@@ -34,16 +34,6 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Configure npm auth (debug)
-        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: npm whoami (debug)
-        run: npm whoami
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
       - name: Create Release Pull Request or Publish
         uses: changesets/action@v1
         with:
