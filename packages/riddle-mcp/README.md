@@ -1,6 +1,6 @@
 # @riddledc/riddle-mcp
 
-MCP-related utilities for RiddleDC. No secrets. No network calls by default.
+MCP-related utilities for RiddleDC. No secrets. No network calls unless you run the server or invoke tools.
 
 ## Install
 

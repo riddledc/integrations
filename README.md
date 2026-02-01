@@ -13,3 +13,8 @@ Public integration packages for RiddleDC.
 
 ## Security
 Report vulnerabilities to joe@riddledc.com
+
+## Release & Verification
+- Releases are built from tags via GitHub Actions and published to npm.
+- Verify a release by checking the Actions run for the tag and comparing published artifacts.
+- No secrets are committed to this repo.

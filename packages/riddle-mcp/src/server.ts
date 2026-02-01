@@ -31,7 +31,7 @@ class RiddleClient {
         Authorization: `Bearer ${this.token ?? ""}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ url, viewport })
+      body: JSON.stringify({ url, options: { viewport } })
     });
 
     if (!response.ok) {

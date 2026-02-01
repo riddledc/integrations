@@ -12,6 +12,14 @@ pnpm add @riddledc/openclaw-riddledc
 
 This package ships `openclaw.plugin.json` for OpenClaw registration.
 
+## Required OpenClaw config
+
+Because the tools register as `optional: true`, add:
+
+```
+tools.alsoAllow: ["riddle"]
+```
+
 ## Configuration
 
 The plugin accepts:
