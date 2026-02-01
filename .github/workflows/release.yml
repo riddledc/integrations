@@ -44,7 +44,13 @@ jobs:
       - name: Publish to npm
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: |
+          npm install -g npm@latest
+          echo "--- npm version ---"
+          npm -v
+          echo "--- .npmrc ---"
           echo "registry=https://registry.npmjs.org/" > ~/.npmrc
+          cat ~/.npmrc
+          echo "--- publishing ---"
           pnpm release
         env:
           NPM_CONFIG_PROVENANCE: true
