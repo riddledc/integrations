@@ -13,7 +13,7 @@
     "test": "pnpm -r test",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "changeset publish"
+    "release": "changeset publish --access public"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.1",
