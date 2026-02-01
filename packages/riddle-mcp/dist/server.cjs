@@ -1,30 +1,26 @@
 #!/usr/bin/env node
+"use strict";
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { writeFileSync } from "fs";
-
-const DEFAULT_GATEWAY_URL = "https://api.riddledc.com";
-const RIDDLE_API = process.env.RIDDLE_MCP_GATEWAY_URL || DEFAULT_GATEWAY_URL;
-
-function saveToTmp(buffer: Buffer, name: string): string {
+// src/server.ts
+var import_server = require("@modelcontextprotocol/sdk/server/index.js");
+var import_stdio = require("@modelcontextprotocol/sdk/server/stdio.js");
+var import_types = require("@modelcontextprotocol/sdk/types.js");
+var import_fs = require("fs");
+var DEFAULT_GATEWAY_URL = "https://api.riddledc.com";
+var RIDDLE_API = process.env.RIDDLE_MCP_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+function saveToTmp(buffer, name) {
   const path = `/tmp/${name}.png`;
-  writeFileSync(path, buffer);
+  (0, import_fs.writeFileSync)(path, buffer);
   return path;
 }
-
-class RiddleClient {
-  private token?: string;
-
+var RiddleClient = class {
   constructor() {
     this.token = process.env.RIDDLE_AUTH_TOKEN || process.env.RIDDLE_API_KEY;
     if (!this.token) {
       console.error("Warning: RIDDLE_AUTH_TOKEN or RIDDLE_API_KEY not set");
     }
   }
-
-  async screenshotSync(url: string, viewport: Record<string, unknown>) {
+  async screenshotSync(url, viewport) {
     const response = await fetch(`${RIDDLE_API}/v1/run`, {
       method: "POST",
       headers: {
@@ -33,7 +29,6 @@ class RiddleClient {
       },
       body: JSON.stringify({ url, viewport })
     });
-
     if (!response.ok) {
       if (response.status === 408) {
         const data = await response.json().catch(() => null);
@@ -41,27 +36,22 @@ class RiddleClient {
         if (!jobId) {
           throw new Error(`API error: ${response.status}`);
         }
-
         await this.waitForJob(jobId);
         const artifacts = await this.getArtifacts(jobId);
-        const png = artifacts.artifacts?.find((a: { name?: string }) => a.name?.endsWith(".png"));
+        const png = artifacts.artifacts?.find((a) => a.name?.endsWith(".png"));
         if (!png?.url) {
           throw new Error("No screenshot artifact found");
         }
-
-        const buffer = await this.downloadArtifact(png.url);
-        return Buffer.from(buffer).toString("base64");
+        const buffer2 = await this.downloadArtifact(png.url);
+        return Buffer.from(buffer2).toString("base64");
       }
-
       const text = await response.text().catch(() => "");
       throw new Error(`API error: ${response.status}${text ? `: ${text}` : ""}`);
     }
-
     const buffer = await response.arrayBuffer();
     return Buffer.from(buffer).toString("base64");
   }
-
-  async runScript(url: string, script: string, viewport: Record<string, unknown>) {
+  async runScript(url, script, viewport) {
     const response = await fetch(`${RIDDLE_API}/v1/run`, {
       method: "POST",
       headers: {
@@ -70,29 +60,24 @@ class RiddleClient {
       },
       body: JSON.stringify({ url, script, viewport, sync: false })
     });
-
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }
-
     return response.json();
   }
-
-  async getJob(jobId: string) {
+  async getJob(jobId) {
     const response = await fetch(`${RIDDLE_API}/v1/jobs/${jobId}`, {
       headers: { Authorization: `Bearer ${this.token ?? ""}` }
     });
     return response.json();
   }
-
-  async getArtifacts(jobId: string) {
+  async getArtifacts(jobId) {
     const response = await fetch(`${RIDDLE_API}/v1/jobs/${jobId}/artifacts`, {
       headers: { Authorization: `Bearer ${this.token ?? ""}` }
     });
     return response.json();
   }
-
-  async waitForJob(jobId: string, maxAttempts = 30, intervalMs = 2000) {
+  async waitForJob(jobId, maxAttempts = 30, intervalMs = 2e3) {
     for (let i = 0; i < maxAttempts; i += 1) {
       const job = await this.getJob(jobId);
       if (job.status === "completed" || job.status === "complete") {
@@ -105,14 +90,12 @@ class RiddleClient {
     }
     throw new Error("Job timed out");
   }
-
-  async downloadArtifact(url: string) {
+  async downloadArtifact(url) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Download failed: ${response.status}`);
     return Buffer.from(await response.arrayBuffer());
   }
-
-  async runScriptSync(url: string, script: string, viewport: Record<string, unknown>, timeoutSec = 60) {
+  async runScriptSync(url, script, viewport, timeoutSec = 60) {
     const response = await fetch(`${RIDDLE_API}/v1/run`, {
       method: "POST",
       headers: {
@@ -127,26 +110,20 @@ class RiddleClient {
         timeout_sec: timeoutSec
       })
     });
-
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`API error ${response.status}: ${text}`);
     }
-
     const { job_id } = await response.json();
     if (!job_id) throw new Error("No job_id returned");
-
     await this.waitForJob(job_id);
-
     const artifacts = await this.getArtifacts(job_id);
-    const results: Array<{ name?: string; type: string; buffer: Buffer }> = [];
-    let consoleLogs: any = null;
-    let networkHar: any = null;
-
+    const results = [];
+    let consoleLogs = null;
+    let networkHar = null;
     for (const artifact of artifacts.artifacts || []) {
       if (artifact.url) {
         const buffer = await this.downloadArtifact(artifact.url);
-
         if (artifact.name === "console.json") {
           try {
             consoleLogs = JSON.parse(buffer.toString("utf8"));
@@ -160,7 +137,6 @@ class RiddleClient {
             networkHar = null;
           }
         }
-
         results.push({
           name: artifact.name,
           type: artifact.name?.endsWith(".png") ? "image" : "file",
@@ -168,21 +144,17 @@ class RiddleClient {
         });
       }
     }
-
     return { job_id, artifacts: results, consoleLogs, networkHar };
   }
-}
-
-const server = new Server({ name: "riddle-mcp-server", version: "1.0.0" }, { capabilities: { tools: {} } });
-const client = new RiddleClient();
-
-const devices = {
+};
+var server = new import_server.Server({ name: "riddle-mcp-server", version: "1.0.0" }, { capabilities: { tools: {} } });
+var client = new RiddleClient();
+var devices = {
   desktop: { width: 1280, height: 720, hasTouch: false },
   ipad: { width: 820, height: 1180, hasTouch: true, isMobile: true },
   iphone: { width: 390, height: 844, hasTouch: true, isMobile: true }
 };
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+server.setRequestHandler(import_types.ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "riddle_screenshot",
@@ -241,16 +213,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "riddle_automate",
-      description:
-        "Run a Playwright script, wait for completion, and return all artifacts. Includes console logs and network HAR. Full sync automation - one call does everything.",
+      description: "Run a Playwright script, wait for completion, and return all artifacts. Includes console logs and network HAR. Full sync automation - one call does everything.",
       inputSchema: {
         type: "object",
         properties: {
           url: { type: "string", description: "Starting URL" },
           script: {
             type: "string",
-            description:
-              "Playwright script. Use 'page' object. Example: await page.click('button'); await page.screenshot({path: 'result.png'});"
+            description: "Playwright script. Use 'page' object. Example: await page.click('button'); await page.screenshot({path: 'result.png'});"
           },
           device: { type: "string", enum: ["desktop", "ipad", "iphone"], description: "Device preset" },
           timeout_sec: { type: "number", description: "Max execution time in seconds (default: 60)" },
@@ -264,8 +234,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "riddle_click_and_screenshot",
-      description:
-        "Simple automation: load URL, click a selector, take screenshot. Good for testing button clicks, game starts, etc. Uses force-click by default to handle animated buttons.",
+      description: "Simple automation: load URL, click a selector, take screenshot. Good for testing button clicks, game starts, etc. Uses force-click by default to handle animated buttons.",
       inputSchema: {
         type: "object",
         properties: {
@@ -280,18 +249,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     }
   ]
 }));
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(import_types.CallToolRequestSchema, async (request) => {
   const { name } = request.params;
-  const args = (request.params.arguments ?? {}) as Record<string, any>;
-
+  const args = request.params.arguments ?? {};
   try {
     if (name === "riddle_screenshot") {
-      const device = args.device as keyof typeof devices | undefined;
+      const device = args.device;
       const viewport = device ? devices[device] : { width: args.width || 1280, height: args.height || 720 };
-
       const base64 = await client.screenshotSync(String(args.url), viewport);
-
       return {
         content: [
           {
@@ -302,22 +267,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     }
-
     if (name === "riddle_batch_screenshot") {
-      const device = args.device as keyof typeof devices | undefined;
+      const device = args.device;
       const viewport = device ? devices[device] : devices.desktop;
-      const results: Array<{ url: string; success: boolean; image?: string; error?: string }> = [];
-
+      const results = [];
       const urls = Array.isArray(args.urls) ? args.urls : [];
       for (const url of urls) {
         try {
           const base64 = await client.screenshotSync(String(url), viewport);
           results.push({ url, success: true, image: base64 });
-        } catch (error: any) {
+        } catch (error) {
           results.push({ url: String(url), success: false, error: error.message });
         }
       }
-
       return {
         content: [
           {
@@ -332,30 +294,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               2
             )
           },
-          ...results
-            .filter((result) => result.success)
-            .map((result) => ({
-              type: "image",
-              data: result.image,
-              mimeType: "image/png"
-            }))
+          ...results.filter((result) => result.success).map((result) => ({
+            type: "image",
+            data: result.image,
+            mimeType: "image/png"
+          }))
         ]
       };
     }
-
     if (name === "riddle_run_script") {
       const viewport = { width: args.width || 1280, height: args.height || 720 };
       const result = await client.runScript(String(args.url), String(args.script), viewport);
-
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
       };
     }
-
     if (name === "riddle_get_job") {
       const job = await client.getJob(String(args.job_id));
       const artifacts = await client.getArtifacts(String(args.job_id));
-
       return {
         content: [
           {
@@ -365,11 +321,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     }
-
     if (name === "riddle_automate") {
-      const device = args.device as keyof typeof devices | undefined;
+      const device = args.device;
       const viewport = device ? devices[device] : devices.desktop;
-
       let script = String(args.script ?? "");
       const forceClicks = args.force_clicks !== false;
       if (forceClicks) {
@@ -378,17 +332,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           ".click($1$2$1, { force: true })"
         );
       }
-
       const { job_id, artifacts, consoleLogs, networkHar } = await client.runScriptSync(
         String(args.url),
         script,
         viewport,
         args.timeout_sec || 60
       );
-
-      const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
-      const savedPaths: string[] = [];
-
+      const images = [];
+      const savedPaths = [];
       for (const artifact of artifacts) {
         if (artifact.type === "image") {
           const base64 = artifact.buffer.toString("base64");
@@ -397,8 +348,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           savedPaths.push(path);
         }
       }
-
-      let consoleOutput: any = null;
+      let consoleOutput = null;
       if (consoleLogs?.entries) {
         consoleOutput = {
           summary: consoleLogs.summary,
@@ -407,21 +357,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           warns: consoleLogs.entries.warn || []
         };
       }
-
-      let networkSummary: any = null;
+      let networkSummary = null;
       if (networkHar?.log?.entries) {
         const entries = networkHar.log.entries;
         networkSummary = {
           total_requests: entries.length,
-          failed: entries.filter((entry: any) => entry.response?.status >= 400).length,
-          requests: entries.slice(-10).map((entry: any) => ({
+          failed: entries.filter((entry) => entry.response?.status >= 400).length,
+          requests: entries.slice(-10).map((entry) => ({
             url: entry.request?.url?.substring(0, 80),
             status: entry.response?.status,
             time: entry.time
           }))
         };
       }
-
       return {
         content: [
           {
@@ -441,24 +389,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     }
-
     if (name === "riddle_click_and_screenshot") {
-      const device = args.device as keyof typeof devices | undefined;
+      const device = args.device;
       const viewport = device ? devices[device] : devices.desktop;
-      const waitMs = args.wait_ms || 1000;
+      const waitMs = args.wait_ms || 1e3;
       const forceClick = args.force !== false;
       const clickSelector = String(args.click ?? "");
-
       const script = `
         await page.waitForLoadState('networkidle');
         await page.click('${clickSelector.replace(/'/g, "\\'")}', { force: ${forceClick} });
         await page.waitForTimeout(${waitMs});
         await page.screenshot({ path: 'after-click.png', fullPage: false });
       `;
-
       const { job_id, artifacts } = await client.runScriptSync(String(args.url), script, viewport, 30);
-
-      const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
+      const images = [];
       for (const artifact of artifacts) {
         if (artifact.type === "image") {
           const base64 = artifact.buffer.toString("base64");
@@ -466,7 +410,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           saveToTmp(artifact.buffer, "click-result");
         }
       }
-
       return {
         content: [
           {
@@ -477,20 +420,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     }
-
     throw new Error(`Unknown tool: ${name}`);
-  } catch (error: any) {
+  } catch (error) {
     return {
       content: [{ type: "text", text: `Error: ${error.message}` }],
       isError: true
     };
   }
 });
-
 async function main() {
-  const transport = new StdioServerTransport();
+  const transport = new import_stdio.StdioServerTransport();
   await server.connect(transport);
   console.error("Riddle MCP server running");
 }
-
 main().catch(console.error);
