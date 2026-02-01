@@ -16,14 +16,24 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "openclaw.plugin.json"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "openclaw": {
+    "extensions": ["."]
+  },
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "echo 'test: (not configured)'"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.32.0"
   },
   "devDependencies": {
     "tsup": "^8.0.1",

@@ -1,6 +1,6 @@
 # @riddledc/openclaw-riddledc
 
-OpenClaw integration package for RiddleDC. No secrets. No assumptions about MCP.
+OpenClaw integration package for RiddleDC. No secrets. No assumption about MCP.
 
 ## Install
 
@@ -8,24 +8,24 @@ OpenClaw integration package for RiddleDC. No secrets. No assumptions about MCP.
 pnpm add @riddledc/openclaw-riddledc
 ```
 
-## Usage
+## OpenClaw plugin metadata
 
-```ts
-import { createRiddleOpenClawPlugin } from "@riddledc/openclaw-riddledc";
-
-const plugin = createRiddleOpenClawPlugin({
-  baseUrl: process.env.RIDDLE_BASE_URL,
-  apiUrl: process.env.RIDDLE_API_URL,
-  token: process.env.RIDDLE_TOKEN
-});
-
-// Pass `plugin` to OpenClaw's plugin registration API
-```
+This package ships `openclaw.plugin.json` for OpenClaw registration.
 
 ## Configuration
 
-- `baseUrl` (optional)
-- `apiUrl` (optional)
-- `token` (optional)
+The plugin accepts:
+- `apiKey` (or `RIDDLE_API_KEY` env var)
+- `baseUrl` (defaults to `https://api.riddledc.com`)
 
-Provide values via env vars or your own config system. Do not hardcode secrets.
+## Tools
+
+- `riddle_run`
+- `riddle_screenshot`
+- `riddle_screenshots`
+- `riddle_steps`
+- `riddle_script`
+
+## Security
+
+Do not hardcode keys. Provide credentials via env vars or your secret manager.
