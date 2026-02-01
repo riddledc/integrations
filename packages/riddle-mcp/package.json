@@ -1,0 +1,46 @@
+{
+  "name": "@riddledc/riddle-mcp",
+  "version": "0.1.0",
+  "description": "MCP-related utilities for RiddleDC (no secrets).",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.cjs"
+    }
+  },
+  "bin": {
+    "riddle-mcp": "./dist/server.cjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/server.ts --format cjs,esm --dts --out-dir dist",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "echo 'test: (not configured)'"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}

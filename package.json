@@ -1,0 +1,23 @@
+{
+  "name": "@riddledc/integrations",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@9.15.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "clean": "pnpm -r clean",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}
