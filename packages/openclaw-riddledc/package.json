@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/openclaw-riddledc",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "OpenClaw integration package for RiddleDC (no secrets).",
   "license": "MIT",
   "author": "RiddleDC",
