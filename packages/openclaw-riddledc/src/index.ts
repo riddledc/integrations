@@ -1,4 +1,6 @@
 import { Type } from "@sinclair/typebox";
+import { writeFile, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 
 type PluginApi = any;
 
@@ -19,6 +21,8 @@ type RunResult = {
   rawContentType?: string;
   rawPngBase64?: string;
 };
+
+const INLINE_CAP = 50 * 1024; // 50 KB
 
 function getCfg(api: PluginApi) {
   const cfg = api?.config ?? {};
@@ -72,10 +76,63 @@ function abToBase64(ab: ArrayBuffer): string {
   return Buffer.from(ab).toString("base64");
 }
 
+function getWorkspacePath(api: PluginApi): string {
+  return api?.workspacePath ?? process.cwd();
+}
+
+async function writeArtifact(
+  workspace: string,
+  subdir: string,
+  filename: string,
+  content: string
+): Promise<{ path: string; sizeBytes: number }> {
+  const dir = join(workspace, "riddle", subdir);
+  await mkdir(dir, { recursive: true });
+  const filePath = join(dir, filename);
+  const buf = Buffer.from(content, "utf8");
+  await writeFile(filePath, buf);
+  return { path: `riddle/${subdir}/${filename}`, sizeBytes: buf.byteLength };
+}
+
+async function applySafetySpec(
+  result: RunResult,
+  opts: { workspace: string; harInline?: boolean }
+): Promise<void> {
+  const jobId = result.job_id ?? "unknown";
+
+  // HAR: always write to file unless harInline=true AND under cap
+  if (result.har != null) {
+    const harStr = typeof result.har === "string" ? result.har : JSON.stringify(result.har);
+    const harBytes = Buffer.byteLength(harStr, "utf8");
+
+    if (opts.harInline && harBytes <= INLINE_CAP) {
+      // Caller explicitly requested inline and it fits — keep as-is
+    } else {
+      const ref = await writeArtifact(opts.workspace, "har", `${jobId}.har.json`, harStr);
+      if (opts.harInline && harBytes > INLINE_CAP) {
+        result.har = { saved: ref.path, sizeBytes: ref.sizeBytes, warning: "Exceeded 50KB inline cap; wrote to file" };
+      } else {
+        result.har = { saved: ref.path, sizeBytes: ref.sizeBytes };
+      }
+    }
+  }
+
+  // Console: inline by default, file fallback at 50 KB
+  if (result.console != null) {
+    const consoleStr = typeof result.console === "string" ? result.console : JSON.stringify(result.console);
+    const consoleBytes = Buffer.byteLength(consoleStr, "utf8");
+
+    if (consoleBytes > INLINE_CAP) {
+      const ref = await writeArtifact(opts.workspace, "console", `${jobId}.log`, consoleStr);
+      result.console = { saved: ref.path, sizeBytes: ref.sizeBytes };
+    }
+  }
+}
+
 async function runWithDefaults(
   api: PluginApi,
   payload: RiddlePayload,
-  defaults?: { include?: string[]; inline?: boolean }
+  defaults?: { include?: string[] }
 ): Promise<RunResult> {
   const { apiKey, baseUrl } = getCfg(api);
   if (!apiKey) {
@@ -88,14 +145,23 @@ async function runWithDefaults(
 
   const mode = detectMode(payload);
 
+  // Detect user intent before merging
+  const userInclude: string[] = payload.include ?? [];
+  const userRequestedHar = userInclude.includes("har");
+  const harInline = !!payload.harInline;
+
   const merged: any = { ...payload };
-  if (defaults?.include?.length) {
-    merged.include = Array.from(new Set([...(merged.include ?? []), ...defaults.include]));
-  }
-  if (defaults?.inline) {
-    merged.inlineConsole = merged.inlineConsole ?? true;
-    merged.inlineHar = merged.inlineHar ?? true;
-    merged.inlineResult = merged.inlineResult ?? true;
+  delete merged.harInline; // Plugin-only flag; don't forward to API
+
+  // Merge includes: user's explicit + tool defaults (defaults never contain "har")
+  const defaultInc = defaults?.include ?? ["screenshot", "console"];
+  merged.include = Array.from(new Set([...userInclude, ...defaultInc]));
+
+  // Inline flags — fetch data inline from API so we can apply caps locally
+  merged.inlineConsole = merged.inlineConsole ?? true;
+  merged.inlineResult = merged.inlineResult ?? true;
+  if (userRequestedHar) {
+    merged.inlineHar = true;
   }
 
   const out: RunResult = { ok: true, mode };
@@ -129,6 +195,11 @@ async function runWithDefaults(
   const json = JSON.parse(txt);
   Object.assign(out, json);
   out.job_id = (json.job_id ?? json.jobId ?? out.job_id) as any;
+
+  // Apply HAR safety spec: cap inline sizes, write large artifacts to files
+  const workspace = getWorkspacePath(api);
+  await applySafetySpec(out, { workspace, harInline });
+
   return out;
 }
 
@@ -137,14 +208,13 @@ export default function register(api: PluginApi) {
     {
       name: "riddle_run",
       description:
-        "Run a Riddle job (pass-through payload) against https://api.riddledc.com/v1/run. Supports url/urls/steps/script. Returns screenshot/console/har/result when requested.",
+        "Run a Riddle job (pass-through payload) against https://api.riddledc.com/v1/run. Supports url/urls/steps/script. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         payload: Type.Record(Type.String(), Type.Any())
       }),
       async execute(_id: string, params: any) {
         const result = await runWithDefaults(api, params.payload, {
-          include: ["console", "har", "result"],
-          inline: true
+          include: ["screenshot", "console", "result"]
         });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -155,12 +225,13 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_screenshot",
-      description: "Riddle: take a screenshot of a single URL (url mode).",
+      description: "Riddle: take a screenshot of a single URL. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         url: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
-        include: Type.Optional(Type.Array(Type.String()))
+        include: Type.Optional(Type.Array(Type.String())),
+        harInline: Type.Optional(Type.Boolean())
       }),
       async execute(_id: string, params: any) {
         if (!params.url || typeof params.url !== "string") throw new Error("url must be a string");
@@ -168,7 +239,8 @@ export default function register(api: PluginApi) {
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
         if (params.options) payload.options = params.options;
         if (params.include) payload.include = params.include;
-        const result = await runWithDefaults(api, payload, { include: ["console", "har"], inline: true });
+        if (params.harInline) payload.harInline = params.harInline;
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -178,12 +250,13 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_screenshots",
-      description: "Riddle: take screenshots for multiple URLs in one job (urls mode).",
+      description: "Riddle: take screenshots for multiple URLs in one job. Returns screenshots + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         urls: Type.Array(Type.String()),
         timeout_sec: Type.Optional(Type.Number()),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
-        include: Type.Optional(Type.Array(Type.String()))
+        include: Type.Optional(Type.Array(Type.String())),
+        harInline: Type.Optional(Type.Boolean())
       }),
       async execute(_id: string, params: any) {
         if (!Array.isArray(params.urls) || params.urls.some((url: any) => typeof url !== "string")) {
@@ -193,7 +266,8 @@ export default function register(api: PluginApi) {
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
         if (params.options) payload.options = params.options;
         if (params.include) payload.include = params.include;
-        const result = await runWithDefaults(api, payload, { include: ["console", "har"], inline: true });
+        if (params.harInline) payload.harInline = params.harInline;
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -203,12 +277,13 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_steps",
-      description: "Riddle: run a workflow in steps mode (goto/click/fill/etc.).",
+      description: "Riddle: run a workflow in steps mode (goto/click/fill/etc.). Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         steps: Type.Array(Type.Record(Type.String(), Type.Any())),
         timeout_sec: Type.Optional(Type.Number()),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
+        harInline: Type.Optional(Type.Boolean()),
         sync: Type.Optional(Type.Boolean())
       }),
       async execute(_id: string, params: any) {
@@ -218,7 +293,8 @@ export default function register(api: PluginApi) {
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
         if (params.options) payload.options = params.options;
         if (params.include) payload.include = params.include;
-        const result = await runWithDefaults(api, payload, { include: ["console", "har", "result"], inline: true });
+        if (params.harInline) payload.harInline = params.harInline;
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -228,12 +304,13 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_script",
-      description: "Riddle: run full Playwright code (script mode).",
+      description: "Riddle: run full Playwright code (script mode). Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         script: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
+        harInline: Type.Optional(Type.Boolean()),
         sync: Type.Optional(Type.Boolean())
       }),
       async execute(_id: string, params: any) {
@@ -243,7 +320,8 @@ export default function register(api: PluginApi) {
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
         if (params.options) payload.options = params.options;
         if (params.include) payload.include = params.include;
-        const result = await runWithDefaults(api, payload, { include: ["console", "har", "result"], inline: true });
+        if (params.harInline) payload.harInline = params.harInline;
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
