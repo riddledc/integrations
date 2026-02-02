@@ -37,7 +37,9 @@
     "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
-    "test": "echo 'test: (not configured)'"
+    "test": "echo 'test: (not configured)'",
+    "sync:openclaw-plugin-version": "node scripts/sync-openclaw-plugin-version.mjs",
+    "prepack": "npm run sync:openclaw-plugin-version"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.32.0"

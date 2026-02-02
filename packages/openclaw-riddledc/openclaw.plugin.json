@@ -1,18 +1,30 @@
 {
-  "id": "riddle",
+  "id": "openclaw-riddledc",
   "name": "Riddle",
   "description": "Riddle (riddledc.com) hosted browser API tools for OpenClaw agents.",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "apiKey": { "type": "string" },
-      "baseUrl": { "type": "string", "default": "https://api.riddledc.com" }
+      "apiKey": {
+        "type": "string"
+      },
+      "baseUrl": {
+        "type": "string",
+        "default": "https://api.riddledc.com"
+      }
     }
   },
   "uiHints": {
-    "apiKey": { "label": "Riddle API Key", "sensitive": true, "placeholder": "rdc_live_..." },
-    "baseUrl": { "label": "API Base URL", "placeholder": "https://api.riddledc.com" }
+    "apiKey": {
+      "label": "Riddle API Key",
+      "sensitive": true,
+      "placeholder": "rdc_live_..."
+    },
+    "baseUrl": {
+      "label": "API Base URL",
+      "placeholder": "https://api.riddledc.com"
+    }
   }
 }

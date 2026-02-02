@@ -5,20 +5,15 @@ OpenClaw integration package for RiddleDC. No secrets. No assumption about MCP.
 ## Install
 
 ```
-pnpm add @riddledc/openclaw-riddledc
+openclaw plugins install @riddledc/openclaw-riddledc
+openclaw plugins enable openclaw-riddledc
 ```
 
 ## OpenClaw plugin metadata
 
 This package ships `openclaw.plugin.json` for OpenClaw registration.
 
-## Required OpenClaw config
-
-Because the tools register as `optional: true`, add:
-
-```
-tools.alsoAllow: ["riddle"]
-```
+The plugin id is `openclaw-riddledc`.
 
 ## Configuration
 

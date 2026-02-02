@@ -22,7 +22,7 @@ type RunResult = {
 
 function getCfg(api: PluginApi) {
   const cfg = api?.config ?? {};
-  const pluginCfg = cfg?.plugins?.entries?.riddle?.config ?? {};
+  const pluginCfg = cfg?.plugins?.entries?.["openclaw-riddledc"]?.config ?? {};
   return {
     apiKey: process.env.RIDDLE_API_KEY || pluginCfg.apiKey,
     baseUrl: pluginCfg.baseUrl || "https://api.riddledc.com"
