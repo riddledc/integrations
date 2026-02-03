@@ -115,9 +115,18 @@ async function applySafetySpec(
   const jobId = result.job_id ?? "unknown";
 
   // Screenshot: always write to file (never inline base64 - too large for context)
-  if (result.screenshot != null && typeof result.screenshot === "string") {
-    const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, result.screenshot);
-    result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
+  // Handle both string format and object format { name, data, size }
+  if (result.screenshot != null) {
+    let base64Data: string | null = null;
+    if (typeof result.screenshot === "string") {
+      base64Data = result.screenshot;
+    } else if (typeof result.screenshot === "object" && result.screenshot.data) {
+      base64Data = result.screenshot.data;
+    }
+    if (base64Data) {
+      const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, base64Data);
+      result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
+    }
   }
 
   // rawPngBase64: same treatment - save to file
