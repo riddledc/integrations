@@ -119,14 +119,34 @@ async function applySafetySpec(
   if (result.screenshot != null) {
     let base64Data: string | null = null;
     if (typeof result.screenshot === "string") {
-      base64Data = result.screenshot;
+      base64Data = result.screenshot.replace(/^data:image\/\w+;base64,/, "");
     } else if (typeof result.screenshot === "object" && result.screenshot.data) {
-      base64Data = result.screenshot.data;
+      base64Data = result.screenshot.data.replace(/^data:image\/\w+;base64,/, "");
     }
     if (base64Data) {
       const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, base64Data);
       result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
     }
+  }
+
+  // screenshots array: save each to file (API returns both screenshot and screenshots)
+  if (Array.isArray((result as any).screenshots)) {
+    const savedRefs: Array<{ saved: string; sizeBytes: number }> = [];
+    for (let i = 0; i < (result as any).screenshots.length; i++) {
+      const ss = (result as any).screenshots[i];
+      let base64Data: string | null = null;
+      if (typeof ss === "string") {
+        base64Data = ss;
+      } else if (typeof ss === "object" && ss.data) {
+        // Handle data:image/png;base64, prefix
+        base64Data = ss.data.replace(/^data:image\/\w+;base64,/, "");
+      }
+      if (base64Data) {
+        const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}-${i}.png`, base64Data);
+        savedRefs.push({ saved: ref.path, sizeBytes: ref.sizeBytes });
+      }
+    }
+    (result as any).screenshots = savedRefs;
   }
 
   // rawPngBase64: same treatment - save to file
