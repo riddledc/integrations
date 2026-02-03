@@ -94,11 +94,38 @@ async function writeArtifact(
   return { path: `riddle/${subdir}/${filename}`, sizeBytes: buf.byteLength };
 }
 
+async function writeArtifactBinary(
+  workspace: string,
+  subdir: string,
+  filename: string,
+  base64Content: string
+): Promise<{ path: string; sizeBytes: number }> {
+  const dir = join(workspace, "riddle", subdir);
+  await mkdir(dir, { recursive: true });
+  const filePath = join(dir, filename);
+  const buf = Buffer.from(base64Content, "base64");
+  await writeFile(filePath, buf);
+  return { path: `riddle/${subdir}/${filename}`, sizeBytes: buf.byteLength };
+}
+
 async function applySafetySpec(
   result: RunResult,
   opts: { workspace: string; harInline?: boolean }
 ): Promise<void> {
   const jobId = result.job_id ?? "unknown";
+
+  // Screenshot: always write to file (never inline base64 - too large for context)
+  if (result.screenshot != null && typeof result.screenshot === "string") {
+    const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, result.screenshot);
+    result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
+  }
+
+  // rawPngBase64: same treatment - save to file
+  if (result.rawPngBase64 != null) {
+    const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, result.rawPngBase64);
+    result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
+    delete result.rawPngBase64;
+  }
 
   // HAR: always write to file unless harInline=true AND under cap
   if (result.har != null) {
@@ -188,6 +215,9 @@ async function runWithDefaults(
     const duration = headers.get("x-duration-ms");
     out.duration_ms = duration ? Number(duration) : undefined;
     out.sync = true;
+    // Save screenshot to file instead of inline base64
+    const workspace = getWorkspacePath(api);
+    await applySafetySpec(out, { workspace, harInline });
     return out;
   }
 
