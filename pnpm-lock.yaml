@@ -21,8 +21,8 @@ importers:
   packages/openclaw-riddledc:
     dependencies:
       '@sinclair/typebox':
-        specifier: ^0.32.0
-        version: 0.32.35
+        specifier: ^0.34.48
+        version: 0.34.48
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -448,8 +448,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sinclair/typebox@0.32.35':
-    resolution: {integrity: sha512-Ul3YyOTU++to8cgNkttakC0dWvpERr6RYoHO2W47DLbFvrwBDJUY31B1sImH6JZSYc4Kt4PyHtoPNu+vL2r2dA==}
+  '@sinclair/typebox@0.34.48':
+    resolution: {integrity: sha512-kKJTNuK3AQOrgjjotVxMrCn1sUJwM76wMszfq1kdU4uYVJjvEWuFQ6HgvLt4Xz3fSmZlTOxJ/Ie13KnIcWQXFA==}
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
@@ -1617,7 +1617,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.57.1':
     optional: true
 
-  '@sinclair/typebox@0.32.35': {}
+  '@sinclair/typebox@0.34.48': {}
 
   '@types/estree@1.0.8': {}
 
