@@ -1,5 +1,22 @@
 # Security Model
 
+## Plugin vs Skill: What This Is
+
+This is a **plugin** (code), not a **skill** (prompt). Understanding the difference matters for trust:
+
+| Type | What it is | Trust implications |
+|------|------------|-------------------|
+| **Plugin** | Node.js code that runs in-process with OpenClaw | Has full process privileges; can access env vars, filesystem, network |
+| **Skill** | Markdown/prompt instructions that guide the LLM | No direct system access; influences agent via tool invocation |
+
+**This package is a plugin.** It runs as code inside the OpenClaw process. That means:
+
+- It *could* read any env var, file, or make any network call (plugins are trusted code)
+- We *choose* to constrain ourselves via hardcoded allowlists and explicit capability limits
+- You should audit the source or trust the npm provenance
+
+**This plugin does NOT bundle any skills.** It only provides tools. No prompt instructions are injected into your agent's context.
+
 ## Data Flow
 
 ```
