@@ -1,5 +1,9 @@
 # @riddledc/openclaw-riddledc
 
+[![npm version](https://img.shields.io/npm/v/@riddledc/openclaw-riddledc.svg)](https://www.npmjs.com/package/@riddledc/openclaw-riddledc)
+[![Build Status](https://github.com/riddledc/integrations/actions/workflows/release.yml/badge.svg)](https://github.com/riddledc/integrations/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 OpenClaw plugin for [Riddle](https://riddledc.com) - hosted browser automation API. Take screenshots, run Playwright scripts, and automate web interactions from your OpenClaw agent.
 
 ## Install

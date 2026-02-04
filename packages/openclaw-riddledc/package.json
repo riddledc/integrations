@@ -24,7 +24,8 @@
     "dist",
     "openclaw.plugin.json",
     "CHECKSUMS.txt",
-    "SECURITY.md"
+    "SECURITY.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
