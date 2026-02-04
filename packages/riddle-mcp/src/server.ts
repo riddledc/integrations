@@ -8,10 +8,10 @@ import { writeFileSync } from "fs";
 const DEFAULT_GATEWAY_URL = "https://api.riddledc.com";
 const RIDDLE_API = process.env.RIDDLE_MCP_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 
-function saveToTmp(buffer: Buffer, name: string): string {
-  const path = `/tmp/${name}.png`;
-  writeFileSync(path, buffer);
-  return path;
+function saveToTmp(buffer: Buffer, name: string, ext = "png"): string {
+  const filename = `/tmp/riddle-${name}-${Date.now()}.${ext}`;
+  writeFileSync(filename, buffer);
+  return filename;
 }
 
 class RiddleClient {
@@ -186,7 +186,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "riddle_screenshot",
-      description: "Take a screenshot of a URL using the Riddle API. Returns base64-encoded PNG image.",
+      description: "Take a screenshot of a URL using the Riddle API. Saves PNG to /tmp and returns file path.",
       inputSchema: {
         type: "object",
         properties: {
@@ -204,7 +204,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "riddle_batch_screenshot",
-      description: "Screenshot multiple URLs. Returns array of base64 images.",
+      description: "Screenshot multiple URLs. Saves PNGs to /tmp and returns file paths.",
       inputSchema: {
         type: "object",
         properties: {
@@ -242,7 +242,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "riddle_automate",
       description:
-        "Run a Playwright script, wait for completion, and return all artifacts. Includes console logs and network HAR. Full sync automation - one call does everything.",
+        "Run a Playwright script, wait for completion, and return all artifacts. Saves screenshots, console logs, and network HAR to /tmp files and returns paths.",
       inputSchema: {
         type: "object",
         properties: {
@@ -265,7 +265,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "riddle_click_and_screenshot",
       description:
-        "Simple automation: load URL, click a selector, take screenshot. Good for testing button clicks, game starts, etc. Uses force-click by default to handle animated buttons.",
+        "Simple automation: load URL, click a selector, take screenshot. Saves PNG to /tmp and returns path. Uses force-click by default to handle animated buttons.",
       inputSchema: {
         type: "object",
         properties: {
@@ -291,13 +291,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const viewport = device ? devices[device] : { width: args.width || 1280, height: args.height || 720 };
 
       const base64 = await client.screenshotSync(String(args.url), viewport);
+      const buffer = Buffer.from(base64, "base64");
+      const path = saveToTmp(buffer, "screenshot");
 
       return {
         content: [
           {
-            type: "image",
-            data: base64,
-            mimeType: "image/png"
+            type: "text",
+            text: JSON.stringify({ screenshot: path, url: args.url }, null, 2)
           }
         ]
       };
@@ -306,13 +307,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (name === "riddle_batch_screenshot") {
       const device = args.device as keyof typeof devices | undefined;
       const viewport = device ? devices[device] : devices.desktop;
-      const results: Array<{ url: string; success: boolean; image?: string; error?: string }> = [];
+      const results: Array<{ url: string; success: boolean; screenshot?: string; error?: string }> = [];
 
       const urls = Array.isArray(args.urls) ? args.urls : [];
       for (const url of urls) {
         try {
           const base64 = await client.screenshotSync(String(url), viewport);
-          results.push({ url, success: true, image: base64 });
+          const buffer = Buffer.from(base64, "base64");
+          const path = saveToTmp(buffer, `batch-${results.length}`);
+          results.push({ url, success: true, screenshot: path });
         } catch (error: any) {
           results.push({ url: String(url), success: false, error: error.message });
         }
@@ -322,23 +325,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           {
             type: "text",
-            text: JSON.stringify(
-              results.map((result) => ({
-                url: result.url,
-                success: result.success,
-                error: result.error
-              })),
-              null,
-              2
-            )
-          },
-          ...results
-            .filter((result) => result.success)
-            .map((result) => ({
-              type: "image",
-              data: result.image,
-              mimeType: "image/png"
-            }))
+            text: JSON.stringify(results, null, 2)
+          }
         ]
       };
     }
@@ -386,40 +374,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         args.timeout_sec || 60
       );
 
-      const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
       const savedPaths: string[] = [];
 
       for (const artifact of artifacts) {
         if (artifact.type === "image") {
-          const base64 = artifact.buffer.toString("base64");
-          images.push({ type: "image", data: base64, mimeType: "image/png" });
           const path = saveToTmp(artifact.buffer, artifact.name?.replace(".png", "") || "artifact");
           savedPaths.push(path);
         }
       }
 
-      let consoleOutput: any = null;
+      // Save console logs to file if present
+      let consolePath: string | null = null;
       if (consoleLogs?.entries) {
-        consoleOutput = {
+        const consoleData = {
           summary: consoleLogs.summary,
-          logs: consoleLogs.entries.log?.slice(-20) || [],
+          logs: consoleLogs.entries.log || [],
           errors: consoleLogs.entries.error || [],
           warns: consoleLogs.entries.warn || []
         };
+        consolePath = saveToTmp(Buffer.from(JSON.stringify(consoleData, null, 2)), "console", "json");
       }
 
-      let networkSummary: any = null;
+      // Save HAR to file if present
+      let harPath: string | null = null;
       if (networkHar?.log?.entries) {
-        const entries = networkHar.log.entries;
-        networkSummary = {
-          total_requests: entries.length,
-          failed: entries.filter((entry: any) => entry.response?.status >= 400).length,
-          requests: entries.slice(-10).map((entry: any) => ({
-            url: entry.request?.url?.substring(0, 80),
-            status: entry.response?.status,
-            time: entry.time
-          }))
-        };
+        harPath = saveToTmp(Buffer.from(JSON.stringify(networkHar, null, 2)), "network", "har");
       }
 
       return {
@@ -429,15 +408,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify(
               {
                 job_id,
-                saved_to: savedPaths,
-                console: consoleOutput,
-                network: networkSummary
+                screenshots: savedPaths,
+                console: consolePath,
+                har: harPath
               },
               null,
               2
             )
-          },
-          ...images
+          }
         ]
       };
     }
@@ -458,12 +436,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const { job_id, artifacts } = await client.runScriptSync(String(args.url), script, viewport, 30);
 
-      const images: Array<{ type: "image"; data: string; mimeType: string }> = [];
+      let screenshotPath: string | null = null;
       for (const artifact of artifacts) {
         if (artifact.type === "image") {
-          const base64 = artifact.buffer.toString("base64");
-          images.push({ type: "image", data: base64, mimeType: "image/png" });
-          saveToTmp(artifact.buffer, "click-result");
+          screenshotPath = saveToTmp(artifact.buffer, "click-result");
         }
       }
 
@@ -471,9 +447,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ job_id, clicked: clickSelector }, null, 2)
-          },
-          ...images
+            text: JSON.stringify({ job_id, clicked: clickSelector, screenshot: screenshotPath }, null, 2)
+          }
         ]
       };
     }
