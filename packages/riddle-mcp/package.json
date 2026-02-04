@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-mcp",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "MCP-related utilities for RiddleDC (no secrets).",
   "license": "MIT",
   "author": "RiddleDC",
