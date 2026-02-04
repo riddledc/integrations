@@ -61,11 +61,21 @@ Example response:
 
 ## Security
 
-- Never hardcode API keys in config files
-- Use environment variables or a secret manager
-- The plugin only communicates with `api.riddledc.com` over HTTPS
-- Hardcoded domain allowlist prevents credential exfiltration
-- See [SECURITY.md](./SECURITY.md) for full threat model and data flow
+- **Capability manifest**: See `openclaw.plugin.json` for declared permissions
+- **Network**: Only communicates with `api.riddledc.com` (hardcoded allowlist)
+- **Context**: No access to conversation history, other tools, or user profile
+- **Filesystem**: Only writes to `~/.openclaw/workspace/riddle/`
+- **Secrets**: Only requires `RIDDLE_API_KEY` (use env var, not config file)
+
+For defense in depth, run your agent with sandboxing:
+
+```yaml
+agents:
+  defaults:
+    sandbox: true
+```
+
+See [SECURITY.md](./SECURITY.md) for full threat model, data flow diagram, and capability details.
 
 ## Reproducible Builds
 

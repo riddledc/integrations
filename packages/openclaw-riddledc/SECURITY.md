@@ -33,6 +33,29 @@
 - Make network requests to arbitrary URLs from your machine
 - Run code locally (all execution happens on Riddle's servers)
 
+## Agent Context Access
+
+This plugin has **no access** to:
+
+| Context | Access |
+|---------|--------|
+| Conversation history | ❌ None |
+| Other tools' outputs | ❌ None |
+| User profile / preferences | ❌ None |
+| Other plugins' data | ❌ None |
+| System environment (except RIDDLE_API_KEY) | ❌ None |
+
+The plugin only sees data explicitly passed to its tools by the agent. It does not hook into message events, read logs, or access the agent's memory/context.
+
+## Capability Manifest
+
+This plugin declares its capabilities in `openclaw.plugin.json`. Key constraints:
+
+- **Network egress**: Only `api.riddledc.com` (hardcoded, enforced at runtime)
+- **Filesystem**: Write only to `~/.openclaw/workspace/riddle/`
+- **Tools**: Provides 5 tools; invokes no other agent tools
+- **Secrets**: Only `RIDDLE_API_KEY` required
+
 ## Security Controls
 
 ### 1. Hardcoded Domain Allowlist
@@ -67,9 +90,24 @@ Only requires one secret: `RIDDLE_API_KEY`. No OAuth, no cookies, no session sta
 |--------|------------|
 | API key exfiltration to attacker server | Hardcoded domain check blocks all non-riddledc.com requests |
 | Malicious config injection | Domain check runs at request time, not config time |
-| Supply chain attack (npm) | Use npm provenance to verify package origin |
-| Build tampering | Checksums + reproducible builds |
+| Supply chain attack (npm) | npm provenance + checksums + reproducible builds |
+| Build tampering | CHECKSUMS.txt with SHA256 hashes |
 | Local file access | Plugin only writes to designated workspace subdirectory |
+| Context/conversation leakage | Plugin has no access to agent context (see above) |
+| Prompt injection via tool output | Screenshots saved as file refs, not inline content |
+
+## Recommended: Run in Sandbox
+
+For defense in depth, consider running your agent with sandboxing enabled:
+
+```yaml
+# In your OpenClaw config
+agents:
+  defaults:
+    sandbox: true
+```
+
+This runs tools like `exec` in a Docker container, limiting blast radius if any plugin or skill misbehaves. While this plugin doesn't require sandboxing (it only calls a remote API), sandboxing protects against other plugins or prompt injection attacks.
 
 ## Reporting Security Issues
 
