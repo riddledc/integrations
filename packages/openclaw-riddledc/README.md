@@ -60,6 +60,18 @@ Example response:
 - Never hardcode API keys in config files
 - Use environment variables or a secret manager
 - The plugin only communicates with `api.riddledc.com` over HTTPS
+- Hardcoded domain allowlist prevents credential exfiltration
+- See [SECURITY.md](./SECURITY.md) for full threat model and data flow
+
+## Reproducible Builds
+
+To verify a build matches the published package:
+
+1. Clone the repo at the tagged version
+2. Run: `pnpm install && pnpm build`
+3. Compare checksums: `shasum -a 256 dist/*`
+
+Expected checksums are in `CHECKSUMS.txt`.
 
 ## License
 

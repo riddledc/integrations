@@ -46,6 +46,8 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: npm install -g npm@latest
 
-      - name: Publish to npm
+      - name: Publish to npm with provenance
         if: steps.changesets.outputs.hasChangesets == 'false'
-        run: pnpm release
+        run: pnpm release --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
