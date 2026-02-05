@@ -284,10 +284,20 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_screenshot",
-      description: "Riddle: take a screenshot of a single URL. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: take a screenshot of a single URL. Supports authenticated screenshots via cookies/localStorage. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         url: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs to inject (e.g., JWT tokens)" })),
+        headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean())
@@ -296,7 +306,12 @@ export default function register(api: PluginApi) {
         if (!params.url || typeof params.url !== "string") throw new Error("url must be a string");
         const payload: any = { url: params.url };
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
-        if (params.options) payload.options = params.options;
+        // Merge auth params into options
+        const opts = { ...(params.options || {}) };
+        if (params.cookies) opts.cookies = params.cookies;
+        if (params.localStorage) opts.localStorage = params.localStorage;
+        if (params.headers) opts.headers = params.headers;
+        if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
@@ -309,10 +324,20 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_screenshots",
-      description: "Riddle: take screenshots for multiple URLs in one job. Returns screenshots + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: take screenshots for multiple URLs in one job. Supports authenticated sessions via cookies/localStorage (shared across all URLs). Returns screenshots + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         urls: Type.Array(Type.String()),
         timeout_sec: Type.Optional(Type.Number()),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs to inject (e.g., JWT tokens)" })),
+        headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean())
@@ -323,7 +348,12 @@ export default function register(api: PluginApi) {
         }
         const payload: any = { urls: params.urls };
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
-        if (params.options) payload.options = params.options;
+        // Merge auth params into options
+        const opts = { ...(params.options || {}) };
+        if (params.cookies) opts.cookies = params.cookies;
+        if (params.localStorage) opts.localStorage = params.localStorage;
+        if (params.headers) opts.headers = params.headers;
+        if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
@@ -336,10 +366,20 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_steps",
-      description: "Riddle: run a workflow in steps mode (goto/click/fill/etc.). Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: run a workflow in steps mode (goto/click/fill/etc.). Supports authenticated sessions via cookies/localStorage. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         steps: Type.Array(Type.Record(Type.String(), Type.Any())),
         timeout_sec: Type.Optional(Type.Number()),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs to inject (e.g., JWT tokens)" })),
+        headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
@@ -350,7 +390,12 @@ export default function register(api: PluginApi) {
         const payload: any = { steps: params.steps };
         if (typeof params.sync === "boolean") payload.sync = params.sync;
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
-        if (params.options) payload.options = params.options;
+        // Merge auth params into options
+        const opts = { ...(params.options || {}) };
+        if (params.cookies) opts.cookies = params.cookies;
+        if (params.localStorage) opts.localStorage = params.localStorage;
+        if (params.headers) opts.headers = params.headers;
+        if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
@@ -363,10 +408,20 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_script",
-      description: "Riddle: run full Playwright code (script mode). Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: run full Playwright code (script mode). Supports authenticated sessions via cookies/localStorage. In scripts, use `await injectLocalStorage()` after navigating to the origin to apply localStorage values. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
       parameters: Type.Object({
         script: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs; use injectLocalStorage() in script after goto to apply" })),
+        headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
@@ -377,7 +432,12 @@ export default function register(api: PluginApi) {
         const payload: any = { script: params.script };
         if (typeof params.sync === "boolean") payload.sync = params.sync;
         if (params.timeout_sec) payload.timeout_sec = params.timeout_sec;
-        if (params.options) payload.options = params.options;
+        // Merge auth params into options
+        const opts = { ...(params.options || {}) };
+        if (params.cookies) opts.cookies = params.cookies;
+        if (params.localStorage) opts.localStorage = params.localStorage;
+        if (params.headers) opts.headers = params.headers;
+        if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
