@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.5.2
+
+### Patch Changes
+
+- Fix data extraction artifacts not appearing in sync responses. Add data/urls/dataset/sitemap to default includes for riddle_steps and riddle_script.
+
 ## 0.5.0
 
 ### Minor Changes

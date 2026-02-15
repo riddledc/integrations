@@ -398,7 +398,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -440,7 +440,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
