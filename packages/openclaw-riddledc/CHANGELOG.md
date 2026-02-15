@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.5.0
+
+### Minor Changes
+
+- Add riddle_scrape, riddle_map, riddle_crawl convenience tools for data extraction. Update riddle_steps and riddle_script descriptions with new sandbox helpers (scrape, map, crawl) and include types (data, urls, dataset, sitemap).
+
 ## 0.4.0
 
 ### Minor Changes

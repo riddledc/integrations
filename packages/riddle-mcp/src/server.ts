@@ -216,7 +216,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "riddle_run_script",
-      description: "Run a Playwright script on a page (async). Returns job_id to check status later.",
+      description: "Run a Playwright script on a page (async). Available sandbox helpers: scrape(opts?), map(opts?), crawl(opts?). Returns job_id to check status later.",
       inputSchema: {
         type: "object",
         properties: {
@@ -242,7 +242,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "riddle_automate",
       description:
-        "Run a Playwright script, wait for completion, and return all artifacts. Saves screenshots, console logs, and network HAR to /tmp files and returns paths.",
+        "Run a Playwright script, wait for completion, and return all artifacts. Available sandbox helpers: saveScreenshot(label), saveJson(name, data), scrape(opts?), map(opts?), crawl(opts?). Saves screenshots, console logs, and network HAR to /tmp files and returns paths.",
       inputSchema: {
         type: "object",
         properties: {
@@ -276,6 +276,48 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           force: { type: "boolean", description: "Force click even on animating elements (default: true)" }
         },
         required: ["url", "click"]
+      }
+    },
+    {
+      name: "riddle_scrape",
+      description: "Scrape a URL and extract structured content: title, description, markdown, links, headings, word count. Navigates to the URL, then extracts.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "URL to scrape" },
+          extract_metadata: { type: "boolean", description: "Extract metadata (default: true)" }
+        },
+        required: ["url"]
+      }
+    },
+    {
+      name: "riddle_map",
+      description: "Discover all URLs on a website by crawling from the starting URL. Returns an array of discovered URLs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Starting URL to map from" },
+          max_pages: { type: "number", description: "Max pages to crawl (default: 500, max: 5000)" },
+          include_patterns: { type: "array", items: { type: "string" }, description: "URL patterns to include" },
+          exclude_patterns: { type: "array", items: { type: "string" }, description: "URL patterns to exclude" }
+        },
+        required: ["url"]
+      }
+    },
+    {
+      name: "riddle_crawl",
+      description: "Crawl a website and extract content from each page into a dataset. Returns dataset metadata and saves data artifacts.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "Starting URL to crawl" },
+          max_pages: { type: "number", description: "Max pages to crawl (default: 100, max: 1000)" },
+          format: { type: "string", enum: ["jsonl", "json", "csv", "zip"], description: "Output format (default: jsonl)" },
+          js_rendering: { type: "boolean", description: "Use full browser rendering for SPAs" },
+          include_patterns: { type: "array", items: { type: "string" }, description: "URL patterns to include" },
+          exclude_patterns: { type: "array", items: { type: "string" }, description: "URL patterns to exclude" }
+        },
+        required: ["url"]
       }
     }
   ]
@@ -450,6 +492,75 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             text: JSON.stringify({ job_id, clicked: clickSelector, screenshot: screenshotPath }, null, 2)
           }
         ]
+      };
+    }
+
+    if (name === "riddle_scrape") {
+      const scrapeOpts = args.extract_metadata === false ? "{ extract_metadata: false }" : "";
+      const script = `return await scrape(${scrapeOpts});`;
+      const { job_id, artifacts } = await client.runScriptSync(
+        String(args.url), script, devices.desktop, 60
+      );
+      // Look for data.json in artifacts
+      let data: any = null;
+      for (const artifact of artifacts) {
+        if (artifact.name === "data.json") {
+          try { data = JSON.parse(artifact.buffer.toString("utf8")); } catch {}
+        }
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ job_id, data }, null, 2) }]
+      };
+    }
+
+    if (name === "riddle_map") {
+      const mapOpts: string[] = [];
+      if (args.max_pages != null) mapOpts.push(`max_pages: ${args.max_pages}`);
+      if (args.include_patterns) mapOpts.push(`include_patterns: ${JSON.stringify(args.include_patterns)}`);
+      if (args.exclude_patterns) mapOpts.push(`exclude_patterns: ${JSON.stringify(args.exclude_patterns)}`);
+      const optsStr = mapOpts.length > 0 ? `{ ${mapOpts.join(", ")} }` : "";
+      const script = `return await map(${optsStr});`;
+      const { job_id, artifacts } = await client.runScriptSync(
+        String(args.url), script, devices.desktop, 120
+      );
+      let urls: any = null;
+      for (const artifact of artifacts) {
+        if (artifact.name === "urls.json") {
+          try { urls = JSON.parse(artifact.buffer.toString("utf8")); } catch {}
+        }
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ job_id, urls }, null, 2) }]
+      };
+    }
+
+    if (name === "riddle_crawl") {
+      const crawlOpts: string[] = [];
+      if (args.max_pages != null) crawlOpts.push(`max_pages: ${args.max_pages}`);
+      if (args.format) crawlOpts.push(`format: '${args.format}'`);
+      if (args.js_rendering) crawlOpts.push("js_rendering: true");
+      if (args.include_patterns) crawlOpts.push(`include_patterns: ${JSON.stringify(args.include_patterns)}`);
+      if (args.exclude_patterns) crawlOpts.push(`exclude_patterns: ${JSON.stringify(args.exclude_patterns)}`);
+      const optsStr = crawlOpts.length > 0 ? `{ ${crawlOpts.join(", ")} }` : "";
+      const script = `return await crawl(${optsStr});`;
+      const { job_id, artifacts } = await client.runScriptSync(
+        String(args.url), script, devices.desktop, 300
+      );
+      // Save dataset artifacts to /tmp
+      const savedPaths: string[] = [];
+      let metadata: any = null;
+      for (const artifact of artifacts) {
+        if (artifact.name === "crawl-result.json") {
+          try { metadata = JSON.parse(artifact.buffer.toString("utf8")); } catch {}
+        }
+        if (artifact.name && (artifact.name.startsWith("dataset.") || artifact.name === "sitemap.json")) {
+          const ext = artifact.name.split(".").pop() || "json";
+          const path = saveToTmp(artifact.buffer, artifact.name.replace(/\.[^.]+$/, ""), ext);
+          savedPaths.push(path);
+        }
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ job_id, metadata, files: savedPaths }, null, 2) }]
       };
     }
 

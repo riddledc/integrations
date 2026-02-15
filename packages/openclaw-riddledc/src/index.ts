@@ -366,7 +366,7 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_steps",
-      description: "Riddle: run a workflow in steps mode (goto/click/fill/etc.). Supports authenticated sessions via cookies/localStorage. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: run a workflow in steps mode (goto/click/fill/screenshot/scrape/map/crawl/etc.). Supports authenticated sessions via cookies/localStorage. Data extraction steps: { scrape: true }, { map: { max_pages?: N } }, { crawl: { max_pages?: N, format?: 'json'|'csv' } }. Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts.",
       parameters: Type.Object({
         steps: Type.Array(Type.Record(Type.String(), Type.Any())),
         timeout_sec: Type.Optional(Type.Number()),
@@ -408,7 +408,7 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_script",
-      description: "Riddle: run full Playwright code (script mode). Supports authenticated sessions via cookies/localStorage. In scripts, use `await injectLocalStorage()` after navigating to the origin to apply localStorage values. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+      description: "Riddle: run full Playwright code (script mode). Supports authenticated sessions via cookies/localStorage. In scripts, use `await injectLocalStorage()` after navigating to the origin to apply localStorage values. Available sandbox helpers: saveScreenshot(label), saveHtml(label), saveJson(name, data), scrape(opts?), map(opts?), crawl(opts?). Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts.",
       parameters: Type.Object({
         script: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
@@ -441,6 +441,126 @@ export default function register(api: PluginApi) {
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result"] });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  // --- Data Extraction Convenience Tools ---
+
+  api.registerTool(
+    {
+      name: "riddle_scrape",
+      description: "Riddle: scrape a URL and extract structured content (title, description, markdown, links, headings, word count). Navigates to the URL first, then extracts. For authenticated scraping, use riddle_script with login steps followed by await scrape().",
+      parameters: Type.Object({
+        url: Type.String({ description: "URL to scrape" }),
+        extract_metadata: Type.Optional(Type.Boolean({ description: "Extract metadata (default: true)" })),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+      }),
+      async execute(_id: string, params: any) {
+        const scrapeOpts = params.extract_metadata === false ? "{ extract_metadata: false }" : "";
+        const payload: any = {
+          url: params.url,
+          script: `return await scrape(${scrapeOpts});`,
+          options: { ...(params.options || {}), returnResult: true }
+        };
+        if (params.cookies) payload.options.cookies = params.cookies;
+        const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_map",
+      description: "Riddle: discover all URLs on a website by crawling from the given URL. Returns an array of discovered URLs. For authenticated mapping, use riddle_script with login steps followed by await map().",
+      parameters: Type.Object({
+        url: Type.String({ description: "Starting URL to map from" }),
+        max_pages: Type.Optional(Type.Number({ description: "Max pages to crawl (default: 500, max: 5000)" })),
+        include_patterns: Type.Optional(Type.Array(Type.String(), { description: "URL patterns to include (glob)" })),
+        exclude_patterns: Type.Optional(Type.Array(Type.String(), { description: "URL patterns to exclude (glob)" })),
+        respect_robots: Type.Optional(Type.Boolean({ description: "Respect robots.txt (default: true)" })),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+      }),
+      async execute(_id: string, params: any) {
+        const mapOpts: string[] = [];
+        if (params.max_pages != null) mapOpts.push(`max_pages: ${params.max_pages}`);
+        if (params.include_patterns) mapOpts.push(`include_patterns: ${JSON.stringify(params.include_patterns)}`);
+        if (params.exclude_patterns) mapOpts.push(`exclude_patterns: ${JSON.stringify(params.exclude_patterns)}`);
+        if (params.respect_robots === false) mapOpts.push("respect_robots: false");
+        const optsStr = mapOpts.length > 0 ? `{ ${mapOpts.join(", ")} }` : "";
+        const payload: any = {
+          url: params.url,
+          script: `return await map(${optsStr});`,
+          options: { ...(params.options || {}), returnResult: true }
+        };
+        if (params.cookies) payload.options.cookies = params.cookies;
+        const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_crawl",
+      description: "Riddle: crawl a website and extract content from each page into a dataset. Returns dataset metadata; use include:[\"dataset\"] to get the full dataset file. For authenticated crawling, use riddle_script with login steps followed by await crawl().",
+      parameters: Type.Object({
+        url: Type.String({ description: "Starting URL to crawl from" }),
+        max_pages: Type.Optional(Type.Number({ description: "Max pages to crawl (default: 100, max: 1000)" })),
+        format: Type.Optional(Type.String({ description: "Output format: jsonl, json, csv, zip (default: jsonl)" })),
+        js_rendering: Type.Optional(Type.Boolean({ description: "Use full browser rendering (slower but handles SPAs)" })),
+        include_patterns: Type.Optional(Type.Array(Type.String(), { description: "URL patterns to include (glob)" })),
+        exclude_patterns: Type.Optional(Type.Array(Type.String(), { description: "URL patterns to exclude (glob)" })),
+        extract_metadata: Type.Optional(Type.Boolean({ description: "Extract metadata per page (default: true)" })),
+        respect_robots: Type.Optional(Type.Boolean({ description: "Respect robots.txt (default: true)" })),
+        cookies: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(),
+          value: Type.String(),
+          domain: Type.String(),
+          path: Type.Optional(Type.String()),
+          secure: Type.Optional(Type.Boolean()),
+          httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies to inject for authenticated sessions" })),
+        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+      }),
+      async execute(_id: string, params: any) {
+        const crawlOpts: string[] = [];
+        if (params.max_pages != null) crawlOpts.push(`max_pages: ${params.max_pages}`);
+        if (params.format) crawlOpts.push(`format: '${params.format}'`);
+        if (params.js_rendering) crawlOpts.push("js_rendering: true");
+        if (params.include_patterns) crawlOpts.push(`include_patterns: ${JSON.stringify(params.include_patterns)}`);
+        if (params.exclude_patterns) crawlOpts.push(`exclude_patterns: ${JSON.stringify(params.exclude_patterns)}`);
+        if (params.extract_metadata === false) crawlOpts.push("extract_metadata: false");
+        if (params.respect_robots === false) crawlOpts.push("respect_robots: false");
+        const optsStr = crawlOpts.length > 0 ? `{ ${crawlOpts.join(", ")} }` : "";
+        const payload: any = {
+          url: params.url,
+          script: `return await crawl(${optsStr});`,
+          options: { ...(params.options || {}), returnResult: true }
+        };
+        if (params.cookies) payload.options.cookies = params.cookies;
+        const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
