@@ -1,5 +1,11 @@
 # @riddledc/riddle-mcp
 
+## 0.5.3
+
+### Patch Changes
+
+- Add riddle_visual_diff tool for pixel-level page comparison
+
 ## 0.5.2
 
 ### Patch Changes

@@ -398,7 +398,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -440,7 +440,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -561,6 +561,55 @@ export default function register(api: PluginApi) {
         };
         if (params.cookies) payload.options.cookies = params.cookies;
         const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_visual_diff",
+      description: "Riddle: visually compare two URLs by screenshotting both and computing a pixel-level diff. Returns change percentage, changed pixel count, and URLs to before/after/diff images. For authenticated comparison, use riddle_script with login steps followed by await visualDiff().",
+      parameters: Type.Object({
+        url_before: Type.String({ description: "URL to screenshot as the 'before' image" }),
+        url_after: Type.String({ description: "URL to screenshot as the 'after' image" }),
+        viewport: Type.Optional(Type.Object({
+          width: Type.Number({ description: "Viewport width (default: 1280)" }),
+          height: Type.Number({ description: "Viewport height (default: 720)" })
+        })),
+        full_page: Type.Optional(Type.Boolean({ description: "Capture full page (default: true)" })),
+        threshold: Type.Optional(Type.Number({ description: "Pixel match threshold 0-1 (default: 0.1)" })),
+        selector: Type.Optional(Type.String({ description: "CSS selector to capture instead of full page" })),
+        delay_ms: Type.Optional(Type.Number({ description: "Delay after page load before capture (ms)" })),
+        cookies_before: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(), value: Type.String(), domain: Type.String(),
+          path: Type.Optional(Type.String()), secure: Type.Optional(Type.Boolean()), httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies for the 'before' URL" })),
+        cookies_after: Type.Optional(Type.Array(Type.Object({
+          name: Type.String(), value: Type.String(), domain: Type.String(),
+          path: Type.Optional(Type.String()), secure: Type.Optional(Type.Boolean()), httpOnly: Type.Optional(Type.Boolean())
+        }), { description: "Cookies for the 'after' URL" })),
+        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+      }),
+      async execute(_id: string, params: any) {
+        const vdOpts: string[] = [];
+        vdOpts.push(`url_before: '${params.url_before}'`);
+        vdOpts.push(`url_after: '${params.url_after}'`);
+        if (params.viewport) vdOpts.push(`viewport: { width: ${params.viewport.width || 1280}, height: ${params.viewport.height || 720} }`);
+        if (params.full_page === false) vdOpts.push("full_page: false");
+        if (params.threshold != null) vdOpts.push(`threshold: ${params.threshold}`);
+        if (params.selector) vdOpts.push(`selector: '${params.selector}'`);
+        if (params.delay_ms) vdOpts.push(`delay_ms: ${params.delay_ms}`);
+        if (params.cookies_before) vdOpts.push(`cookies_before: ${JSON.stringify(params.cookies_before)}`);
+        if (params.cookies_after) vdOpts.push(`cookies_after: ${JSON.stringify(params.cookies_after)}`);
+        const optsStr = `{ ${vdOpts.join(", ")} }`;
+        const payload: any = {
+          url: params.url_before,
+          script: `return await visualDiff(${optsStr});`,
+          options: { ...(params.options || {}), returnResult: true }
+        };
+        const result = await runWithDefaults(api, payload, { include: ["result", "console", "visual_diff"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },

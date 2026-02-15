@@ -319,6 +319,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         },
         required: ["url"]
       }
+    },
+    {
+      name: "riddle_visual_diff",
+      description: "Visually compare two URLs by screenshotting both and computing a pixel-level diff. Returns change percentage, pixel counts, and diff/before/after image URLs.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          url_before: { type: "string", description: "URL to screenshot as the 'before' image" },
+          url_after: { type: "string", description: "URL to screenshot as the 'after' image" },
+          viewport_width: { type: "number", description: "Viewport width (default: 1280)" },
+          viewport_height: { type: "number", description: "Viewport height (default: 720)" },
+          full_page: { type: "boolean", description: "Capture full page (default: true)" },
+          threshold: { type: "number", description: "Pixel match threshold 0-1 (default: 0.1)" },
+          selector: { type: "string", description: "CSS selector to capture instead of full page" },
+          delay_ms: { type: "number", description: "Delay after page load before capture (ms)" }
+        },
+        required: ["url_before", "url_after"]
+      }
     }
   ]
 }));
@@ -561,6 +579,38 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       return {
         content: [{ type: "text", text: JSON.stringify({ job_id, metadata, files: savedPaths }, null, 2) }]
+      };
+    }
+
+    if (name === "riddle_visual_diff") {
+      const vdOpts: string[] = [];
+      vdOpts.push(`url_before: '${args.url_before}'`);
+      vdOpts.push(`url_after: '${args.url_after}'`);
+      if (args.viewport_width || args.viewport_height) {
+        vdOpts.push(`viewport: { width: ${args.viewport_width || 1280}, height: ${args.viewport_height || 720} }`);
+      }
+      if (args.full_page === false) vdOpts.push("full_page: false");
+      if (args.threshold != null) vdOpts.push(`threshold: ${args.threshold}`);
+      if (args.selector) vdOpts.push(`selector: '${args.selector}'`);
+      if (args.delay_ms) vdOpts.push(`delay_ms: ${args.delay_ms}`);
+      const optsStr = `{ ${vdOpts.join(", ")} }`;
+      const script = `return await visualDiff(${optsStr});`;
+      const { job_id, artifacts } = await client.runScriptSync(
+        String(args.url_before), script, devices.desktop, 60
+      );
+      let diffData: any = null;
+      const savedPaths: string[] = [];
+      for (const artifact of artifacts) {
+        if (artifact.name === "visual-diff.json") {
+          try { diffData = JSON.parse(artifact.buffer.toString("utf8")); } catch {}
+        }
+        if (artifact.name && artifact.name.endsWith(".png")) {
+          const path = saveToTmp(artifact.buffer, artifact.name.replace(".png", ""), "png");
+          savedPaths.push(path);
+        }
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify({ job_id, ...diffData, images: savedPaths }, null, 2) }]
       };
     }
 
