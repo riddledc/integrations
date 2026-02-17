@@ -91,7 +91,7 @@ async function writeArtifact(
   const filePath = join(dir, filename);
   const buf = Buffer.from(content, "utf8");
   await writeFile(filePath, buf);
-  return { path: `riddle/${subdir}/${filename}`, sizeBytes: buf.byteLength };
+  return { path: filePath, sizeBytes: buf.byteLength };
 }
 
 async function writeArtifactBinary(
@@ -105,7 +105,7 @@ async function writeArtifactBinary(
   const filePath = join(dir, filename);
   const buf = Buffer.from(base64Content, "base64");
   await writeFile(filePath, buf);
-  return { path: `riddle/${subdir}/${filename}`, sizeBytes: buf.byteLength };
+  return { path: filePath, sizeBytes: buf.byteLength };
 }
 
 async function applySafetySpec(
