@@ -125,16 +125,18 @@ async function applySafetySpec(
     }
     if (base64Data) {
       const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}.png`, base64Data);
-      result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes };
+      const cdnUrl = typeof result.screenshot === "object" ? result.screenshot.url : undefined;
+      result.screenshot = { saved: ref.path, sizeBytes: ref.sizeBytes, ...(cdnUrl ? { url: cdnUrl } : {}) };
     }
   }
 
   // screenshots array: save each to file (API returns both screenshot and screenshots)
   if (Array.isArray((result as any).screenshots)) {
-    const savedRefs: Array<{ saved: string; sizeBytes: number }> = [];
+    const savedRefs: Array<{ saved: string; sizeBytes: number; url?: string }> = [];
     for (let i = 0; i < (result as any).screenshots.length; i++) {
       const ss = (result as any).screenshots[i];
       let base64Data: string | null = null;
+      const cdnUrl = typeof ss === "object" ? ss.url : undefined;
       if (typeof ss === "string") {
         base64Data = ss;
       } else if (typeof ss === "object" && ss.data) {
@@ -143,7 +145,7 @@ async function applySafetySpec(
       }
       if (base64Data) {
         const ref = await writeArtifactBinary(opts.workspace, "screenshots", `${jobId}-${i}.png`, base64Data);
-        savedRefs.push({ saved: ref.path, sizeBytes: ref.sizeBytes });
+        savedRefs.push({ saved: ref.path, sizeBytes: ref.sizeBytes, ...(cdnUrl ? { url: cdnUrl } : {}) });
       }
     }
     (result as any).screenshots = savedRefs;
