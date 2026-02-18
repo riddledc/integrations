@@ -46,7 +46,7 @@
     "prepack": "npm run sync:openclaw-plugin-version && npm run checksums"
   },
   "dependencies": {
-    "@sinclair/typebox": "^0.32.0"
+    "@sinclair/typebox": "^0.34.48"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
