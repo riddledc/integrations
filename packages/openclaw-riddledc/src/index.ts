@@ -187,6 +187,130 @@ async function applySafetySpec(
   }
 }
 
+async function pollJobStatus(
+  baseUrl: string,
+  apiKey: string,
+  jobId: string,
+  maxWaitMs: number
+): Promise<any> {
+  const start = Date.now();
+  const POLL_INTERVAL = 2000;
+
+  while (Date.now() - start < maxWaitMs) {
+    const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/jobs/${jobId}`, {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    if (!res.ok) {
+      return { status: "poll_error", error: `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    // Terminal statuses
+    if (
+      data.status === "completed" ||
+      data.status === "completed_timeout" ||
+      data.status === "completed_error" ||
+      data.status === "failed"
+    ) {
+      return data;
+    }
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+  }
+  return { status: "poll_timeout", error: `Job ${jobId} did not complete within ${maxWaitMs}ms` };
+}
+
+async function fetchArtifactsAndBuild(
+  baseUrl: string,
+  apiKey: string,
+  jobId: string,
+  include: string[]
+): Promise<Record<string, any>> {
+  // Fetch artifacts list (standard format — returns CDN URLs)
+  const res = await fetch(
+    `${baseUrl.replace(/\/$/, "")}/v1/jobs/${jobId}/artifacts?include=${include.join(",")}`,
+    { headers: { Authorization: `Bearer ${apiKey}` } }
+  );
+  if (!res.ok) {
+    return { error: `Artifacts fetch failed: HTTP ${res.status}` };
+  }
+  const data = await res.json();
+  const artifacts: Array<{ name: string; url?: string }> = data.artifacts || [];
+  const result: Record<string, any> = {};
+
+  // Propagate timeout/error from artifacts endpoint
+  if (data.status) result._artifactsStatus = data.status;
+  if (data.timeout) result._timeout = data.timeout;
+  if (data.error) result._error = data.error;
+
+  // Download screenshots from CDN and convert to base64
+  const screenshots = artifacts.filter((a) => a.name && /\.(png|jpg|jpeg)$/i.test(a.name));
+  if (screenshots.length > 0) {
+    result.screenshots = [];
+    for (const ss of screenshots) {
+      if (!ss.url) continue;
+      try {
+        const imgRes = await fetch(ss.url);
+        if (imgRes.ok) {
+          const buf = await imgRes.arrayBuffer();
+          result.screenshots.push({
+            name: ss.name,
+            data: `data:image/png;base64,${Buffer.from(buf).toString("base64")}`,
+            size: buf.byteLength,
+            url: ss.url
+          });
+        }
+      } catch {
+        // Skip failed screenshot downloads
+      }
+    }
+    if (result.screenshots.length > 0) {
+      result.screenshot = result.screenshots[0];
+    }
+  }
+
+  // Download console.json from CDN
+  const consoleArtifact = artifacts.find((a) => a.name === "console.json");
+  if (consoleArtifact?.url) {
+    try {
+      const cRes = await fetch(consoleArtifact.url);
+      if (cRes.ok) {
+        result.console = await cRes.json();
+      }
+    } catch {
+      // Skip
+    }
+  }
+
+  // Download result.json if present
+  const resultArtifact = artifacts.find((a) => a.name === "result.json");
+  if (resultArtifact?.url) {
+    try {
+      const rRes = await fetch(resultArtifact.url);
+      if (rRes.ok) {
+        result.result = await rRes.json();
+      }
+    } catch {
+      // Skip
+    }
+  }
+
+  // Download HAR if present (only if requested)
+  if (include.includes("har")) {
+    const harArtifact = artifacts.find((a) => a.name === "network.har");
+    if (harArtifact?.url) {
+      try {
+        const hRes = await fetch(harArtifact.url);
+        if (hRes.ok) {
+          result.har = await hRes.json();
+        }
+      } catch {
+        // Skip
+      }
+    }
+  }
+
+  return result;
+}
+
 async function runWithDefaults(
   api: PluginApi,
   payload: RiddlePayload,
@@ -227,6 +351,55 @@ async function runWithDefaults(
   const { contentType, body, headers, status } = await postRun(baseUrl, apiKey, merged);
   out.rawContentType = contentType ?? undefined;
 
+  const workspace = getWorkspacePath(api);
+
+  // HTTP 408 = sync poll timed out, job still running — poll async
+  if (status === 408) {
+    let jobIdFrom408: string | undefined;
+    try {
+      const json408 = JSON.parse(Buffer.from(body).toString("utf8"));
+      jobIdFrom408 = json408.job_id;
+    } catch {
+      // fall through
+    }
+    if (!jobIdFrom408) {
+      out.ok = false;
+      out.error = "Sync poll timed out but no job_id in 408 response";
+      return out;
+    }
+    out.job_id = jobIdFrom408;
+
+    // Poll with timeout = script timeout + 30s buffer (generous)
+    const scriptTimeoutMs = ((payload.timeout_sec as number) ?? 60) * 1000;
+    const pollMaxMs = scriptTimeoutMs + 30000;
+    const jobStatus = await pollJobStatus(baseUrl, apiKey, jobIdFrom408, pollMaxMs);
+
+    if (jobStatus.status === "poll_timeout" || jobStatus.status === "poll_error" || jobStatus.status === "failed") {
+      out.ok = false;
+      out.status = jobStatus.status;
+      out.error = jobStatus.error || `Job ${jobStatus.status}`;
+      return out;
+    }
+
+    // Job reached terminal status — fetch artifacts from CDN
+    const artifacts = await fetchArtifactsAndBuild(baseUrl, apiKey, jobIdFrom408, merged.include);
+    Object.assign(out, artifacts);
+    out.job_id = jobIdFrom408;
+    out.status = jobStatus.status;
+    out.duration_ms = jobStatus.duration_ms;
+
+    // completed_timeout / completed_error — still try to save any partial outputs
+    if (jobStatus.status !== "completed") {
+      out.ok = false;
+      if (jobStatus.timeout) (out as any).timeout = jobStatus.timeout;
+      if (jobStatus.error) out.error = jobStatus.error;
+    }
+
+    await applySafetySpec(out, { workspace, harInline });
+    return out;
+  }
+
+  // Other 4xx/5xx errors
   if (status >= 400) {
     try {
       const txt = Buffer.from(body).toString("utf8");
@@ -240,14 +413,13 @@ async function runWithDefaults(
     }
   }
 
+  // Raw PNG response (simple screenshot)
   if (contentType && contentType.includes("image/png")) {
     out.rawPngBase64 = abToBase64(body);
     out.job_id = headers.get("x-job-id") ?? undefined;
     const duration = headers.get("x-duration-ms");
     out.duration_ms = duration ? Number(duration) : undefined;
     out.sync = true;
-    // Save screenshot to file instead of inline base64
-    const workspace = getWorkspacePath(api);
     await applySafetySpec(out, { workspace, harInline });
     return out;
   }
@@ -257,8 +429,41 @@ async function runWithDefaults(
   Object.assign(out, json);
   out.job_id = (json.job_id ?? json.jobId ?? out.job_id) as any;
 
-  // Apply HAR safety spec: cap inline sizes, write large artifacts to files
-  const workspace = getWorkspacePath(api);
+  // Handle async response (HTTP 202 — job accepted, not yet complete)
+  if (status === 202 && out.job_id && json.status_url) {
+    const scriptTimeoutMs = ((payload.timeout_sec as number) ?? 60) * 1000;
+    const pollMaxMs = scriptTimeoutMs + 30000;
+    const jobStatus = await pollJobStatus(baseUrl, apiKey, out.job_id, pollMaxMs);
+
+    if (jobStatus.status === "poll_timeout" || jobStatus.status === "poll_error" || jobStatus.status === "failed") {
+      out.ok = false;
+      out.status = jobStatus.status;
+      out.error = jobStatus.error || `Job ${jobStatus.status}`;
+      return out;
+    }
+
+    // Fetch artifacts
+    const artifacts = await fetchArtifactsAndBuild(baseUrl, apiKey, out.job_id, merged.include);
+    Object.assign(out, artifacts);
+    out.status = jobStatus.status;
+    out.duration_ms = jobStatus.duration_ms;
+
+    if (jobStatus.status !== "completed") {
+      out.ok = false;
+      if (jobStatus.timeout) (out as any).timeout = jobStatus.timeout;
+      if (jobStatus.error) out.error = jobStatus.error;
+    }
+
+    await applySafetySpec(out, { workspace, harInline });
+    return out;
+  }
+
+  // Handle completed_timeout / completed_error from sync poll (lease service now returns these)
+  if (json.status === "completed_timeout" || json.status === "completed_error") {
+    out.ok = false;
+    // Still process any partial outputs (screenshots, console) that came through
+  }
+
   await applySafetySpec(out, { workspace, harInline });
 
   return out;
