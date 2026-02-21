@@ -314,7 +314,7 @@ async function fetchArtifactsAndBuild(
 async function runWithDefaults(
   api: PluginApi,
   payload: RiddlePayload,
-  defaults?: { include?: string[] }
+  defaults?: { include?: string[]; returnAsync?: boolean }
 ): Promise<RunResult> {
   const { apiKey, baseUrl } = getCfg(api);
   if (!apiKey) {
@@ -332,8 +332,15 @@ async function runWithDefaults(
   const userRequestedHar = userInclude.includes("har");
   const harInline = !!payload.harInline;
 
+  const returnAsync = !!defaults?.returnAsync;
+
   const merged: any = { ...payload };
   delete merged.harInline; // Plugin-only flag; don't forward to API
+
+  // Force async API response when caller wants fire-and-forget
+  if (returnAsync) {
+    merged.sync = false;
+  }
 
   // Merge includes: user's explicit + tool defaults (defaults never contain "har")
   const defaultInc = defaults?.include ?? ["screenshot", "console"];
@@ -368,6 +375,12 @@ async function runWithDefaults(
       return out;
     }
     out.job_id = jobIdFrom408;
+
+    // Async mode: return job_id immediately without polling
+    if (returnAsync) {
+      out.status = "submitted";
+      return out;
+    }
 
     // Poll with timeout = script timeout + 30s buffer (generous)
     const scriptTimeoutMs = ((payload.timeout_sec as number) ?? 60) * 1000;
@@ -431,6 +444,12 @@ async function runWithDefaults(
 
   // Handle async response (HTTP 202 — job accepted, not yet complete)
   if (status === 202 && out.job_id && json.status_url) {
+    // Async mode: return job_id immediately without polling
+    if (returnAsync) {
+      out.status = "submitted";
+      return out;
+    }
+
     const scriptTimeoutMs = ((payload.timeout_sec as number) ?? 60) * 1000;
     const pollMaxMs = scriptTimeoutMs + 30000;
     const jobStatus = await pollJobStatus(baseUrl, apiKey, out.job_id, pollMaxMs);
@@ -474,15 +493,66 @@ export default function register(api: PluginApi) {
     {
       name: "riddle_run",
       description:
-        "Run a Riddle job (pass-through payload) against https://api.riddledc.com/v1/run. Supports url/urls/steps/script. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture.",
+        "Run a Riddle job (pass-through payload) against https://api.riddledc.com/v1/run. Supports url/urls/steps/script. Returns screenshot + console by default; pass include:[\"har\"] to opt in to HAR capture. Set async:true to return immediately with job_id (use riddle_poll to check status later).",
       parameters: Type.Object({
-        payload: Type.Record(Type.String(), Type.Any())
+        payload: Type.Record(Type.String(), Type.Any()),
+        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." }))
       }),
       async execute(_id: string, params: any) {
         const result = await runWithDefaults(api, params.payload, {
-          include: ["screenshot", "console", "result"]
+          include: ["screenshot", "console", "result"],
+          returnAsync: !!params.async
         });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_poll",
+      description: "Poll the status of an async Riddle job. Use after submitting a job with async:true. Returns current status if still running, or full results (screenshot, console, etc.) if completed.",
+      parameters: Type.Object({
+        job_id: Type.String({ description: "Job ID returned by an async riddle_* call" }),
+        include: Type.Optional(Type.Array(Type.String(), { description: "Artifacts to fetch on completion (default: screenshot, console, result)" })),
+        harInline: Type.Optional(Type.Boolean())
+      }),
+      async execute(_id: string, params: any) {
+        if (!params.job_id || typeof params.job_id !== "string") throw new Error("job_id must be a string");
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        }
+        assertAllowedBaseUrl(baseUrl);
+
+        // Check job status (single poll, no loop)
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/jobs/${params.job_id}`, {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!res.ok) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: params.job_id, error: `HTTP ${res.status}` }, null, 2) }] };
+        }
+        const data = await res.json();
+
+        // Still running — return status only
+        if (data.status !== "completed" && data.status !== "completed_timeout" && data.status !== "completed_error" && data.status !== "failed") {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: true, job_id: params.job_id, status: data.status, message: "Job still running. Call riddle_poll again later." }, null, 2) }] };
+        }
+
+        // Terminal — fetch artifacts
+        const include = params.include ?? ["screenshot", "console", "result"];
+        const artifacts = await fetchArtifactsAndBuild(baseUrl, apiKey, params.job_id, include);
+        const out: RunResult = { ok: data.status === "completed", job_id: params.job_id, status: data.status, duration_ms: data.duration_ms, ...artifacts };
+
+        if (data.status !== "completed") {
+          if (data.timeout) (out as any).timeout = data.timeout;
+          if (data.error) out.error = data.error;
+        }
+
+        const workspace = getWorkspacePath(api);
+        await applySafetySpec(out, { workspace, harInline: !!params.harInline });
+        return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
       }
     },
     { optional: true }
@@ -573,7 +643,7 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_steps",
-      description: "Riddle: run a workflow in steps mode (goto/click/fill/screenshot/scrape/map/crawl/etc.). Supports authenticated sessions via cookies/localStorage. Data extraction steps: { scrape: true }, { map: { max_pages?: N } }, { crawl: { max_pages?: N, format?: 'json'|'csv' } }. Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts.",
+      description: "Riddle: run a workflow in steps mode (goto/click/fill/screenshot/scrape/map/crawl/etc.). Supports authenticated sessions via cookies/localStorage. Data extraction steps: { scrape: true }, { map: { max_pages?: N } }, { crawl: { max_pages?: N, format?: 'json'|'csv' } }. Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts. Set async:true to return immediately with job_id (use riddle_poll to check status later).",
       parameters: Type.Object({
         steps: Type.Array(Type.Record(Type.String(), Type.Any())),
         timeout_sec: Type.Optional(Type.Number()),
@@ -590,7 +660,8 @@ export default function register(api: PluginApi) {
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
-        sync: Type.Optional(Type.Boolean())
+        sync: Type.Optional(Type.Boolean()),
+        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." }))
       }),
       async execute(_id: string, params: any) {
         if (!Array.isArray(params.steps)) throw new Error("steps must be an array");
@@ -605,7 +676,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"], returnAsync: !!params.async });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
@@ -615,7 +686,7 @@ export default function register(api: PluginApi) {
   api.registerTool(
     {
       name: "riddle_script",
-      description: "Riddle: run full Playwright code (script mode). Supports authenticated sessions via cookies/localStorage. In scripts, use `await injectLocalStorage()` after navigating to the origin to apply localStorage values. Available sandbox helpers: saveScreenshot(label), saveHtml(label), saveJson(name, data), scrape(opts?), map(opts?), crawl(opts?). Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts.",
+      description: "Riddle: run full Playwright code (script mode). Supports authenticated sessions via cookies/localStorage. In scripts, use `await injectLocalStorage()` after navigating to the origin to apply localStorage values. Available sandbox helpers: saveScreenshot(label), saveHtml(label), saveJson(name, data), scrape(opts?), map(opts?), crawl(opts?). Returns screenshot + console by default; pass include:[\"har\",\"data\",\"urls\",\"dataset\",\"sitemap\"] for additional artifacts. Set async:true to return immediately with job_id (use riddle_poll to check status later).",
       parameters: Type.Object({
         script: Type.String(),
         timeout_sec: Type.Optional(Type.Number()),
@@ -632,7 +703,8 @@ export default function register(api: PluginApi) {
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
-        sync: Type.Optional(Type.Boolean())
+        sync: Type.Optional(Type.Boolean()),
+        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." }))
       }),
       async execute(_id: string, params: any) {
         if (!params.script || typeof params.script !== "string") throw new Error("script must be a string");
@@ -647,7 +719,7 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
-        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"] });
+        const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"], returnAsync: !!params.async });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },

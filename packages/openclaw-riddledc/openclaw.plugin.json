@@ -33,6 +33,7 @@
         "riddle_steps",
         "riddle_script",
         "riddle_run",
+        "riddle_poll",
         "riddle_scrape",
         "riddle_map",
         "riddle_crawl",
