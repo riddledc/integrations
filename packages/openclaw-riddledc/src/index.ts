@@ -1,6 +1,10 @@
 import { Type } from "@sinclair/typebox";
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, readFile, stat, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { execFile as execFileCb } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFile = promisify(execFileCb);
 
 type PluginApi = any;
 
@@ -890,6 +894,122 @@ export default function register(api: PluginApi) {
         };
         const result = await runWithDefaults(api, payload, { include: ["result", "console", "visual_diff"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_preview",
+      description: "Deploy a local build directory as an ephemeral preview site. Tars the directory, uploads to Riddle, and returns a live URL at preview.riddledc.com that can be screenshotted with other riddle_* tools. Previews auto-expire after 24 hours.",
+      parameters: Type.Object({
+        directory: Type.String({ description: "Absolute path to the build output directory (e.g. /path/to/build or /path/to/dist)" }),
+        framework: Type.Optional(Type.String({ description: "Framework hint: 'spa' (default) or 'static'" }))
+      }),
+      async execute(_id: string, params: any) {
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        }
+        assertAllowedBaseUrl(baseUrl);
+
+        const dir = params.directory;
+        if (!dir || typeof dir !== "string") throw new Error("directory must be an absolute path");
+
+        // Verify directory exists
+        try {
+          const st = await stat(dir);
+          if (!st.isDirectory()) throw new Error(`Not a directory: ${dir}`);
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Cannot access directory: ${e.message}` }, null, 2) }] };
+        }
+
+        const endpoint = baseUrl.replace(/\/$/, "");
+
+        // Step 1: Create preview
+        const createRes = await fetch(`${endpoint}/v1/preview`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ framework: params.framework || "spa" })
+        });
+        if (!createRes.ok) {
+          const err = await createRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
+        }
+        const created = await createRes.json() as any;
+
+        // Step 2: Tar the directory and upload
+        const tarball = `/tmp/riddle-preview-${created.id}.tar.gz`;
+        try {
+          await execFile("tar", ["czf", tarball, "-C", dir, "."], { timeout: 60000 });
+          const tarData = await readFile(tarball);
+
+          const uploadRes = await fetch(created.upload_url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/gzip" },
+            body: tarData
+          });
+          if (!uploadRes.ok) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
+          }
+        } finally {
+          try { await rm(tarball, { force: true }); } catch { /* ignore */ }
+        }
+
+        // Step 3: Publish
+        const publishRes = await fetch(`${endpoint}/v1/preview/${created.id}/publish`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!publishRes.ok) {
+          const err = await publishRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Publish failed: HTTP ${publishRes.status} ${err}` }, null, 2) }] };
+        }
+        const published = await publishRes.json() as any;
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              ok: true,
+              id: published.id,
+              preview_url: published.preview_url,
+              file_count: published.file_count,
+              total_bytes: published.total_bytes,
+              expires_at: created.expires_at
+            }, null, 2)
+          }]
+        };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_preview_delete",
+      description: "Delete an ephemeral preview site created by riddle_preview. Removes all files and frees the preview ID immediately instead of waiting for auto-expiry.",
+      parameters: Type.Object({
+        id: Type.String({ description: "Preview ID (e.g. pv_a1b2c3d4)" })
+      }),
+      async execute(_id: string, params: any) {
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        }
+        assertAllowedBaseUrl(baseUrl);
+
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/preview/${params.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Delete failed: HTTP ${res.status} ${err}` }, null, 2) }] };
+        }
+        const data = await res.json() as any;
+        return { content: [{ type: "text", text: JSON.stringify({ ok: true, deleted: true, files_removed: data.files_removed }, null, 2) }] };
       }
     },
     { optional: true }
