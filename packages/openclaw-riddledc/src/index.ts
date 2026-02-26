@@ -1014,4 +1014,164 @@ export default function register(api: PluginApi) {
     },
     { optional: true }
   );
+
+  api.registerTool(
+    {
+      name: "riddle_server_preview",
+      description: "Run a server-side app (Next.js, Express, Django, etc.) in an isolated Docker container and screenshot it. Tars the build directory, uploads to Riddle, starts the container with the specified image and command, waits for readiness, then takes a Playwright screenshot. Use for apps that need a running server process (not static sites — use riddle_preview for those).",
+      parameters: Type.Object({
+        directory: Type.String({ description: "Absolute path to the project/build directory to deploy into the container" }),
+        image: Type.String({ description: "Docker image to run (e.g. 'node:20-slim', 'python:3.12-slim')" }),
+        command: Type.String({ description: "Command to start the server inside the container (e.g. 'npm start', 'python manage.py runserver 0.0.0.0:3000')" }),
+        port: Type.Number({ description: "Port the server listens on inside the container" }),
+        path: Type.Optional(Type.String({ description: "URL path to screenshot (default: '/')" })),
+        env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Non-sensitive environment variables" })),
+        sensitive_env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Sensitive environment variables (API keys, DB passwords). Stored securely and deleted after use." })),
+        timeout: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 120, max: 600)" })),
+        readiness_path: Type.Optional(Type.String({ description: "Path to poll for readiness (default: same as path)" })),
+        readiness_timeout: Type.Optional(Type.Number({ description: "Max seconds to wait for server readiness (default: 30)" })),
+        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready (e.g. 'await page.click(\"button\")')" }))
+      }),
+      async execute(_id: string, params: any) {
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        }
+        assertAllowedBaseUrl(baseUrl);
+
+        const dir = params.directory;
+        if (!dir || typeof dir !== "string") throw new Error("directory must be an absolute path");
+
+        // Verify directory exists
+        try {
+          const st = await stat(dir);
+          if (!st.isDirectory()) throw new Error(`Not a directory: ${dir}`);
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Cannot access directory: ${e.message}` }, null, 2) }] };
+        }
+
+        const endpoint = baseUrl.replace(/\/$/, "");
+
+        // Step 1: Store sensitive env vars if provided
+        let envRef: string | null = null;
+        if (params.sensitive_env && Object.keys(params.sensitive_env).length > 0) {
+          const envRes = await fetch(`${endpoint}/v1/server-preview/env`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ env: params.sensitive_env })
+          });
+          if (!envRes.ok) {
+            const err = await envRes.text();
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: HTTP ${envRes.status} ${err}` }, null, 2) }] };
+          }
+          const envData = await envRes.json() as any;
+          envRef = envData.env_ref;
+        }
+
+        // Step 2: Create server preview job
+        const createBody: any = {
+          image: params.image,
+          command: params.command,
+          port: params.port,
+        };
+        if (params.path) createBody.path = params.path;
+        if (params.env) createBody.env = params.env;
+        if (envRef) createBody.env_ref = envRef;
+        if (params.timeout) createBody.timeout = params.timeout;
+        if (params.readiness_path) createBody.readiness_path = params.readiness_path;
+        if (params.readiness_timeout) createBody.readiness_timeout = params.readiness_timeout;
+        if (params.script) createBody.script = params.script;
+
+        const createRes = await fetch(`${endpoint}/v1/server-preview`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(createBody)
+        });
+        if (!createRes.ok) {
+          const err = await createRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
+        }
+        const created = await createRes.json() as any;
+
+        // Step 3: Tar the directory and upload
+        const tarball = `/tmp/riddle-sp-${created.job_id}.tar.gz`;
+        try {
+          await execFile("tar", ["czf", tarball, "-C", dir, "."], { timeout: 120000 });
+          const tarData = await readFile(tarball);
+
+          const uploadRes = await fetch(created.upload_url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/gzip" },
+            body: tarData
+          });
+          if (!uploadRes.ok) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
+          }
+        } finally {
+          try { await rm(tarball, { force: true }); } catch { /* ignore */ }
+        }
+
+        // Step 4: Start the job
+        const startRes = await fetch(`${endpoint}/v1/server-preview/${created.job_id}/start`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!startRes.ok) {
+          const err = await startRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+        }
+
+        // Step 5: Poll until complete
+        const timeoutMs = ((params.timeout || 120) + 60) * 1000; // extra 60s buffer for Docker pull
+        const pollStart = Date.now();
+        const POLL_INTERVAL = 3000;
+
+        while (Date.now() - pollStart < timeoutMs) {
+          const statusRes = await fetch(`${endpoint}/v1/server-preview/${created.job_id}`, {
+            headers: { Authorization: `Bearer ${apiKey}` }
+          });
+          if (!statusRes.ok) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
+          }
+          const statusData = await statusRes.json() as any;
+
+          if (statusData.status === "completed" || statusData.status === "failed") {
+            const result: any = {
+              ok: statusData.status === "completed",
+              job_id: created.job_id,
+              status: statusData.status,
+              outputs: statusData.outputs || [],
+              compute_seconds: statusData.compute_seconds,
+              egress_bytes: statusData.egress_bytes,
+            };
+            if (statusData.error) result.error = statusData.error;
+
+            // Download and save screenshots from outputs
+            const workspace = getWorkspacePath(api);
+            for (const output of result.outputs) {
+              if (output.name && /\.(png|jpg|jpeg)$/i.test(output.name) && output.url) {
+                try {
+                  const imgRes = await fetch(output.url);
+                  if (imgRes.ok) {
+                    const buf = await imgRes.arrayBuffer();
+                    const base64 = Buffer.from(buf).toString("base64");
+                    const ref = await writeArtifactBinary(workspace, "screenshots", `${created.job_id}-${output.name}`, base64);
+                    output.saved = ref.path;
+                    output.sizeBytes = ref.sizeBytes;
+                  }
+                } catch { /* skip */ }
+              }
+            }
+
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
+
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        }
+
+        return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Job did not complete within ${timeoutMs / 1000}s` }, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
 }
