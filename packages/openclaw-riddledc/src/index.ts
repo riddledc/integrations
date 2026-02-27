@@ -1135,9 +1135,9 @@ export default function register(api: PluginApi) {
           }
           const statusData = await statusRes.json() as any;
 
-          if (statusData.status === "completed" || statusData.status === "failed") {
+          if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
             const result: any = {
-              ok: statusData.status === "completed",
+              ok: statusData.status === "complete" || statusData.status === "completed",
               job_id: created.job_id,
               status: statusData.status,
               outputs: statusData.outputs || [],
