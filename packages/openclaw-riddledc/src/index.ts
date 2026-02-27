@@ -1030,7 +1030,8 @@ export default function register(api: PluginApi) {
         timeout: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 120, max: 600)" })),
         readiness_path: Type.Optional(Type.String({ description: "Path to poll for readiness (default: same as path)" })),
         readiness_timeout: Type.Optional(Type.Number({ description: "Max seconds to wait for server readiness (default: 30)" })),
-        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready (e.g. 'await page.click(\"button\")')" }))
+        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready (e.g. 'await page.click(\"button\")')" })),
+        wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy for page.goto (default: 'load'). Use 'domcontentloaded' for SPAs that make continuous network requests." }))
       }),
       async execute(_id: string, params: any) {
         const { apiKey, baseUrl } = getCfg(api);
@@ -1081,6 +1082,7 @@ export default function register(api: PluginApi) {
         if (params.readiness_path) createBody.readiness_path = params.readiness_path;
         if (params.readiness_timeout) createBody.readiness_timeout = params.readiness_timeout;
         if (params.script) createBody.script = params.script;
+        if (params.wait_until) createBody.wait_until = params.wait_until;
 
         const createRes = await fetch(`${endpoint}/v1/server-preview`, {
           method: "POST",
