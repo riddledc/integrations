@@ -1030,8 +1030,12 @@ export default function register(api: PluginApi) {
         timeout: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 120, max: 600)" })),
         readiness_path: Type.Optional(Type.String({ description: "Path to poll for readiness (default: same as path)" })),
         readiness_timeout: Type.Optional(Type.Number({ description: "Max seconds to wait for server readiness (default: 30)" })),
-        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready (e.g. 'await page.click(\"button\")')" })),
-        wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy for page.goto (default: 'load'). Use 'domcontentloaded' for SPAs that make continuous network requests." }))
+        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready. Full sandbox: saveScreenshot(), scrape(), map(), crawl(), saveHtml(), saveJson(), visualDiff(). Cannot use with steps." })),
+        steps: Type.Optional(Type.Array(Type.Any(), { description: "Declarative steps (same as riddle_steps). Cannot use with script. Example: [{ click: '.btn' }, { screenshot: 'after-click' }]" })),
+        wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy for page.goto (default: 'load'). Use 'domcontentloaded' for SPAs that make continuous network requests." })),
+        viewport: Type.Optional(Type.Object({ width: Type.Number(), height: Type.Number() }, { description: "Browser viewport size (default: 1920x1080)" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs injected before page load (e.g. auth tokens)" })),
+        exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['node_modules', '.git', '*.log']" })),
       }),
       async execute(_id: string, params: any) {
         const { apiKey, baseUrl } = getCfg(api);
@@ -1053,13 +1057,18 @@ export default function register(api: PluginApi) {
 
         const endpoint = baseUrl.replace(/\/$/, "");
 
-        // Step 1: Store sensitive env vars if provided
+        // Step 1: Store sensitive env vars and/or localStorage if provided
         let envRef: string | null = null;
-        if (params.sensitive_env && Object.keys(params.sensitive_env).length > 0) {
+        const hasSensitiveEnv = params.sensitive_env && Object.keys(params.sensitive_env).length > 0;
+        const hasLocalStorage = params.localStorage && Object.keys(params.localStorage).length > 0;
+        if (hasSensitiveEnv || hasLocalStorage) {
+          const envBody: any = {};
+          if (hasSensitiveEnv) envBody.env = params.sensitive_env;
+          if (hasLocalStorage) envBody.localStorage = params.localStorage;
           const envRes = await fetch(`${endpoint}/v1/server-preview/env`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ env: params.sensitive_env })
+            body: JSON.stringify(envBody)
           });
           if (!envRes.ok) {
             const err = await envRes.text();
@@ -1082,7 +1091,9 @@ export default function register(api: PluginApi) {
         if (params.readiness_path) createBody.readiness_path = params.readiness_path;
         if (params.readiness_timeout) createBody.readiness_timeout = params.readiness_timeout;
         if (params.script) createBody.script = params.script;
+        if (params.steps) createBody.steps = params.steps;
         if (params.wait_until) createBody.wait_until = params.wait_until;
+        if (params.viewport) createBody.viewport = params.viewport;
 
         const createRes = await fetch(`${endpoint}/v1/server-preview`, {
           method: "POST",
@@ -1098,7 +1109,9 @@ export default function register(api: PluginApi) {
         // Step 3: Tar the directory and upload
         const tarball = `/tmp/riddle-sp-${created.job_id}.tar.gz`;
         try {
-          await execFile("tar", ["czf", tarball, "-C", dir, "."], { timeout: 120000 });
+          const excludes = params.exclude || ["node_modules", ".git", "*.log"];
+          const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
+          await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
           const tarData = await readFile(tarball);
 
           const uploadRes = await fetch(created.upload_url, {
@@ -1164,6 +1177,9 @@ export default function register(api: PluginApi) {
                 } catch { /* skip */ }
               }
             }
+
+            // Convenience: screenshots[] = just the image outputs
+            result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
 
             return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
           }
