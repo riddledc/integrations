@@ -1033,6 +1033,8 @@ export default function register(api: PluginApi) {
         script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready. Full sandbox: saveScreenshot(), scrape(), map(), crawl(), saveHtml(), saveJson(), visualDiff(). Cannot use with steps." })),
         steps: Type.Optional(Type.Array(Type.Any(), { description: "Declarative steps (same as riddle_steps). Cannot use with script. Example: [{ click: '.btn' }, { screenshot: 'after-click' }]" })),
         wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy for page.goto (default: 'load'). Use 'domcontentloaded' for SPAs that make continuous network requests." })),
+        wait_for_selector: Type.Optional(Type.String({ description: "CSS selector to wait for after page load, before running script. Solves hydration race conditions. Example: '.billing-table' or '[data-hydrated]'" })),
+        color_scheme: Type.Optional(Type.Union([Type.Literal("dark"), Type.Literal("light")], { description: "Color scheme for emulateMedia. Applied BEFORE navigation so initial render uses it." })),
         viewport: Type.Optional(Type.Object({ width: Type.Number(), height: Type.Number() }, { description: "Browser viewport size (default: 1920x1080)" })),
         localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs injected before page load (e.g. auth tokens)" })),
         exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['.git', '*.log']. Add 'node_modules' only if your server doesn't need it (e.g. static file servers)." })),
@@ -1093,6 +1095,8 @@ export default function register(api: PluginApi) {
         if (params.script) createBody.script = params.script;
         if (params.steps) createBody.steps = params.steps;
         if (params.wait_until) createBody.wait_until = params.wait_until;
+        if (params.wait_for_selector) createBody.wait_for_selector = params.wait_for_selector;
+        if (params.color_scheme) createBody.color_scheme = params.color_scheme;
         if (params.viewport) createBody.viewport = params.viewport;
 
         const createRes = await fetch(`${endpoint}/v1/server-preview`, {
