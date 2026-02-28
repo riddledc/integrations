@@ -1035,7 +1035,7 @@ export default function register(api: PluginApi) {
         wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy for page.goto (default: 'load'). Use 'domcontentloaded' for SPAs that make continuous network requests." })),
         viewport: Type.Optional(Type.Object({ width: Type.Number(), height: Type.Number() }, { description: "Browser viewport size (default: 1920x1080)" })),
         localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs injected before page load (e.g. auth tokens)" })),
-        exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['node_modules', '.git', '*.log']" })),
+        exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['.git', '*.log']. Add 'node_modules' only if your server doesn't need it (e.g. static file servers)." })),
       }),
       async execute(_id: string, params: any) {
         const { apiKey, baseUrl } = getCfg(api);
@@ -1109,7 +1109,7 @@ export default function register(api: PluginApi) {
         // Step 3: Tar the directory and upload
         const tarball = `/tmp/riddle-sp-${created.job_id}.tar.gz`;
         try {
-          const excludes = params.exclude || ["node_modules", ".git", "*.log"];
+          const excludes = params.exclude || [".git", "*.log"];
           const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
           await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
           const tarData = await readFile(tarball);
