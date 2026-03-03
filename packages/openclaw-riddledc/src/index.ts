@@ -581,7 +581,9 @@ export default function register(api: PluginApi) {
         headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
-        harInline: Type.Optional(Type.Boolean())
+        harInline: Type.Optional(Type.Boolean()),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier. 'residential' routes through residential IPs with CAPTCHA solving. Adds data-based surcharge (~$19/GB). Default: no proxy (datacenter)." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         if (!params.url || typeof params.url !== "string") throw new Error("url must be a string");
@@ -595,6 +597,8 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -621,7 +625,9 @@ export default function register(api: PluginApi) {
         headers: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "HTTP headers to send with requests" })),
         options: Type.Optional(Type.Record(Type.String(), Type.Any())),
         include: Type.Optional(Type.Array(Type.String())),
-        harInline: Type.Optional(Type.Boolean())
+        harInline: Type.Optional(Type.Boolean()),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier. 'residential' routes through residential IPs with CAPTCHA solving. Adds data-based surcharge (~$19/GB). Default: no proxy (datacenter)." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         if (!Array.isArray(params.urls) || params.urls.some((url: any) => typeof url !== "string")) {
@@ -637,6 +643,8 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -665,7 +673,9 @@ export default function register(api: PluginApi) {
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
         sync: Type.Optional(Type.Boolean()),
-        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." }))
+        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." })),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier. 'residential' routes through residential IPs with CAPTCHA solving. Adds data-based surcharge (~$19/GB). Default: no proxy (datacenter)." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         if (!Array.isArray(params.steps)) throw new Error("steps must be an array");
@@ -680,6 +690,8 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"], returnAsync: !!params.async });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -708,7 +720,9 @@ export default function register(api: PluginApi) {
         include: Type.Optional(Type.Array(Type.String())),
         harInline: Type.Optional(Type.Boolean()),
         sync: Type.Optional(Type.Boolean()),
-        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." }))
+        async: Type.Optional(Type.Boolean({ description: "Return job_id immediately without waiting for completion. Use riddle_poll to check status." })),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier. 'residential' routes through residential IPs with CAPTCHA solving. Adds data-based surcharge (~$19/GB). Default: no proxy (datacenter)." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         if (!params.script || typeof params.script !== "string") throw new Error("script must be a string");
@@ -723,6 +737,8 @@ export default function register(api: PluginApi) {
         if (Object.keys(opts).length > 0) payload.options = opts;
         if (params.include) payload.include = params.include;
         if (params.harInline) payload.harInline = params.harInline;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["screenshot", "console", "result", "data", "urls", "dataset", "sitemap", "visual_diff"], returnAsync: !!params.async });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -747,7 +763,9 @@ export default function register(api: PluginApi) {
           secure: Type.Optional(Type.Boolean()),
           httpOnly: Type.Optional(Type.Boolean())
         }), { description: "Cookies to inject for authenticated sessions" })),
-        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+        options: Type.Optional(Type.Record(Type.String(), Type.Any())),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier for blocked sites. Adds ~$19/GB surcharge." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         const scrapeOpts = params.extract_metadata === false ? "{ extract_metadata: false }" : "";
@@ -757,6 +775,8 @@ export default function register(api: PluginApi) {
           options: { ...(params.options || {}), returnResult: true }
         };
         if (params.cookies) payload.options.cookies = params.cookies;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -782,7 +802,9 @@ export default function register(api: PluginApi) {
           secure: Type.Optional(Type.Boolean()),
           httpOnly: Type.Optional(Type.Boolean())
         }), { description: "Cookies to inject for authenticated sessions" })),
-        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+        options: Type.Optional(Type.Record(Type.String(), Type.Any())),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier for blocked sites. Adds ~$19/GB surcharge." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         const mapOpts: string[] = [];
@@ -797,6 +819,8 @@ export default function register(api: PluginApi) {
           options: { ...(params.options || {}), returnResult: true }
         };
         if (params.cookies) payload.options.cookies = params.cookies;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
@@ -825,7 +849,9 @@ export default function register(api: PluginApi) {
           secure: Type.Optional(Type.Boolean()),
           httpOnly: Type.Optional(Type.Boolean())
         }), { description: "Cookies to inject for authenticated sessions" })),
-        options: Type.Optional(Type.Record(Type.String(), Type.Any()))
+        options: Type.Optional(Type.Record(Type.String(), Type.Any())),
+        proxy: Type.Optional(Type.Union([Type.Literal("residential"), Type.Literal("isp")], { description: "Proxy tier for blocked sites. Adds ~$19/GB surcharge." })),
+        proxy_options: Type.Optional(Type.Object({ country: Type.Optional(Type.String({ description: "ISO country code (default: 'us')" })) }))
       }),
       async execute(_id: string, params: any) {
         const crawlOpts: string[] = [];
@@ -843,6 +869,8 @@ export default function register(api: PluginApi) {
           options: { ...(params.options || {}), returnResult: true }
         };
         if (params.cookies) payload.options.cookies = params.cookies;
+        if (params.proxy) payload.proxy = params.proxy;
+        if (params.proxy_options) payload.proxy_options = params.proxy_options;
         const result = await runWithDefaults(api, payload, { include: ["result", "console"] });
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
