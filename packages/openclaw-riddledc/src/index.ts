@@ -1224,4 +1224,195 @@ export default function register(api: PluginApi) {
     },
     { optional: true }
   );
+
+  // ── riddle_build_preview ──────────────────────────────────────
+  api.registerTool(
+    {
+      name: "riddle_build_preview",
+      description: "Build a Docker image from a Dockerfile in the project directory, run the server, and screenshot it. Unlike riddle_server_preview (which pulls a stock image), this builds a custom image from your Dockerfile — allowing pre-installed dependencies, build tools, and custom system packages. Built images are cached on the worker for 30 minutes by default for fast re-runs.",
+      parameters: Type.Object({
+        directory: Type.String({ description: "Absolute path to the project directory. Must contain a Dockerfile at root." }),
+        command: Type.String({ description: "Command to start the server inside the built container (e.g. 'python server.py')" }),
+        port: Type.Number({ description: "Port the server listens on inside the container" }),
+        path: Type.Optional(Type.String({ description: "URL path to screenshot (default: '/')" })),
+        env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Non-sensitive environment variables" })),
+        sensitive_env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Sensitive environment variables. Stored securely and deleted after use." })),
+        build_args: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Docker build arguments (--build-arg KEY=VAL)" })),
+        keep_image_minutes: Type.Optional(Type.Number({ description: "How long to cache the built image on the worker (default: 30, max: 120, 0 = delete immediately)" })),
+        timeout: Type.Optional(Type.Number({ description: "Max execution time in seconds including build (default: 180, max: 600)" })),
+        readiness_path: Type.Optional(Type.String({ description: "Path to poll for readiness (default: same as path)" })),
+        readiness_timeout: Type.Optional(Type.Number({ description: "Max seconds to wait for server readiness (default: 30)" })),
+        script: Type.Optional(Type.String({ description: "Optional Playwright script to run after server is ready. Cannot use with steps." })),
+        steps: Type.Optional(Type.Array(Type.Any(), { description: "Declarative steps (same as riddle_steps). Cannot use with script." })),
+        wait_until: Type.Optional(Type.Union([Type.Literal("load"), Type.Literal("domcontentloaded"), Type.Literal("networkidle")], { description: "Playwright waitUntil strategy (default: 'load')" })),
+        wait_for_selector: Type.Optional(Type.String({ description: "CSS selector to wait for after page load, before running script" })),
+        color_scheme: Type.Optional(Type.Union([Type.Literal("dark"), Type.Literal("light")], { description: "Color scheme for emulateMedia" })),
+        viewport: Type.Optional(Type.Object({ width: Type.Number(), height: Type.Number() }, { description: "Browser viewport size (default: 1920x1080)" })),
+        localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs injected before page load" })),
+        exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['.git', '*.log']" })),
+      }),
+      async execute(_id: string, params: any) {
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        }
+        assertAllowedBaseUrl(baseUrl);
+
+        const dir = params.directory;
+        if (!dir || typeof dir !== "string") throw new Error("directory must be an absolute path");
+
+        try {
+          const st = await stat(dir);
+          if (!st.isDirectory()) throw new Error(`Not a directory: ${dir}`);
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Cannot access directory: ${e.message}` }, null, 2) }] };
+        }
+
+        // Verify Dockerfile exists
+        try {
+          await stat(`${dir}/Dockerfile`);
+        } catch {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `No Dockerfile found at ${dir}/Dockerfile. riddle_build_preview requires a Dockerfile at the root of the directory.` }, null, 2) }] };
+        }
+
+        const endpoint = baseUrl.replace(/\/$/, "");
+
+        // Step 1: Store sensitive env vars and/or localStorage if provided
+        let envRef: string | null = null;
+        const hasSensitiveEnv = params.sensitive_env && Object.keys(params.sensitive_env).length > 0;
+        const hasLocalStorage = params.localStorage && Object.keys(params.localStorage).length > 0;
+        if (hasSensitiveEnv || hasLocalStorage) {
+          const envBody: any = {};
+          if (hasSensitiveEnv) envBody.env = params.sensitive_env;
+          if (hasLocalStorage) envBody.localStorage = params.localStorage;
+          const envRes = await fetch(`${endpoint}/v1/build-preview/env`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify(envBody)
+          });
+          if (!envRes.ok) {
+            const err = await envRes.text();
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: HTTP ${envRes.status} ${err}` }, null, 2) }] };
+          }
+          const envData = await envRes.json() as any;
+          envRef = envData.env_ref;
+        }
+
+        // Step 2: Create build preview job
+        const createBody: any = {
+          command: params.command,
+          port: params.port,
+        };
+        if (params.path) createBody.path = params.path;
+        if (params.env) createBody.env = params.env;
+        if (envRef) createBody.env_ref = envRef;
+        if (params.build_args) createBody.build_args = params.build_args;
+        if (params.keep_image_minutes !== undefined) createBody.keep_image_minutes = params.keep_image_minutes;
+        if (params.timeout) createBody.timeout = params.timeout;
+        if (params.readiness_path) createBody.readiness_path = params.readiness_path;
+        if (params.readiness_timeout) createBody.readiness_timeout = params.readiness_timeout;
+        if (params.script) createBody.script = params.script;
+        if (params.steps) createBody.steps = params.steps;
+        if (params.wait_until) createBody.wait_until = params.wait_until;
+        if (params.wait_for_selector) createBody.wait_for_selector = params.wait_for_selector;
+        if (params.color_scheme) createBody.color_scheme = params.color_scheme;
+        if (params.viewport) createBody.viewport = params.viewport;
+
+        const createRes = await fetch(`${endpoint}/v1/build-preview`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(createBody)
+        });
+        if (!createRes.ok) {
+          const err = await createRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
+        }
+        const created = await createRes.json() as any;
+
+        // Step 3: Tar the directory and upload
+        const tarball = `/tmp/riddle-bp-${created.job_id}.tar.gz`;
+        try {
+          const excludes = params.exclude || [".git", "*.log"];
+          const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
+          await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
+          const tarData = await readFile(tarball);
+
+          const uploadRes = await fetch(created.upload_url, {
+            method: "PUT",
+            headers: { "Content-Type": "application/gzip" },
+            body: tarData
+          });
+          if (!uploadRes.ok) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
+          }
+        } finally {
+          try { await rm(tarball, { force: true }); } catch {}
+        }
+
+        // Step 4: Start the job
+        const startRes = await fetch(`${endpoint}/v1/build-preview/${created.job_id}/start`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!startRes.ok) {
+          const err = await startRes.text();
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+        }
+
+        // Step 5: Poll until complete (extra buffer for build time)
+        const timeoutMs = ((params.timeout || 180) + 120) * 1000;
+        const pollStart = Date.now();
+        const POLL_INTERVAL = 3000;
+
+        while (Date.now() - pollStart < timeoutMs) {
+          const statusRes = await fetch(`${endpoint}/v1/build-preview/${created.job_id}`, {
+            headers: { Authorization: `Bearer ${apiKey}` }
+          });
+          if (!statusRes.ok) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
+          }
+          const statusData = await statusRes.json() as any;
+
+          if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
+            const result: any = {
+              ok: statusData.status === "complete" || statusData.status === "completed",
+              job_id: created.job_id,
+              status: statusData.status,
+              outputs: statusData.outputs || [],
+              compute_seconds: statusData.compute_seconds,
+              build_duration_ms: statusData.build_duration_ms,
+              egress_bytes: statusData.egress_bytes,
+            };
+            if (statusData.error) result.error = statusData.error;
+
+            // Download and save screenshots from outputs
+            const workspace = getWorkspacePath(api);
+            for (const output of result.outputs) {
+              if (output.name && /\.(png|jpg|jpeg)$/i.test(output.name) && output.url) {
+                try {
+                  const imgRes = await fetch(output.url);
+                  if (imgRes.ok) {
+                    const buf = await imgRes.arrayBuffer();
+                    const base64 = Buffer.from(buf).toString("base64");
+                    const ref = await writeArtifactBinary(workspace, "screenshots", `${created.job_id}-${output.name}`, base64);
+                    output.saved = ref.path;
+                    output.sizeBytes = ref.sizeBytes;
+                  }
+                } catch {}
+              }
+            }
+
+            result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
+
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          }
+
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        }
+
+        return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Job did not complete within ${timeoutMs / 1000}s` }, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
 }

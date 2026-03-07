@@ -33,7 +33,7 @@
   },
   "openclaw": {
     "extensions": [
-      "."
+      "./dist/index.js"
     ]
   },
   "scripts": {
