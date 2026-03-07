@@ -1250,6 +1250,7 @@ export default function register(api: PluginApi) {
         viewport: Type.Optional(Type.Object({ width: Type.Number(), height: Type.Number() }, { description: "Browser viewport size (default: 1920x1080)" })),
         localStorage: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "localStorage key-value pairs injected before page load" })),
         exclude: Type.Optional(Type.Array(Type.String(), { description: "Glob patterns to exclude from tarball. Default: ['.git', '*.log']" })),
+        audit: Type.Optional(Type.Boolean({ description: "Run security audit scan on submitted code. Returns dependency list, security findings, code summary, and risk flags." })),
       }),
       async execute(_id: string, params: any) {
         const { apiKey, baseUrl } = getCfg(api);
@@ -1317,6 +1318,7 @@ export default function register(api: PluginApi) {
         if (params.wait_for_selector) createBody.wait_for_selector = params.wait_for_selector;
         if (params.color_scheme) createBody.color_scheme = params.color_scheme;
         if (params.viewport) createBody.viewport = params.viewport;
+        if (params.audit) createBody.audit = true;
 
         const createRes = await fetch(`${endpoint}/v1/build-preview`, {
           method: "POST",
@@ -1386,6 +1388,7 @@ export default function register(api: PluginApi) {
             if (statusData.error) result.error = statusData.error;
             if (statusData.build_log) result.build_log = statusData.build_log;
             if (statusData.container_log) result.container_log = statusData.container_log;
+            if (statusData.audit) result.audit = statusData.audit;
 
             // Download and save screenshots from outputs
             const workspace = getWorkspacePath(api);
