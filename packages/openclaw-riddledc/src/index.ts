@@ -1384,6 +1384,8 @@ export default function register(api: PluginApi) {
               egress_bytes: statusData.egress_bytes,
             };
             if (statusData.error) result.error = statusData.error;
+            if (statusData.build_log) result.build_log = statusData.build_log;
+            if (statusData.container_log) result.container_log = statusData.container_log;
 
             // Download and save screenshots from outputs
             const workspace = getWorkspacePath(api);
