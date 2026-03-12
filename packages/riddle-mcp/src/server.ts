@@ -595,6 +595,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             type: "string",
             description: "Wait for this CSS selector before screenshotting (handles hydration)"
           },
+          navigation_timeout: {
+            type: "number",
+            description: "Seconds to wait for page.goto() navigation (5-120, default: 30)"
+          },
           color_scheme: {
             type: "string",
             enum: ["light", "dark"],
@@ -661,6 +665,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
             description: "Playwright script to run after server is ready"
           },
           wait_for_selector: { type: "string", description: "Wait for CSS selector before screenshot" },
+          navigation_timeout: { type: "number", description: "Seconds to wait for page.goto() navigation (5-120, default: 30)" },
           color_scheme: { type: "string", enum: ["light", "dark"] },
           viewport: {
             type: "object",
@@ -972,6 +977,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         readiness_timeout: args.readiness_timeout,
         script: args.script,
         wait_for_selector: args.wait_for_selector,
+        navigation_timeout: args.navigation_timeout,
         color_scheme: args.color_scheme,
         viewport: args.viewport,
         exclude: args.exclude
@@ -1040,6 +1046,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         env: args.env,
         script: args.script,
         wait_for_selector: args.wait_for_selector,
+        navigation_timeout: args.navigation_timeout,
         color_scheme: args.color_scheme,
         viewport: args.viewport,
         exclude: args.exclude
