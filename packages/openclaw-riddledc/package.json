@@ -1,6 +1,10 @@
 {
   "name": "@riddledc/openclaw-riddledc",
+<<<<<<< HEAD
   "version": "0.8.0",
+=======
+  "version": "0.7.0",
+>>>>>>> 023d538 (Add navigation_timeout parameter to preview tools)
   "description": "OpenClaw integration package for RiddleDC (no secrets).",
   "license": "MIT",
   "author": "RiddleDC",

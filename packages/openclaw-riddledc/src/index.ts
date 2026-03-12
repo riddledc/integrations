@@ -1440,6 +1440,7 @@ export default function register(api: PluginApi) {
     },
     { optional: true }
   );
+<<<<<<< HEAD
 
   // ── Persistent Session Tools ──
 
@@ -1595,4 +1596,6 @@ export default function register(api: PluginApi) {
     },
     { optional: true }
   );
+=======
+>>>>>>> 023d538 (Add navigation_timeout parameter to preview tools)
 }
