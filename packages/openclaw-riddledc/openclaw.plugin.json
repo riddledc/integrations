@@ -42,7 +42,11 @@
         "riddle_preview",
         "riddle_preview_delete",
         "riddle_server_preview",
-        "riddle_build_preview"
+        "riddle_build_preview",
+        "riddle_session_create",
+        "riddle_session_list",
+        "riddle_session_run",
+        "riddle_session_destroy"
       ],
       "invokes": [],
       "note": "Provides tools for agent use; does not invoke other agent tools"

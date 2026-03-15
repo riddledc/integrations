@@ -1440,4 +1440,159 @@ export default function register(api: PluginApi) {
     },
     { optional: true }
   );
+
+  // ── Persistent Session Tools ──
+
+  async function riddleApiFetch(api: PluginApi, method: string, path: string, body?: any): Promise<any> {
+    const { apiKey, baseUrl } = getCfg(api);
+    if (!apiKey) throw new Error("Missing Riddle API key. Set RIDDLE_API_KEY or configure in plugin settings.");
+    assertAllowedBaseUrl(baseUrl);
+    const url = `${baseUrl.replace(/\/$/, "")}${path}`;
+    const res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        ...(body ? { "Content-Type": "application/json" } : {})
+      },
+      ...(body ? { body: JSON.stringify(body) } : {})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || data.error || `HTTP ${res.status}`);
+    return data;
+  }
+
+  api.registerTool(
+    {
+      name: "riddle_session_create",
+      description:
+        "Create a persistent browser session. Sessions maintain cookies, localStorage, and auth state across multiple riddle_session_run calls. Use for multi-step auth flows (2FA, OAuth) and authenticated agent workflows. Sessions are billed per-second while warm.",
+      parameters: Type.Object({
+        name: Type.String({ description: "Human-readable session name (unique per API key)" }),
+        ttl_sec: Type.Optional(Type.Number({ description: "Max session lifetime in seconds (default: 3600, max: 86400)" })),
+        idle_timeout_sec: Type.Optional(Type.Number({ description: "Max idle time between uses in seconds (default: 600, max: 3600)" }))
+      }),
+      async execute(_id: string, params: any) {
+        const data = await riddleApiFetch(api, "POST", "/v1/sessions", {
+          name: params.name,
+          ttl_sec: params.ttl_sec,
+          idle_timeout_sec: params.idle_timeout_sec
+        });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_session_list",
+      description: "List all active persistent browser sessions for the current API key.",
+      parameters: Type.Object({}),
+      async execute() {
+        const data = await riddleApiFetch(api, "GET", "/v1/sessions");
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_session_run",
+      description:
+        "Run a Playwright script or steps in a persistent session. The browser context (cookies, localStorage, auth tokens) persists from previous calls to the same session. Use after riddle_session_create. Available helpers in script: saveScreenshot(label), saveJson(name, data), saveFile(name, buffer), scrape(), map(), crawl().",
+      parameters: Type.Object({
+        session_id: Type.String({ description: "Session ID from riddle_session_create" }),
+        url: Type.Optional(Type.String({ description: "URL to navigate to" })),
+        script: Type.Optional(Type.String({ description: "Playwright script to execute" })),
+        steps: Type.Optional(Type.Array(Type.Any(), { description: "Declarative steps (alternative to script)" })),
+        timeout_sec: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 60)" }))
+      }),
+      async execute(_id: string, params: any) {
+        const { apiKey, baseUrl } = getCfg(api);
+        if (!apiKey) return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
+        assertAllowedBaseUrl(baseUrl);
+
+        // Build run payload
+        const payload: any = { timeout_sec: params.timeout_sec || 60 };
+        if (params.script) { payload.script = params.script; payload.url = params.url; }
+        else if (params.steps) { payload.steps = params.steps; }
+        else if (params.url) { payload.url = params.url; payload.script = `await page.goto('${params.url.replace(/'/g, "\\'")}'); await saveScreenshot('page');`; }
+        else return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Provide script, steps, or url" }, null, 2) }] };
+
+        // Call session run endpoint
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/sessions/${params.session_id}/run`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: data.error?.message || data.error || `HTTP ${res.status}` }, null, 2) }] };
+
+        // If we got a job_id, poll for completion
+        if (data.job_id) {
+          const timeoutMs = (params.timeout_sec || 60) * 1000 + 15000;
+          const POLL_INTERVAL = 2000;
+          const started = Date.now();
+          while (Date.now() - started < timeoutMs) {
+            await new Promise(r => setTimeout(r, POLL_INTERVAL));
+            const statusRes = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/jobs/${data.job_id}`, {
+              headers: { Authorization: `Bearer ${apiKey}` }
+            });
+            if (!statusRes.ok) continue;
+            const statusData = await statusRes.json();
+            if (statusData.status === "completed" || statusData.status === "failed" || statusData.status === "completed_error" || statusData.status === "completed_timeout") {
+              const result: any = {
+                ok: statusData.status === "completed",
+                job_id: data.job_id,
+                session_id: params.session_id,
+                status: statusData.status,
+                outputs: statusData.outputs || [],
+                duration_ms: statusData.duration_ms,
+              };
+              if (statusData.error) result.error = statusData.error;
+
+              // Download and save screenshots
+              const workspace = getWorkspacePath(api);
+              for (const output of result.outputs) {
+                if (output.name && /\.(png|jpg|jpeg)$/i.test(output.name) && output.url) {
+                  try {
+                    const imgRes = await fetch(output.url);
+                    if (imgRes.ok) {
+                      const buf = await imgRes.arrayBuffer();
+                      const base64 = Buffer.from(buf).toString("base64");
+                      const ref = await writeArtifactBinary(workspace, "screenshots", `${data.job_id}-${output.name}`, base64);
+                      output.saved = ref.path;
+                      output.sizeBytes = ref.sizeBytes;
+                    }
+                  } catch {}
+                }
+              }
+              result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
+              return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+            }
+          }
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: data.job_id, session_id: params.session_id, error: "Job did not complete in time" }, null, 2) }] };
+        }
+
+        return { content: [{ type: "text", text: JSON.stringify({ ok: true, ...data }, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_session_destroy",
+      description: "Destroy a persistent browser session, closing the browser context and cleaning up all stored state. Stops warm-time billing.",
+      parameters: Type.Object({
+        session_id: Type.String({ description: "Session ID to destroy" })
+      }),
+      async execute(_id: string, params: any) {
+        const data = await riddleApiFetch(api, "DELETE", `/v1/sessions/${params.session_id}`);
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
 }
