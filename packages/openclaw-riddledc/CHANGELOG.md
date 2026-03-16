@@ -1,5 +1,15 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.0
+
+### Minor Changes
+
+- e797be1: Add navigation_timeout parameter to server_preview and build_preview tools (5-120s, default 30s). Controls Playwright page.goto() timeout independently from readiness_timeout.
+
+### Patch Changes
+
+- cb6cdb7: Add stealth and custom_storage parameters to riddle_session_run
+
 ## 0.8.0
 
 ### Minor Changes
