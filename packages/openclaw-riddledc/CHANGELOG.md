@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.1
+
+### Patch Changes
+
+- 420786d: Add stealth and custom_storage parameters to riddle_session_run (fix: previous release lost these during conflict resolution)
+
 ## 0.9.0
 
 ### Minor Changes
