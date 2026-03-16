@@ -1,14 +1,11 @@
 # @riddledc/riddle-mcp
 
-<<<<<<< HEAD
 ## 0.7.0
 
 ### Minor Changes
 
 - 023d538: Add navigation_timeout parameter to server_preview and build_preview tools (5-120s, default 30s). Controls Playwright page.goto() timeout independently from readiness_timeout.
 
-=======
->>>>>>> 023d538 (Add navigation_timeout parameter to preview tools)
 ## 0.5.3
 
 ### Patch Changes

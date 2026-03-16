@@ -1,10 +1,6 @@
 {
   "name": "@riddledc/riddle-mcp",
-<<<<<<< HEAD
   "version": "0.7.0",
-=======
-  "version": "0.6.0",
->>>>>>> 023d538 (Add navigation_timeout parameter to preview tools)
   "description": "MCP-related utilities for RiddleDC (no secrets).",
   "license": "MIT",
   "author": "RiddleDC",
