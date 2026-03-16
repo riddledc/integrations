@@ -1506,7 +1506,15 @@ export default function register(api: PluginApi) {
         url: Type.Optional(Type.String({ description: "URL to navigate to" })),
         script: Type.Optional(Type.String({ description: "Playwright script to execute" })),
         steps: Type.Optional(Type.Array(Type.Any(), { description: "Declarative steps (alternative to script)" })),
-        timeout_sec: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 60)" }))
+        timeout_sec: Type.Optional(Type.Number({ description: "Max execution time in seconds (default: 60)" })),
+        stealth: Type.Optional(Type.Boolean({ description: "Enable stealth mode (Patchright) to bypass bot detection (Cloudflare, Vercel, Datadome). Default: false" })),
+        custom_storage: Type.Optional(Type.Object({
+          bucket: Type.String(),
+          region: Type.Optional(Type.String()),
+          prefix: Type.Optional(Type.String()),
+          cdn_domain: Type.Optional(Type.String()),
+          role_arn: Type.Optional(Type.String()),
+        }, { description: "BYOB storage config" }))
       }),
       async execute(_id: string, params: any) {
         const { apiKey, baseUrl } = getCfg(api);
@@ -1515,6 +1523,8 @@ export default function register(api: PluginApi) {
 
         // Build run payload
         const payload: any = { timeout_sec: params.timeout_sec || 60 };
+        if (params.stealth) payload.stealth = true;
+        if (params.custom_storage) payload.custom_storage = params.custom_storage;
         if (params.script) { payload.script = params.script; payload.url = params.url; }
         else if (params.steps) { payload.steps = params.steps; }
         else if (params.url) { payload.url = params.url; payload.script = `await page.goto('${params.url.replace(/'/g, "\\'")}'); await saveScreenshot('page');`; }
