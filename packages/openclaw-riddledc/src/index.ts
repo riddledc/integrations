@@ -27,6 +27,9 @@ type RunResult = {
 };
 
 const INLINE_CAP = 50 * 1024; // 50 KB
+const PREVIEW_REQUEST_TIMEOUT_MS = 30_000;
+const PREVIEW_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+const PREVIEW_ARTIFACT_TIMEOUT_MS = 60_000;
 
 function getCfg(api: PluginApi) {
   const cfg = api?.config ?? {};
@@ -82,6 +85,31 @@ function abToBase64(ab: ArrayBuffer): string {
 
 function getWorkspacePath(api: PluginApi): string {
   return api?.workspacePath ?? process.cwd();
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function writeArtifact(
@@ -972,11 +1000,16 @@ export default function register(api: PluginApi) {
         const endpoint = baseUrl.replace(/\/$/, "");
 
         // Step 1: Create preview
-        const createRes = await fetch(`${endpoint}/v1/preview`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ framework: params.framework || "spa" })
-        });
+        let createRes: Response;
+        try {
+          createRes = await fetchWithTimeout(`${endpoint}/v1/preview`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ framework: params.framework || "spa" })
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview create");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!createRes.ok) {
           const err = await createRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
@@ -989,11 +1022,16 @@ export default function register(api: PluginApi) {
           await execFile("tar", ["czf", tarball, "-C", dir, "."], { timeout: 60000 });
           const tarData = await readFile(tarball);
 
-          const uploadRes = await fetch(created.upload_url, {
-            method: "PUT",
-            headers: { "Content-Type": "application/gzip" },
-            body: tarData
-          });
+          let uploadRes: Response;
+          try {
+            uploadRes = await fetchWithTimeout(created.upload_url, {
+              method: "PUT",
+              headers: { "Content-Type": "application/gzip" },
+              body: tarData
+            }, PREVIEW_UPLOAD_TIMEOUT_MS, "preview upload");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!uploadRes.ok) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
           }
@@ -1002,10 +1040,15 @@ export default function register(api: PluginApi) {
         }
 
         // Step 3: Publish
-        const publishRes = await fetch(`${endpoint}/v1/preview/${created.id}/publish`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` }
-        });
+        let publishRes: Response;
+        try {
+          publishRes = await fetchWithTimeout(`${endpoint}/v1/preview/${created.id}/publish`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}` }
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview publish");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Publish failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!publishRes.ok) {
           const err = await publishRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Publish failed: HTTP ${publishRes.status} ${err}` }, null, 2) }] };
@@ -1044,10 +1087,15 @@ export default function register(api: PluginApi) {
         }
         assertAllowedBaseUrl(baseUrl);
 
-        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/preview/${params.id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${apiKey}` }
-        });
+        let res: Response;
+        try {
+          res = await fetchWithTimeout(`${baseUrl.replace(/\/$/, "")}/v1/preview/${params.id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${apiKey}` }
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview delete");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Delete failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!res.ok) {
           const err = await res.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Delete failed: HTTP ${res.status} ${err}` }, null, 2) }] };
@@ -1112,11 +1160,16 @@ export default function register(api: PluginApi) {
           const envBody: any = {};
           if (hasSensitiveEnv) envBody.env = params.sensitive_env;
           if (hasLocalStorage) envBody.localStorage = params.localStorage;
-          const envRes = await fetch(`${endpoint}/v1/server-preview/env`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify(envBody)
-          });
+          let envRes: Response;
+          try {
+            envRes = await fetchWithTimeout(`${endpoint}/v1/server-preview/env`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify(envBody)
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview env store");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!envRes.ok) {
             const err = await envRes.text();
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: HTTP ${envRes.status} ${err}` }, null, 2) }] };
@@ -1145,11 +1198,16 @@ export default function register(api: PluginApi) {
         if (params.color_scheme) createBody.color_scheme = params.color_scheme;
         if (params.viewport) createBody.viewport = params.viewport;
 
-        const createRes = await fetch(`${endpoint}/v1/server-preview`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(createBody)
-        });
+        let createRes: Response;
+        try {
+          createRes = await fetchWithTimeout(`${endpoint}/v1/server-preview`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify(createBody)
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview create");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!createRes.ok) {
           const err = await createRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
@@ -1164,11 +1222,16 @@ export default function register(api: PluginApi) {
           await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
           const tarData = await readFile(tarball);
 
-          const uploadRes = await fetch(created.upload_url, {
-            method: "PUT",
-            headers: { "Content-Type": "application/gzip" },
-            body: tarData
-          });
+          let uploadRes: Response;
+          try {
+            uploadRes = await fetchWithTimeout(created.upload_url, {
+              method: "PUT",
+              headers: { "Content-Type": "application/gzip" },
+              body: tarData
+            }, PREVIEW_UPLOAD_TIMEOUT_MS, "server preview upload");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!uploadRes.ok) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
           }
@@ -1177,10 +1240,15 @@ export default function register(api: PluginApi) {
         }
 
         // Step 4: Start the job
-        const startRes = await fetch(`${endpoint}/v1/server-preview/${created.job_id}/start`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` }
-        });
+        let startRes: Response;
+        try {
+          startRes = await fetchWithTimeout(`${endpoint}/v1/server-preview/${created.job_id}/start`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}` }
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview start");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!startRes.ok) {
           const err = await startRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
@@ -1192,9 +1260,14 @@ export default function register(api: PluginApi) {
         const POLL_INTERVAL = 3000;
 
         while (Date.now() - pollStart < timeoutMs) {
-          const statusRes = await fetch(`${endpoint}/v1/server-preview/${created.job_id}`, {
-            headers: { Authorization: `Bearer ${apiKey}` }
-          });
+          let statusRes: Response;
+          try {
+            statusRes = await fetchWithTimeout(`${endpoint}/v1/server-preview/${created.job_id}`, {
+              headers: { Authorization: `Bearer ${apiKey}` }
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview poll");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!statusRes.ok) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
           }
@@ -1216,7 +1289,7 @@ export default function register(api: PluginApi) {
             for (const output of result.outputs) {
               if (output.name && /\.(png|jpg|jpeg)$/i.test(output.name) && output.url) {
                 try {
-                  const imgRes = await fetch(output.url);
+                  const imgRes = await fetchWithTimeout(output.url, {}, PREVIEW_ARTIFACT_TIMEOUT_MS, "server preview artifact download");
                   if (imgRes.ok) {
                     const buf = await imgRes.arrayBuffer();
                     const base64 = Buffer.from(buf).toString("base64");
@@ -1305,11 +1378,16 @@ export default function register(api: PluginApi) {
           const envBody: any = {};
           if (hasSensitiveEnv) envBody.env = params.sensitive_env;
           if (hasLocalStorage) envBody.localStorage = params.localStorage;
-          const envRes = await fetch(`${endpoint}/v1/build-preview/env`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify(envBody)
-          });
+          let envRes: Response;
+          try {
+            envRes = await fetchWithTimeout(`${endpoint}/v1/build-preview/env`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+              body: JSON.stringify(envBody)
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview env store");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!envRes.ok) {
             const err = await envRes.text();
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Store env failed: HTTP ${envRes.status} ${err}` }, null, 2) }] };
@@ -1340,11 +1418,16 @@ export default function register(api: PluginApi) {
         if (params.viewport) createBody.viewport = params.viewport;
         if (params.audit) createBody.audit = true;
 
-        const createRes = await fetch(`${endpoint}/v1/build-preview`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify(createBody)
-        });
+        let createRes: Response;
+        try {
+          createRes = await fetchWithTimeout(`${endpoint}/v1/build-preview`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify(createBody)
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview create");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!createRes.ok) {
           const err = await createRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
@@ -1359,11 +1442,16 @@ export default function register(api: PluginApi) {
           await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
           const tarData = await readFile(tarball);
 
-          const uploadRes = await fetch(created.upload_url, {
-            method: "PUT",
-            headers: { "Content-Type": "application/gzip" },
-            body: tarData
-          });
+          let uploadRes: Response;
+          try {
+            uploadRes = await fetchWithTimeout(created.upload_url, {
+              method: "PUT",
+              headers: { "Content-Type": "application/gzip" },
+              body: tarData
+            }, PREVIEW_UPLOAD_TIMEOUT_MS, "build preview upload");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!uploadRes.ok) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
           }
@@ -1372,10 +1460,15 @@ export default function register(api: PluginApi) {
         }
 
         // Step 4: Start the job
-        const startRes = await fetch(`${endpoint}/v1/build-preview/${created.job_id}/start`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${apiKey}` }
-        });
+        let startRes: Response;
+        try {
+          startRes = await fetchWithTimeout(`${endpoint}/v1/build-preview/${created.job_id}/start`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${apiKey}` }
+          }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview start");
+        } catch (e: any) {
+          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: ${describeError(e)}` }, null, 2) }] };
+        }
         if (!startRes.ok) {
           const err = await startRes.text();
           return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
@@ -1387,9 +1480,14 @@ export default function register(api: PluginApi) {
         const POLL_INTERVAL = 3000;
 
         while (Date.now() - pollStart < timeoutMs) {
-          const statusRes = await fetch(`${endpoint}/v1/build-preview/${created.job_id}`, {
-            headers: { Authorization: `Bearer ${apiKey}` }
-          });
+          let statusRes: Response;
+          try {
+            statusRes = await fetchWithTimeout(`${endpoint}/v1/build-preview/${created.job_id}`, {
+              headers: { Authorization: `Bearer ${apiKey}` }
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview poll");
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: ${describeError(e)}` }, null, 2) }] };
+          }
           if (!statusRes.ok) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
           }
@@ -1415,7 +1513,7 @@ export default function register(api: PluginApi) {
             for (const output of result.outputs) {
               if (output.name && /\.(png|jpg|jpeg)$/i.test(output.name) && output.url) {
                 try {
-                  const imgRes = await fetch(output.url);
+                  const imgRes = await fetchWithTimeout(output.url, {}, PREVIEW_ARTIFACT_TIMEOUT_MS, "build preview artifact download");
                   if (imgRes.ok) {
                     const buf = await imgRes.arrayBuffer();
                     const base64 = Buffer.from(buf).toString("base64");
