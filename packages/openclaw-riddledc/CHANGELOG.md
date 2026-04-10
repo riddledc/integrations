@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.2
+
+### Patch Changes
+
+- c8327bf: Retry transient preview control-plane network failures and include richer fetch error diagnostics.
+
 ## 0.9.1
 
 ### Patch Changes
