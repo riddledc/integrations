@@ -30,6 +30,8 @@ const INLINE_CAP = 50 * 1024; // 50 KB
 const PREVIEW_REQUEST_TIMEOUT_MS = 30_000;
 const PREVIEW_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 const PREVIEW_ARTIFACT_TIMEOUT_MS = 60_000;
+const PREVIEW_RETRY_ATTEMPTS = 3;
+const PREVIEW_RETRY_BASE_DELAY_MS = 750;
 
 function getCfg(api: PluginApi) {
   const cfg = api?.config ?? {};
@@ -88,8 +90,22 @@ function getWorkspacePath(api: PluginApi): string {
 }
 
 function describeError(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
+  const anyErr = err as any;
+  const parts: string[] = [];
+  if (err instanceof Error) parts.push(err.message);
+  else parts.push(String(err));
+
+  const cause = anyErr?.cause;
+  if (cause) {
+    const causeParts = [
+      cause.code ? `code=${cause.code}` : "",
+      cause.name ? `name=${cause.name}` : "",
+      cause.message ? `message=${cause.message}` : "",
+    ].filter(Boolean);
+    if (causeParts.length) parts.push(`cause: ${causeParts.join(" ")}`);
+  }
+
+  return parts.join("; ");
 }
 
 async function fetchWithTimeout(
@@ -110,6 +126,59 @@ async function fetchWithTimeout(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function isTransientFetchError(err: unknown): boolean {
+  const text = describeError(err).toLowerCase();
+  return [
+    "fetch failed",
+    "timed out",
+    "timeout",
+    "econnreset",
+    "econnrefused",
+    "etimedout",
+    "eai_again",
+    "socket",
+    "network",
+    "und_err",
+    "terminated",
+  ].some((needle) => text.includes(needle));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  label: string,
+  opts: { attempts?: number; baseDelayMs?: number } = {},
+): Promise<Response> {
+  const attempts = Math.max(1, opts.attempts ?? PREVIEW_RETRY_ATTEMPTS);
+  const baseDelayMs = opts.baseDelayMs ?? PREVIEW_RETRY_BASE_DELAY_MS;
+  let lastErr: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fetchWithTimeout(url, init, timeoutMs, label);
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= attempts || !isTransientFetchError(err)) break;
+
+      const jitterMs = Math.floor(Math.random() * 250);
+      const delayMs = Math.min(baseDelayMs * Math.pow(2, attempt - 1) + jitterMs, 5_000);
+      console.warn(`[openclaw-riddledc] ${label} attempt ${attempt}/${attempts} failed: ${describeError(err)}; retrying in ${delayMs}ms`);
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error(`${label} failed after ${attempts} attempts: ${describeError(lastErr)}`);
+}
+
+function isAlreadyStartedResponse(status: number, body: string): boolean {
+  return status === 409 && /already in status:\s*(queued|running|complete|completed)/i.test(body);
 }
 
 async function writeArtifact(
@@ -1002,7 +1071,7 @@ export default function register(api: PluginApi) {
         // Step 1: Create preview
         let createRes: Response;
         try {
-          createRes = await fetchWithTimeout(`${endpoint}/v1/preview`, {
+          createRes = await fetchWithRetry(`${endpoint}/v1/preview`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ framework: params.framework || "spa" })
@@ -1024,7 +1093,7 @@ export default function register(api: PluginApi) {
 
           let uploadRes: Response;
           try {
-            uploadRes = await fetchWithTimeout(created.upload_url, {
+            uploadRes = await fetchWithRetry(created.upload_url, {
               method: "PUT",
               headers: { "Content-Type": "application/gzip" },
               body: tarData
@@ -1200,7 +1269,7 @@ export default function register(api: PluginApi) {
 
         let createRes: Response;
         try {
-          createRes = await fetchWithTimeout(`${endpoint}/v1/server-preview`, {
+          createRes = await fetchWithRetry(`${endpoint}/v1/server-preview`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify(createBody)
@@ -1224,7 +1293,7 @@ export default function register(api: PluginApi) {
 
           let uploadRes: Response;
           try {
-            uploadRes = await fetchWithTimeout(created.upload_url, {
+            uploadRes = await fetchWithRetry(created.upload_url, {
               method: "PUT",
               headers: { "Content-Type": "application/gzip" },
               body: tarData
@@ -1242,7 +1311,7 @@ export default function register(api: PluginApi) {
         // Step 4: Start the job
         let startRes: Response;
         try {
-          startRes = await fetchWithTimeout(`${endpoint}/v1/server-preview/${created.job_id}/start`, {
+          startRes = await fetchWithRetry(`${endpoint}/v1/server-preview/${created.job_id}/start`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}` }
           }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview start");
@@ -1251,7 +1320,11 @@ export default function register(api: PluginApi) {
         }
         if (!startRes.ok) {
           const err = await startRes.text();
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+          if (isAlreadyStartedResponse(startRes.status, err)) {
+            console.warn(`[openclaw-riddledc] server preview start returned ${startRes.status} for ${created.job_id}; continuing to poll`);
+          } else {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+          }
         }
 
         // Step 5: Poll until complete
@@ -1262,9 +1335,9 @@ export default function register(api: PluginApi) {
         while (Date.now() - pollStart < timeoutMs) {
           let statusRes: Response;
           try {
-            statusRes = await fetchWithTimeout(`${endpoint}/v1/server-preview/${created.job_id}`, {
+            statusRes = await fetchWithRetry(`${endpoint}/v1/server-preview/${created.job_id}`, {
               headers: { Authorization: `Bearer ${apiKey}` }
-            }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview poll");
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "server preview poll", { attempts: 2 });
           } catch (e: any) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: ${describeError(e)}` }, null, 2) }] };
           }
@@ -1420,7 +1493,7 @@ export default function register(api: PluginApi) {
 
         let createRes: Response;
         try {
-          createRes = await fetchWithTimeout(`${endpoint}/v1/build-preview`, {
+          createRes = await fetchWithRetry(`${endpoint}/v1/build-preview`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify(createBody)
@@ -1444,7 +1517,7 @@ export default function register(api: PluginApi) {
 
           let uploadRes: Response;
           try {
-            uploadRes = await fetchWithTimeout(created.upload_url, {
+            uploadRes = await fetchWithRetry(created.upload_url, {
               method: "PUT",
               headers: { "Content-Type": "application/gzip" },
               body: tarData
@@ -1462,7 +1535,7 @@ export default function register(api: PluginApi) {
         // Step 4: Start the job
         let startRes: Response;
         try {
-          startRes = await fetchWithTimeout(`${endpoint}/v1/build-preview/${created.job_id}/start`, {
+          startRes = await fetchWithRetry(`${endpoint}/v1/build-preview/${created.job_id}/start`, {
             method: "POST",
             headers: { Authorization: `Bearer ${apiKey}` }
           }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview start");
@@ -1471,7 +1544,11 @@ export default function register(api: PluginApi) {
         }
         if (!startRes.ok) {
           const err = await startRes.text();
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+          if (isAlreadyStartedResponse(startRes.status, err)) {
+            console.warn(`[openclaw-riddledc] build preview start returned ${startRes.status} for ${created.job_id}; continuing to poll`);
+          } else {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Start failed: HTTP ${startRes.status} ${err}` }, null, 2) }] };
+          }
         }
 
         // Step 5: Poll until complete (extra buffer for build time)
@@ -1482,9 +1559,9 @@ export default function register(api: PluginApi) {
         while (Date.now() - pollStart < timeoutMs) {
           let statusRes: Response;
           try {
-            statusRes = await fetchWithTimeout(`${endpoint}/v1/build-preview/${created.job_id}`, {
+            statusRes = await fetchWithRetry(`${endpoint}/v1/build-preview/${created.job_id}`, {
               headers: { Authorization: `Bearer ${apiKey}` }
-            }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview poll");
+            }, PREVIEW_REQUEST_TIMEOUT_MS, "build preview poll", { attempts: 2 });
           } catch (e: any) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: ${describeError(e)}` }, null, 2) }] };
           }
