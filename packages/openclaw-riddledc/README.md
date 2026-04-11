@@ -38,6 +38,16 @@ Get your API key at [riddledc.com](https://riddledc.com).
 
 All tools return screenshots + console logs by default. Pass `include: ["har"]` to also capture network traffic.
 
+## Core API
+
+Packages that need to compose Riddle operations without recursively invoking OpenClaw tools can import the shared implementation:
+
+```ts
+import { createServerPreview, runWithDefaults } from "@riddledc/openclaw-riddledc/core";
+```
+
+Use this from higher-level plugins or skills when they need preview/script behavior directly, instead of making nested OpenClaw tool calls.
+
 ## How It Works
 
 Screenshots are automatically saved to `~/.openclaw/workspace/riddle/screenshots/` and the tool returns a file reference instead of inline base64. This keeps agent context small and prevents token overflow.
