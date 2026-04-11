@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.3
+
+### Patch Changes
+
+- 4c1a194: Export reusable Riddle core helpers for direct composition outside OpenClaw tool wrappers.
+
 ## 0.9.2
 
 ### Patch Changes
