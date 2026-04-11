@@ -3,6 +3,11 @@ import { writeFile, mkdir, readFile, stat, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
+import {
+  configFromOpenClawApi,
+  createStaticPreview,
+  deleteStaticPreview,
+} from "./core";
 
 const execFile = promisify(execFileCb);
 
@@ -1049,94 +1054,8 @@ export default function register(api: PluginApi) {
         framework: Type.Optional(Type.String({ description: "Framework hint: 'spa' (default) or 'static'" }))
       }),
       async execute(_id: string, params: any) {
-        const { apiKey, baseUrl } = getCfg(api);
-        if (!apiKey) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
-        }
-        assertAllowedBaseUrl(baseUrl);
-
-        const dir = params.directory;
-        if (!dir || typeof dir !== "string") throw new Error("directory must be an absolute path");
-
-        // Verify directory exists
-        try {
-          const st = await stat(dir);
-          if (!st.isDirectory()) throw new Error(`Not a directory: ${dir}`);
-        } catch (e: any) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Cannot access directory: ${e.message}` }, null, 2) }] };
-        }
-
-        const endpoint = baseUrl.replace(/\/$/, "");
-
-        // Step 1: Create preview
-        let createRes: Response;
-        try {
-          createRes = await fetchWithRetry(`${endpoint}/v1/preview`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ framework: params.framework || "spa" })
-          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview create");
-        } catch (e: any) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: ${describeError(e)}` }, null, 2) }] };
-        }
-        if (!createRes.ok) {
-          const err = await createRes.text();
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Create failed: HTTP ${createRes.status} ${err}` }, null, 2) }] };
-        }
-        const created = await createRes.json() as any;
-
-        // Step 2: Tar the directory and upload
-        const tarball = `/tmp/riddle-preview-${created.id}.tar.gz`;
-        try {
-          await execFile("tar", ["czf", tarball, "-C", dir, "."], { timeout: 60000 });
-          const tarData = await readFile(tarball);
-
-          let uploadRes: Response;
-          try {
-            uploadRes = await fetchWithRetry(created.upload_url, {
-              method: "PUT",
-              headers: { "Content-Type": "application/gzip" },
-              body: tarData
-            }, PREVIEW_UPLOAD_TIMEOUT_MS, "preview upload");
-          } catch (e: any) {
-            return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
-          }
-          if (!uploadRes.ok) {
-            return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Upload failed: HTTP ${uploadRes.status}` }, null, 2) }] };
-          }
-        } finally {
-          try { await rm(tarball, { force: true }); } catch { /* ignore */ }
-        }
-
-        // Step 3: Publish
-        let publishRes: Response;
-        try {
-          publishRes = await fetchWithTimeout(`${endpoint}/v1/preview/${created.id}/publish`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${apiKey}` }
-          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview publish");
-        } catch (e: any) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Publish failed: ${describeError(e)}` }, null, 2) }] };
-        }
-        if (!publishRes.ok) {
-          const err = await publishRes.text();
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, id: created.id, error: `Publish failed: HTTP ${publishRes.status} ${err}` }, null, 2) }] };
-        }
-        const published = await publishRes.json() as any;
-
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              ok: true,
-              id: published.id,
-              preview_url: published.preview_url,
-              file_count: published.file_count,
-              total_bytes: published.total_bytes,
-              expires_at: created.expires_at
-            }, null, 2)
-          }]
-        };
+        const result = await createStaticPreview(configFromOpenClawApi(api), params);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
     { optional: true }
@@ -1150,27 +1069,8 @@ export default function register(api: PluginApi) {
         id: Type.String({ description: "Preview ID (e.g. pv_a1b2c3d4)" })
       }),
       async execute(_id: string, params: any) {
-        const { apiKey, baseUrl } = getCfg(api);
-        if (!apiKey) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: "Missing Riddle API key." }, null, 2) }] };
-        }
-        assertAllowedBaseUrl(baseUrl);
-
-        let res: Response;
-        try {
-          res = await fetchWithTimeout(`${baseUrl.replace(/\/$/, "")}/v1/preview/${params.id}`, {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${apiKey}` }
-          }, PREVIEW_REQUEST_TIMEOUT_MS, "preview delete");
-        } catch (e: any) {
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Delete failed: ${describeError(e)}` }, null, 2) }] };
-        }
-        if (!res.ok) {
-          const err = await res.text();
-          return { content: [{ type: "text", text: JSON.stringify({ ok: false, error: `Delete failed: HTTP ${res.status} ${err}` }, null, 2) }] };
-        }
-        const data = await res.json() as any;
-        return { content: [{ type: "text", text: JSON.stringify({ ok: true, deleted: true, files_removed: data.files_removed }, null, 2) }] };
+        const result = await deleteStaticPreview(configFromOpenClawApi(api), params.id);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
     { optional: true }
