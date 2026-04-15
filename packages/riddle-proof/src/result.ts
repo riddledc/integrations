@@ -1,4 +1,5 @@
 import type {
+  RiddleProofEvidenceBundle,
   RiddleProofRunResult,
   RiddleProofRunState,
   RiddleProofStatus,
@@ -77,6 +78,7 @@ export function createRunResult(input: {
   state_path?: string | null;
   last_summary?: string | null;
   metadata?: RiddleProofTerminalMetadata;
+  evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
 }): RiddleProofRunResult {
   const status = input.status || input.state.status;
@@ -99,6 +101,7 @@ export function createRunResult(input: {
     merge_recommendation: state.merge_recommendation,
     finalized: state.finalized,
     blocker: state.blocker,
+    evidence_bundle: input.evidence_bundle,
     raw: input.raw,
   }) as RiddleProofRunResult;
 }
