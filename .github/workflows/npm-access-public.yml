@@ -16,7 +16,9 @@ jobs:
       - name: Make riddle-proof public
         run: |
           npm whoami
-          npm access public @riddledc/riddle-proof --registry=https://registry.npmjs.org/
+          npm access get status @riddledc/riddle-proof --registry=https://registry.npmjs.org/
+          npm access set status=public @riddledc/riddle-proof --registry=https://registry.npmjs.org/
+          npm access get status @riddledc/riddle-proof --registry=https://registry.npmjs.org/
           npm view @riddledc/riddle-proof version --registry=https://registry.npmjs.org/ --json
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
