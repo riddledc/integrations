@@ -2,7 +2,7 @@
   "schema": "riddle-proof.reference-run.v1",
   "source": "openclaw proofed_change_run",
   "captured_at": "2026-04-15T04:26:22.000Z",
-  "discord_message_url": "https://discord.com/channels/884957116929048596/1493829592618631259/1493829594837684264",
+  "discord_message_url": "https://discord.com/channels/000000000000000000/111111111111111111/222222222222222222",
   "request": {
     "repo": "davisdiehl/lilarcade",
     "branch": "main",
@@ -11,10 +11,10 @@
     "verification_mode": "visual",
     "integration_context": {
       "source": "discord",
-      "channel_id": "1493829592618631259",
-      "thread_id": "1493829592618631259",
-      "message_id": "1493829594837684264",
-      "source_url": "https://discord.com/channels/884957116929048596/1493829592618631259/1493829594837684264"
+      "channel_id": "111111111111111111",
+      "thread_id": "111111111111111111",
+      "message_id": "222222222222222222",
+      "source_url": "https://discord.com/channels/000000000000000000/111111111111111111/222222222222222222"
     }
   },
   "harness": {
@@ -61,11 +61,11 @@
     "discord_notification": {
       "ok": true,
       "status": 200,
-      "channel_id": "1493829592618631259",
+      "channel_id": "111111111111111111",
       "parent_channel_id": "",
-      "thread_id": "1493829592618631259",
-      "source_message_id": "1493829594837684264",
-      "message_id": "1493831228930003014",
+      "thread_id": "111111111111111111",
+      "source_message_id": "222222222222222222",
+      "message_id": "333333333333333333",
       "pr_url": "https://github.com/davisdiehl/lilarcade/pull/255"
     },
     "proof_summary": "Original request: Add a cool new visual to the tic tac toe game.\nVerification mode: visual\nSuccess criteria: The tic tac toe game should have a clearly visible new visual treatment that feels intentional and polished, without breaking gameplay or layout.\nImplementation files: src/Games/TicTacToe.css, src/Games/TicTacToe.jsx\nProof assessment: ready_to_ship"

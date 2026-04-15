@@ -16,8 +16,10 @@ reusable contracts and low-risk helpers are extracted here.
 - Run/result/state/event types
 - Evidence bundle and proof assessment types
 - Adapter interfaces
+- State/event helpers for wrappers that need a stable run envelope
 - Terminal ship metadata normalization
 - Stable result helpers
+- OpenClaw parameter normalization via `@riddledc/riddle-proof/openclaw`
 
 ## Non-Goals
 
@@ -27,3 +29,15 @@ reusable contracts and low-risk helpers are extracted here.
 
 Future wrappers can consume this package from OpenClaw, Discord, CLI, GitHub
 Actions, or Riddle-hosted workflows.
+
+## OpenClaw Adapter Boundary
+
+`@riddledc/riddle-proof/openclaw` translates the current
+`proofed_change_run`-style tool params into generic `RiddleProofRunParams`.
+It preserves Discord routing metadata as `integration_context` and parses
+`assertions_json` into the shared assertions field.
+
+The adapter does not invoke another OpenClaw plugin and does not supply a
+coding agent. It is the reusable mapping layer a future OpenClaw wrapper can
+call before handing the request to its configured implementation, judge, ship,
+and notification adapters.

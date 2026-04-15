@@ -21,7 +21,8 @@ thin, typed layers:
 
 ```text
 @riddledc/riddle-proof
-  reusable contracts, evidence/result helpers, adapter interfaces
+  reusable contracts, state/result helpers, evidence helpers,
+  integration adapters, adapter interfaces
 
 OpenClaw proofed_change_run
   current working reference; do not rewrite in place during extraction
@@ -66,7 +67,9 @@ The initial package should avoid owning the full workflow loop. Start with
 low-risk pieces that are already stable:
 
 - terminal result shape
+- run state/event shape
 - ship metadata normalization
+- OpenClaw parameter normalization
 - evidence bundle and proof assessment types
 - adapter interfaces
 - event/state shape
@@ -88,6 +91,7 @@ core dependency: @riddledc/riddle-proof
 The wrapper should:
 
 - translate OpenClaw tool params into `RiddleProofRunParams`
+- call `@riddledc/riddle-proof/openclaw` for the OpenClaw-specific translation
 - provide the OC/Codex implementation and judge adapters
 - pass Discord/OpenClaw context as `integration_context`
 - return `RiddleProofRunResult`
