@@ -1,0 +1,118 @@
+{
+  "schema": "riddle-proof.reference-run.v1",
+  "source": "openclaw proofed_change_run",
+  "captured_at": "2026-04-15T04:26:22.000Z",
+  "discord_message_url": "https://discord.com/channels/884957116929048596/1493829592618631259/1493829594837684264",
+  "request": {
+    "repo": "davisdiehl/lilarcade",
+    "branch": "main",
+    "change_request": "Add a cool new visual to the tic tac toe game.",
+    "success_criteria": "The tic tac toe game should have a clearly visible new visual treatment that feels intentional and polished, without breaking gameplay or layout.",
+    "verification_mode": "visual",
+    "integration_context": {
+      "source": "discord",
+      "channel_id": "1493829592618631259",
+      "thread_id": "1493829592618631259",
+      "message_id": "1493829594837684264",
+      "source_url": "https://discord.com/channels/884957116929048596/1493829592618631259/1493829594837684264"
+    }
+  },
+  "harness": {
+    "status": "shipped",
+    "iterations": 6,
+    "last_checkpoint": "ship_review",
+    "riddle_state_path": "/tmp/riddle-proof-state-20260415042622-9618466e.json",
+    "last_summary": "Proof shipped to GitHub PR and Discord.",
+    "events": [
+      {
+        "ts": "2026-04-15T04:26:22.000Z",
+        "kind": "checkpoint",
+        "checkpoint": "ship_review",
+        "stage": "ship",
+        "summary": "Ship review reached terminal ready-to-ship decision."
+      },
+      {
+        "ts": "2026-04-15T04:26:22.000Z",
+        "kind": "proof_assessment",
+        "checkpoint": "ship_review",
+        "stage": "ship",
+        "summary": "Visual delta added a polished tic tac toe arena while preserving heading, player labels, reset button, board, interaction count, and clean capture."
+      },
+      {
+        "ts": "2026-04-15T04:26:22.000Z",
+        "kind": "ship",
+        "checkpoint": "ship_review",
+        "stage": "ship",
+        "summary": "Created PR, marked it ready, and notified Discord."
+      }
+    ]
+  },
+  "riddle_state": {
+    "stage": "ship",
+    "status": "ready",
+    "active_checkpoint": null,
+    "verify_status": "evidence_captured",
+    "verification_mode": "visual",
+    "proof_decision": "ready_to_ship",
+    "merge_recommendation": "ready_to_ship (supervising-agent proof assessment)",
+    "pr_url": "https://github.com/davisdiehl/lilarcade/pull/255",
+    "marked_ready": true,
+    "finalized": true,
+    "discord_notification": {
+      "ok": true,
+      "status": 200,
+      "channel_id": "1493829592618631259",
+      "parent_channel_id": "",
+      "thread_id": "1493829592618631259",
+      "source_message_id": "1493829594837684264",
+      "message_id": "1493831228930003014",
+      "pr_url": "https://github.com/davisdiehl/lilarcade/pull/255"
+    },
+    "proof_summary": "Original request: Add a cool new visual to the tic tac toe game.\nVerification mode: visual\nSuccess criteria: The tic tac toe game should have a clearly visible new visual treatment that feels intentional and polished, without breaking gameplay or layout.\nImplementation files: src/Games/TicTacToe.css, src/Games/TicTacToe.jsx\nProof assessment: ready_to_ship"
+  },
+  "evidence_bundle": {
+    "verification_mode": "visual",
+    "baselines": [
+      {
+        "kind": "before",
+        "url": "https://riddle-screenshots-748553757828.s3.amazonaws.com/server-previews/sp_8e6f79b5/before.png",
+        "label": "before baseline"
+      }
+    ],
+    "after": {
+      "kind": "after",
+      "url": "https://riddle-screenshots-748553757828.s3.amazonaws.com/server-previews/sp_5af97d38/after-proof.png",
+      "label": "after proof"
+    },
+    "artifacts": [
+      {
+        "name": "after-proof.png",
+        "kind": "screenshot",
+        "url": "https://riddle-screenshots-748553757828.s3.amazonaws.com/server-previews/sp_5af97d38/after-proof.png",
+        "content_type": "image/png"
+      },
+      {
+        "name": "before.png",
+        "kind": "screenshot",
+        "url": "https://riddle-screenshots-748553757828.s3.amazonaws.com/server-previews/sp_8e6f79b5/before.png",
+        "content_type": "image/png"
+      }
+    ],
+    "assertions": {
+      "preserved_anchors": [
+        "TIC TAC TOE heading",
+        "Player X vs Player O",
+        "Reset Game",
+        "board"
+      ],
+      "interactive_elements": 11,
+      "console_errors": 0,
+      "capture_errors": 0
+    },
+    "summary": "Ready-to-ship visual proof for a tic tac toe change.",
+    "notes": [
+      "Fixture is intentionally compact and preserves the terminal metadata shape from the working OpenClaw reference flow.",
+      "Use this as parity coverage before routing production integrations through the reusable Riddle Proof package."
+    ]
+  }
+}
