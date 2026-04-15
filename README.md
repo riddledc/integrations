@@ -3,6 +3,7 @@
 Public integration packages for RiddleDC.
 
 ## Packages
+- `@riddledc/riddle-proof` — reusable contracts and helpers for evidence-backed Riddle Proof workflows.
 - `@riddledc/riddle-mcp` — MCP-related utilities/server/client components (no secrets).
 - `@riddledc/openclaw-riddledc` — OpenClaw integration package (no secrets).
 

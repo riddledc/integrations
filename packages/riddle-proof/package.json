@@ -1,0 +1,53 @@
+{
+  "name": "@riddledc/riddle-proof",
+  "version": "0.1.0",
+  "description": "Reusable Riddle Proof contracts and helpers for evidence-backed agent changes.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/riddle-proof"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js",
+      "require": "./dist/types.cjs"
+    },
+    "./result": {
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js",
+      "require": "./dist/result.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/types.ts src/result.ts --format cjs,esm --dts --out-dir dist",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}
