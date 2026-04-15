@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Reusable Riddle Proof contracts and helpers for evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",
