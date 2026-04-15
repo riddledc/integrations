@@ -54,9 +54,18 @@ export interface RiddleProofRunParams {
   reference?: "prod" | "before" | "both";
   base_branch?: string;
   before_ref?: string;
+  allow_static_preview_fallback?: boolean;
   context?: string;
   reviewer?: string;
+  mode?: string;
+  build_command?: string;
+  build_output?: string;
+  server_image?: string;
+  server_command?: string;
+  server_port?: number;
   server_path?: string;
+  use_auth?: boolean;
+  color_scheme?: "dark" | "light" | (string & {});
   wait_for_selector?: string;
   ship_mode?: "none" | "ship";
   integration_context?: IntegrationContext;

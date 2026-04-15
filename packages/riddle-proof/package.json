@@ -28,6 +28,16 @@
       "types": "./dist/result.d.ts",
       "import": "./dist/result.js",
       "require": "./dist/result.cjs"
+    },
+    "./state": {
+      "types": "./dist/state.d.ts",
+      "import": "./dist/state.js",
+      "require": "./dist/state.cjs"
+    },
+    "./openclaw": {
+      "types": "./dist/openclaw.d.ts",
+      "import": "./dist/openclaw.js",
+      "require": "./dist/openclaw.cjs"
     }
   },
   "files": [
@@ -40,7 +50,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/result.ts --format cjs,esm --dts --out-dir dist",
+    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/openclaw.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js"
