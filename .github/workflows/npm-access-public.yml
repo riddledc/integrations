@@ -1,0 +1,22 @@
+name: Npm Access Public
+
+on:
+  workflow_dispatch:
+
+jobs:
+  npm-access-public:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Make riddle-proof public
+        run: |
+          npm whoami
+          npm access public @riddledc/riddle-proof --registry=https://registry.npmjs.org/
+          npm view @riddledc/riddle-proof version --registry=https://registry.npmjs.org/ --json
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
