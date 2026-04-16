@@ -360,6 +360,7 @@ const syncResult = await syncOpenClawRiddleProof(
 );
 assert.equal(syncEngineCalls[0].action, "sync");
 assert.equal(syncEngineCalls[0].cleanup_merged_pr, true);
+assert.equal(syncEngineCalls[0].update_base_checkout, true);
 assert.equal(syncResult.status, "completed");
 assert.equal(syncResult.pr_state?.status, "merged");
 assert.equal(syncResult.merge_commit, "merge257");

@@ -1,5 +1,16 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.6
+
+### Patch Changes
+
+- Extend `riddle_proof_sync` with `update_base_checkout`, a safe post-merge
+  fast-forward request for clean local base checkouts. The underlying engine
+  reports the base checkout path, branch, clean state, local/remote heads, and
+  whether the update ran, skipped, or failed.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.4.5
+
 ## 0.4.5
 
 ### Patch Changes

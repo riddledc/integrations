@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.4.5
+
+### Patch Changes
+
+- Add explicit sync workflow params for safe post-merge base checkout refreshes
+  so public wrappers can request and report local base updates after PR merge.
+
 ## 0.4.4
 
 ### Patch Changes

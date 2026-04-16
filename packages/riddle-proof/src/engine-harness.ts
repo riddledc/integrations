@@ -41,6 +41,9 @@ export interface RiddleProofWorkflowParams extends Record<string, unknown> {
   action: string;
   state_path?: string;
   leave_draft?: boolean;
+  cleanup_merged_pr?: boolean;
+  fetch_base?: boolean;
+  update_base_checkout?: boolean;
 }
 
 export interface RiddleProofEngineResult extends Record<string, unknown> {

@@ -59,6 +59,7 @@ export interface RiddleProofSyncParams {
   state_path: string;
   cleanup?: boolean;
   fetch_base?: boolean;
+  update_base_checkout?: boolean;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -552,6 +553,7 @@ export async function syncOpenClawRiddleProof(
     state_path: engineStatePath,
     cleanup_merged_pr: params.cleanup !== false,
     fetch_base: params.fetch_base !== false,
+    update_base_checkout: params.update_base_checkout !== false,
   };
 
   return runRiddleProofEngineHarness({
@@ -637,6 +639,7 @@ export const riddleProofSyncParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
   cleanup: optionalBoolean("When true, prune proof worktrees and temporary proof branches after the PR is merged. Defaults to true."),
   fetch_base: optionalBoolean("When true, fetch the PR base branch after a merge so later runs start from fresh origin/<base>. Defaults to true."),
+  update_base_checkout: optionalBoolean("When true, safely fast-forward the clean local base checkout after merge. Defaults to true."),
 });
 
 export const riddleProofReviewParameters = Type.Object({
