@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: write
   pull-requests: write
   id-token: write
+  statuses: write
 
 jobs:
   release:
@@ -45,11 +45,40 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Trigger CI for Release Pull Request
+      - name: Validate Release Pull Request
         if: steps.changesets.outputs.hasChangesets == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run ci.yml --ref changeset-release/main
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -e
+          sha="$(git rev-parse HEAD)"
+
+          post_status() {
+            gh api "repos/${GH_REPO}/statuses/${sha}" \
+              -f state="$1" \
+              -f context="release-pr-ci" \
+              -f description="$2" \
+              -f target_url="${RUN_URL}" >/dev/null
+          }
+
+          finish() {
+            status="$?"
+            if [ "$status" -eq 0 ]; then
+              post_status success "Release PR validation passed"
+            else
+              post_status failure "Release PR validation failed"
+            fi
+            exit "$status"
+          }
+
+          post_status pending "Validating release PR"
+          trap finish EXIT
+
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm test
 
       - name: Upgrade npm for Trusted Publishing
         if: steps.changesets.outputs.hasChangesets == 'false'
