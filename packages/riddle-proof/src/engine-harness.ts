@@ -100,6 +100,7 @@ export interface RunRiddleProofEngineHarnessInput {
   config?: RiddleProofEngineHarnessConfig;
   state?: RiddleProofRunState;
   state_path?: string;
+  resume_params?: RiddleProofWorkflowParams;
   max_iterations?: number;
   dry_run?: boolean;
   auto_approve?: boolean;
@@ -807,7 +808,7 @@ export async function runRiddleProofEngineHarness(
     });
   }
 
-  let nextParams = initialRunParams(request, input, state);
+  let nextParams = input.resume_params || initialRunParams(request, input, state);
   let lastResult: RiddleProofEngineResult | null = null;
 
   for (let index = 0; index < maxIterations; index += 1) {
