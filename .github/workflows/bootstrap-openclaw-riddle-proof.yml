@@ -28,6 +28,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Build dependency
+        run: pnpm --filter @riddledc/riddle-proof build
+
       - name: Build package
         run: pnpm --filter @riddledc/openclaw-riddle-proof build
 
