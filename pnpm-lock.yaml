@@ -18,6 +18,25 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
+  packages/openclaw-riddle-proof:
+    dependencies:
+      '@riddledc/riddle-proof':
+        specifier: ^0.1.1
+        version: 0.1.1
+      '@sinclair/typebox':
+        specifier: ^0.32.0
+        version: 0.32.35
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.7
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(typescript@5.9.3)
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
   packages/openclaw-riddledc:
     dependencies:
       '@sinclair/typebox':
@@ -334,6 +353,10 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@riddledc/riddle-proof@0.1.1':
+    resolution: {integrity: sha512-n2A+E0JIWcQwkfq3qViCdE4RmENUli81As+f//HrZ/Xijy01mCq+LgTiJUipq1jkuzJWhvWdbFgMH5O7Ryny9A==}
+    engines: {node: '>=18'}
 
   '@rollup/rollup-android-arm-eabi@4.57.1':
     resolution: {integrity: sha512-A6ehUVSiSaaliTxai040ZpZ2zTevHYbvu/lDoeAteHI8QnaosIzm4qwtezfRg1jOYaUmnzLX1AOD6Z+UJjtifg==}
@@ -1553,6 +1576,8 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@riddledc/riddle-proof@0.1.1': {}
 
   '@rollup/rollup-android-arm-eabi@4.57.1':
     optional: true

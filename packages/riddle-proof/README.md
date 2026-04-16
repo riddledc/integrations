@@ -7,9 +7,11 @@ Riddle Proof is agent-agnostic. Bring a coding agent through an adapter; Riddle
 Proof standardizes evidence, proof assessment, ship gates, terminal results,
 and integration metadata.
 
-This package is intentionally small at first. The current OpenClaw
-`proofed_change_run` implementation remains the reference workflow while
-reusable contracts and low-risk helpers are extracted here.
+This package includes the reusable runner harness that drives a request through
+setup, implementation, proof capture, judgment, shipping, and notification
+adapters. The current OpenClaw `proofed_change_run` implementation remains the
+reference workflow while adapter implementations are extracted behind parity
+tests.
 
 ## Initial Scope
 
@@ -17,6 +19,7 @@ reusable contracts and low-risk helpers are extracted here.
 - Evidence bundle and proof assessment types
 - Adapter interfaces
 - State/event helpers for wrappers that need a stable run envelope
+- Runner harness for setup -> implement -> prove -> judge -> ship -> notify
 - Terminal ship metadata normalization
 - Stable result helpers
 - OpenClaw parameter normalization via `@riddledc/riddle-proof/openclaw`
@@ -40,6 +43,7 @@ npm install @riddledc/riddle-proof
 
 ```ts
 import { createRunResult, createRunState } from "@riddledc/riddle-proof";
+import { runRiddleProof } from "@riddledc/riddle-proof/runner";
 import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
 ```
 
@@ -47,6 +51,21 @@ The root export provides generic contracts and helpers. Integration-specific
 adapters are exposed through subpaths such as
 `@riddledc/riddle-proof/openclaw`, so wrappers can reuse the mapping logic
 without depending on another plugin runtime.
+
+## Runner Harness
+
+`runRiddleProof` is the reusable idea-to-PR workflow driver. It does not ship
+credentials or a coding agent. It calls adapters supplied by the host
+integration:
+
+```text
+setup -> implement -> prove -> judge -> ship -> notify
+```
+
+The proof adapter is where a host wires Riddle server-backed capture. The ship
+adapter is where a host commits, pushes, opens or updates a PR, and waits for CI
+when configured. The notification adapter is where a host updates Discord,
+OpenClaw, GitHub, or another integration.
 
 ## OpenClaw Adapter Boundary
 

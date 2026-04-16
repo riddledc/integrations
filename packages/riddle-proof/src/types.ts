@@ -37,8 +37,10 @@ export type RiddleProofStage =
   | "recon"
   | "author"
   | "implement"
+  | "prove"
   | "verify"
   | "ship"
+  | "notify"
   | (string & {});
 
 export interface RiddleProofRunParams {
@@ -176,6 +178,23 @@ export interface RiddleProofAssessment {
   source?: "supervising_agent" | "supervisor" | "human" | (string & {});
 }
 
+export interface SetupAdapterInput {
+  request: RiddleProofRunParams;
+  state: RiddleProofRunState;
+}
+
+export interface SetupAdapterResult {
+  ok: boolean;
+  workdir?: string;
+  evidence_context?: RiddleProofEvidenceBundle;
+  blockers?: string[];
+  raw?: Record<string, unknown>;
+}
+
+export interface SetupAdapter {
+  setup(input: SetupAdapterInput): Promise<SetupAdapterResult>;
+}
+
 export interface ImplementationAdapterInput {
   workdir: string;
   change_request: string;
@@ -194,6 +213,23 @@ export interface ImplementationAdapterResult {
 
 export interface ImplementationAdapter {
   implement(input: ImplementationAdapterInput): Promise<ImplementationAdapterResult>;
+}
+
+export interface ProofAdapterInput {
+  state: RiddleProofRunState;
+  implementation?: ImplementationAdapterResult;
+  evidence_context?: RiddleProofEvidenceBundle;
+}
+
+export interface ProofAdapterResult {
+  ok: boolean;
+  evidence_bundle?: RiddleProofEvidenceBundle;
+  blockers?: string[];
+  raw?: Record<string, unknown>;
+}
+
+export interface ProofAdapter {
+  prove(input: ProofAdapterInput): Promise<ProofAdapterResult>;
 }
 
 export interface JudgeAdapter {

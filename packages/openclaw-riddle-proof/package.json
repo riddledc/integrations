@@ -1,0 +1,55 @@
+{
+  "name": "@riddledc/openclaw-riddle-proof",
+  "version": "0.0.0",
+  "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/openclaw-riddle-proof"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "build": "npm run sync:openclaw-plugin-version && tsup src/index.ts --format cjs,esm --dts --out-dir dist --clean",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js",
+    "sync:openclaw-plugin-version": "node scripts/sync-openclaw-plugin-version.mjs",
+    "prepack": "npm run sync:openclaw-plugin-version"
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof": "^0.1.1",
+    "@sinclair/typebox": "^0.32.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}
