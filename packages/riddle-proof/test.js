@@ -62,7 +62,15 @@ function baseState() {
 const terminalMetadata = normalizeTerminalMetadata({
   riddleState: {
     pr_url: "https://github.com/davisdiehl/lilarcade/pull/255",
+    target_branch: "tictactoe-board-polish",
     marked_ready: true,
+    left_draft: false,
+    ci_status: "no_checks",
+    ship_commit: "96f5f86",
+    ship_remote_head: "96f5f86",
+    proof_comment_url: "https://github.com/davisdiehl/lilarcade/pull/255#issuecomment-1",
+    before_cdn: "https://example.com/before.png",
+    after_cdn: "https://example.com/after.png",
     discord_notification: {
       ok: true,
       channel_id: "111111111111111111",
@@ -76,7 +84,15 @@ const terminalMetadata = normalizeTerminalMetadata({
 
 assert.deepEqual(terminalMetadata, {
   pr_url: "https://github.com/davisdiehl/lilarcade/pull/255",
+  pr_branch: "tictactoe-board-polish",
   marked_ready: true,
+  left_draft: false,
+  ci_status: "no_checks",
+  ship_commit: "96f5f86",
+  ship_remote_head: "96f5f86",
+  proof_comment_url: "https://github.com/davisdiehl/lilarcade/pull/255#issuecomment-1",
+  before_artifact_url: "https://example.com/before.png",
+  after_artifact_url: "https://example.com/after.png",
   notification: {
     ok: true,
     channel_id: "111111111111111111",
@@ -89,7 +105,10 @@ assert.deepEqual(terminalMetadata, {
 
 const state = applyTerminalMetadata(baseState(), terminalMetadata);
 assert.equal(state.pr_url, "https://github.com/davisdiehl/lilarcade/pull/255");
+assert.equal(state.pr_branch, "tictactoe-board-polish");
 assert.equal(state.marked_ready, true);
+assert.equal(state.ci_status, "no_checks");
+assert.equal(state.proof_comment_url, "https://github.com/davisdiehl/lilarcade/pull/255#issuecomment-1");
 assert.equal(state.notification.message_id, "333333333333333333");
 
 const result = createRunResult({
@@ -109,7 +128,15 @@ assert.deepEqual(result, {
   last_summary: "Ship completed.",
   event_count: 1,
   pr_url: "https://github.com/davisdiehl/lilarcade/pull/255",
+  pr_branch: "tictactoe-board-polish",
   marked_ready: true,
+  left_draft: false,
+  ci_status: "no_checks",
+  ship_commit: "96f5f86",
+  ship_remote_head: "96f5f86",
+  proof_comment_url: "https://github.com/davisdiehl/lilarcade/pull/255#issuecomment-1",
+  before_artifact_url: "https://example.com/before.png",
+  after_artifact_url: "https://example.com/after.png",
   notification: {
     ok: true,
     channel_id: "111111111111111111",
@@ -129,6 +156,14 @@ const fallbackMetadata = normalizeTerminalMetadata({
   engineResult: {
     prUrl: "https://github.com/example/repo/pull/1",
     markedReady: false,
+    shipReport: {
+      pr_branch: "proof/demo",
+      shipped_commit: "abc123",
+      ci_status: "passed",
+      proof_comment_url: "https://github.com/example/repo/pull/1#issuecomment-2",
+      before_artifact_url: "https://example.com/before-fallback.png",
+      after_artifact_url: "https://example.com/after-fallback.png",
+    },
     checkpointContract: {
       details: {
         finalized: false,
@@ -139,7 +174,21 @@ const fallbackMetadata = normalizeTerminalMetadata({
 
 assert.deepEqual(fallbackMetadata, {
   pr_url: "https://github.com/example/repo/pull/1",
+  pr_branch: "proof/demo",
   marked_ready: false,
+  ci_status: "passed",
+  ship_commit: "abc123",
+  proof_comment_url: "https://github.com/example/repo/pull/1#issuecomment-2",
+  before_artifact_url: "https://example.com/before-fallback.png",
+  after_artifact_url: "https://example.com/after-fallback.png",
+  ship_report: {
+    pr_branch: "proof/demo",
+    shipped_commit: "abc123",
+    ci_status: "passed",
+    proof_comment_url: "https://github.com/example/repo/pull/1#issuecomment-2",
+    before_artifact_url: "https://example.com/before-fallback.png",
+    after_artifact_url: "https://example.com/after-fallback.png",
+  },
   finalized: false,
 });
 
