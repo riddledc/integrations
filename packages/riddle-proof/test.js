@@ -1,16 +1,22 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
+import path from "node:path";
 import {
   appendStageHeartbeat,
   appendRunEvent,
   applyTerminalMetadata,
+  createDisabledRiddleProofAgentAdapter,
   createRunStatusSnapshot,
   createRunState,
   createRunResult,
   isSuccessfulStatus,
   isTerminalStatus,
   normalizeTerminalMetadata,
+  readRiddleProofRunStatus,
+  runRiddleProofEngineHarness,
   runRiddleProof,
   setRunStatus,
 } from "./dist/index.js";
@@ -369,5 +375,185 @@ assert.equal(harnessResult.evidence_bundle.after.url, "https://example.com/after
 assert.equal(harnessResult.evidence_bundle.after.role, "after_proof");
 assert.equal(harnessResult.evidence_bundle.artifacts[0].role, "after_proof");
 assert.equal(harnessResult.last_checkpoint, "notification_completed");
+
+const engineFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-harness-"));
+const engineWorkdir = path.join(engineFixture, "after");
+mkdirSync(engineWorkdir, { recursive: true });
+execFileSync("git", ["init"], { cwd: engineWorkdir, stdio: "ignore" });
+const engineStatePath = path.join(engineFixture, "riddle-state.json");
+writeFileSync(engineStatePath, JSON.stringify({
+  after_worktree: engineWorkdir,
+  branch: "agent/openclaw/riddle-proof-engine-harness",
+}, null, 2));
+
+const engineCalls = [];
+const engineHarnessResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Drive the proven checkpoint engine.",
+    verification_mode: "visual",
+    ship_mode: "ship",
+    harness_state_path: path.join(engineFixture, "harness-state.json"),
+  },
+  max_iterations: 8,
+  engine: {
+    async execute(params) {
+      engineCalls.push(params);
+      if (params.ship_after_verify) {
+        writeFileSync(engineStatePath, JSON.stringify({
+          after_worktree: engineWorkdir,
+          branch: "agent/openclaw/riddle-proof-engine-harness",
+          pr_url: "https://github.com/riddledc/example/pull/101",
+          marked_ready: true,
+          proof_decision: "ready_to_ship",
+          merge_recommendation: "ready_to_ship",
+          finalized: true,
+        }, null, 2));
+        return {
+          ok: true,
+          state_path: engineStatePath,
+          checkpoint: "ship_review",
+          summary: "Ship review complete.",
+        };
+      }
+      if (params.proof_assessment_json) {
+        return {
+          ok: true,
+          state_path: engineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Proof is ready to ship.",
+          shipGate: { ok: true },
+        };
+      }
+      if (params.advance_stage === "verify") {
+        return {
+          ok: false,
+          state_path: engineStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof assessment required.",
+        };
+      }
+      if (params.advance_stage === "implement") {
+        return {
+          ok: true,
+          state_path: engineStatePath,
+          checkpoint: "implement_review",
+          summary: "Implementation review ready.",
+          checkpointContract: {
+            resume: { continue_with_stage: "verify" },
+          },
+        };
+      }
+      if (params.author_packet_json) {
+        return {
+          ok: false,
+          state_path: engineStatePath,
+          checkpoint: "implement_changes_missing",
+          summary: "Implementation changes are required.",
+        };
+      }
+      if (params.recon_assessment_json) {
+        return {
+          ok: false,
+          state_path: engineStatePath,
+          checkpoint: "author_supervisor_judgment",
+          summary: "Author packet required.",
+        };
+      }
+      return {
+        ok: false,
+        state_path: engineStatePath,
+        checkpoint: "recon_supervisor_judgment",
+        summary: "Recon assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() {
+      return {
+        ok: true,
+        summary: "Recon is specific enough.",
+        payload: {
+          decision: "ready_for_author",
+          continue_with_stage: "author",
+          source: "supervising_agent",
+        },
+      };
+    },
+    async authorProofPacket() {
+      return {
+        ok: true,
+        summary: "Proof packet ready.",
+        payload: {
+          proof_plan: "Capture the changed page.",
+          capture_script: "await saveScreenshot('after-proof')",
+          summary: "Capture after proof.",
+        },
+      };
+    },
+    async implementChange() {
+      writeFileSync(path.join(engineWorkdir, "feature.txt"), "changed\n");
+      return {
+        ok: true,
+        summary: "Changed the after worktree.",
+        diffDetected: true,
+        changedFiles: ["feature.txt"],
+        implementationNotes: "Created a focused fixture diff.",
+      };
+    },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Proof is ready.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["after evidence satisfies the request"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+
+assert.equal(engineHarnessResult.status, "shipped");
+assert.equal(engineHarnessResult.ok, true);
+assert.equal(engineHarnessResult.pr_url, "https://github.com/riddledc/example/pull/101");
+assert.equal(engineHarnessResult.marked_ready, true);
+assert.equal(engineHarnessResult.proof_decision, "ready_to_ship");
+assert.equal(engineHarnessResult.worktree_path, engineWorkdir);
+assert.equal(engineHarnessResult.branch, "agent/openclaw/riddle-proof-engine-harness");
+assert.equal(engineHarnessResult.current_stage, "ship");
+assert.equal(engineHarnessResult.state_path, path.join(engineFixture, "harness-state.json"));
+assert.equal(readRiddleProofRunStatus(engineHarnessResult.state_path).status, "shipped");
+assert.equal(engineCalls.at(-1).ship_after_verify, true);
+
+const missingWorktreeStatePath = path.join(engineFixture, "missing-worktree-riddle-state.json");
+writeFileSync(missingWorktreeStatePath, JSON.stringify({}, null, 2));
+const missingWorktreeResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Block without an isolated worktree.",
+    verification_mode: "visual",
+    harness_state_path: path.join(engineFixture, "missing-worktree-harness-state.json"),
+  },
+  max_iterations: 1,
+  engine: {
+    async execute() {
+      return {
+        ok: false,
+        state_path: missingWorktreeStatePath,
+        checkpoint: "implement_changes_missing",
+        summary: "Implementation changes are required.",
+      };
+    },
+  },
+  agent: createDisabledRiddleProofAgentAdapter(),
+});
+
+assert.equal(missingWorktreeResult.status, "blocked");
+assert.equal(missingWorktreeResult.blocker.code, "implementation_worktree_missing");
 
 console.log(JSON.stringify({ ok: true }));

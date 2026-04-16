@@ -94,6 +94,11 @@ export function normalizeRunParams(input: RiddleProofRunParams): RiddleProofRunP
     color_scheme: input.color_scheme,
     wait_for_selector: input.wait_for_selector,
     ship_mode: input.ship_mode,
+    engine_state_path: input.engine_state_path,
+    harness_state_path: input.harness_state_path,
+    max_iterations: input.max_iterations,
+    auto_approve: input.auto_approve,
+    dry_run: input.dry_run,
     integration_context: normalizeIntegrationContext(input.integration_context),
   }) as RiddleProofRunParams;
 }

@@ -98,8 +98,7 @@ switches to the new wrapper.
 
 ## First Reusable Logic
 
-The initial package should avoid owning the full workflow loop. Start with
-low-risk pieces that are already stable:
+The package now owns the low-risk pieces that were already stable:
 
 - terminal result shape
 - run state/event shape
@@ -109,7 +108,14 @@ low-risk pieces that are already stable:
 - adapter interfaces
 - event/state shape
 
-Then extract higher-risk workflow behavior behind parity tests.
+The next extraction layer is the reusable engine harness. It drives the current
+`riddle-proof-run` checkpoint engine directly, persists wrapper run state, emits
+stage heartbeats, exposes cheap status snapshots, and stops at concrete blockers
+when the engine, isolated worktree, or agent adapter is missing.
+
+Keep the old `proofed_change_run` plugin as the production route until the new
+engine harness has a configured agent adapter and parity tests prove the full
+idea-to-PR path.
 
 ## Packaging Target
 

@@ -78,6 +78,11 @@ export interface RiddleProofRunParams {
   color_scheme?: "dark" | "light" | (string & {});
   wait_for_selector?: string;
   ship_mode?: "none" | "ship";
+  engine_state_path?: string;
+  harness_state_path?: string;
+  max_iterations?: number;
+  auto_approve?: boolean;
+  dry_run?: boolean;
   integration_context?: IntegrationContext;
 }
 
