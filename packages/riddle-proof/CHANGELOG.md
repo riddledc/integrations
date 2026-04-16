@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.4.2
+
+### Patch Changes
+
+- 09d79bb: Add an explicit draft-hold escape hatch, preserve it through the engine harness,
+  and tighten main-agent proof review guidance for subtle visual changes.
+
 ## 0.4.1
 
 ### Patch Changes
