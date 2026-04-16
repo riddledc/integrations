@@ -1,0 +1,42 @@
+{
+  "id": "openclaw-riddle-proof",
+  "name": "Riddle Proof",
+  "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
+  "version": "0.0.0",
+  "type": "plugin",
+  "bundledSkills": [],
+  "capabilities": {
+    "network": {
+      "egress": [],
+      "enforced": true,
+      "note": "This wrapper currently normalizes requests only; future adapters must declare any network egress they add."
+    },
+    "filesystem": {
+      "write": [],
+      "read": []
+    },
+    "agentContext": {
+      "conversationHistory": false,
+      "otherToolOutputs": false,
+      "userProfile": false,
+      "note": "Plugin only sees data explicitly passed to its tool."
+    },
+    "tools": {
+      "provides": [
+        "riddle_proof_change"
+      ],
+      "invokes": [],
+      "note": "Initial wrapper exposes the OpenClaw-facing contract without invoking another plugin runtime."
+    },
+    "secrets": {
+      "required": [],
+      "optional": [],
+      "note": "No secrets are required by the initial wrapper."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

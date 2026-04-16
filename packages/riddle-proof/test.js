@@ -9,6 +9,7 @@ import {
   isSuccessfulStatus,
   isTerminalStatus,
   normalizeTerminalMetadata,
+  runRiddleProof,
   setRunStatus,
 } from "./dist/index.js";
 import {
@@ -20,6 +21,7 @@ const require = createRequire(import.meta.url);
 const cjs = require("./dist/index.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
+assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 
 function readJson(relativePath) {
@@ -214,5 +216,105 @@ const blockedState = setRunStatus(createRunState({
 }), "blocked", "2026-04-15T00:01:00.000Z");
 assert.equal(blockedState.ok, false);
 assert.equal(blockedState.updated_at, "2026-04-15T00:01:00.000Z");
+
+const missingAdapterResult = await runRiddleProof({
+  request: {
+    change_request: "Wire the proof runner.",
+    verification_mode: "visual",
+  },
+  workdir: "/tmp/riddle-proof-workdir",
+  adapters: {},
+});
+assert.equal(missingAdapterResult.status, "blocked");
+assert.equal(missingAdapterResult.blocker.code, "implementation_adapter_not_configured");
+
+const calls = [];
+const harnessResult = await runRiddleProof({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Ship the proof harness.",
+    verification_mode: "visual",
+    ship_mode: "ship",
+  },
+  workdir: "/tmp/riddle-proof-workdir",
+  max_iterations: 2,
+  adapters: {
+    implementation: {
+      async implement(input) {
+        calls.push(`implement:${input.change_request}`);
+        return {
+          ok: true,
+          changed_files: ["src/app.ts"],
+          tests_run: ["npm test"],
+        };
+      },
+    },
+    proof: {
+      async prove() {
+        calls.push("prove");
+        return {
+          ok: true,
+          evidence_bundle: {
+            verification_mode: "visual",
+            after: {
+              kind: "after",
+              url: "https://example.com/after.png",
+            },
+            assertions: {
+              headline_visible: true,
+            },
+          },
+        };
+      },
+    },
+    judge: {
+      async assessProof() {
+        calls.push("judge");
+        return {
+          decision: "ready_to_ship",
+          summary: "Proof is ready.",
+          source: "supervisor",
+        };
+      },
+    },
+    ship: {
+      async ship() {
+        calls.push("ship");
+        return {
+          pr_url: "https://github.com/riddledc/example/pull/42",
+          marked_ready: true,
+          proof_decision: "ready_to_ship",
+          finalized: true,
+        };
+      },
+    },
+    notification: {
+      async notify() {
+        calls.push("notify");
+        return {
+          ok: true,
+          channel_id: "111111111111111111",
+        };
+      },
+    },
+  },
+});
+assert.deepEqual(calls, [
+  "implement:Ship the proof harness.",
+  "prove",
+  "judge",
+  "ship",
+  "notify",
+]);
+assert.equal(harnessResult.status, "shipped");
+assert.equal(harnessResult.ok, true);
+assert.equal(harnessResult.iterations, 1);
+assert.equal(harnessResult.pr_url, "https://github.com/riddledc/example/pull/42");
+assert.equal(harnessResult.marked_ready, true);
+assert.equal(harnessResult.proof_decision, "ready_to_ship");
+assert.equal(harnessResult.finalized, true);
+assert.equal(harnessResult.notification.ok, true);
+assert.equal(harnessResult.evidence_bundle.after.url, "https://example.com/after.png");
+assert.equal(harnessResult.last_checkpoint, "notification_completed");
 
 console.log(JSON.stringify({ ok: true }));

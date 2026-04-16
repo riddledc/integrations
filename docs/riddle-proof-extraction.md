@@ -10,6 +10,10 @@ Riddle Proof does not supply the coding agent. It supplies the orchestration,
 evidence, judgment, and shipping contracts that make an agent-authored change
 auditable before human merge.
 
+It should be more than a skill prompt. The package boundary should preserve the
+hard part of the working flow: taking an idea through server-backed proof,
+agent execution, verification, PR creation, CI, and integration updates.
+
 The durable product promise is:
 
 > Bring your agent. Riddle brings the proof.
@@ -27,11 +31,17 @@ thin, typed layers:
 OpenClaw proofed_change_run
   current working reference; do not rewrite in place during extraction
 
-future OpenClaw Riddle Proof wrapper
-  new plugin/wrapper that consumes @riddledc/riddle-proof after parity tests
+@riddledc/openclaw-riddle-proof
+  @riddledc/openclaw-riddle-proof wrapper that consumes @riddledc/riddle-proof
+  and exposes the OpenClaw tool surface
+
+Riddle execution harness
+  server-aware setup, implementation, proof capture, judge, ship, and notify
+  adapters that move a request from idea to PR
 
 future integrations
-  CLI, GitHub Action, Discord bridge, Riddle-hosted workflow
+  CLI, GitHub Action, Discord bridge, Riddle-hosted workflow wrappers around
+  the same harness
 ```
 
 Avoid plugin-in-plugin recursion. Wrappers should call reusable logic directly
@@ -56,10 +66,32 @@ through adapters rather than invoking another plugin as a transport layer.
 - `RiddleProofEvent`
 - `RiddleProofEvidenceBundle`
 - `RiddleProofAssessment`
+- `SetupAdapter`
 - `ImplementationAdapter`
+- `ProofAdapter`
 - `JudgeAdapter`
 - `ShipAdapter`
 - `NotificationAdapter`
+
+## Idea To PR Harness
+
+The part that moves a request from "please change this" to "here is a PR with
+proof" is the execution harness, not the thin OpenClaw wrapper by itself.
+
+The harness should be the reusable implementation of this sequence:
+
+- intake: normalize the request and integration context
+- setup: prepare the repository, branch, auth, server config, and preview target
+- implement: hand the change request to the configured coding agent
+- prove: run the Riddle server-backed capture/evidence path
+- judge: compare evidence against assertions and success criteria
+- ship: commit, push, open or update the PR, and wait for CI when configured
+- notify: update Discord, OpenClaw, GitHub, or another integration
+
+The current OpenClaw `proofed_change_run` and `riddle-proof` skill/pipelines are
+the reference implementation for this behavior. The extraction should convert
+that reference into typed adapters and parity tests before any production route
+switches to the new wrapper.
 
 ## First Reusable Logic
 
@@ -76,6 +108,22 @@ low-risk pieces that are already stable:
 
 Then extract higher-risk workflow behavior behind parity tests.
 
+## Packaging Target
+
+The public Riddle Proof package set should give users a real integration path,
+not just instructions:
+
+- `@riddledc/riddle-proof`: shared run contracts, helper functions, the runner
+  harness, and adapter interfaces
+- `@riddledc/openclaw-riddle-proof`: the OpenClaw tool wrapper and adapter
+  wiring point
+- examples and parity fixtures: a documented way to exercise a fake or dry-run
+  harness without touching production integrations
+
+Hosted Riddle infrastructure can remain a configured service boundary. The npm
+packages must not publish Riddle secrets, Discord credentials, GitHub tokens, or
+OpenClaw-instance-specific configuration.
+
 ## Future OpenClaw Wrapper
 
 Create a new wrapper before replacing the current reference plugin. A likely
@@ -84,7 +132,7 @@ shape is:
 ```text
 plugin id: riddle-proof
 tool name: riddle_proof_change
-package: @riddledc/openclaw-riddledc or a sibling package
+package: @riddledc/openclaw-riddle-proof
 core dependency: @riddledc/riddle-proof
 ```
 
@@ -92,7 +140,8 @@ The wrapper should:
 
 - translate OpenClaw tool params into `RiddleProofRunParams`
 - call `@riddledc/riddle-proof/openclaw` for the OpenClaw-specific translation
-- provide the OC/Codex implementation and judge adapters
+- hand off to configured setup, implementation, proof, judge, ship, and notify
+  adapters
 - pass Discord/OpenClaw context as `integration_context`
 - return `RiddleProofRunResult`
 - leave the current `proofed_change_run` plugin untouched until parity is
