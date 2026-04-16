@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "plugin",
   "bundledSkills": [],
   "capabilities": {
@@ -13,10 +13,12 @@
     },
     "filesystem": {
       "write": [
-        "/tmp/riddle-proof-run-*.json"
+        "/tmp/riddle-proof-run-*.json",
+        "/tmp/riddle-proof-codex-*"
       ],
       "read": [
         "/tmp/riddle-proof-run-*.json",
+        "/tmp/riddle-proof-codex-*",
         "/root/.openclaw/extensions/riddle-proof-run"
       ]
     },
@@ -31,8 +33,10 @@
         "riddle_proof_change",
         "riddle_proof_status"
       ],
-      "invokes": [],
-      "note": "The wrapper calls reusable logic directly and does not invoke another OpenClaw plugin runtime."
+      "invokes": [
+        "codex exec"
+      ],
+      "note": "The wrapper calls reusable logic directly and does not invoke another OpenClaw plugin runtime. The Codex exec adapter only runs when explicitly configured."
     },
     "secrets": {
       "required": [],
@@ -51,6 +55,14 @@
           "engine"
         ],
         "description": "disabled returns the normalized blocked envelope; engine calls the configured local Riddle Proof engine."
+      },
+      "agentMode": {
+        "type": "string",
+        "enum": [
+          "disabled",
+          "codex_exec"
+        ],
+        "description": "disabled stops at agent checkpoints; codex_exec uses the local codex CLI as the checkpoint agent."
       },
       "riddleEngineModuleUrl": {
         "type": "string"
@@ -73,6 +85,29 @@
           "none",
           "ship"
         ]
+      },
+      "codexCommand": {
+        "type": "string"
+      },
+      "codexHome": {
+        "type": "string"
+      },
+      "codexModel": {
+        "type": "string"
+      },
+      "codexTimeoutMs": {
+        "type": "number"
+      },
+      "codexSandbox": {
+        "type": "string",
+        "enum": [
+          "read-only",
+          "workspace-write",
+          "danger-full-access"
+        ]
+      },
+      "codexFullAuto": {
+        "type": "boolean"
       }
     }
   }

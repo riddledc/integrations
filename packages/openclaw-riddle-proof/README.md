@@ -16,8 +16,11 @@ a blocked result until execution is explicitly configured.
 
 When configured with `executionMode: "engine"` and a `riddleEngineModuleUrl`,
 the wrapper calls the reusable engine harness in `@riddledc/riddle-proof`.
-That harness drives the existing `riddle-proof-run` checkpoint engine directly
-and stops at concrete blockers when an agent adapter is not configured.
+That harness drives the existing `riddle-proof-run` checkpoint engine directly.
+By default it still stops at concrete blockers when an agent adapter is not
+configured. When `agentMode: "codex_exec"` is explicitly set, the wrapper uses a
+local `codex exec` adapter for recon judgment, proof packet authoring,
+implementation, and proof judgment.
 
 This keeps the currently working OpenClaw/Discord proof flow as the reference
 implementation while the new wrapper reaches parity.
@@ -55,12 +58,33 @@ elapsed time, blocker, worktree path, and latest event.
 
 The wrapper depends on `@riddledc/riddle-proof` for contracts and normalization.
 It does not invoke another OpenClaw plugin and does not supply a coding agent.
-The first reusable engine harness is wired behind explicit config. Agent
-execution remains an adapter boundary: the package does not publish a coding
-agent or secrets. The configured agent must implement the recon, author,
-implementation, and proof-assessment adapter methods before the wrapper can
-drive all the way to a PR.
+The reusable engine harness and the local Codex exec adapter are wired behind
+explicit config. Agent execution remains an adapter boundary: the package does
+not publish a hosted coding agent or secrets. The configured runtime must supply
+the local `codex` CLI environment, repository access, Riddle engine module, and
+any service credentials needed by that runtime before the wrapper can drive all
+the way to a PR.
 
 The package should call configured services and credentials at runtime; it must
 not publish Riddle server secrets, Discord credentials, GitHub tokens, or
 OpenClaw-instance-specific configuration.
+
+## Codex Exec Adapter
+
+The optional adapter can be enabled with config like:
+
+```json
+{
+  "executionMode": "engine",
+  "agentMode": "codex_exec",
+  "riddleEngineModuleUrl": "file:///root/.openclaw/extensions/riddle-proof-run/dist/engine.js",
+  "codexHome": "/root/.codex",
+  "codexSandbox": "workspace-write",
+  "defaultShipMode": "ship"
+}
+```
+
+The adapter runs `codex exec` in the isolated after-worktree supplied by the
+Riddle Proof engine. It writes no package-time secrets and removes inherited
+`OPENAI_API_KEY` from the child process environment so a configured
+`CODEX_HOME` login is used unless the host wraps the command differently.
