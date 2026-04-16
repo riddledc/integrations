@@ -1,6 +1,7 @@
 import type {
   IntegrationContext,
   RiddleProofEvent,
+  RiddleProofPrLifecycleState,
   RiddleProofRunParams,
   RiddleProofRunStatusSnapshot,
   RiddleProofRunState,
@@ -44,6 +45,47 @@ function elapsedMs(start?: string | null, end?: string | null): number | undefin
   const endMs = end ? Date.parse(end) : NaN;
   if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return undefined;
   return Math.max(0, endMs - startMs);
+}
+
+function normalizePrStatus(value: unknown): RiddleProofPrLifecycleState["status"] {
+  const status = nonEmptyString(value)?.toLowerCase();
+  if (status === "merged") return "merged";
+  if (status === "open") return "open";
+  if (status === "closed") return "closed";
+  if (status === "not_found" || status === "not-found") return "not_found";
+  if (status === "unavailable") return "unavailable";
+  return status || "unknown";
+}
+
+export function normalizePrLifecycleState(
+  input?: Partial<RiddleProofPrLifecycleState> | Record<string, unknown> | null,
+  checkedAt = timestamp(),
+): RiddleProofPrLifecycleState | undefined {
+  const value = recordValue(input);
+  if (!value) return undefined;
+
+  const cleanup = recordValue(value.cleanup);
+  const mergeCommit =
+    nonEmptyString(value.merge_commit) ||
+    nonEmptyString(value.mergeCommit) ||
+    nonEmptyString(recordValue(value.mergeCommit)?.oid);
+  return compactRecord({
+    status: normalizePrStatus(value.status || value.state),
+    pr_url: nonEmptyString(value.pr_url) || nonEmptyString(value.prUrl) || nonEmptyString(value.url),
+    pr_number: nonEmptyString(value.pr_number) || nonEmptyString(value.prNumber) || (
+      typeof value.number === "number" ? String(value.number) : undefined
+    ),
+    repo: nonEmptyString(value.repo) || nonEmptyString(value.repository),
+    head_branch: nonEmptyString(value.head_branch) || nonEmptyString(value.headBranch) || nonEmptyString(value.headRefName),
+    base_branch: nonEmptyString(value.base_branch) || nonEmptyString(value.baseBranch) || nonEmptyString(value.baseRefName),
+    merge_commit: mergeCommit,
+    merged_at: nonEmptyString(value.merged_at) || nonEmptyString(value.mergedAt),
+    closed_at: nonEmptyString(value.closed_at) || nonEmptyString(value.closedAt),
+    checked_at: nonEmptyString(value.checked_at) || nonEmptyString(value.checkedAt) || checkedAt,
+    source: nonEmptyString(value.source),
+    next_action: nonEmptyString(value.next_action) || nonEmptyString(value.nextAction),
+    cleanup: cleanup && Object.keys(cleanup).length ? cleanup : undefined,
+  }) as RiddleProofPrLifecycleState;
 }
 
 export function normalizeIntegrationContext(
@@ -187,6 +229,16 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     state_path: state.state_path ?? null,
     worktree_path: state.worktree_path ?? null,
     branch: state.branch ?? null,
+    pr_url: state.pr_url ?? null,
+    pr_branch: state.pr_branch ?? null,
+    pr_state: state.pr_state,
+    ci_status: state.ci_status,
+    ship_commit: state.ship_commit,
+    ship_remote_head: state.ship_remote_head,
+    merge_commit: state.merge_commit,
+    merged_at: state.merged_at,
+    proof_comment_url: state.proof_comment_url,
+    cleanup_report: state.cleanup_report,
     iterations: state.iterations,
     last_checkpoint: state.last_checkpoint ?? null,
     updated_at: state.updated_at,
@@ -200,6 +252,31 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
 export function setRunStatus<T extends RiddleProofRunState>(state: T, status: RiddleProofStatus, at = timestamp()): T {
   state.status = status;
   state.ok = status !== "blocked" && status !== "failed";
+  state.updated_at = at;
+  return state;
+}
+
+export function applyPrLifecycleState<T extends RiddleProofRunState>(
+  state: T,
+  input?: Partial<RiddleProofPrLifecycleState> | Record<string, unknown> | null,
+  at = timestamp(),
+): T {
+  const prState = normalizePrLifecycleState(input, at);
+  if (!prState) return state;
+
+  state.pr_state = prState;
+  if (prState.pr_url) state.pr_url = prState.pr_url;
+  if (prState.head_branch) state.pr_branch = prState.head_branch;
+  if (prState.merge_commit) state.merge_commit = prState.merge_commit;
+  if (prState.merged_at) state.merged_at = prState.merged_at;
+  if (prState.cleanup) state.cleanup_report = prState.cleanup;
+
+  if (prState.status === "merged") {
+    state.finalized = true;
+    state.status = "completed";
+    state.ok = true;
+  }
+
   state.updated_at = at;
   return state;
 }

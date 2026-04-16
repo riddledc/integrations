@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.4.4
+
+### Patch Changes
+
+- Add PR lifecycle sync state to the public run contract so wrappers can record
+  whether a shipped PR is still open, merged, closed, or unavailable, along
+  with merge commit/time and cleanup results.
+
 ## 0.4.2
 
 ### Patch Changes

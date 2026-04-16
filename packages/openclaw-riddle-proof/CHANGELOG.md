@@ -1,5 +1,16 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.5
+
+### Patch Changes
+
+- Add `riddle_proof_sync`, an explicit public tool for reconciling shipped proof
+  runs after PR review or merge. The sync path checks PR lifecycle state through
+  the configured engine, records merge metadata, and supports post-merge cleanup
+  without mutating cheap status reads.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.4.4
+
 ## 0.4.3
 
 ### Patch Changes

@@ -8,6 +8,7 @@ import {
   appendStageHeartbeat,
   appendRunEvent,
   applyTerminalMetadata,
+  applyPrLifecycleState,
   createDisabledRiddleProofAgentAdapter,
   createRunStatusSnapshot,
   createRunState,
@@ -110,6 +111,27 @@ assert.equal(state.marked_ready, true);
 assert.equal(state.ci_status, "no_checks");
 assert.equal(state.proof_comment_url, "https://github.com/davisdiehl/lilarcade/pull/255#issuecomment-1");
 assert.equal(state.notification.message_id, "333333333333333333");
+
+const mergedState = applyPrLifecycleState(baseState(), {
+  status: "MERGED",
+  pr_url: "https://github.com/davisdiehl/lilarcade/pull/255",
+  number: 255,
+  headRefName: "tictactoe-board-polish",
+  baseRefName: "main",
+  mergeCommit: { oid: "merge123" },
+  mergedAt: "2026-04-16T05:00:00.000Z",
+  cleanup: { worktrees_removed: 2 },
+});
+assert.equal(mergedState.status, "completed");
+assert.equal(mergedState.ok, true);
+assert.equal(mergedState.pr_state?.status, "merged");
+assert.equal(mergedState.pr_state?.head_branch, "tictactoe-board-polish");
+assert.equal(mergedState.merge_commit, "merge123");
+assert.equal(mergedState.merged_at, "2026-04-16T05:00:00.000Z");
+assert.equal(mergedState.cleanup_report?.worktrees_removed, 2);
+const mergedSnapshot = createRunStatusSnapshot(mergedState, "2026-04-16T05:00:01.000Z");
+assert.equal(mergedSnapshot.pr_state?.status, "merged");
+assert.equal(mergedSnapshot.merge_commit, "merge123");
 
 const result = createRunResult({
   state,
