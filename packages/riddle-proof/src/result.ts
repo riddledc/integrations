@@ -89,7 +89,11 @@ export function createRunResult(input: {
   return compactRecord({
     ok,
     status,
+    run_id: state.run_id,
     state_path: input.state_path ?? state.state_path ?? null,
+    worktree_path: state.worktree_path ?? null,
+    branch: state.branch ?? null,
+    current_stage: state.current_stage ?? null,
     iterations: state.iterations,
     last_checkpoint: state.last_checkpoint ?? null,
     last_summary: input.last_summary ?? null,

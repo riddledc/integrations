@@ -48,6 +48,7 @@ export function createOpenClawRiddleProofResult(
         next_step:
           "Wire the server-backed execution harness behind this wrapper after parity tests pass.",
         required_adapters: [
+          "preflight",
           "setup",
           "implementation",
           "proof",

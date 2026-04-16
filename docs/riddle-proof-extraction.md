@@ -4,6 +4,9 @@ Riddle Proof is the reusable proof workflow behind evidence-backed agent changes
 The current OpenClaw `proofed_change_run` plugin remains the working reference
 implementation until the package below reaches parity.
 
+See `docs/riddle-proof-hardening.md` for operational requirements captured from
+real OpenClaw dogfood runs.
+
 ## Product Boundary
 
 Riddle Proof does not supply the coding agent. It supplies the orchestration,
