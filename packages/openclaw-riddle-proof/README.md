@@ -72,7 +72,11 @@ elapsed time, blocker, worktree path, and latest event.
 `riddle_proof_sync` accepts the same wrapper `state_path` and asks the configured
 engine to reconcile PR lifecycle state. It is the explicit path for "the PR was
 merged, update the run": check the PR, record merged/closed/open state, fetch the
-base branch when configured, and clean isolated proof worktrees after merge.
+base branch when configured, safely fast-forward a clean local base checkout
+when configured, and clean isolated proof worktrees after merge. The sync result
+includes `cleanup_report.base_checkout` so operators can see the base worktree,
+branch, clean state, local/remote heads, and whether the fast-forward ran,
+skipped, or failed.
 
 `riddle_proof_review` accepts the wrapper `state_path` plus a structured
 main-agent proof verdict. It is intended for runs that stopped at
