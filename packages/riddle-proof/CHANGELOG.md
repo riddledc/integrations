@@ -1,5 +1,16 @@
 # @riddledc/riddle-proof
 
+## 0.4.1
+
+### Patch Changes
+
+- 68b060c: Add main-agent proof review support for OpenClaw Riddle Proof runs.
+
+  The reusable harness can now resume from explicit workflow params, and the
+  OpenClaw wrapper can pause final proof judgment at a structured
+  `main_agent_proof_review_required` checkpoint. A new `riddle_proof_review` tool
+  submits the main agent's verdict and resumes the same run.
+
 ## 0.4.0
 
 ### Minor Changes
