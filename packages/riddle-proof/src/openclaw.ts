@@ -30,6 +30,11 @@ export interface OpenClawProofedChangeParams {
   wait_for_selector?: string;
   ship_after_verify?: boolean;
   ship_mode?: "none" | "ship";
+  state_path?: string;
+  harness_state_path?: string;
+  max_iterations?: number;
+  auto_approve?: boolean;
+  dry_run?: boolean;
   discord_channel?: string;
   discord_thread_id?: string;
   discord_message_id?: string;
@@ -92,6 +97,11 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     color_scheme: params.color_scheme,
     wait_for_selector: params.wait_for_selector,
     ship_mode: params.ship_mode || (params.ship_after_verify ? "ship" : undefined),
+    engine_state_path: params.state_path,
+    harness_state_path: params.harness_state_path,
+    max_iterations: params.max_iterations,
+    auto_approve: params.auto_approve,
+    dry_run: params.dry_run,
     integration_context: openClawIntegrationContext(params),
   });
 }

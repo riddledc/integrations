@@ -2,18 +2,23 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "plugin",
   "bundledSkills": [],
   "capabilities": {
     "network": {
       "egress": [],
       "enforced": true,
-      "note": "This wrapper currently normalizes requests only; future adapters must declare any network egress they add."
+      "note": "The wrapper itself does not need network egress; configured engine or agent adapters must declare additional egress if added."
     },
     "filesystem": {
-      "write": [],
-      "read": []
+      "write": [
+        "/tmp/riddle-proof-run-*.json"
+      ],
+      "read": [
+        "/tmp/riddle-proof-run-*.json",
+        "/root/.openclaw/extensions/riddle-proof-run"
+      ]
     },
     "agentContext": {
       "conversationHistory": false,
@@ -23,10 +28,11 @@
     },
     "tools": {
       "provides": [
-        "riddle_proof_change"
+        "riddle_proof_change",
+        "riddle_proof_status"
       ],
       "invokes": [],
-      "note": "Initial wrapper exposes the OpenClaw-facing contract without invoking another plugin runtime."
+      "note": "The wrapper calls reusable logic directly and does not invoke another OpenClaw plugin runtime."
     },
     "secrets": {
       "required": [],
@@ -37,6 +43,37 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "executionMode": {
+        "type": "string",
+        "enum": [
+          "disabled",
+          "engine"
+        ],
+        "description": "disabled returns the normalized blocked envelope; engine calls the configured local Riddle Proof engine."
+      },
+      "riddleEngineModuleUrl": {
+        "type": "string"
+      },
+      "riddleProofDir": {
+        "type": "string"
+      },
+      "defaultReviewer": {
+        "type": "string"
+      },
+      "stateDir": {
+        "type": "string"
+      },
+      "defaultMaxIterations": {
+        "type": "number"
+      },
+      "defaultShipMode": {
+        "type": "string",
+        "enum": [
+          "none",
+          "ship"
+        ]
+      }
+    }
   }
 }

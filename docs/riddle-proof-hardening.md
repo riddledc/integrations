@@ -65,3 +65,11 @@ The `@riddledc/riddle-proof` package now exposes primitives for this:
   isolated workspace behavior.
 - `EvidenceReference.role` and `EvidenceArtifact.role` for explicit artifact
   meaning.
+- `runRiddleProofEngineHarness` for driving the existing checkpoint engine
+  directly while persisting wrapper run state and returning concrete blockers.
+- `readRiddleProofRunStatus` for status-only integration checks.
+
+The engine harness must block before implementation if the engine state does
+not expose an isolated after-worktree. It must also refuse to advance after
+implementation unless that worktree has a detectable diff or the configured
+agent adapter explicitly reports one.
