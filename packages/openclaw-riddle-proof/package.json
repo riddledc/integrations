@@ -44,7 +44,7 @@
     "prepack": "npm run sync:openclaw-plugin-version"
   },
   "dependencies": {
-    "@riddledc/riddle-proof": "^0.1.1",
+    "@riddledc/riddle-proof": "workspace:^",
     "@sinclair/typebox": "^0.32.0"
   },
   "devDependencies": {
