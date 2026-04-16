@@ -228,6 +228,69 @@ function collectImageArtifacts(value: unknown, output: Array<Record<string, unkn
   return output;
 }
 
+function listValue(value: unknown, limit: number) {
+  return Array.isArray(value) ? value.slice(0, limit) : [];
+}
+
+function semanticObservation(label: string, observation: unknown) {
+  const record = recordValue(observation) || {};
+  const details = recordValue(record.details) || {};
+  const valid = typeof record.valid === "boolean" ? record.valid : typeof record.ok === "boolean" ? record.ok : false;
+  return {
+    label,
+    valid,
+    reason: stringValue(record.reason),
+    telemetry_ready: Boolean(record.telemetry_ready),
+    url: stringValue(record.url),
+    capture_url: stringValue(record.capture_url),
+    observed_path: stringValue(details.observed_path),
+    observed_path_raw: stringValue(details.observed_path_raw),
+    title: stringValue(details.title),
+    visible_text_sample: stringValue(details.visible_text_sample),
+    headings: listValue(details.headings, 8),
+    buttons: listValue(details.buttons, 12),
+    links: listValue(details.links, 12),
+    canvas_count: typeof details.canvas_count === "number" ? details.canvas_count : 0,
+    interactive_elements: typeof details.interactive_elements === "number" ? details.interactive_elements : 0,
+    visible_interactive_elements: typeof details.visible_interactive_elements === "number" ? details.visible_interactive_elements : 0,
+    semantic_anchor_count: typeof details.semantic_anchor_count === "number" ? details.semantic_anchor_count : 0,
+    large_visible_elements: listValue(details.large_visible_elements, 10),
+  };
+}
+
+function buildSemanticContext(
+  assessmentRequest: Record<string, unknown>,
+  evidenceBundle: Record<string, unknown>,
+  fullState: Record<string, unknown>,
+) {
+  const existing = recordValue(assessmentRequest.semantic_context) || recordValue(evidenceBundle.semantic_context);
+  if (existing) return existing;
+
+  const baseline = recordValue(evidenceBundle.baseline) || {};
+  const beforeBaseline = recordValue(baseline.before) || {};
+  const prodBaseline = recordValue(baseline.prod) || {};
+  const after = recordValue(evidenceBundle.after) || {};
+  const beforeSemantic = semanticObservation("before", beforeBaseline.observation);
+  const prodSemantic = semanticObservation("prod", prodBaseline.observation);
+  const afterSemantic = semanticObservation("after", after.observation || assessmentRequest.after_observation);
+  const expectedPath = stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path);
+  return {
+    expected_path: expectedPath || null,
+    reference: stringValue(evidenceBundle.reference) || stringValue(fullState.reference) || null,
+    requested_change: stringValue(fullState.change_request) || null,
+    success_criteria: stringValue(fullState.success_criteria) || null,
+    route: {
+      expected_path: expectedPath || null,
+      before_observed_path: stringValue(beforeSemantic.observed_path) || stringValue(beforeBaseline.path) || null,
+      prod_observed_path: stringValue(prodSemantic.observed_path) || stringValue(prodBaseline.path) || null,
+      after_observed_path: stringValue(afterSemantic.observed_path) || null,
+    },
+    before: beforeSemantic,
+    prod: prodSemantic,
+    after: afterSemantic,
+  };
+}
+
 function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
   const fullState = recordValue(context.fullRiddleState) || {};
   const assessmentRequest =
@@ -241,6 +304,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     {};
   const after = recordValue(evidenceBundle.after) || {};
   const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
+  const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
   const imageArtifacts: Array<Record<string, unknown>> = [];
   for (const [role, url] of [
     ["before", fullState.before_cdn],
@@ -267,9 +331,11 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || null,
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
+    semantic_context: semanticContext,
     proof_assessment_request: assessmentRequest,
     review_prompt: [
       "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
+      "Use semantic_context.route, headings, buttons, and text anchors to ground route/content judgment before calling the proof wrong-route.",
       "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
       "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
       "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",

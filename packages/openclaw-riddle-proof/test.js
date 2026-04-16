@@ -206,6 +206,17 @@ writeFileSync(reviewStatePath, JSON.stringify({
   proof_assessment_request: {
     expected_path: "/games/tic-tac-toe",
     visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    semantic_context: {
+      route: {
+        expected_path: "/games/tic-tac-toe",
+        after_observed_path: "/games/tic-tac-toe",
+      },
+      after: {
+        headings: ["Tic Tac Toe"],
+        buttons: ["Reset Game"],
+        visible_text_sample: "Tic Tac Toe Reset Game",
+      },
+    },
   },
 }, null, 2));
 const reviewEngineCalls = [];
@@ -257,6 +268,8 @@ assert.equal(
   reviewBlocked.blocker?.details?.proof_review?.image_artifacts?.some((item) => item.url === "https://example.com/after.png"),
   true,
 );
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.route?.after_observed_path, "/games/tic-tac-toe");
+assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.after?.buttons, ["Reset Game"]);
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
 
 const reviewResumeEngineCalls = [];

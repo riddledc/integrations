@@ -128,7 +128,17 @@ export interface RiddleProofRunState {
   iterations: number;
   last_checkpoint?: string | null;
   pr_url?: string;
+  pr_branch?: string;
   marked_ready?: boolean;
+  left_draft?: boolean;
+  ci_status?: string;
+  ship_commit?: string;
+  ship_remote_head?: string;
+  proof_comment_url?: string;
+  before_artifact_url?: string;
+  prod_artifact_url?: string;
+  after_artifact_url?: string;
+  ship_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
@@ -150,7 +160,17 @@ export interface RiddleProofRunResult {
   last_summary?: string | null;
   event_count?: number;
   pr_url?: string;
+  pr_branch?: string;
   marked_ready?: boolean;
+  left_draft?: boolean;
+  ci_status?: string;
+  ship_commit?: string;
+  ship_remote_head?: string;
+  proof_comment_url?: string;
+  before_artifact_url?: string;
+  prod_artifact_url?: string;
+  after_artifact_url?: string;
+  ship_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
@@ -184,6 +204,7 @@ export interface RiddleProofEvidenceBundle {
   proof_evidence?: unknown;
   proof_evidence_sample?: unknown;
   assertions?: JsonValue;
+  semantic_context?: Record<string, unknown>;
   summary?: string;
   notes?: string[];
 }
@@ -316,7 +337,17 @@ export interface NotificationAdapter {
 
 export interface RiddleProofTerminalMetadata {
   pr_url?: string;
+  pr_branch?: string;
   marked_ready?: boolean;
+  left_draft?: boolean;
+  ci_status?: string;
+  ship_commit?: string;
+  ship_remote_head?: string;
+  proof_comment_url?: string;
+  before_artifact_url?: string;
+  prod_artifact_url?: string;
+  after_artifact_url?: string;
+  ship_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
