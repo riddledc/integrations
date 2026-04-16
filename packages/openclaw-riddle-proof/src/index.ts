@@ -6,6 +6,8 @@ import {
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   setRunStatus,
+  type RiddleProofAgentAdapter,
+  type RiddleProofEngine,
   type RiddleProofRunResult,
   type RiddleProofRunStatusSnapshot,
 } from "@riddledc/riddle-proof";
@@ -13,12 +15,29 @@ import {
   toRiddleProofRunParams,
   type OpenClawProofedChangeParams,
 } from "@riddledc/riddle-proof/openclaw";
+import {
+  createCodexExecAgentAdapter,
+  type CodexExecAgentConfig,
+} from "./codex-exec-agent";
+
+export {
+  createCodexExecAgentAdapter,
+  createCodexExecJsonRunner,
+  runCodexExecAgentDoctor,
+} from "./codex-exec-agent";
+export type {
+  CodexExecAgentConfig,
+  CodexJsonRequest,
+  CodexJsonResult,
+  CodexJsonRunner,
+} from "./codex-exec-agent";
 
 export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
 
 export type RiddleProofChangeParams = OpenClawProofedChangeParams;
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
+export type OpenClawRiddleProofAgentMode = "disabled" | "codex_exec";
 
 export interface CreateOpenClawRiddleProofResultOptions {
   implementationConfigured?: boolean;
@@ -26,12 +45,21 @@ export interface CreateOpenClawRiddleProofResultOptions {
 
 export interface OpenClawRiddleProofRuntimeConfig {
   executionMode?: OpenClawRiddleProofExecutionMode;
+  agentMode?: OpenClawRiddleProofAgentMode;
+  engine?: RiddleProofEngine | (() => Promise<RiddleProofEngine>);
+  agent?: RiddleProofAgentAdapter;
   riddleEngineModuleUrl?: string;
   riddleProofDir?: string;
   defaultReviewer?: string;
   stateDir?: string;
   defaultMaxIterations?: number;
   defaultShipMode?: "none" | "ship";
+  codexCommand?: CodexExecAgentConfig["codexCommand"];
+  codexHome?: CodexExecAgentConfig["codexHome"];
+  codexModel?: CodexExecAgentConfig["codexModel"];
+  codexTimeoutMs?: CodexExecAgentConfig["codexTimeoutMs"];
+  codexSandbox?: CodexExecAgentConfig["codexSandbox"];
+  codexFullAuto?: CodexExecAgentConfig["codexFullAuto"];
 }
 
 export function createOpenClawRiddleProofResult(
@@ -98,16 +126,43 @@ export function createOpenClawRiddleProofResult(
 function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const cfg = (api.pluginConfig ?? {}) as Record<string, unknown>;
   const executionMode = cfg.executionMode === "engine" ? "engine" : "disabled";
+  const agentMode = cfg.agentMode === "codex_exec" ? "codex_exec" : "disabled";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
+  const codexSandbox =
+    cfg.codexSandbox === "read-only" ||
+    cfg.codexSandbox === "workspace-write" ||
+    cfg.codexSandbox === "danger-full-access"
+      ? cfg.codexSandbox
+      : undefined;
   return {
     executionMode,
+    agentMode,
     riddleEngineModuleUrl: typeof cfg.riddleEngineModuleUrl === "string" ? cfg.riddleEngineModuleUrl : undefined,
     riddleProofDir: typeof cfg.riddleProofDir === "string" ? cfg.riddleProofDir : undefined,
     defaultReviewer: typeof cfg.defaultReviewer === "string" ? cfg.defaultReviewer : undefined,
     stateDir: typeof cfg.stateDir === "string" ? cfg.stateDir : undefined,
     defaultMaxIterations: typeof cfg.defaultMaxIterations === "number" ? cfg.defaultMaxIterations : undefined,
     defaultShipMode,
+    codexCommand: typeof cfg.codexCommand === "string" ? cfg.codexCommand : undefined,
+    codexHome: typeof cfg.codexHome === "string" ? cfg.codexHome : undefined,
+    codexModel: typeof cfg.codexModel === "string" ? cfg.codexModel : undefined,
+    codexTimeoutMs: typeof cfg.codexTimeoutMs === "number" ? cfg.codexTimeoutMs : undefined,
+    codexSandbox,
+    codexFullAuto: typeof cfg.codexFullAuto === "boolean" ? cfg.codexFullAuto : undefined,
   };
+}
+
+function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofAgentAdapter | undefined {
+  if (config.agent) return config.agent;
+  if (config.agentMode !== "codex_exec") return undefined;
+  return createCodexExecAgentAdapter({
+    codexCommand: config.codexCommand,
+    codexHome: config.codexHome,
+    codexModel: config.codexModel,
+    codexTimeoutMs: config.codexTimeoutMs,
+    codexSandbox: config.codexSandbox,
+    codexFullAuto: config.codexFullAuto,
+  });
 }
 
 export async function runOpenClawRiddleProof(
@@ -125,6 +180,8 @@ export async function runOpenClawRiddleProof(
     max_iterations: request.max_iterations ?? config.defaultMaxIterations,
     dry_run: request.dry_run,
     auto_approve: request.auto_approve,
+    engine: config.engine,
+    agent: agentFromConfig(config),
     config: {
       riddleEngineModuleUrl: config.riddleEngineModuleUrl,
       riddleProofDir: config.riddleProofDir,
