@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.1
+
+### Patch Changes
+
+- 1dc946d: Tighten visual proof assessment guidance so subtle or unmeasured UI deltas are not marked ready without a clearly legible before/after change.
+
 ## 0.4.0
 
 ### Minor Changes
