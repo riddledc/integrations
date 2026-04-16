@@ -272,6 +272,8 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
       "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
       "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
       "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
+      "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
+      "If visual_delta is unmeasured and the before/after images look nearly identical or require zooming/code inspection to believe, choose needs_implementation or needs_richer_proof.",
       `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
     ],
     response_schema: {
@@ -475,6 +477,7 @@ export const riddleProofChangeParameters = Type.Object({
     Type.Literal("none"),
     Type.Literal("ship"),
   ], { description: "Whether to ship after verification." })),
+  leave_draft: optionalBoolean("Opt-in escape hatch: keep the PR as draft after proof and CI instead of marking it ready."),
   state_path: optionalString("Existing underlying Riddle Proof engine state path to resume."),
   harness_state_path: optionalString("Existing Riddle Proof wrapper run state path to resume."),
   max_iterations: Type.Optional(Type.Number({ description: "Maximum engine/checkpoint iterations before returning a blocker." })),

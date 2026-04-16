@@ -40,6 +40,7 @@ export type RiddleProofShipMode = "none" | "ship";
 export interface RiddleProofWorkflowParams extends Record<string, unknown> {
   action: string;
   state_path?: string;
+  leave_draft?: boolean;
 }
 
 export interface RiddleProofEngineResult extends Record<string, unknown> {
@@ -294,6 +295,7 @@ function initialRunParams(
     use_auth: request.use_auth,
     color_scheme: request.color_scheme,
     wait_for_selector: request.wait_for_selector,
+    leave_draft: request.leave_draft || undefined,
     discord_channel: request.integration_context?.channel_id,
     discord_thread_id: request.integration_context?.thread_id,
     discord_message_id: request.integration_context?.message_id,
@@ -793,6 +795,7 @@ export async function runRiddleProofEngineHarness(
       engine_state_path: request.engine_state_path || null,
       max_iterations: maxIterations,
       ship_mode: effectiveShipMode(request, input.config),
+      leave_draft: request.leave_draft || false,
     },
   });
 
@@ -812,6 +815,9 @@ export async function runRiddleProofEngineHarness(
   let lastResult: RiddleProofEngineResult | null = null;
 
   for (let index = 0; index < maxIterations; index += 1) {
+    if (request.leave_draft && nextParams.leave_draft === undefined) {
+      nextParams = { ...nextParams, leave_draft: true };
+    }
     state.iterations += 1;
     const stage = stageFromWorkflowParams(nextParams);
     heartbeat(state, {

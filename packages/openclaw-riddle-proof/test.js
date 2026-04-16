@@ -28,6 +28,7 @@ const params = {
   harness_state_path: "/tmp/riddle-wrapper-state.json",
   max_iterations: 3,
   auto_approve: true,
+  leave_draft: true,
   dry_run: true,
 };
 
@@ -50,6 +51,7 @@ assert.equal(result.raw?.request?.engine_state_path, "/tmp/riddle-engine-state.j
 assert.equal(result.raw?.request?.harness_state_path, "/tmp/riddle-wrapper-state.json");
 assert.equal(result.raw?.request?.max_iterations, 3);
 assert.equal(result.raw?.request?.auto_approve, true);
+assert.equal(result.raw?.request?.leave_draft, true);
 assert.equal(result.raw?.request?.dry_run, true);
 assert.deepEqual(result.raw?.request?.assertions, { must_show_confirmation: true });
 assert.equal(result.raw?.request?.integration_context?.source, "discord");

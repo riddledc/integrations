@@ -30,6 +30,7 @@ export interface OpenClawProofedChangeParams {
   wait_for_selector?: string;
   ship_after_verify?: boolean;
   ship_mode?: "none" | "ship";
+  leave_draft?: boolean;
   state_path?: string;
   harness_state_path?: string;
   max_iterations?: number;
@@ -97,6 +98,7 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     color_scheme: params.color_scheme,
     wait_for_selector: params.wait_for_selector,
     ship_mode: params.ship_mode || (params.ship_after_verify ? "ship" : undefined),
+    leave_draft: params.leave_draft,
     engine_state_path: params.state_path,
     harness_state_path: params.harness_state_path,
     max_iterations: params.max_iterations,
