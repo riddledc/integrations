@@ -12,7 +12,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && pnpm install --lockfile-only",
     "release": "changeset publish --access public"
   },
   "devDependencies": {
