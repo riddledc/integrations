@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.0
+
+### Minor Changes
+
+- 2ac69d1: Add an optional Codex exec agent adapter for engine-mode Riddle Proof runs.
+
 ## 0.3.0
 
 ### Minor Changes
