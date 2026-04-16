@@ -29,6 +29,8 @@ should pause for the current OpenClaw agent. In that mode the run blocks at
 request, before/after image URLs, visual delta metadata, and a review rubric.
 The OpenClaw agent can inspect the screenshot evidence in its own conversation
 context and then resume the same run with `riddle_proof_review`.
+The ready verdict is intentionally strict: for visual polish, screenshots must
+prove a visible reviewer-scale change, not just a code or CSS difference.
 
 This keeps the currently working OpenClaw/Discord proof flow as the reference
 implementation while the new wrapper reaches parity.
@@ -57,7 +59,10 @@ wired and parity-tested against the existing `proofed_change_run` flow.
 
 `riddle_proof_change` accepts proofed-change-style params such as `repo`,
 `branch`, `change_request`, `verification_mode`, `assertions_json`, and Discord
-routing metadata. It returns a `RiddleProofRunResult`.
+routing metadata. The default ship path should open or update a draft PR, prove
+the exact commit, wait for CI, and mark the PR ready; `leave_draft: true` is an
+explicit escape hatch for debug or intentionally draft-only runs. It returns a
+`RiddleProofRunResult`.
 
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,

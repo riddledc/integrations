@@ -183,6 +183,12 @@ assert.equal(referenceParams.integration_context.thread_id, "111111111111111111"
 assert.equal(referenceParams.integration_context.metadata.tool, "proofed_change_run");
 assert.equal(referenceParams.assertions.interactive_elements, 11);
 assert.equal(parseOpenClawAssertions("plain text assertion"), "plain text assertion");
+assert.equal(toRiddleProofRunParams({
+  repo: "riddledc/example",
+  change_request: "Keep the PR in draft for a debug run.",
+  ship_after_verify: true,
+  leave_draft: true,
+}).leave_draft, true);
 
 const referenceState = createRunState({
   state_path: referenceRun.harness.riddle_state_path,
@@ -393,6 +399,7 @@ const engineHarnessResult = await runRiddleProofEngineHarness({
     change_request: "Drive the proven checkpoint engine.",
     verification_mode: "visual",
     ship_mode: "ship",
+    leave_draft: true,
     harness_state_path: path.join(engineFixture, "harness-state.json"),
   },
   max_iterations: 8,
@@ -529,6 +536,7 @@ assert.equal(engineHarnessResult.current_stage, "ship");
 assert.equal(engineHarnessResult.state_path, path.join(engineFixture, "harness-state.json"));
 assert.equal(readRiddleProofRunStatus(engineHarnessResult.state_path).status, "shipped");
 assert.equal(engineCalls.at(-1).ship_after_verify, true);
+assert.equal(engineCalls.at(-1).leave_draft, true);
 
 const missingWorktreeStatePath = path.join(engineFixture, "missing-worktree-riddle-state.json");
 writeFileSync(missingWorktreeStatePath, JSON.stringify({}, null, 2));

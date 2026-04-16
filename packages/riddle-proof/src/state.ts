@@ -94,6 +94,7 @@ export function normalizeRunParams(input: RiddleProofRunParams): RiddleProofRunP
     color_scheme: input.color_scheme,
     wait_for_selector: input.wait_for_selector,
     ship_mode: input.ship_mode,
+    leave_draft: input.leave_draft,
     engine_state_path: input.engine_state_path,
     harness_state_path: input.harness_state_path,
     max_iterations: input.max_iterations,

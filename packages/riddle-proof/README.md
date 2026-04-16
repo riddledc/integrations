@@ -71,15 +71,19 @@ events and return `createRunStatusSnapshot` for cheap observer status.
 
 The proof adapter is where a host wires Riddle server-backed capture. The ship
 adapter is where a host commits, pushes, opens or updates a PR, and waits for CI
-when configured. The notification adapter is where a host updates Discord,
-OpenClaw, GitHub, or another integration.
+when configured. `ship_mode: "ship"` is expected to drive the happy path all the
+way to a ready PR after proof and CI; `leave_draft: true` is only an explicit
+debug or user-request escape hatch. The notification adapter is where a host
+updates Discord, OpenClaw, GitHub, or another integration.
 
 ## OpenClaw Adapter Boundary
 
 `@riddledc/riddle-proof/openclaw` translates the current
 `proofed_change_run`-style tool params into generic `RiddleProofRunParams`.
 It preserves Discord routing metadata as `integration_context` and parses
-`assertions_json` into the shared assertions field.
+`assertions_json` into the shared assertions field. Compatibility params such as
+`ship_after_verify` and the explicit `leave_draft` escape hatch are preserved so
+the underlying runtime can distinguish "do not merge" from "keep this draft."
 
 The adapter does not invoke another OpenClaw plugin and does not supply a
 coding agent. It is the reusable mapping layer a future OpenClaw wrapper can
