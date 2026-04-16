@@ -22,6 +22,14 @@ configured. When `agentMode: "codex_exec"` is explicitly set, the wrapper uses a
 local `codex exec` adapter for recon judgment, proof packet authoring,
 implementation, and proof judgment.
 
+Set `proofReviewMode: "main_agent"` when the local Codex adapter should still
+handle recon, proof authoring, and implementation, but final proof judgment
+should pause for the current OpenClaw agent. In that mode the run blocks at
+`main_agent_proof_review_required` with a proof-review packet containing the
+request, before/after image URLs, visual delta metadata, and a review rubric.
+The OpenClaw agent can inspect the screenshot evidence in its own conversation
+context and then resume the same run with `riddle_proof_review`.
+
 This keeps the currently working OpenClaw/Discord proof flow as the reference
 implementation while the new wrapper reaches parity.
 
@@ -45,6 +53,7 @@ wired and parity-tested against the existing `proofed_change_run` flow.
 
 - `riddle_proof_change`
 - `riddle_proof_status`
+- `riddle_proof_review`
 
 `riddle_proof_change` accepts proofed-change-style params such as `repo`,
 `branch`, `change_request`, `verification_mode`, `assertions_json`, and Discord
@@ -53,6 +62,12 @@ routing metadata. It returns a `RiddleProofRunResult`.
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,
 elapsed time, blocker, worktree path, and latest event.
+
+`riddle_proof_review` accepts the wrapper `state_path` plus a structured
+main-agent proof verdict. It is intended for runs that stopped at
+`main_agent_proof_review_required`; the submitted judgment is passed back to the
+underlying engine as `proof_assessment_json` so the workflow can ship, iterate,
+or escalate without losing run state.
 
 ## Runtime Boundary
 
@@ -80,6 +95,7 @@ The optional adapter can be enabled with config like:
   "riddleEngineModuleUrl": "file:///root/.openclaw/extensions/riddle-proof-run/dist/engine.js",
   "codexHome": "/root/.codex",
   "codexSandbox": "workspace-write",
+  "proofReviewMode": "main_agent",
   "defaultShipMode": "ship"
 }
 ```
@@ -88,3 +104,8 @@ The adapter runs `codex exec` in the isolated after-worktree supplied by the
 Riddle Proof engine. It writes no package-time secrets and removes inherited
 `OPENAI_API_KEY` from the child process environment so a configured
 `CODEX_HOME` login is used unless the host wraps the command differently.
+
+With `proofReviewMode: "main_agent"`, `codex exec` is not asked to make the
+final proof judgment. It implements the change and captures proof, then the
+wrapper returns a review packet for the main OpenClaw agent to judge using the
+visible screenshots and evidence bundle.

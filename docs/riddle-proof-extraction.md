@@ -141,6 +141,7 @@ shape is:
 ```text
 plugin id: riddle-proof
 tool name: riddle_proof_change
+review tool: riddle_proof_review
 package: @riddledc/openclaw-riddle-proof
 core dependency: @riddledc/riddle-proof
 ```
@@ -151,6 +152,8 @@ The wrapper should:
 - call `@riddledc/riddle-proof/openclaw` for the OpenClaw-specific translation
 - hand off to configured setup, implementation, proof, judge, ship, and notify
   adapters
+- optionally pause final proof judgment for the main OpenClaw agent with a
+  screenshot/evidence review packet, then resume via `riddle_proof_review`
 - pass Discord/OpenClaw context as `integration_context`
 - return `RiddleProofRunResult`
 - leave the current `proofed_change_run` plugin untouched until parity is

@@ -5,10 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import register, {
   RIDDLE_PROOF_CHANGE_TOOL_NAME,
+  RIDDLE_PROOF_REVIEW_TOOL_NAME,
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
   runOpenClawRiddleProof,
+  submitOpenClawRiddleProofReview,
 } from "./dist/index.js";
 
 const params = {
@@ -185,6 +187,108 @@ assert.equal(engineModeResult.branch, "agent/openclaw-wrapper-test");
 assert.deepEqual(wrapperAgentCalls, [engineWorkdir]);
 assert.equal(engineCalls.length, 2);
 
+const reviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-review-"));
+const reviewStatePath = path.join(reviewFixture, "riddle-state.json");
+const reviewWrapperStatePath = path.join(reviewFixture, "wrapper-state.json");
+writeFileSync(reviewStatePath, JSON.stringify({
+  branch: "agent/review-fixture",
+  before_cdn: "https://example.com/before.png",
+  after_cdn: "https://example.com/after.png",
+  evidence_bundle: {
+    expected_path: "/games/tic-tac-toe",
+    after: {
+      screenshot_url: "https://example.com/after.png",
+      visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/games/tic-tac-toe",
+    visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+  },
+}, null, 2));
+const reviewEngineCalls = [];
+const reviewDelegate = {
+  async assessRecon() {
+    throw new Error("recon should not run in proof review fixture");
+  },
+  async authorProofPacket() {
+    throw new Error("author should not run in proof review fixture");
+  },
+  async implementChange() {
+    throw new Error("implement should not run in proof review fixture");
+  },
+  async assessProof() {
+    throw new Error("codex proof assessment should be deferred to main agent");
+  },
+};
+const reviewBlocked = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: reviewWrapperStatePath,
+    state_path: reviewStatePath,
+    change_request: "Make Tic Tac Toe board polish visibly stronger",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    engine: {
+      async execute(engineParams) {
+        reviewEngineCalls.push(engineParams);
+        return {
+          ok: false,
+          state_path: reviewStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof evidence needs judgment.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(reviewBlocked.status, "blocked");
+assert.equal(reviewBlocked.blocker?.code, "main_agent_proof_review_required");
+assert.equal(
+  reviewBlocked.blocker?.details?.proof_review?.image_artifacts?.some((item) => item.url === "https://example.com/after.png"),
+  true,
+);
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
+
+const reviewResumeEngineCalls = [];
+const reviewResumed = await submitOpenClawRiddleProofReview(
+  {
+    state_path: reviewWrapperStatePath,
+    decision: "ready_to_ship",
+    summary: "The screenshot shows a visibly stronger Tic Tac Toe board.",
+    reasons: ["after screenshot visibly satisfies the request"],
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    engine: {
+      async execute(engineParams) {
+        reviewResumeEngineCalls.push(engineParams);
+        assert.ok(engineParams.proof_assessment_json);
+        return {
+          ok: true,
+          state_path: reviewStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Proof is ready to ship after main-agent review.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(reviewResumed.status, "ready_to_ship");
+assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).source, "supervising_agent");
+assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).continue_with_stage, "ship");
+
 const registered = [];
 register({
   registerTool(tool, options) {
@@ -192,13 +296,16 @@ register({
   },
 });
 
-assert.equal(registered.length, 2);
+assert.equal(registered.length, 3);
 const changeTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
 const statusTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
+const reviewTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
 assert.ok(changeTool);
 assert.ok(statusTool);
+assert.ok(reviewTool);
 assert.equal(changeTool.options.optional, true);
 assert.equal(statusTool.options.optional, true);
+assert.equal(reviewTool.options.optional, true);
 
 const executed = await changeTool.tool.execute("test-call", params);
 assert.equal(executed.content[0].type, "text");

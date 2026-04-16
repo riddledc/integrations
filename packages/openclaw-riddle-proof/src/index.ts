@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { existsSync, readFileSync } from "node:fs";
 import {
   appendRunEvent,
   createRunResult,
@@ -9,7 +10,9 @@ import {
   type RiddleProofAgentAdapter,
   type RiddleProofEngine,
   type RiddleProofRunResult,
+  type RiddleProofRunState,
   type RiddleProofRunStatusSnapshot,
+  type RiddleProofWorkflowParams,
 } from "@riddledc/riddle-proof";
 import {
   toRiddleProofRunParams,
@@ -34,10 +37,22 @@ export type {
 
 export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
+export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 
 export type RiddleProofChangeParams = OpenClawProofedChangeParams;
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
 export type OpenClawRiddleProofAgentMode = "disabled" | "codex_exec";
+export type OpenClawRiddleProofReviewMode = "codex_exec" | "main_agent";
+
+export interface RiddleProofReviewParams {
+  state_path: string;
+  decision: "ready_to_ship" | "needs_richer_proof" | "revise_capture" | "needs_recon" | "needs_implementation";
+  summary: string;
+  recommended_stage?: "ship" | "author" | "implement" | "recon" | "verify";
+  continue_with_stage?: "ship" | "author" | "implement" | "recon" | "verify";
+  escalation_target?: "agent" | "human";
+  reasons?: string[];
+}
 
 export interface CreateOpenClawRiddleProofResultOptions {
   implementationConfigured?: boolean;
@@ -46,6 +61,7 @@ export interface CreateOpenClawRiddleProofResultOptions {
 export interface OpenClawRiddleProofRuntimeConfig {
   executionMode?: OpenClawRiddleProofExecutionMode;
   agentMode?: OpenClawRiddleProofAgentMode;
+  proofReviewMode?: OpenClawRiddleProofReviewMode;
   engine?: RiddleProofEngine | (() => Promise<RiddleProofEngine>);
   agent?: RiddleProofAgentAdapter;
   riddleEngineModuleUrl?: string;
@@ -127,6 +143,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const cfg = (api.pluginConfig ?? {}) as Record<string, unknown>;
   const executionMode = cfg.executionMode === "engine" ? "engine" : "disabled";
   const agentMode = cfg.agentMode === "codex_exec" ? "codex_exec" : "disabled";
+  const proofReviewMode = cfg.proofReviewMode === "main_agent" ? "main_agent" : "codex_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const codexSandbox =
     cfg.codexSandbox === "read-only" ||
@@ -137,6 +154,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   return {
     executionMode,
     agentMode,
+    proofReviewMode,
     riddleEngineModuleUrl: typeof cfg.riddleEngineModuleUrl === "string" ? cfg.riddleEngineModuleUrl : undefined,
     riddleProofDir: typeof cfg.riddleProofDir === "string" ? cfg.riddleProofDir : undefined,
     defaultReviewer: typeof cfg.defaultReviewer === "string" ? cfg.defaultReviewer : undefined,
@@ -153,16 +171,142 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
 }
 
 function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofAgentAdapter | undefined {
-  if (config.agent) return config.agent;
+  const wrapForReview = (agent: RiddleProofAgentAdapter) =>
+    config.proofReviewMode === "main_agent" ? createMainAgentProofReviewAdapter(agent) : agent;
+  if (config.agent) return wrapForReview(config.agent);
   if (config.agentMode !== "codex_exec") return undefined;
-  return createCodexExecAgentAdapter({
+  return wrapForReview(createCodexExecAgentAdapter({
     codexCommand: config.codexCommand,
     codexHome: config.codexHome,
     codexModel: config.codexModel,
     codexTimeoutMs: config.codexTimeoutMs,
     codexSandbox: config.codexSandbox,
     codexFullAuto: config.codexFullAuto,
-  });
+  }));
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
+  if (output.length >= 16 || !value) return output;
+  if (typeof value === "string") {
+    if (/^https?:\/\/.+\.(png|jpe?g|webp)(\?|#|$)/i.test(value) && !seen.has(value)) {
+      seen.add(value);
+      output.push({ role: "artifact", url: value });
+    }
+    return output;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectImageArtifacts(item, output, seen);
+    return output;
+  }
+  const record = recordValue(value);
+  if (!record) return output;
+  const url = stringValue(record.url);
+  const name = stringValue(record.name) || stringValue(record.label);
+  const kind = stringValue(record.kind);
+  const role = stringValue(record.role);
+  if (
+    url &&
+    !seen.has(url) &&
+    (/^https?:\/\/.+\.(png|jpe?g|webp)(\?|#|$)/i.test(url) || kind === "screenshot" || /\.(png|jpe?g|webp)$/i.test(name))
+  ) {
+    seen.add(url);
+    output.push({
+      role: role || kind || "artifact",
+      name: name || undefined,
+      url,
+    });
+  }
+  for (const nested of Object.values(record)) collectImageArtifacts(nested, output, seen);
+  return output;
+}
+
+function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
+  const fullState = recordValue(context.fullRiddleState) || {};
+  const assessmentRequest =
+    recordValue(fullState.proof_assessment_request) ||
+    recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
+    recordValue(context.engineResult.decisionRequest) ||
+    {};
+  const evidenceBundle =
+    recordValue(fullState.evidence_bundle) ||
+    recordValue(assessmentRequest.evidence_bundle) ||
+    {};
+  const after = recordValue(evidenceBundle.after) || {};
+  const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
+  const imageArtifacts: Array<Record<string, unknown>> = [];
+  for (const [role, url] of [
+    ["before", fullState.before_cdn],
+    ["prod", fullState.prod_cdn],
+    ["after", fullState.after_cdn],
+  ] as const) {
+    const normalized = stringValue(url);
+    if (normalized) imageArtifacts.push({ role, url: normalized });
+  }
+  collectImageArtifacts(evidenceBundle, imageArtifacts, new Set(imageArtifacts.map((item) => String(item.url || ""))));
+
+  return {
+    mode: "main_agent_visual_review",
+    run_id: context.state.run_id || null,
+    state_path: context.state.state_path || null,
+    engine_state_path: context.engineResult.state_path || context.request.engine_state_path || null,
+    checkpoint: context.checkpoint,
+    repo: context.request.repo || null,
+    branch: stringValue(fullState.branch) || context.state.branch || context.request.branch || null,
+    change_request: context.request.change_request || "",
+    context: context.request.context || "",
+    verification_mode: context.request.verification_mode || "proof",
+    success_criteria: context.request.success_criteria || "",
+    expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || null,
+    image_artifacts: imageArtifacts,
+    visual_delta: visualDelta,
+    proof_assessment_request: assessmentRequest,
+    review_prompt: [
+      "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
+      "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
+      "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
+      `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
+    ],
+    response_schema: {
+      state_path: context.state.state_path || null,
+      decision: "ready_to_ship | needs_richer_proof | revise_capture | needs_recon | needs_implementation",
+      summary: "Concrete visual judgment grounded in the screenshots.",
+      recommended_stage: "ship | author | implement | recon | verify",
+      continue_with_stage: "ship | author | implement | recon | verify",
+      escalation_target: "agent | human",
+      reasons: ["string"],
+    },
+  };
+}
+
+function createMainAgentProofReviewAdapter(delegate: RiddleProofAgentAdapter): RiddleProofAgentAdapter {
+  return {
+    assessRecon: (context) => delegate.assessRecon(context),
+    authorProofPacket: (context) => delegate.authorProofPacket(context),
+    implementChange: (context) => delegate.implementChange(context),
+    async assessProof(context) {
+      const proofReview = buildMainAgentProofReviewPacket(context);
+      return {
+        ok: false,
+        blocker: {
+          code: "main_agent_proof_review_required",
+          checkpoint: context.checkpoint,
+          message:
+            "Riddle Proof captured evidence and is waiting for the main OpenClaw agent to inspect the screenshots before shipping or iterating.",
+          details: {
+            proof_review: proofReview,
+          },
+        },
+      };
+    },
+  };
 }
 
 export async function runOpenClawRiddleProof(
@@ -195,6 +339,102 @@ export async function runOpenClawRiddleProof(
 
 export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRunStatusSnapshot | null {
   return readRiddleProofRunStatus(state_path);
+}
+
+function readRunState(statePath: string): RiddleProofRunState | null {
+  if (!statePath || !existsSync(statePath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf-8"));
+    return parsed?.version === "riddle-proof.run-state.v1" && Array.isArray(parsed.events)
+      ? parsed as RiddleProofRunState
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function stageForReviewDecision(decision: RiddleProofReviewParams["decision"]) {
+  if (decision === "ready_to_ship") return "ship";
+  if (decision === "needs_implementation") return "implement";
+  if (decision === "needs_recon") return "recon";
+  return "author";
+}
+
+export async function submitOpenClawRiddleProofReview(
+  params: RiddleProofReviewParams,
+  config: OpenClawRiddleProofRuntimeConfig = {},
+): Promise<RiddleProofRunResult> {
+  if (config.executionMode !== "engine") {
+    const request = createRunState({ request: {} });
+    request.blocker = {
+      code: "execution_adapter_not_configured",
+      message: "Riddle Proof review submission requires executionMode=engine.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
+  }
+
+  const state = readRunState(params.state_path);
+  if (!state) {
+    const request = createRunState({ request: {} });
+    request.blocker = {
+      code: "riddle_proof_run_state_not_found",
+      message: "No readable Riddle Proof wrapper run state exists at state_path.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
+  }
+
+  const engineStatePath = state.request.engine_state_path;
+  if (!engineStatePath) {
+    state.blocker = {
+      code: "riddle_proof_engine_state_missing",
+      message: "The wrapper run state does not include an engine_state_path to resume.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state, status: "blocked", last_summary: state.blocker.message });
+  }
+
+  const stage = params.continue_with_stage || params.recommended_stage || stageForReviewDecision(params.decision);
+  const assessment = {
+    decision: params.decision,
+    summary: params.summary,
+    recommended_stage: params.recommended_stage || stage,
+    continue_with_stage: params.continue_with_stage || stage,
+    escalation_target: params.escalation_target || "agent",
+    reasons: Array.isArray(params.reasons) ? params.reasons.filter((item): item is string => typeof item === "string") : [],
+    source: "supervising_agent",
+  };
+  const resumeParams: RiddleProofWorkflowParams = {
+    action: "run",
+    state_path: engineStatePath,
+    continue_from_checkpoint: true,
+    proof_assessment_json: JSON.stringify(assessment),
+  };
+
+  return runRiddleProofEngineHarness({
+    request: {
+      ...state.request,
+      harness_state_path: params.state_path,
+      engine_state_path: engineStatePath,
+    },
+    state,
+    state_path: params.state_path,
+    resume_params: resumeParams,
+    max_iterations: state.request.max_iterations ?? config.defaultMaxIterations,
+    dry_run: state.request.dry_run,
+    auto_approve: state.request.auto_approve,
+    engine: config.engine,
+    agent: agentFromConfig(config),
+    config: {
+      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+      riddleProofDir: config.riddleProofDir,
+      defaultReviewer: config.defaultReviewer,
+      stateDir: config.stateDir,
+      defaultMaxIterations: config.defaultMaxIterations,
+      defaultShipMode: config.defaultShipMode,
+    },
+  });
 }
 
 const optionalString = (description: string) => Type.Optional(Type.String({ description }));
@@ -250,6 +490,37 @@ export const riddleProofStatusParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
 });
 
+export const riddleProofReviewParameters = Type.Object({
+  state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+  decision: Type.Union([
+    Type.Literal("ready_to_ship"),
+    Type.Literal("needs_richer_proof"),
+    Type.Literal("revise_capture"),
+    Type.Literal("needs_recon"),
+    Type.Literal("needs_implementation"),
+  ], { description: "Main-agent proof judgment." }),
+  summary: Type.String({ description: "Concrete visual or evidence-based judgment." }),
+  recommended_stage: Type.Optional(Type.Union([
+    Type.Literal("ship"),
+    Type.Literal("author"),
+    Type.Literal("implement"),
+    Type.Literal("recon"),
+    Type.Literal("verify"),
+  ])),
+  continue_with_stage: Type.Optional(Type.Union([
+    Type.Literal("ship"),
+    Type.Literal("author"),
+    Type.Literal("implement"),
+    Type.Literal("recon"),
+    Type.Literal("verify"),
+  ])),
+  escalation_target: Type.Optional(Type.Union([
+    Type.Literal("agent"),
+    Type.Literal("human"),
+  ])),
+  reasons: Type.Optional(Type.Array(Type.String())),
+});
+
 export default function register(api: any) {
   const runtimeConfig = runtimeConfigFrom(api);
 
@@ -281,6 +552,20 @@ export default function register(api: any) {
           state_path: params.state_path,
           message: "No readable Riddle Proof run state exists at state_path.",
         };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    },
+    { optional: true },
+  );
+
+  api.registerTool(
+    {
+      name: RIDDLE_PROOF_REVIEW_TOOL_NAME,
+      description:
+        "Submit a main-agent proof judgment for a Riddle Proof run that blocked at main_agent_proof_review_required, then resume the workflow.",
+      parameters: riddleProofReviewParameters,
+      async execute(_id: string, params: RiddleProofReviewParams) {
+        const result = await submitOpenClawRiddleProofReview(params, runtimeConfig);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },
