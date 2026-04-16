@@ -44,7 +44,7 @@ metadata. It returns a `RiddleProofRunResult`.
 
 The wrapper depends on `@riddledc/riddle-proof` for contracts and normalization.
 It does not invoke another OpenClaw plugin and does not supply a coding agent.
-Future setup, implementation, proof, judge, ship, and notification adapters
+Future preflight, setup, implementation, proof, judge, ship, and notification adapters
 should be wired into the `@riddledc/riddle-proof` runner behind this wrapper
 after parity tests pass.
 

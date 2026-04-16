@@ -2,7 +2,9 @@ import type {
   IntegrationContext,
   RiddleProofEvent,
   RiddleProofRunParams,
+  RiddleProofRunStatusSnapshot,
   RiddleProofRunState,
+  RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
 import { compactRecord, nonEmptyString, recordValue } from "./result";
@@ -11,8 +13,13 @@ export const RIDDLE_PROOF_RUN_STATE_VERSION = "riddle-proof.run-state.v1" as con
 
 export interface CreateRunStateInput {
   request: RiddleProofRunParams;
+  run_id?: string;
   status?: RiddleProofStatus;
   state_path?: string;
+  worktree_path?: string;
+  branch?: string;
+  current_stage?: RiddleProofStage | null;
+  stage_started_at?: string | null;
   created_at?: string;
   updated_at?: string;
   iterations?: number;
@@ -24,6 +31,19 @@ export type RunEventInput = Omit<RiddleProofEvent, "ts"> & { ts?: string };
 
 function timestamp() {
   return new Date().toISOString();
+}
+
+function createRunId(createdAt: string): string {
+  const stamp = createdAt.replace(/\D/g, "").slice(0, 14) || "unknown";
+  const entropy = Math.random().toString(36).slice(2, 8) || "run";
+  return `rp_${stamp}_${entropy}`;
+}
+
+function elapsedMs(start?: string | null, end?: string | null): number | undefined {
+  const startMs = start ? Date.parse(start) : NaN;
+  const endMs = end ? Date.parse(end) : NaN;
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return undefined;
+  return Math.max(0, endMs - startMs);
 }
 
 export function normalizeIntegrationContext(
@@ -82,7 +102,12 @@ export function createRunState(input: CreateRunStateInput): RiddleProofRunState 
   const createdAt = input.created_at || timestamp();
   return compactRecord({
     version: RIDDLE_PROOF_RUN_STATE_VERSION,
+    run_id: input.run_id || createRunId(createdAt),
     state_path: input.state_path,
+    worktree_path: input.worktree_path,
+    branch: input.branch || input.request.branch,
+    current_stage: input.current_stage ?? null,
+    stage_started_at: input.stage_started_at ?? null,
     status: input.status || "running",
     created_at: createdAt,
     updated_at: input.updated_at || createdAt,
@@ -112,8 +137,58 @@ export function appendRunEvent<T extends RiddleProofRunState>(state: T, input: R
     details: event.details,
   }) as RiddleProofEvent);
   if (input.checkpoint !== undefined) state.last_checkpoint = input.checkpoint;
+  if (input.stage !== undefined) {
+    if (state.current_stage !== input.stage) state.stage_started_at = event.ts;
+    state.current_stage = input.stage;
+  }
   state.updated_at = event.ts;
   return state;
+}
+
+export function appendStageHeartbeat<T extends RiddleProofRunState>(state: T, input: {
+  stage: RiddleProofStage;
+  summary?: string;
+  checkpoint?: string;
+  wait_reason?: string;
+  blocker?: string;
+  details?: Record<string, unknown>;
+  ts?: string;
+}): T {
+  const at = input.ts || timestamp();
+  return appendRunEvent(state, {
+    ts: at,
+    kind: "stage.heartbeat",
+    checkpoint: input.checkpoint || `${input.stage}_heartbeat`,
+    stage: input.stage,
+    summary: input.summary || `${input.stage} stage is active.`,
+    details: compactRecord({
+      elapsed_ms: elapsedMs(state.created_at, at),
+      stage_elapsed_ms: elapsedMs(state.stage_started_at, at),
+      wait_reason: input.wait_reason,
+      blocker: input.blocker,
+      ...input.details,
+    }) as Record<string, unknown>,
+  });
+}
+
+export function createRunStatusSnapshot(state: RiddleProofRunState, at = timestamp()): RiddleProofRunStatusSnapshot {
+  const latestEvent = state.events[state.events.length - 1];
+  const runId = state.run_id || "unknown";
+  return compactRecord({
+    run_id: runId,
+    status: state.status,
+    current_stage: state.current_stage ?? null,
+    state_path: state.state_path ?? null,
+    worktree_path: state.worktree_path ?? null,
+    branch: state.branch ?? null,
+    iterations: state.iterations,
+    last_checkpoint: state.last_checkpoint ?? null,
+    updated_at: state.updated_at,
+    elapsed_ms: elapsedMs(state.created_at, at),
+    stage_elapsed_ms: elapsedMs(state.stage_started_at, at),
+    blocker: state.blocker,
+    latest_event: latestEvent,
+  }) as RiddleProofRunStatusSnapshot;
 }
 
 export function setRunStatus<T extends RiddleProofRunState>(state: T, status: RiddleProofStatus, at = timestamp()): T {

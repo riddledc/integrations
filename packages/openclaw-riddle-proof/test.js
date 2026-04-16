@@ -22,6 +22,7 @@ assert.equal(result.ok, false);
 assert.equal(result.status, "blocked");
 assert.equal(result.blocker?.code, "execution_adapter_not_configured");
 assert.deepEqual(result.blocker?.details?.required_adapters, [
+  "preflight",
   "setup",
   "implementation",
   "proof",

@@ -33,6 +33,7 @@ export type RiddleProofDecision =
   | (string & {});
 
 export type RiddleProofStage =
+  | "preflight"
   | "setup"
   | "recon"
   | "author"
@@ -41,6 +42,13 @@ export type RiddleProofStage =
   | "verify"
   | "ship"
   | "notify"
+  | (string & {});
+
+export type RiddleProofArtifactRole =
+  | "baseline"
+  | "after_proof"
+  | "incidental"
+  | "diagnostic"
   | (string & {});
 
 export interface RiddleProofRunParams {
@@ -100,7 +108,12 @@ export interface RiddleProofEvent {
 
 export interface RiddleProofRunState {
   version: "riddle-proof.run-state.v1";
+  run_id?: string;
   state_path?: string;
+  worktree_path?: string;
+  branch?: string;
+  current_stage?: RiddleProofStage | null;
+  stage_started_at?: string | null;
   status: RiddleProofStatus;
   ok?: boolean;
   created_at: string;
@@ -121,7 +134,11 @@ export interface RiddleProofRunState {
 export interface RiddleProofRunResult {
   ok: boolean;
   status: RiddleProofStatus;
+  run_id?: string;
   state_path?: string | null;
+  worktree_path?: string | null;
+  branch?: string | null;
+  current_stage?: RiddleProofStage | null;
   iterations?: number;
   last_checkpoint?: string | null;
   last_summary?: string | null;
@@ -135,6 +152,22 @@ export interface RiddleProofRunResult {
   blocker?: RiddleProofBlocker;
   evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
+}
+
+export interface RiddleProofRunStatusSnapshot {
+  run_id: string;
+  status: RiddleProofStatus;
+  current_stage?: RiddleProofStage | null;
+  state_path?: string | null;
+  worktree_path?: string | null;
+  branch?: string | null;
+  iterations: number;
+  last_checkpoint?: string | null;
+  updated_at: string;
+  elapsed_ms?: number;
+  stage_elapsed_ms?: number;
+  blocker?: RiddleProofBlocker;
+  latest_event?: RiddleProofEvent;
 }
 
 export interface RiddleProofEvidenceBundle {
@@ -151,6 +184,7 @@ export interface RiddleProofEvidenceBundle {
 
 export interface EvidenceReference {
   kind: "before" | "prod" | "after" | "comparison" | (string & {});
+  role?: RiddleProofArtifactRole;
   url?: string;
   path?: string;
   observed_path?: string;
@@ -161,6 +195,7 @@ export interface EvidenceReference {
 export interface EvidenceArtifact {
   name: string;
   kind?: "screenshot" | "json" | "log" | "metric" | "audio" | "video" | (string & {});
+  role?: RiddleProofArtifactRole;
   url?: string;
   path?: string;
   content_type?: string;
@@ -178,6 +213,23 @@ export interface RiddleProofAssessment {
   source?: "supervising_agent" | "supervisor" | "human" | (string & {});
 }
 
+export interface PreflightAdapterInput {
+  request: RiddleProofRunParams;
+  state: RiddleProofRunState;
+}
+
+export interface PreflightAdapterResult {
+  ok: boolean;
+  warnings?: string[];
+  degraded_capabilities?: string[];
+  blockers?: string[];
+  raw?: Record<string, unknown>;
+}
+
+export interface PreflightAdapter {
+  preflight(input: PreflightAdapterInput): Promise<PreflightAdapterResult>;
+}
+
 export interface SetupAdapterInput {
   request: RiddleProofRunParams;
   state: RiddleProofRunState;
@@ -186,6 +238,9 @@ export interface SetupAdapterInput {
 export interface SetupAdapterResult {
   ok: boolean;
   workdir?: string;
+  worktree_path?: string;
+  branch?: string;
+  cleanup_policy?: "reuse" | "delete_on_success" | "delete_on_finish" | "leave_for_debug" | (string & {});
   evidence_context?: RiddleProofEvidenceBundle;
   blockers?: string[];
   raw?: Record<string, unknown>;

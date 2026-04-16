@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import {
+  appendStageHeartbeat,
   appendRunEvent,
   applyTerminalMetadata,
+  createRunStatusSnapshot,
   createRunState,
   createRunResult,
   isSuccessfulStatus,
@@ -212,10 +214,37 @@ assert.equal(referenceState.request.integration_context.source, "discord");
 
 const blockedState = setRunStatus(createRunState({
   request: { change_request: "needs more proof", verification_mode: "audio" },
+  run_id: "rp_blocked",
   created_at: "2026-04-15T00:00:00.000Z",
 }), "blocked", "2026-04-15T00:01:00.000Z");
 assert.equal(blockedState.ok, false);
 assert.equal(blockedState.updated_at, "2026-04-15T00:01:00.000Z");
+
+const statusState = createRunState({
+  request: {
+    repo: "riddledc/example",
+    branch: "proof/worktree",
+    change_request: "track proof run status",
+  },
+  run_id: "rp_status",
+  state_path: "/tmp/riddle-proof/state.json",
+  worktree_path: "/tmp/riddle-proof/worktree",
+  created_at: "2026-04-15T00:00:00.000Z",
+});
+appendStageHeartbeat(statusState, {
+  stage: "setup",
+  wait_reason: "waiting_for_clean_worktree",
+  ts: "2026-04-15T00:00:05.000Z",
+});
+const statusSnapshot = createRunStatusSnapshot(statusState, "2026-04-15T00:00:10.000Z");
+assert.equal(statusSnapshot.run_id, "rp_status");
+assert.equal(statusSnapshot.current_stage, "setup");
+assert.equal(statusSnapshot.state_path, "/tmp/riddle-proof/state.json");
+assert.equal(statusSnapshot.worktree_path, "/tmp/riddle-proof/worktree");
+assert.equal(statusSnapshot.branch, "proof/worktree");
+assert.equal(statusSnapshot.elapsed_ms, 10000);
+assert.equal(statusSnapshot.latest_event.kind, "stage.heartbeat");
+assert.equal(statusSnapshot.latest_event.details.wait_reason, "waiting_for_clean_worktree");
 
 const missingAdapterResult = await runRiddleProof({
   request: {
@@ -239,6 +268,15 @@ const harnessResult = await runRiddleProof({
   workdir: "/tmp/riddle-proof-workdir",
   max_iterations: 2,
   adapters: {
+    preflight: {
+      async preflight(input) {
+        calls.push(`preflight:${Boolean(input.state.run_id)}`);
+        return {
+          ok: true,
+          degraded_capabilities: ["embeddings"],
+        };
+      },
+    },
     implementation: {
       async implement(input) {
         calls.push(`implement:${input.change_request}`);
@@ -258,8 +296,17 @@ const harnessResult = await runRiddleProof({
             verification_mode: "visual",
             after: {
               kind: "after",
+              role: "after_proof",
               url: "https://example.com/after.png",
             },
+            artifacts: [
+              {
+                name: "proof.png",
+                kind: "screenshot",
+                role: "after_proof",
+                path: "/tmp/riddle-proof/proof.png",
+              },
+            ],
             assertions: {
               headline_visible: true,
             },
@@ -300,6 +347,7 @@ const harnessResult = await runRiddleProof({
   },
 });
 assert.deepEqual(calls, [
+  "preflight:true",
   "implement:Ship the proof harness.",
   "prove",
   "judge",
@@ -308,6 +356,9 @@ assert.deepEqual(calls, [
 ]);
 assert.equal(harnessResult.status, "shipped");
 assert.equal(harnessResult.ok, true);
+assert.match(harnessResult.run_id, /^rp_/);
+assert.equal(harnessResult.worktree_path, "/tmp/riddle-proof-workdir");
+assert.equal(harnessResult.current_stage, "notify");
 assert.equal(harnessResult.iterations, 1);
 assert.equal(harnessResult.pr_url, "https://github.com/riddledc/example/pull/42");
 assert.equal(harnessResult.marked_ready, true);
@@ -315,6 +366,8 @@ assert.equal(harnessResult.proof_decision, "ready_to_ship");
 assert.equal(harnessResult.finalized, true);
 assert.equal(harnessResult.notification.ok, true);
 assert.equal(harnessResult.evidence_bundle.after.url, "https://example.com/after.png");
+assert.equal(harnessResult.evidence_bundle.after.role, "after_proof");
+assert.equal(harnessResult.evidence_bundle.artifacts[0].role, "after_proof");
 assert.equal(harnessResult.last_checkpoint, "notification_completed");
 
 console.log(JSON.stringify({ ok: true }));

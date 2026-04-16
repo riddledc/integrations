@@ -1,10 +1,11 @@
 import { createRunResult } from "./result";
-import { appendRunEvent, createRunState, setRunStatus } from "./state";
+import { appendRunEvent, appendStageHeartbeat, createRunState, setRunStatus } from "./state";
 import type {
   ImplementationAdapter,
   ImplementationAdapterResult,
   JudgeAdapter,
   NotificationAdapter,
+  PreflightAdapter,
   ProofAdapter,
   RiddleProofAssessment,
   RiddleProofBlocker,
@@ -19,6 +20,7 @@ import type {
 } from "./types";
 
 export interface RiddleProofRunnerAdapters {
+  preflight?: PreflightAdapter;
   setup?: SetupAdapter;
   implementation?: ImplementationAdapter;
   proof?: ProofAdapter;
@@ -135,6 +137,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
   const state = input.state || createRunState({
     request: input.request,
     state_path: input.state_path,
+    worktree_path: input.workdir,
   });
   const adapters = input.adapters || {};
   const maxIterations = Math.max(1, Math.trunc(input.max_iterations ?? 1));
@@ -145,13 +148,73 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
     stage: "setup",
     summary: "Riddle Proof run started.",
     details: {
+      run_id: state.run_id,
+      state_path: state.state_path,
+      worktree_path: state.worktree_path,
+      branch: state.branch,
       max_iterations: maxIterations,
       ship_mode: state.request.ship_mode || "none",
+    },
+  });
+  appendStageHeartbeat(state, {
+    stage: "setup",
+    summary: "Setup stage is active.",
+    details: {
+      run_id: state.run_id,
+      state_path: state.state_path,
+      worktree_path: state.worktree_path,
+      branch: state.branch,
     },
   });
 
   let workdir = input.workdir;
   let evidenceContext: RiddleProofEvidenceBundle | undefined;
+
+  if (adapters.preflight) {
+    appendRunEvent(state, {
+      kind: "preflight.started",
+      checkpoint: "preflight_started",
+      stage: "preflight",
+      summary: "Riddle Proof preflight adapter started.",
+    });
+
+    try {
+      const preflight = await adapters.preflight.preflight({ request: state.request, state });
+      if (!preflight.ok) {
+        return blockRun({
+          state,
+          stage: "preflight",
+          blocker: adapterBlocker(
+            "preflight_failed",
+            "The preflight adapter found blocking tool or model configuration issues.",
+            "preflight_failed",
+            {
+              blockers: preflight.blockers,
+              warnings: preflight.warnings,
+              degraded_capabilities: preflight.degraded_capabilities,
+            },
+          ),
+          raw: { preflight },
+        });
+      }
+      appendRunEvent(state, {
+        kind: "preflight.completed",
+        checkpoint: "preflight_completed",
+        stage: "preflight",
+        summary: "Riddle Proof preflight adapter completed.",
+        details: {
+          warnings: preflight.warnings,
+          degraded_capabilities: preflight.degraded_capabilities,
+        },
+      });
+    } catch (error) {
+      return blockRun({
+        state,
+        stage: "preflight",
+        blocker: adapterBlocker("preflight_exception", "The preflight adapter threw an exception.", "preflight_failed", errorDetails(error)),
+      });
+    }
+  }
 
   if (adapters.setup) {
     appendRunEvent(state, {
@@ -176,7 +239,9 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
           raw: { setup },
         });
       }
-      workdir = setup.workdir || workdir;
+      workdir = setup.worktree_path || setup.workdir || workdir;
+      state.worktree_path = setup.worktree_path || setup.workdir || state.worktree_path;
+      state.branch = setup.branch || state.branch;
       evidenceContext = setup.evidence_context;
       appendRunEvent(state, {
         kind: "setup.completed",
@@ -185,6 +250,9 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
         summary: "Riddle Proof setup adapter completed.",
         details: {
           has_workdir: Boolean(workdir),
+          worktree_path: state.worktree_path,
+          branch: state.branch,
+          cleanup_policy: setup.cleanup_policy,
           has_evidence_context: Boolean(evidenceContext),
         },
       });
@@ -244,6 +312,11 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
 
   for (let attempt = 0; attempt < maxIterations; attempt += 1) {
     state.iterations += 1;
+    appendStageHeartbeat(state, {
+      stage: "implement",
+      summary: "Implementation stage is active.",
+      details: { iteration: state.iterations },
+    });
     appendRunEvent(state, {
       kind: "implementation.started",
       checkpoint: "implementation_started",
@@ -294,6 +367,13 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
       },
     });
 
+    appendStageHeartbeat(state, {
+      stage: "prove",
+      summary: "Proof capture stage is active.",
+      details: {
+        verification_mode: state.request.verification_mode,
+      },
+    });
     appendRunEvent(state, {
       kind: "proof.started",
       checkpoint: "proof_started",
@@ -344,6 +424,13 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
       checkpoint: "judge_started",
       stage: "verify",
       summary: "Judge adapter started.",
+    });
+    appendStageHeartbeat(state, {
+      stage: "verify",
+      summary: "Verification stage is active.",
+      details: {
+        verification_mode: evidenceBundle.verification_mode,
+      },
     });
 
     try {
@@ -441,6 +528,10 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
     checkpoint: "ship_started",
     stage: "ship",
     summary: "Ship adapter started.",
+  });
+  appendStageHeartbeat(state, {
+    stage: "ship",
+    summary: "Ship stage is active.",
   });
 
   let metadata: RiddleProofTerminalMetadata;
