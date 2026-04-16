@@ -38,6 +38,7 @@ export type {
 export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
 export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
+export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 
 export type RiddleProofChangeParams = OpenClawProofedChangeParams;
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
@@ -52,6 +53,12 @@ export interface RiddleProofReviewParams {
   continue_with_stage?: "ship" | "author" | "implement" | "recon" | "verify";
   escalation_target?: "agent" | "human";
   reasons?: string[];
+}
+
+export interface RiddleProofSyncParams {
+  state_path: string;
+  cleanup?: boolean;
+  fetch_base?: boolean;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -505,6 +512,73 @@ export async function submitOpenClawRiddleProofReview(
   });
 }
 
+export async function syncOpenClawRiddleProof(
+  params: RiddleProofSyncParams,
+  config: OpenClawRiddleProofRuntimeConfig = {},
+): Promise<RiddleProofRunResult> {
+  if (config.executionMode !== "engine") {
+    const request = createRunState({ request: {} });
+    request.blocker = {
+      code: "execution_adapter_not_configured",
+      message: "Riddle Proof PR sync requires executionMode=engine.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
+  }
+
+  const state = readRunState(params.state_path);
+  if (!state) {
+    const request = createRunState({ request: {} });
+    request.blocker = {
+      code: "riddle_proof_run_state_not_found",
+      message: "No readable Riddle Proof wrapper run state exists at state_path.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
+  }
+
+  const engineStatePath = state.request.engine_state_path;
+  if (!engineStatePath) {
+    state.blocker = {
+      code: "riddle_proof_engine_state_missing",
+      message: "The wrapper run state does not include an engine_state_path to sync.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state, status: "blocked", last_summary: state.blocker.message });
+  }
+
+  const resumeParams: RiddleProofWorkflowParams = {
+    action: "sync",
+    state_path: engineStatePath,
+    cleanup_merged_pr: params.cleanup !== false,
+    fetch_base: params.fetch_base !== false,
+  };
+
+  return runRiddleProofEngineHarness({
+    request: {
+      ...state.request,
+      harness_state_path: params.state_path,
+      engine_state_path: engineStatePath,
+    },
+    state,
+    state_path: params.state_path,
+    resume_params: resumeParams,
+    max_iterations: 1,
+    dry_run: state.request.dry_run,
+    auto_approve: state.request.auto_approve,
+    engine: config.engine,
+    agent: agentFromConfig(config),
+    config: {
+      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+      riddleProofDir: config.riddleProofDir,
+      defaultReviewer: config.defaultReviewer,
+      stateDir: config.stateDir,
+      defaultMaxIterations: config.defaultMaxIterations,
+      defaultShipMode: config.defaultShipMode,
+    },
+  });
+}
+
 const optionalString = (description: string) => Type.Optional(Type.String({ description }));
 const optionalBoolean = (description: string) => Type.Optional(Type.Boolean({ description }));
 
@@ -557,6 +631,12 @@ export const riddleProofChangeParameters = Type.Object({
 
 export const riddleProofStatusParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+});
+
+export const riddleProofSyncParameters = Type.Object({
+  state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+  cleanup: optionalBoolean("When true, prune proof worktrees and temporary proof branches after the PR is merged. Defaults to true."),
+  fetch_base: optionalBoolean("When true, fetch the PR base branch after a merge so later runs start from fresh origin/<base>. Defaults to true."),
 });
 
 export const riddleProofReviewParameters = Type.Object({
@@ -621,6 +701,20 @@ export default function register(api: any) {
           state_path: params.state_path,
           message: "No readable Riddle Proof run state exists at state_path.",
         };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    },
+    { optional: true },
+  );
+
+  api.registerTool(
+    {
+      name: RIDDLE_PROOF_SYNC_TOOL_NAME,
+      description:
+        "Synchronize a shipped Riddle Proof run after PR review or merge. Checks the PR lifecycle, updates run state, and cleans proof worktrees after merge.",
+      parameters: riddleProofSyncParameters,
+      async execute(_id: string, params: RiddleProofSyncParams) {
+        const result = await syncOpenClawRiddleProof(params, runtimeConfig);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },

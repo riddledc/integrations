@@ -10,6 +10,15 @@ export type RiddleProofStatus =
   | "shipped"
   | "completed";
 
+export type RiddleProofPrLifecycleStatus =
+  | "unknown"
+  | "open"
+  | "merged"
+  | "closed"
+  | "not_found"
+  | "unavailable"
+  | (string & {});
+
 export type RiddleProofVerificationMode =
   | "proof"
   | "visual"
@@ -129,16 +138,20 @@ export interface RiddleProofRunState {
   last_checkpoint?: string | null;
   pr_url?: string;
   pr_branch?: string;
+  pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
+  merge_commit?: string;
+  merged_at?: string;
   proof_comment_url?: string;
   before_artifact_url?: string;
   prod_artifact_url?: string;
   after_artifact_url?: string;
   ship_report?: Record<string, unknown>;
+  cleanup_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
@@ -161,16 +174,20 @@ export interface RiddleProofRunResult {
   event_count?: number;
   pr_url?: string;
   pr_branch?: string;
+  pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
+  merge_commit?: string;
+  merged_at?: string;
   proof_comment_url?: string;
   before_artifact_url?: string;
   prod_artifact_url?: string;
   after_artifact_url?: string;
   ship_report?: Record<string, unknown>;
+  cleanup_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
@@ -187,6 +204,16 @@ export interface RiddleProofRunStatusSnapshot {
   state_path?: string | null;
   worktree_path?: string | null;
   branch?: string | null;
+  pr_url?: string | null;
+  pr_branch?: string | null;
+  pr_state?: RiddleProofPrLifecycleState;
+  ci_status?: string;
+  ship_commit?: string;
+  ship_remote_head?: string;
+  merge_commit?: string;
+  merged_at?: string;
+  proof_comment_url?: string;
+  cleanup_report?: Record<string, unknown>;
   iterations: number;
   last_checkpoint?: string | null;
   updated_at: string;
@@ -338,18 +365,38 @@ export interface NotificationAdapter {
 export interface RiddleProofTerminalMetadata {
   pr_url?: string;
   pr_branch?: string;
+  pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
+  merge_commit?: string;
+  merged_at?: string;
   proof_comment_url?: string;
   before_artifact_url?: string;
   prod_artifact_url?: string;
   after_artifact_url?: string;
   ship_report?: Record<string, unknown>;
+  cleanup_report?: Record<string, unknown>;
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
   finalized?: boolean;
+}
+
+export interface RiddleProofPrLifecycleState {
+  status: RiddleProofPrLifecycleStatus;
+  pr_url?: string;
+  pr_number?: string;
+  repo?: string;
+  head_branch?: string;
+  base_branch?: string;
+  merge_commit?: string;
+  merged_at?: string;
+  closed_at?: string;
+  checked_at?: string;
+  source?: string;
+  next_action?: string;
+  cleanup?: Record<string, unknown>;
 }

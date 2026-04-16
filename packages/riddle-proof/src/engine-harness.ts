@@ -238,11 +238,13 @@ function stageFromCheckpoint(result: RiddleProofEngineResult): RiddleProofStage 
   if (checkpoint.startsWith("implement_")) return "implement";
   if (checkpoint.startsWith("verify_")) return "verify";
   if (checkpoint.startsWith("ship_")) return "ship";
+  if (checkpoint.startsWith("pr_sync_")) return "notify";
   if (checkpoint.includes("capture")) return "prove";
   return "setup";
 }
 
 function stageFromWorkflowParams(params: RiddleProofWorkflowParams): RiddleProofStage {
+  if (params.action === "sync") return "notify";
   const stage = nonEmptyString(params.advance_stage);
   if (stage) return stage as RiddleProofStage;
   if (params.ship_after_verify) return "ship";
@@ -625,6 +627,25 @@ async function routeCheckpoint(
   if (checkpoint === "ship_review") {
     return {
       terminal: terminalResult(state, "shipped", result, result.summary || "Riddle Proof shipped."),
+    };
+  }
+
+  if (checkpoint.startsWith("pr_sync_")) {
+    const fullState = context.fullRiddleState || {};
+    const prState = recordValue(result.pr_state) || recordValue(result.prState) || recordValue(fullState.pr_state) || {};
+    const prStatus = nonEmptyString(prState.status);
+    const status: RiddleProofStatus =
+      prStatus === "merged" ? "completed" :
+        prStatus === "open" ? "shipped" :
+          result.ok === false ? "blocked" : "completed";
+    return {
+      terminal: terminalResult(
+        state,
+        status,
+        result,
+        result.summary || "Riddle Proof PR lifecycle sync completed.",
+        { pr_sync: true },
+      ),
     };
   }
 

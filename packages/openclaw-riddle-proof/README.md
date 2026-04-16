@@ -55,6 +55,7 @@ wired and parity-tested against the existing `proofed_change_run` flow.
 
 - `riddle_proof_change`
 - `riddle_proof_status`
+- `riddle_proof_sync`
 - `riddle_proof_review`
 
 `riddle_proof_change` accepts proofed-change-style params such as `repo`,
@@ -67,6 +68,11 @@ explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,
 elapsed time, blocker, worktree path, and latest event.
+
+`riddle_proof_sync` accepts the same wrapper `state_path` and asks the configured
+engine to reconcile PR lifecycle state. It is the explicit path for "the PR was
+merged, update the run": check the PR, record merged/closed/open state, fetch the
+base branch when configured, and clean isolated proof worktrees after merge.
 
 `riddle_proof_review` accepts the wrapper `state_path` plus a structured
 main-agent proof verdict. It is intended for runs that stopped at

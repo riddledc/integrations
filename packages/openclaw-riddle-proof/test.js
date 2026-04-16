@@ -7,10 +7,12 @@ import register, {
   RIDDLE_PROOF_CHANGE_TOOL_NAME,
   RIDDLE_PROOF_REVIEW_TOOL_NAME,
   RIDDLE_PROOF_STATUS_TOOL_NAME,
+  RIDDLE_PROOF_SYNC_TOOL_NAME,
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
   runOpenClawRiddleProof,
   submitOpenClawRiddleProofReview,
+  syncOpenClawRiddleProof,
 } from "./dist/index.js";
 
 const params = {
@@ -304,6 +306,65 @@ assert.equal(reviewResumed.status, "ready_to_ship");
 assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).source, "supervising_agent");
 assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).continue_with_stage, "ship");
 
+const syncFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-sync-"));
+const syncStatePath = path.join(syncFixture, "riddle-state.json");
+const syncWrapperStatePath = path.join(syncFixture, "wrapper-state.json");
+writeFileSync(syncStatePath, JSON.stringify({
+  pr_url: "https://github.com/davisdiehl/lilarcade/pull/257",
+  target_branch: "ttt-status-polish-proof",
+}, null, 2));
+writeFileSync(syncWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_sync",
+  status: "shipped",
+  created_at: "2026-04-16T00:00:00.000Z",
+  updated_at: "2026-04-16T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Polish Tic Tac Toe status",
+    engine_state_path: syncStatePath,
+  },
+  iterations: 2,
+  events: [],
+  pr_url: "https://github.com/davisdiehl/lilarcade/pull/257",
+}, null, 2));
+const syncEngineCalls = [];
+const syncResult = await syncOpenClawRiddleProof(
+  { state_path: syncWrapperStatePath },
+  {
+    executionMode: "engine",
+    engine: {
+      async execute(engineParams) {
+        syncEngineCalls.push(engineParams);
+        const pr_state = {
+          status: "merged",
+          pr_url: "https://github.com/davisdiehl/lilarcade/pull/257",
+          pr_number: "257",
+          head_branch: "ttt-status-polish-proof",
+          base_branch: "main",
+          merge_commit: "merge257",
+          merged_at: "2026-04-16T05:30:00.000Z",
+          cleanup: { worktrees_removed: 2, pruned: true },
+        };
+        writeFileSync(syncStatePath, JSON.stringify({ pr_state, merge_commit: "merge257", merged_at: pr_state.merged_at }, null, 2));
+        return {
+          ok: true,
+          state_path: syncStatePath,
+          checkpoint: "pr_sync_merged",
+          summary: "PR is merged and local proof artifacts were reconciled.",
+          pr_state,
+        };
+      },
+    },
+  },
+);
+assert.equal(syncEngineCalls[0].action, "sync");
+assert.equal(syncEngineCalls[0].cleanup_merged_pr, true);
+assert.equal(syncResult.status, "completed");
+assert.equal(syncResult.pr_state?.status, "merged");
+assert.equal(syncResult.merge_commit, "merge257");
+assert.equal(syncResult.cleanup_report?.worktrees_removed, 2);
+
 const registered = [];
 register({
   registerTool(tool, options) {
@@ -311,16 +372,19 @@ register({
   },
 });
 
-assert.equal(registered.length, 3);
+assert.equal(registered.length, 4);
 const changeTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
 const statusTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
 const reviewTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
+const syncTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_SYNC_TOOL_NAME);
 assert.ok(changeTool);
 assert.ok(statusTool);
 assert.ok(reviewTool);
+assert.ok(syncTool);
 assert.equal(changeTool.options.optional, true);
 assert.equal(statusTool.options.optional, true);
 assert.equal(reviewTool.options.optional, true);
+assert.equal(syncTool.options.optional, true);
 
 const executed = await changeTool.tool.execute("test-call", params);
 assert.equal(executed.content[0].type, "text");
