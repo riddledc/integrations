@@ -30,6 +30,24 @@ reusable contracts and low-risk helpers are extracted here.
 Future wrappers can consume this package from OpenClaw, Discord, CLI, GitHub
 Actions, or Riddle-hosted workflows.
 
+## Install
+
+```sh
+npm install @riddledc/riddle-proof
+```
+
+## Usage
+
+```ts
+import { createRunResult, createRunState } from "@riddledc/riddle-proof";
+import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
+```
+
+The root export provides generic contracts and helpers. Integration-specific
+adapters are exposed through subpaths such as
+`@riddledc/riddle-proof/openclaw`, so wrappers can reuse the mapping logic
+without depending on another plugin runtime.
+
 ## OpenClaw Adapter Boundary
 
 `@riddledc/riddle-proof/openclaw` translates the current
