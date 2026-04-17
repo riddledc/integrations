@@ -72,10 +72,10 @@ elapsed time, blocker, worktree path, and latest event.
 
 `riddle_proof_inspect` accepts the same wrapper `state_path` and returns a
 proof-native review packet: route match, repo profile usage, artifact URLs,
-visual delta, semantic anchors, visible text samples, and a concrete next action
-for the supervising agent. Use it when a run pauses for proof review and the
-reviewer needs one compact packet instead of stitching together raw state,
-screenshots, and side inspection tools.
+visual delta, structured proof evidence, semantic anchors, visible text samples,
+and a concrete next action for the supervising agent. Use it when a run pauses
+for proof review and the reviewer needs one compact packet instead of stitching
+together raw state, screenshots, and side inspection tools.
 
 `riddle_proof_sync` accepts the same wrapper `state_path` and asks the configured
 engine to reconcile PR lifecycle state. It is the explicit path for "the PR was

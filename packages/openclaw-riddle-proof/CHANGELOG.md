@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.8
+
+### Patch Changes
+
+- Extend `riddle_proof_inspect` with structured proof evidence fields so
+  non-visual modes like audio can surface proof evidence presence, samples,
+  result keys, and data outputs in the same compact review packet.
+
 ## 0.4.7
 
 ### Patch Changes
