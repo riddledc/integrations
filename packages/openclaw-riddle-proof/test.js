@@ -206,8 +206,12 @@ writeFileSync(reviewStatePath, JSON.stringify({
   },
   evidence_bundle: {
     expected_path: "/games/tic-tac-toe",
+    proof_evidence: { modality: "audio", attack_ms_after: 12, passed: true },
+    proof_evidence_sample: "{\"modality\":\"audio\",\"attack_ms_after\":12,\"passed\":true}",
     after: {
       screenshot_url: "https://example.com/after.png",
+      proof_evidence: { modality: "audio", attack_ms_after: 12, passed: true },
+      proof_evidence_sample: "{\"modality\":\"audio\",\"attack_ms_after\":12,\"passed\":true}",
       visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
     },
   },
@@ -287,6 +291,8 @@ assert.equal(inspectResult.proof_profile_applied, true);
 assert.equal(inspectResult.proof_profile?.name, "Tic Tac Toe");
 assert.equal(inspectResult.ready_to_ship_candidate, true);
 assert.deepEqual(inspectResult.visible_change?.after_buttons, ["Reset Game"]);
+assert.equal(inspectResult.structured_evidence?.proof_evidence_present, true);
+assert.match(inspectResult.structured_evidence?.proof_evidence_sample, /attack_ms_after/);
 
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(
@@ -418,5 +424,6 @@ const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_p
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
 assert.equal(inspectParsed.route_matched, true);
 assert.equal(inspectParsed.proof_profile_applied, true);
+assert.equal(inspectParsed.structured_evidence.proof_evidence_present, true);
 
 console.log(JSON.stringify({ ok: true }));

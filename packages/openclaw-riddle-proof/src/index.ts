@@ -206,6 +206,17 @@ function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function compactValue(value: unknown, limit = 1200) {
+  if (value === undefined || value === null || value === "") return "";
+  let text = "";
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    text = String(value);
+  }
+  return text.length <= limit ? text : `${text.slice(0, limit - 20).trimEnd()}...`;
+}
+
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -372,6 +383,13 @@ function buildProofInspection(
     {};
   const after = recordValue(evidenceBundle.after) || {};
   const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
+  const supportingArtifacts = recordValue(after.supporting_artifacts) || {};
+  const proofEvidence = evidenceBundle.proof_evidence ?? after.proof_evidence ?? null;
+  const proofEvidenceSample =
+    stringValue(evidenceBundle.proof_evidence_sample) ||
+    stringValue(after.proof_evidence_sample) ||
+    stringValue(supportingArtifacts.proof_evidence_sample) ||
+    compactValue(proofEvidence);
   const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
   const route = recordValue(semanticContext.route);
   const imageArtifacts: Array<Record<string, unknown>> = [];
@@ -410,6 +428,13 @@ function buildProofInspection(
     route_matched: routeMatches(route),
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
+    structured_evidence: {
+      proof_evidence_present: Boolean(proofEvidence !== null && proofEvidence !== undefined) || Boolean(supportingArtifacts.proof_evidence_present),
+      proof_evidence_sample: proofEvidenceSample,
+      data_outputs: listValue(supportingArtifacts.data_outputs, 12),
+      result_keys: listValue(supportingArtifacts.result_keys, 12),
+      structured_result_keys: listValue(supportingArtifacts.structured_result_keys, 12),
+    },
     visible_change: visibleChange,
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyCandidate,
