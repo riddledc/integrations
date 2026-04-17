@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.7
+
+### Patch Changes
+
+- Add `riddle_proof_inspect`, a compact proof-native review helper that reads a
+  wrapper run state and returns route match, profile usage, artifact URLs,
+  visual delta, semantic anchors, visible text samples, and the recommended
+  review next action.
+
 ## 0.4.6
 
 ### Patch Changes

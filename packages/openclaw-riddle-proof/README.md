@@ -55,6 +55,7 @@ wired and parity-tested against the existing `proofed_change_run` flow.
 
 - `riddle_proof_change`
 - `riddle_proof_status`
+- `riddle_proof_inspect`
 - `riddle_proof_sync`
 - `riddle_proof_review`
 
@@ -68,6 +69,13 @@ explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,
 elapsed time, blocker, worktree path, and latest event.
+
+`riddle_proof_inspect` accepts the same wrapper `state_path` and returns a
+proof-native review packet: route match, repo profile usage, artifact URLs,
+visual delta, semantic anchors, visible text samples, and a concrete next action
+for the supervising agent. Use it when a run pauses for proof review and the
+reviewer needs one compact packet instead of stitching together raw state,
+screenshots, and side inspection tools.
 
 `riddle_proof_sync` accepts the same wrapper `state_path` and asks the configured
 engine to reconcile PR lifecycle state. It is the explicit path for "the PR was

@@ -5,12 +5,14 @@ import os from "node:os";
 import path from "node:path";
 import register, {
   RIDDLE_PROOF_CHANGE_TOOL_NAME,
+  RIDDLE_PROOF_INSPECT_TOOL_NAME,
   RIDDLE_PROOF_REVIEW_TOOL_NAME,
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
   runOpenClawRiddleProof,
+  inspectOpenClawRiddleProof,
   submitOpenClawRiddleProofReview,
   syncOpenClawRiddleProof,
 } from "./dist/index.js";
@@ -198,6 +200,10 @@ writeFileSync(reviewStatePath, JSON.stringify({
   branch: "agent/review-fixture",
   before_cdn: "https://example.com/before.png",
   after_cdn: "https://example.com/after.png",
+  proof_profile: {
+    name: "Tic Tac Toe",
+    applied_fields: ["server_path", "wait_for_selector"],
+  },
   evidence_bundle: {
     expected_path: "/games/tic-tac-toe",
     after: {
@@ -273,6 +279,14 @@ assert.equal(
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.route?.after_observed_path, "/games/tic-tac-toe");
 assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.after?.buttons, ["Reset Game"]);
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
+
+const inspectResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath });
+assert.equal(inspectResult.ok, true);
+assert.equal(inspectResult.route_matched, true);
+assert.equal(inspectResult.proof_profile_applied, true);
+assert.equal(inspectResult.proof_profile?.name, "Tic Tac Toe");
+assert.equal(inspectResult.ready_to_ship_candidate, true);
+assert.deepEqual(inspectResult.visible_change?.after_buttons, ["Reset Game"]);
 
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(
@@ -373,17 +387,20 @@ register({
   },
 });
 
-assert.equal(registered.length, 4);
+assert.equal(registered.length, 5);
 const changeTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
 const statusTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
+const inspectTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_INSPECT_TOOL_NAME);
 const reviewTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
 const syncTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_SYNC_TOOL_NAME);
 assert.ok(changeTool);
 assert.ok(statusTool);
+assert.ok(inspectTool);
 assert.ok(reviewTool);
 assert.ok(syncTool);
 assert.equal(changeTool.options.optional, true);
 assert.equal(statusTool.options.optional, true);
+assert.equal(inspectTool.options.optional, true);
 assert.equal(reviewTool.options.optional, true);
 assert.equal(syncTool.options.optional, true);
 
@@ -396,5 +413,10 @@ assert.equal(parsed.raw.request.integration_context.metadata.tool, "proofed_chan
 const statusExecuted = await statusTool.tool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);
 assert.equal(statusParsed.status, "not_found");
+
+const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
+const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
+assert.equal(inspectParsed.route_matched, true);
+assert.equal(inspectParsed.proof_profile_applied, true);
 
 console.log(JSON.stringify({ ok: true }));
