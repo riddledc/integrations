@@ -39,6 +39,7 @@ export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
 export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
+export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 
 export type RiddleProofChangeParams = OpenClawProofedChangeParams;
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
@@ -60,6 +61,10 @@ export interface RiddleProofSyncParams {
   cleanup?: boolean;
   fetch_base?: boolean;
   update_base_checkout?: boolean;
+}
+
+export interface RiddleProofInspectParams {
+  state_path: string;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -299,6 +304,121 @@ function buildSemanticContext(
   };
 }
 
+function routeMatches(route: Record<string, unknown> | null) {
+  if (!route) return false;
+  const expected = stringValue(route.expected_path);
+  if (!expected) return false;
+  const after = stringValue(route.after_observed_path);
+  if (after !== expected) return false;
+  const observed = [
+    stringValue(route.before_observed_path),
+    stringValue(route.prod_observed_path),
+  ].filter(Boolean);
+  return observed.every((item) => item === expected);
+}
+
+function uniqueStrings(values: unknown[], limit: number) {
+  const output: string[] = [];
+  for (const value of values) {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (text && !output.includes(text)) output.push(text);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+function semanticRecord(value: unknown) {
+  return recordValue(value) || {};
+}
+
+function buildVisibleChangeSummary(semanticContext: Record<string, unknown>) {
+  const before = semanticRecord(semanticContext.before);
+  const prod = semanticRecord(semanticContext.prod);
+  const after = semanticRecord(semanticContext.after);
+  const baselineAnchors = new Set([
+    ...uniqueStrings(listValue(before.headings, 12), 12),
+    ...uniqueStrings(listValue(before.buttons, 16), 16),
+    ...uniqueStrings(listValue(prod.headings, 12), 12),
+    ...uniqueStrings(listValue(prod.buttons, 16), 16),
+  ]);
+  const afterAnchors = uniqueStrings([
+    ...listValue(after.headings, 12),
+    ...listValue(after.buttons, 16),
+    ...listValue(after.links, 16),
+  ], 24);
+  const newAnchors = afterAnchors.filter((item) => !baselineAnchors.has(item)).slice(0, 8);
+  return {
+    before_text_sample: stringValue(before.visible_text_sample),
+    prod_text_sample: stringValue(prod.visible_text_sample),
+    after_text_sample: stringValue(after.visible_text_sample),
+    after_headings: uniqueStrings(listValue(after.headings, 12), 12),
+    after_buttons: uniqueStrings(listValue(after.buttons, 16), 16),
+    new_after_anchors: newAnchors,
+  };
+}
+
+function buildProofInspection(
+  wrapperState: RiddleProofRunState,
+  fullState: Record<string, unknown>,
+  checkpoint?: string | null,
+) {
+  const assessmentRequest =
+    recordValue(fullState.proof_assessment_request) ||
+    recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
+    {};
+  const evidenceBundle =
+    recordValue(fullState.evidence_bundle) ||
+    recordValue(assessmentRequest.evidence_bundle) ||
+    {};
+  const after = recordValue(evidenceBundle.after) || {};
+  const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
+  const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
+  const route = recordValue(semanticContext.route);
+  const imageArtifacts: Array<Record<string, unknown>> = [];
+  for (const [role, url] of [
+    ["before", fullState.before_cdn],
+    ["prod", fullState.prod_cdn],
+    ["after", fullState.after_cdn],
+  ] as const) {
+    const normalized = stringValue(url);
+    if (normalized) imageArtifacts.push({ role, url: normalized });
+  }
+  collectImageArtifacts(evidenceBundle, imageArtifacts, new Set(imageArtifacts.map((item) => String(item.url || ""))));
+  const profile = recordValue(fullState.proof_profile);
+  const visibleChange = buildVisibleChangeSummary(semanticContext);
+  const readyCandidate = Boolean(
+    routeMatches(route) &&
+    semanticRecord(semanticContext.after).valid !== false &&
+    imageArtifacts.some((item) => item.role === "after" || item.name === "after") &&
+    (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
+  );
+  return {
+    ok: true,
+    status: wrapperState.status,
+    run_id: wrapperState.run_id || null,
+    state_path: wrapperState.state_path || null,
+    engine_state_path: wrapperState.request.engine_state_path || null,
+    checkpoint: checkpoint || wrapperState.last_checkpoint || null,
+    repo: wrapperState.request.repo || fullState.repo || null,
+    branch: stringValue(fullState.branch) || wrapperState.branch || wrapperState.request.branch || null,
+    change_request: wrapperState.request.change_request || fullState.change_request || "",
+    verification_mode: wrapperState.request.verification_mode || fullState.verification_mode || "proof",
+    proof_profile_applied: Boolean(profile),
+    proof_profile: profile,
+    expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path) || null,
+    route,
+    route_matched: routeMatches(route),
+    image_artifacts: imageArtifacts,
+    visual_delta: visualDelta,
+    visible_change: visibleChange,
+    semantic_context: semanticContext,
+    ready_to_ship_candidate: readyCandidate,
+    next_action: readyCandidate
+      ? `If the screenshots visually satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
+      : "Use this inspection packet to choose needs_implementation, needs_richer_proof, revise_capture, or needs_recon.",
+  };
+}
+
 function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
   const fullState = recordValue(context.fullRiddleState) || {};
   const assessmentRequest =
@@ -429,11 +549,47 @@ function readRunState(statePath: string): RiddleProofRunState | null {
   }
 }
 
+function readJsonRecord(statePath: string): Record<string, unknown> | null {
+  if (!statePath || !existsSync(statePath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf-8"));
+    return recordValue(parsed);
+  } catch {
+    return null;
+  }
+}
+
 function stageForReviewDecision(decision: RiddleProofReviewParams["decision"]) {
   if (decision === "ready_to_ship") return "ship";
   if (decision === "needs_implementation") return "implement";
   if (decision === "needs_recon") return "recon";
   return "author";
+}
+
+export function inspectOpenClawRiddleProof(params: RiddleProofInspectParams) {
+  const state = readRunState(params.state_path);
+  if (!state) {
+    return {
+      ok: false,
+      status: "not_found",
+      state_path: params.state_path,
+      message: "No readable Riddle Proof wrapper run state exists at state_path.",
+    };
+  }
+
+  const engineStatePath = state.request.engine_state_path;
+  const engineState = engineStatePath ? readJsonRecord(engineStatePath) : null;
+  if (!engineState) {
+    return {
+      ok: false,
+      status: "not_found",
+      state_path: params.state_path,
+      engine_state_path: engineStatePath || null,
+      message: "No readable Riddle Proof engine state exists for this wrapper run.",
+    };
+  }
+
+  return buildProofInspection(state, engineState, state.last_checkpoint);
 }
 
 export async function submitOpenClawRiddleProofReview(
@@ -635,6 +791,10 @@ export const riddleProofStatusParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
 });
 
+export const riddleProofInspectParameters = Type.Object({
+  state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+});
+
 export const riddleProofSyncParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
   cleanup: optionalBoolean("When true, prune proof worktrees and temporary proof branches after the PR is merged. Defaults to true."),
@@ -704,6 +864,20 @@ export default function register(api: any) {
           state_path: params.state_path,
           message: "No readable Riddle Proof run state exists at state_path.",
         };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    },
+    { optional: true },
+  );
+
+  api.registerTool(
+    {
+      name: RIDDLE_PROOF_INSPECT_TOOL_NAME,
+      description:
+        "Return a compact proof inspection packet for review: route match, profile use, artifacts, visual delta, semantic anchors, and visible text samples.",
+      parameters: riddleProofInspectParameters,
+      async execute(_id: string, params: RiddleProofInspectParams) {
+        const result = inspectOpenClawRiddleProof(params);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },
