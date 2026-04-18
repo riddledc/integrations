@@ -21,6 +21,7 @@ tests.
 - State/event helpers for wrappers that need a stable run envelope
 - Runner harness for preflight -> setup -> implement -> prove -> judge -> ship -> notify
 - Stage heartbeat and run status snapshot helpers
+- Capture diagnostics helpers for redacted Riddle server preview evidence
 - Worktree metadata and proof artifact role contracts
 - Terminal ship metadata normalization
 - Stable result helpers
@@ -46,6 +47,7 @@ npm install @riddledc/riddle-proof
 ```ts
 import { createRunResult, createRunState } from "@riddledc/riddle-proof";
 import { runRiddleProof } from "@riddledc/riddle-proof/runner";
+import { createCaptureDiagnostic } from "@riddledc/riddle-proof/diagnostics";
 import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
 ```
 
@@ -75,6 +77,81 @@ when configured. `ship_mode: "ship"` is expected to drive the happy path all the
 way to a ready PR after proof and CI; `leave_draft: true` is only an explicit
 debug or user-request escape hatch. The notification adapter is where a host
 updates Discord, OpenClaw, GitHub, or another integration.
+
+## Capture Diagnostics
+
+`@riddledc/riddle-proof/diagnostics` standardizes the evidence contract around
+Riddle-backed capture calls. It is designed for state files, PR proof comments,
+and agent handoffs where a reviewer needs to know whether proof failed because
+the route was wrong, the preview was not ready, the capture script did not save
+artifacts, or the app runtime produced weak evidence.
+
+```ts
+import {
+  appendCaptureDiagnostic,
+  createCaptureDiagnostic,
+  summarizeCaptureArtifacts,
+} from "@riddledc/riddle-proof/diagnostics";
+
+const args = {
+  server_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+  wait_for_selector: "[data-proof-ready='true']",
+  script,
+};
+
+const payload = await runRiddleServerPreview(args);
+
+const diagnostic = createCaptureDiagnostic({
+  label: "after",
+  tool: "riddle_server_preview",
+  args,
+  payload,
+  route: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+});
+
+appendCaptureDiagnostic(state, { label: "after", tool: "riddle_server_preview", args, payload });
+console.log(summarizeCaptureArtifacts(payload));
+```
+
+The helper redacts sensitive keys such as authorization headers, cookies,
+local storage, API keys, secrets, passwords, and tokens. It preserves route,
+selector, script shape, artifact names, URLs, result keys, console summary, and
+artifact errors. Long strings and arrays are capped so diagnostics remain safe
+to keep in a run state.
+
+### Runtime Evidence Contract
+
+For browser previews, apps can expose deterministic proof data on
+`globalThis.__riddleProofEvidence`. Capture scripts can return that object or
+write it into a JSON artifact next to screenshots. Good evidence is usually a
+mix of:
+
+- The exact route or query params a human reviewer can open
+- A readiness selector or explicit ready flag
+- Screenshots and JSON artifacts saved by the capture script
+- Runtime metrics from `globalThis.__riddleProofEvidence`
+- Assertions that explain why the evidence is sufficient
+
+Metrics are guardrails, not a replacement for taste or product judgment. For a
+musical sequencer, useful proof might include the selected song and mix, the
+transport state, current playhead time, instrument lane readiness, measured
+frame drift, console errors, and screenshots of the intended view. The reviewer
+still decides whether it sounds good.
+
+### Server Preview Usage
+
+Server preview proof is most useful when the request, capture, and PR comment
+all point at the same reproducible page. Prefer exact paths such as:
+
+```text
+/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile
+```
+
+Use `wait_for_selector` for a stable application-ready signal instead of a fixed
+sleep. Save screenshots and structured artifacts from the same capture script
+that performs the interaction. If proof is weak, keep the diagnostics history in
+the run state so the next agent can see the last route, tool status, artifact
+shape, and errors without rerunning blind.
 
 ## OpenClaw Adapter Boundary
 

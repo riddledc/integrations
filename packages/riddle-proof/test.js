@@ -9,17 +9,21 @@ import {
   appendRunEvent,
   applyTerminalMetadata,
   applyPrLifecycleState,
+  appendCaptureDiagnostic,
   createDisabledRiddleProofAgentAdapter,
+  createCaptureDiagnostic,
   createRunStatusSnapshot,
   createRunState,
   createRunResult,
   isSuccessfulStatus,
   isTerminalStatus,
   normalizeTerminalMetadata,
+  redactForProofDiagnostics,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   runRiddleProof,
   setRunStatus,
+  summarizeCaptureArtifacts,
 } from "./dist/index.js";
 import {
   parseOpenClawAssertions,
@@ -28,8 +32,11 @@ import {
 
 const require = createRequire(import.meta.url);
 const cjs = require("./dist/index.cjs");
+const cjsDiagnostics = require("./dist/diagnostics.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
+assert.equal(typeof cjs.createCaptureDiagnostic, "function");
+assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 
@@ -173,6 +180,94 @@ assert.equal(isTerminalStatus("shipped"), true);
 assert.equal(isTerminalStatus("running"), false);
 assert.equal(isSuccessfulStatus("blocked"), false);
 assert.equal(isSuccessfulStatus("ready_to_ship"), true);
+
+const diagnosticArgs = {
+  script: "await page.goto('/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile')",
+  localStorage: { session: "secret" },
+  headers: { Authorization: "Bearer secret" },
+  nested: {
+    api_key: "secret",
+    safe: "ok",
+  },
+  long: "x".repeat(2105),
+};
+const redactedDiagnosticArgs = redactForProofDiagnostics(diagnosticArgs);
+assert.equal(redactedDiagnosticArgs.script.startsWith("await page.goto"), true);
+assert.equal(redactedDiagnosticArgs.localStorage, "[redacted]");
+assert.equal(redactedDiagnosticArgs.headers, "[redacted]");
+assert.equal(redactedDiagnosticArgs.nested.api_key, "[redacted]");
+assert.equal(redactedDiagnosticArgs.nested.safe, "ok");
+assert.equal(redactedDiagnosticArgs.long.endsWith("... [truncated]"), true);
+
+const diagnosticPayload = {
+  ok: true,
+  outputs: [
+    { name: "console.json", url: "https://example.com/console.json" },
+  ],
+  screenshots: [
+    { name: "after-proof.png", url: "https://example.com/after-proof.png" },
+  ],
+  artifacts: [
+    {
+      name: "metering.json",
+      kind: "json",
+      role: "diagnostic",
+      path: "/tmp/riddle-proof/metering.json",
+      metadata: { samples: 64 },
+    },
+  ],
+  _artifact_json: {
+    "console.json": { summary: { errors: 0, warnings: 1 } },
+    "proof.json": {
+      result: {
+        audio_ready: true,
+        playhead_synced: true,
+      },
+    },
+  },
+  _artifact_errors: {
+    "missing.json": "404 not found",
+  },
+};
+const artifactSummary = summarizeCaptureArtifacts(diagnosticPayload);
+assert.equal(artifactSummary.outputs[0].name, "console.json");
+assert.equal(artifactSummary.screenshots[0].name, "after-proof.png");
+assert.equal(artifactSummary.artifacts[0].metadata_keys[0], "samples");
+assert.deepEqual(artifactSummary.result_keys, ["audio_ready", "playhead_synced"]);
+assert.deepEqual(artifactSummary.artifact_json, ["console.json", "proof.json"]);
+assert.equal(artifactSummary.artifact_errors["missing.json"], "404 not found");
+assert.equal(artifactSummary.console_summary.warnings, 1);
+
+const captureDiagnostic = createCaptureDiagnostic({
+  label: "after",
+  tool: "riddle_server_preview",
+  captured_at: "2026-04-18T00:00:00.000Z",
+  args: diagnosticArgs,
+  payload: diagnosticPayload,
+  route: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+  preview_url: "https://riddle.example/previews/sp_123",
+  wait_for_selector: "[data-proof-ready='true']",
+  evidence: {
+    globalThisEvidence: {
+      bpm: 112,
+      token: "secret",
+    },
+  },
+});
+assert.equal(captureDiagnostic.version, "riddle-proof.capture-diagnostic.v1");
+assert.equal(captureDiagnostic.ok, true);
+assert.equal(captureDiagnostic.args.headers, "[redacted]");
+assert.equal(captureDiagnostic.args.nested.safe, "ok");
+assert.equal(captureDiagnostic.evidence.globalThisEvidence.token, "[redacted]");
+assert.equal(captureDiagnostic.artifact_summary.result_keys.includes("playhead_synced"), true);
+
+const diagnosticState = {};
+appendCaptureDiagnostic(diagnosticState, { label: "first", payload: diagnosticPayload }, 2);
+appendCaptureDiagnostic(diagnosticState, { label: "second", payload: diagnosticPayload }, 2);
+appendCaptureDiagnostic(diagnosticState, { label: "third", payload: diagnosticPayload }, 2);
+assert.equal(diagnosticState.capture_diagnostics.length, 2);
+assert.equal(diagnosticState.capture_diagnostics[0].label, "second");
+assert.equal(diagnosticState.capture_diagnostics[1].label, "third");
 
 const fallbackMetadata = normalizeTerminalMetadata({
   engineResult: {
