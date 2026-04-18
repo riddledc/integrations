@@ -3,3 +3,4 @@ export * from "./result";
 export * from "./state";
 export * from "./runner";
 export * from "./engine-harness";
+export * from "./diagnostics";
