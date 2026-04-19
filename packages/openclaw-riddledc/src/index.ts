@@ -186,6 +186,27 @@ function isAlreadyStartedResponse(status: number, body: string): boolean {
   return status === 409 && /already in status:\s*(queued|running|complete|completed)/i.test(body);
 }
 
+function previewTimeoutToolResult(
+  jobId: string,
+  timeoutMs: number,
+  lastStatusData: any,
+  extras: Record<string, any> = {},
+): any {
+  const lastStatus = lastStatusData?.status ?? "unknown";
+  const result: any = {
+    ok: false,
+    job_id: jobId,
+    status: lastStatus,
+    outputs: lastStatusData?.outputs || [],
+    compute_seconds: lastStatusData?.compute_seconds,
+    egress_bytes: lastStatusData?.egress_bytes,
+    error: `Job did not complete within ${timeoutMs / 1000}s; last status was ${lastStatus}`,
+    ...extras,
+  };
+  if (lastStatusData?.error) result.server_error = lastStatusData.error;
+  return result;
+}
+
 async function writeArtifact(
   workspace: string,
   subdir: string,
@@ -1231,6 +1252,7 @@ export default function register(api: PluginApi) {
         const timeoutMs = ((params.timeout || 120) + 60) * 1000; // extra 60s buffer for Docker pull
         const pollStart = Date.now();
         const POLL_INTERVAL = 3000;
+        let lastStatusData: any = null;
 
         while (Date.now() - pollStart < timeoutMs) {
           let statusRes: Response;
@@ -1245,6 +1267,7 @@ export default function register(api: PluginApi) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
           }
           const statusData = await statusRes.json() as any;
+          lastStatusData = statusData;
 
           if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
             const result: any = {
@@ -1283,7 +1306,7 @@ export default function register(api: PluginApi) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL));
         }
 
-        return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Job did not complete within ${timeoutMs / 1000}s` }, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(previewTimeoutToolResult(created.job_id, timeoutMs, lastStatusData), null, 2) }] };
       }
     },
     { optional: true }
@@ -1455,6 +1478,7 @@ export default function register(api: PluginApi) {
         const timeoutMs = ((params.timeout || 180) + 120) * 1000;
         const pollStart = Date.now();
         const POLL_INTERVAL = 3000;
+        let lastStatusData: any = null;
 
         while (Date.now() - pollStart < timeoutMs) {
           let statusRes: Response;
@@ -1469,6 +1493,7 @@ export default function register(api: PluginApi) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Poll failed: HTTP ${statusRes.status}` }, null, 2) }] };
           }
           const statusData = await statusRes.json() as any;
+          lastStatusData = statusData;
 
           if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
             const result: any = {
@@ -1510,7 +1535,12 @@ export default function register(api: PluginApi) {
           await new Promise((r) => setTimeout(r, POLL_INTERVAL));
         }
 
-        return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Job did not complete within ${timeoutMs / 1000}s` }, null, 2) }] };
+        return { content: [{ type: "text", text: JSON.stringify(previewTimeoutToolResult(created.job_id, timeoutMs, lastStatusData, {
+          build_duration_ms: lastStatusData?.build_duration_ms,
+          ...(lastStatusData?.build_log ? { build_log: lastStatusData.build_log } : {}),
+          ...(lastStatusData?.container_log ? { container_log: lastStatusData.container_log } : {}),
+          ...(lastStatusData?.audit ? { audit: lastStatusData.audit } : {}),
+        }), null, 2) }] };
       }
     },
     { optional: true }
