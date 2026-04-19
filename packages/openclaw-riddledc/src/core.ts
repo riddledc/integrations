@@ -192,6 +192,27 @@ export function isAlreadyStartedResponse(status: number, body: string): boolean 
   return status === 409 && /already in status:\s*(queued|running|complete|completed)/i.test(body);
 }
 
+function previewTimeoutResult(
+  jobId: string,
+  timeoutMs: number,
+  lastStatusData: any,
+  resultExtras: (statusData: any) => Record<string, any> = () => ({}),
+): PreviewResult {
+  const lastStatus = lastStatusData?.status ?? "unknown";
+  const result: PreviewResult = {
+    ok: false,
+    job_id: jobId,
+    status: lastStatus,
+    outputs: lastStatusData?.outputs || [],
+    compute_seconds: lastStatusData?.compute_seconds,
+    egress_bytes: lastStatusData?.egress_bytes,
+    error: `Job did not complete within ${timeoutMs / 1000}s; last status was ${lastStatus}`,
+    ...resultExtras(lastStatusData ?? {}),
+  };
+  if (lastStatusData?.error) result.server_error = lastStatusData.error;
+  return result;
+}
+
 async function writeArtifact(
   workspace: string,
   subdir: string,
@@ -621,6 +642,7 @@ async function pollPreviewJob(
   const endpoint = config.baseUrl.replace(/\/$/, "");
   const pollStart = Date.now();
   const pollIntervalMs = 3000;
+  let lastStatusData: any = null;
 
   while (Date.now() - pollStart < timeoutMs) {
     let statusRes: Response;
@@ -635,6 +657,7 @@ async function pollPreviewJob(
       return { ok: false, job_id: jobId, error: `Poll failed: HTTP ${statusRes.status}` };
     }
     const statusData = await statusRes.json() as any;
+    lastStatusData = statusData;
 
     if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
       const result: PreviewResult = {
@@ -656,7 +679,7 @@ async function pollPreviewJob(
     await sleep(pollIntervalMs);
   }
 
-  return { ok: false, job_id: jobId, error: `Job did not complete within ${timeoutMs / 1000}s` };
+  return previewTimeoutResult(jobId, timeoutMs, lastStatusData, resultExtras);
 }
 
 export async function createStaticPreview(
