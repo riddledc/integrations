@@ -199,14 +199,18 @@ function previewTimeoutResult(
   resultExtras: (statusData: any) => Record<string, any> = () => ({}),
 ): PreviewResult {
   const lastStatus = lastStatusData?.status ?? "unknown";
+  const lastPhase = lastStatusData?.phase ?? lastStatus;
   const result: PreviewResult = {
     ok: false,
     job_id: jobId,
     status: lastStatus,
+    phase: lastPhase,
+    phase_updated_at: lastStatusData?.phase_updated_at,
+    phase_details: lastStatusData?.phase_details,
     outputs: lastStatusData?.outputs || [],
     compute_seconds: lastStatusData?.compute_seconds,
     egress_bytes: lastStatusData?.egress_bytes,
-    error: `Job did not complete within ${timeoutMs / 1000}s; last status was ${lastStatus}`,
+    error: `Job did not complete within ${timeoutMs / 1000}s; last status was ${lastStatus}, phase was ${lastPhase}`,
     ...resultExtras(lastStatusData ?? {}),
   };
   if (lastStatusData?.error) result.server_error = lastStatusData.error;
@@ -664,12 +668,16 @@ async function pollPreviewJob(
         ok: statusData.status === "complete" || statusData.status === "completed",
         job_id: jobId,
         status: statusData.status,
+        phase: statusData.phase ?? statusData.status,
+        phase_updated_at: statusData.phase_updated_at,
+        phase_details: statusData.phase_details,
         outputs: statusData.outputs || [],
         compute_seconds: statusData.compute_seconds,
         egress_bytes: statusData.egress_bytes,
         ...resultExtras(statusData),
       };
       if (statusData.error) result.error = statusData.error;
+      if (statusData.script_error) result.script_error = statusData.script_error;
 
       await saveImageOutputs(config.workspace, jobId, result.outputs, pathPrefix.slice(1));
       result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
