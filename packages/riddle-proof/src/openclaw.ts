@@ -26,6 +26,9 @@ export interface OpenClawProofedChangeParams {
   server_port?: number;
   server_path?: string;
   use_auth?: boolean;
+  auth_localStorage_json?: string;
+  auth_cookies_json?: string;
+  auth_headers_json?: string;
   color_scheme?: "dark" | "light" | (string & {});
   wait_for_selector?: string;
   ship_after_verify?: boolean;
@@ -95,6 +98,9 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     server_port: params.server_port,
     server_path: params.server_path,
     use_auth: params.use_auth,
+    auth_localStorage_json: params.auth_localStorage_json,
+    auth_cookies_json: params.auth_cookies_json,
+    auth_headers_json: params.auth_headers_json,
     color_scheme: params.color_scheme,
     wait_for_selector: params.wait_for_selector,
     ship_mode: params.ship_mode || (params.ship_after_verify ? "ship" : undefined),

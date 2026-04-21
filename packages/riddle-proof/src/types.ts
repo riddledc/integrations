@@ -84,6 +84,9 @@ export interface RiddleProofRunParams {
   server_port?: number;
   server_path?: string;
   use_auth?: boolean;
+  auth_localStorage_json?: string;
+  auth_cookies_json?: string;
+  auth_headers_json?: string;
   color_scheme?: "dark" | "light" | (string & {});
   wait_for_selector?: string;
   ship_mode?: "none" | "ship";

@@ -30,6 +30,9 @@ const params = {
   ship_after_verify: true,
   state_path: "/tmp/riddle-engine-state.json",
   harness_state_path: "/tmp/riddle-wrapper-state.json",
+  auth_localStorage_json: "{\"session\":\"local\"}",
+  auth_cookies_json: "[{\"name\":\"session\",\"value\":\"cookie\"}]",
+  auth_headers_json: "{\"Authorization\":\"Bearer token\"}",
   max_iterations: 3,
   auto_approve: true,
   leave_draft: true,
@@ -53,6 +56,9 @@ assert.equal(result.raw?.request?.repo, "riddledc/example");
 assert.equal(result.raw?.request?.ship_mode, "ship");
 assert.equal(result.raw?.request?.engine_state_path, "/tmp/riddle-engine-state.json");
 assert.equal(result.raw?.request?.harness_state_path, "/tmp/riddle-wrapper-state.json");
+assert.equal(result.raw?.request?.auth_localStorage_json, "{\"session\":\"local\"}");
+assert.equal(result.raw?.request?.auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
+assert.equal(result.raw?.request?.auth_headers_json, "{\"Authorization\":\"Bearer token\"}");
 assert.equal(result.raw?.request?.max_iterations, 3);
 assert.equal(result.raw?.request?.auto_approve, true);
 assert.equal(result.raw?.request?.leave_draft, true);
