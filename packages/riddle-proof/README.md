@@ -161,6 +161,10 @@ It preserves Discord routing metadata as `integration_context` and parses
 `assertions_json` into the shared assertions field. Compatibility params such as
 `ship_after_verify` and the explicit `leave_draft` escape hatch are preserved so
 the underlying runtime can distinguish "do not merge" from "keep this draft."
+Generic authenticated proof inputs are preserved as pass-through JSON strings:
+`auth_localStorage_json`, `auth_cookies_json`, and `auth_headers_json`. Use
+those for public integrations; reserve `use_auth` for a configured, site-specific
+auth helper.
 
 The adapter does not invoke another OpenClaw plugin and does not supply a
 coding agent. It is the reusable mapping layer a future OpenClaw wrapper can

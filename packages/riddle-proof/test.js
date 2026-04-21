@@ -321,6 +321,9 @@ const referenceParams = toRiddleProofRunParams({
   discord_thread_id: referenceRun.request.integration_context.thread_id,
   discord_message_id: referenceRun.request.integration_context.message_id,
   discord_source_url: referenceRun.request.integration_context.source_url,
+  auth_localStorage_json: "{\"session\":\"local\"}",
+  auth_cookies_json: "[{\"name\":\"session\",\"value\":\"cookie\"}]",
+  auth_headers_json: "{\"Authorization\":\"Bearer token\"}",
 });
 const referenceMetadata = normalizeTerminalMetadata({
   riddleState: referenceRun.riddle_state,
@@ -348,6 +351,9 @@ assert.equal(referenceParams.integration_context.source, "discord");
 assert.equal(referenceParams.integration_context.thread_id, "111111111111111111");
 assert.equal(referenceParams.integration_context.metadata.tool, "proofed_change_run");
 assert.equal(referenceParams.assertions.interactive_elements, 11);
+assert.equal(referenceParams.auth_localStorage_json, "{\"session\":\"local\"}");
+assert.equal(referenceParams.auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
+assert.equal(referenceParams.auth_headers_json, "{\"Authorization\":\"Bearer token\"}");
 assert.equal(parseOpenClawAssertions("plain text assertion"), "plain text assertion");
 assert.equal(toRiddleProofRunParams({
   repo: "riddledc/example",
@@ -566,6 +572,9 @@ const engineHarnessResult = await runRiddleProofEngineHarness({
     verification_mode: "visual",
     ship_mode: "ship",
     leave_draft: true,
+    auth_localStorage_json: "{\"session\":\"local\"}",
+    auth_cookies_json: "[{\"name\":\"session\",\"value\":\"cookie\"}]",
+    auth_headers_json: "{\"Authorization\":\"Bearer token\"}",
     harness_state_path: path.join(engineFixture, "harness-state.json"),
   },
   max_iterations: 8,
@@ -701,6 +710,9 @@ assert.equal(engineHarnessResult.branch, "agent/openclaw/riddle-proof-engine-har
 assert.equal(engineHarnessResult.current_stage, "ship");
 assert.equal(engineHarnessResult.state_path, path.join(engineFixture, "harness-state.json"));
 assert.equal(readRiddleProofRunStatus(engineHarnessResult.state_path).status, "shipped");
+assert.equal(engineCalls[0].auth_localStorage_json, "{\"session\":\"local\"}");
+assert.equal(engineCalls[0].auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
+assert.equal(engineCalls[0].auth_headers_json, "{\"Authorization\":\"Bearer token\"}");
 assert.equal(engineCalls.at(-1).ship_after_verify, true);
 assert.equal(engineCalls.at(-1).leave_draft, true);
 

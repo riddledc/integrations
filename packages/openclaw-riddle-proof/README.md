@@ -66,6 +66,13 @@ the exact commit, wait for CI, and mark the PR ready; `leave_draft: true` is an
 explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `RiddleProofRunResult`.
 
+For pages behind login, pass generic browser auth as JSON strings:
+`auth_localStorage_json`, `auth_cookies_json`, or `auth_headers_json`. These
+are forwarded to the proof runtime so previews and script captures can exercise
+authenticated pages without depending on a site-specific OpenClaw helper.
+`use_auth: true` remains available only for deployments that have explicitly
+configured their own auth helper.
+
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,
 elapsed time, blocker, worktree path, and latest event.
