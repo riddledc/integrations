@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.8
+
+### Patch Changes
+
+- 61f1218: Default proof-run scratch worktrees to local temp storage so dependency cache materialization does not crawl on shared workspace filesystems.
+
 ## 0.5.7
 
 ### Patch Changes

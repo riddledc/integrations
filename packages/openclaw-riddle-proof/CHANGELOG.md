@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.19
+
+### Patch Changes
+
+- 61f1218: Default proof-run scratch worktrees to local temp storage so dependency cache materialization does not crawl on shared workspace filesystems.
+- Updated dependencies [61f1218]
+  - @riddledc/riddle-proof@0.5.8
+
 ## 0.4.18
 
 ### Patch Changes
