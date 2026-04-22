@@ -64,8 +64,17 @@ export interface PluginConfig {
 }
 
 export const CHECKPOINT_CONTRACT_VERSION = "riddle-proof-run.checkpoint.v1";
+function currentDistDir() {
+  const meta = typeof import.meta === "object" ? import.meta as { url?: string } : {};
+  if (typeof meta.url === "string" && meta.url) {
+    return path.dirname(fileURLToPath(meta.url));
+  }
+  if (typeof __dirname === "string") return __dirname;
+  return process.cwd();
+}
+
 export const BUNDLED_RIDDLE_PROOF_DIR = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
+  currentDistDir(),
   "..",
   "runtime",
 );

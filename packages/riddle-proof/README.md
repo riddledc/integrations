@@ -10,8 +10,8 @@ and integration metadata.
 This package includes the reusable runner harness that drives a request through
 preflight, setup, implementation, proof capture, judgment, shipping, and
 notification adapters. The OpenClaw wrapper uses the public
-`riddle_proof_change` tool and the packaged `@riddledc/riddle-proof-run`
-checkpoint engine.
+`riddle_proof_change` tool and this package's bundled proof-run checkpoint
+engine.
 
 ## Initial Scope
 

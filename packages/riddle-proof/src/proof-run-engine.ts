@@ -22,7 +22,7 @@ import {
   type WorkflowParams,
   type WorkflowStage,
   type PluginConfig,
-} from "./core.js";
+} from "./proof-run-core.js";
 
 function snapshotFor(statePath: string) {
   return summarizeState(readState(statePath));

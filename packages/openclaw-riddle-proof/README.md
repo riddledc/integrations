@@ -14,10 +14,10 @@ mode it normalizes OpenClaw tool parameters through
 `@riddledc/riddle-proof/openclaw`, creates the shared run envelope, and returns
 a blocked result until execution is explicitly configured.
 
-When configured with `executionMode: "engine"` and a `riddleEngineModuleUrl`,
-the wrapper calls the reusable engine harness in `@riddledc/riddle-proof`.
-That harness drives the packaged `@riddledc/riddle-proof-run` checkpoint engine
-directly.
+When configured with `executionMode: "engine"`, the wrapper calls the reusable
+engine harness in `@riddledc/riddle-proof`.
+That harness drives the packaged proof-run checkpoint engine in
+`@riddledc/riddle-proof` directly.
 By default it still stops at concrete blockers when an agent adapter is not
 configured. When `agentMode: "codex_exec"` is explicitly set, the wrapper uses a
 local `codex exec` adapter for recon judgment, proof packet authoring,
@@ -136,7 +136,6 @@ The optional adapter can be enabled with config like:
 {
   "executionMode": "engine",
   "agentMode": "codex_exec",
-  "riddleEngineModuleUrl": "file:///root/.openclaw/extensions/riddle-proof-run/dist/engine.js",
   "codexHome": "/root/.codex",
   "codexSandbox": "workspace-write",
   "proofReviewMode": "main_agent",

@@ -2,9 +2,11 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 const fixtureDir = path.join(__dirname, 'test-fixture');
 const fakeSkillDir = path.join(fixtureDir, 'skills', 'riddle-proof');
 const fakePipelineDir = path.join(fakeSkillDir, 'pipelines');
@@ -364,23 +366,23 @@ process.exit(1);
 
 async function run() {
   setupFixture();
-  if (!existsSync(path.join(__dirname, 'dist', 'core.js'))) {
+  if (!existsSync(path.join(__dirname, 'dist', 'proof-run-core.js'))) {
     execFileSync('npm', ['run', 'build'], { cwd: __dirname, stdio: 'pipe' });
   }
 
-  const manifest = JSON.parse(readFileSync(path.join(__dirname, 'openclaw.plugin.json'), 'utf-8'));
-  assert(manifest.capabilities.tools.provides.includes('riddle_proof_run'), 'manifest must provide riddle_proof_run');
-  assert(existsSync(path.join(__dirname, 'dist', 'openclaw.plugin.json')), 'dist/openclaw.plugin.json must exist');
-
-  const core = await import(pathToFileURL(path.join(__dirname, 'dist', 'core.js')).href);
-  const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'engine.js')).href);
-  const pluginMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'index.js')).href);
-  assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/engine.js should expose createRiddleProofEngine');
-  assert(typeof pluginMod.createRiddleProofEngine === 'function', 'plugin entry should re-export createRiddleProofEngine for compatibility');
-  assert(typeof pluginMod.executeWorkflow === 'function', 'plugin entry should continue re-exporting executeWorkflow');
+  const core = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-core.js')).href);
+  const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-engine.js')).href);
+  const cjsCore = require(path.join(__dirname, 'dist', 'proof-run-core.cjs'));
+  const cjsEngineMod = require(path.join(__dirname, 'dist', 'proof-run-engine.cjs'));
+  assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.js should expose createRiddleProofEngine');
+  assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
   assert(
     core.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
     'default riddle-proof lookup should prefer the bundled package runtime',
+  );
+  assert(
+    cjsCore.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
+    'CommonJS default riddle-proof lookup should prefer the bundled package runtime',
   );
   assert(existsSync(path.join(__dirname, 'runtime', 'pipelines', 'riddle-proof-setup.lobster')), 'package runtime should include lobster pipelines');
   assert(existsSync(path.join(__dirname, 'runtime', 'lib', 'setup.py')), 'package runtime should include Python stage helpers');
@@ -570,7 +572,7 @@ async function run() {
   const reconBlocked = await localEngine.execute({ action: 'run', state_path: reconLoopStatePath });
   assert(
     reconBlocked.checkpoint === 'recon_supervisor_judgment',
-    `run should bubble recon observations to the supervising agent before marching onward (got ${reconBlocked.checkpoint}: ${reconBlocked.summary || reconBlocked.error || ''})`,
+    `run should bubble recon observations to the supervising agent before marching onward (got ${reconBlocked.checkpoint}: ${reconBlocked.summary || ''}; error=${reconBlocked.error || ''}; ${JSON.stringify(reconBlocked.details || reconBlocked.raw || {}, null, 2)})`,
   );
   assert(reconBlocked.checkpointContract.version === 'riddle-proof-run.checkpoint.v1', 'checkpoints should expose a stable machine-readable contract');
   assert(reconBlocked.decisionRequest.checkpoint_contract.checkpoint === 'recon_supervisor_judgment', 'checkpoint contract should persist in the decision request');
@@ -704,7 +706,7 @@ async function run() {
     },
   });
   const holdReadyConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: holdReadyStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: holdReadyStatePath });
-  const holdReady = await pluginMod.executeWorkflow({
+  const holdReady = await engineMod.executeWorkflow({
     action: 'run',
     state_path: holdReadyStatePath,
     advance_stage: 'verify',
@@ -741,7 +743,7 @@ async function run() {
     active_checkpoint_stage: 'verify',
   });
   const missingBaselineConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: missingBaselineStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: missingBaselineStatePath });
-  const blockedShip = await pluginMod.executeWorkflow({ action: 'run', state_path: missingBaselineStatePath, advance_stage: 'ship' }, { riddleProofDir: fakeSkillDir, statePath: missingBaselineStatePath, defaultReviewer: 'octocat' }, missingBaselineConfig);
+  const blockedShip = await engineMod.executeWorkflow({ action: 'run', state_path: missingBaselineStatePath, advance_stage: 'ship' }, { riddleProofDir: fakeSkillDir, statePath: missingBaselineStatePath, defaultReviewer: 'octocat' }, missingBaselineConfig);
   assert(blockedShip.checkpoint === 'ship_gate_blocked', 'ship should be blocked when the required baseline evidence is missing');
   assert(blockedShip.shipGate.ok === false, 'blocked ship should expose the failing gate');
   assert(blockedShip.shipGate.reasons.includes('before_cdn is required before ship'), 'blocked ship should explain the missing before baseline');
@@ -757,11 +759,11 @@ async function run() {
     simulate_verify_status: 'capture_incomplete',
   });
   const verifyRetryConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: verifyRetryStatePath });
-  const verifyRetry = await pluginMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, advance_stage: 'verify' }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
+  const verifyRetry = await engineMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, advance_stage: 'verify' }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
   assert(verifyRetry.checkpoint === 'verify_capture_retry', 'verify should keep bad captures inside the verify sub-loop');
   assert(verifyRetry.decisionRequest.continue_with_stage === 'author', 'capture retry should expose author as the resumable checkpoint target');
 
-  const authorRetry = await pluginMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, continue_from_checkpoint: true }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
+  const authorRetry = await engineMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, continue_from_checkpoint: true }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
   assert(authorRetry.checkpoint === 'author_supervisor_judgment', 'capture retry should flow back into supervising-agent proof authoring');
 
   const ambiguousAssessmentStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-ambiguous-')), 'state.json');
@@ -806,7 +808,7 @@ async function run() {
     },
   });
   const ambiguousConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: ambiguousAssessmentStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: ambiguousAssessmentStatePath });
-  const ambiguous = await pluginMod.executeWorkflow({
+  const ambiguous = await engineMod.executeWorkflow({
     action: 'run',
     state_path: ambiguousAssessmentStatePath,
     continue_from_checkpoint: true,
@@ -823,7 +825,7 @@ async function run() {
   assert(ambiguous.decisionRequest.continue_with_stage === 'author', 'internal retry should point back to author');
   assert(ambiguous.summary.includes('not be converging yet') || ambiguous.summary.includes('keep iterating internally'), 'retry summary should stay agent-facing');
 
-  const authorRetryAfterProofAssessment = await pluginMod.executeWorkflow({
+  const authorRetryAfterProofAssessment = await engineMod.executeWorkflow({
     action: 'run',
     state_path: ambiguousAssessmentStatePath,
     continue_from_checkpoint: true,
@@ -877,7 +879,7 @@ async function run() {
     },
   });
   const escalationConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: escalationStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: escalationStatePath });
-  const escalated = await pluginMod.executeWorkflow({
+  const escalated = await engineMod.executeWorkflow({
     action: 'run',
     state_path: escalationStatePath,
     continue_from_checkpoint: true,
@@ -909,7 +911,7 @@ async function run() {
     merge_recommendation: 'ready-to-ship',
   });
   const staleAfterConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: staleAfterStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: staleAfterStatePath });
-  const reimplemented = await pluginMod.executeWorkflow({ action: 'run', state_path: staleAfterStatePath, advance_stage: 'implement' }, { riddleProofDir: fakeSkillDir, statePath: staleAfterStatePath, defaultReviewer: 'octocat' }, staleAfterConfig);
+  const reimplemented = await engineMod.executeWorkflow({ action: 'run', state_path: staleAfterStatePath, advance_stage: 'implement' }, { riddleProofDir: fakeSkillDir, statePath: staleAfterStatePath, defaultReviewer: 'octocat' }, staleAfterConfig);
   assert(reimplemented.checkpoint === 'implement_review', 'explicit implement reruns should still checkpoint for review');
   const afterReimplement = readJson(staleAfterStatePath);
   assert(afterReimplement.after_cdn === '', 'implement reruns should invalidate stale after evidence');
@@ -929,7 +931,7 @@ async function run() {
     finalized: false,
   });
   const orphanSyncConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: orphanSyncStatePath, defaultReviewer: 'octocat' }, { action: 'sync', state_path: orphanSyncStatePath });
-  const orphanSync = await pluginMod.executeWorkflow({ action: 'sync', state_path: orphanSyncStatePath }, { riddleProofDir: fakeSkillDir, statePath: orphanSyncStatePath, defaultReviewer: 'octocat' }, orphanSyncConfig);
+  const orphanSync = await engineMod.executeWorkflow({ action: 'sync', state_path: orphanSyncStatePath }, { riddleProofDir: fakeSkillDir, statePath: orphanSyncStatePath, defaultReviewer: 'octocat' }, orphanSyncConfig);
   assert(orphanSync.checkpoint === 'pr_sync_no_pr', 'sync should explicitly identify orphaned runs with no linked PR');
   assert(orphanSync.summary.includes('state exists'), 'orphaned sync should clarify that the wrapper state was readable');
   assert(orphanSync.pr_state.status === 'orphaned', 'orphaned sync should expose an orphaned PR state');
@@ -948,7 +950,7 @@ async function run() {
     finalized: true,
   });
   const syncConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: syncStatePath, defaultReviewer: 'octocat' }, { action: 'sync', state_path: syncStatePath });
-  const synced = await pluginMod.executeWorkflow({ action: 'sync', state_path: syncStatePath }, { riddleProofDir: fakeSkillDir, statePath: syncStatePath, defaultReviewer: 'octocat' }, syncConfig);
+  const synced = await engineMod.executeWorkflow({ action: 'sync', state_path: syncStatePath }, { riddleProofDir: fakeSkillDir, statePath: syncStatePath, defaultReviewer: 'octocat' }, syncConfig);
   assert(synced.checkpoint === 'pr_sync_merged', 'sync should detect merged PR state');
   assert(synced.pr_state.status === 'merged', 'sync should expose normalized PR lifecycle state');
   assert(synced.pr_state.merge_commit === 'merge-sync-123', 'sync should record the merge commit');
@@ -992,7 +994,7 @@ async function run() {
     finalized: true,
   });
   const baseSyncConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: baseSyncStatePath, defaultReviewer: 'octocat' }, { action: 'sync', state_path: baseSyncStatePath });
-  await pluginMod.executeWorkflow({ action: 'sync', state_path: baseSyncStatePath, cleanup_merged_pr: false }, { riddleProofDir: fakeSkillDir, statePath: baseSyncStatePath, defaultReviewer: 'octocat' }, baseSyncConfig);
+  await engineMod.executeWorkflow({ action: 'sync', state_path: baseSyncStatePath, cleanup_merged_pr: false }, { riddleProofDir: fakeSkillDir, statePath: baseSyncStatePath, defaultReviewer: 'octocat' }, baseSyncConfig);
   const afterBaseSync = readJson(baseSyncStatePath);
   assert(afterBaseSync.cleanup_report.base_checkout.updated === true, 'sync should fast-forward a clean local base checkout after merge');
   assert(readFileSync(path.join(baseRepoDir, 'README.md'), 'utf-8') === 'two\n', 'base checkout should contain the fetched merge result');
@@ -1014,7 +1016,7 @@ async function run() {
     ok: true,
     checks: {
       build: true,
-      manifestCopied: true,
+      runtimeFiles: true,
       setupDefaults: true,
       statePatch: true,
       summarizeState: true,

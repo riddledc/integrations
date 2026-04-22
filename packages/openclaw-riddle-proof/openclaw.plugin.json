@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "type": "plugin",
   "bundledSkills": [],
   "capabilities": {
@@ -19,7 +19,7 @@
       "read": [
         "/tmp/riddle-proof-run-*.json",
         "/tmp/riddle-proof-codex-*",
-        "/root/.openclaw/extensions/riddle-proof-run"
+        "/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof"
       ]
     },
     "agentContext": {

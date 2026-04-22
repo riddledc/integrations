@@ -30,15 +30,12 @@ thin, typed layers:
 ```text
 @riddledc/riddle-proof
   reusable contracts, state/result helpers, evidence helpers,
-  integration adapters, adapter interfaces
+  integration adapters, adapter interfaces, proof-run checkpoint engine,
+  and bundled lobster/Python runtime assets
 
 @riddledc/openclaw-riddle-proof
   wrapper that consumes @riddledc/riddle-proof and exposes the
   riddle_proof_change OpenClaw tool surface
-
-@riddledc/riddle-proof-run
-  server-aware setup, implementation, proof capture, judge, ship, and notify
-  checkpoint engine plus bundled lobster/Python runtime assets
 
 future integrations
   CLI, GitHub Action, Discord bridge, Riddle-hosted workflow wrappers around
@@ -106,7 +103,7 @@ The package now owns the low-risk pieces that were already stable:
 - event/state shape
 
 The current extraction layer is the reusable engine harness. It drives the
-packaged `@riddledc/riddle-proof-run` checkpoint engine directly, persists
+packaged proof-run checkpoint engine in `@riddledc/riddle-proof` directly, persists
 wrapper run state, emits stage heartbeats, exposes cheap status snapshots, and
 stops at concrete blockers when the engine, isolated worktree, or agent adapter
 is missing.
@@ -122,8 +119,7 @@ The public Riddle Proof package set should give users a real integration path,
 not just instructions:
 
 - `@riddledc/riddle-proof`: shared run contracts, helper functions, the runner
-  harness, and adapter interfaces
-- `@riddledc/riddle-proof-run`: packaged checkpoint engine plus bundled
+  harness, adapter interfaces, proof-run checkpoint engine, and bundled
   lobster/Python runtime assets
 - `@riddledc/openclaw-riddle-proof`: the OpenClaw tool wrapper and adapter
   wiring point
@@ -144,7 +140,7 @@ tool name: riddle_proof_change
 review tool: riddle_proof_review
 package: @riddledc/openclaw-riddle-proof
 core dependency: @riddledc/riddle-proof
-engine dependency: @riddledc/riddle-proof-run
+engine dependency: @riddledc/riddle-proof/proof-run-engine
 ```
 
 The wrapper should:
