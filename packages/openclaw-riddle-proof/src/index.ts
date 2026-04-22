@@ -786,8 +786,40 @@ export async function runOpenClawRiddleProof(
   });
 }
 
+function latestRuntimeEvent(engineState: Record<string, unknown> | null) {
+  const events = Array.isArray(engineState?.runtime_events)
+    ? engineState.runtime_events
+    : [];
+  return recordValue(events[events.length - 1]);
+}
+
+function elapsedMsSince(isoTime: unknown) {
+  const startedAt = stringValue(isoTime);
+  if (!startedAt) return null;
+  const startedMs = Date.parse(startedAt);
+  if (!Number.isFinite(startedMs)) return null;
+  return Math.max(0, Date.now() - startedMs);
+}
+
 export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRunStatusSnapshot | null {
-  return readRiddleProofRunStatus(state_path);
+  const snapshot = readRiddleProofRunStatus(state_path);
+  if (!snapshot) return null;
+
+  const wrapperState = readRunState(state_path);
+  const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
+  if (!engineStatePath) return snapshot;
+
+  const engineState = readJsonRecord(engineStatePath);
+  const activeSubstep = recordValue(engineState?.current_runtime_step);
+  const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  return {
+    ...snapshot,
+    engine_state_path: engineStatePath,
+    active_substep: activeSubstep,
+    substep_elapsed_ms: activeSubstep?.status === "running" ? elapsedMsSince(activeSubstep.started_at) : null,
+    engine_latest_event: latestRuntimeEvent(engineState),
+    engine_runtime_event_count: runtimeEvents.length,
+  } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
 }
 
 function readRunState(statePath: string): RiddleProofRunState | null {

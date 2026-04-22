@@ -255,6 +255,31 @@ assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
 ]);
+writeFileSync(backgroundEngineStatePath, JSON.stringify({
+  branch: "agent/background-proof",
+  current_runtime_step: {
+    step: "verify",
+    action: "run",
+    status: "running",
+    started_at: new Date(Date.now() - 250).toISOString(),
+    workflow_file: "riddle-proof-verify.lobster",
+  },
+  runtime_events: [
+    {
+      ts: new Date().toISOString(),
+      kind: "workflow.step.started",
+      step: "verify",
+      action: "run",
+      summary: "Started verify workflow step.",
+    },
+  ],
+}, null, 2));
+const enrichedBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+assert.equal(enrichedBackgroundStatus?.engine_state_path, backgroundEngineStatePath);
+assert.equal(enrichedBackgroundStatus?.active_substep?.step, "verify");
+assert.equal(enrichedBackgroundStatus?.engine_latest_event?.kind, "workflow.step.started");
+assert.equal(enrichedBackgroundStatus?.engine_runtime_event_count, 1);
+assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 
 const reviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-review-"));
 const reviewStatePath = path.join(reviewFixture, "riddle-state.json");

@@ -239,6 +239,19 @@ if missing:
     print('MISSING: ' + ', '.join(missing))
 print('=' * 50)
 
+# The TypeScript harness writes runtime observability fields before Lobster
+# starts. Preflight initializes the main state file, so preserve those fields
+# rather than making status polling go blind during setup.
+if os.path.exists(STATE_FILE):
+    try:
+        with open(STATE_FILE) as existing_state_file:
+            existing_state = json.load(existing_state_file)
+    except Exception:
+        existing_state = {}
+    for runtime_key in ('current_runtime_step', 'last_runtime_step', 'runtime_events', 'runtime_updated_at'):
+        if runtime_key in existing_state:
+            s[runtime_key] = existing_state[runtime_key]
+
 save_state(s)
 
 if missing:

@@ -125,6 +125,25 @@ function createHarnessStatePath(stateDir: string) {
   return path.join(stateDir, `riddle-proof-run-${stamp}-${crypto.randomUUID().slice(0, 8)}.json`);
 }
 
+function createEngineStatePath(state: RiddleProofRunState, config?: RiddleProofEngineHarnessConfig) {
+  const existing = nonEmptyString(state.request.engine_state_path);
+  if (existing) return existing;
+
+  const harnessStatePath = nonEmptyString(state.state_path);
+  if (harnessStatePath) {
+    const dir = path.dirname(harnessStatePath);
+    const base = path.basename(harnessStatePath);
+    if (base.startsWith("riddle-proof-run-")) {
+      return path.join(dir, base.replace("riddle-proof-run-", "riddle-proof-state-"));
+    }
+    return path.join(dir, `${base}.engine-state.json`);
+  }
+
+  const stateDir = config?.stateDir || "/tmp";
+  const stamp = timestamp().replace(/\D/g, "").slice(0, 14) || "unknown";
+  return path.join(stateDir, `riddle-proof-state-${stamp}-${crypto.randomUUID().slice(0, 8)}.json`);
+}
+
 function ensureParent(filePath: string) {
   mkdirSync(path.dirname(filePath), { recursive: true });
 }
@@ -182,6 +201,19 @@ function heartbeat(
 
 function jsonParam(payload: Record<string, unknown>) {
   return JSON.stringify(payload);
+}
+
+function redactedWorkflowParams(params: RiddleProofWorkflowParams) {
+  const secretKeys = new Set([
+    "auth_localStorage_json",
+    "auth_cookies_json",
+    "auth_headers_json",
+  ]);
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    output[key] = secretKeys.has(key) && value ? "[redacted]" : value;
+  }
+  return output;
 }
 
 function engineStatePath(result: RiddleProofEngineResult, state: RiddleProofRunState) {
@@ -803,6 +835,10 @@ export async function runRiddleProofEngineHarness(
 ): Promise<RiddleProofRunResult> {
   const state = loadRunState(input);
   state.request = normalizeRunParams({ ...state.request, ...input.request });
+  state.request.engine_state_path =
+    nonEmptyString(input.resume_params?.state_path) ||
+    nonEmptyString(state.request.engine_state_path) ||
+    createEngineStatePath(state, input.config);
   const request = state.request;
   const agent = input.agent || createDisabledRiddleProofAgentAdapter();
   const maxIterations = Math.max(
@@ -863,12 +899,17 @@ export async function runRiddleProofEngineHarness(
         branch: state.branch || null,
       },
     });
+    const engineCallStartedAt = timestamp();
+    const engineCallStartedMs = Date.now();
     recordEvent(state, {
       kind: "engine.call",
       checkpoint: "engine_call",
       stage,
       summary: "Calling Riddle Proof engine.",
-      details: { params: nextParams },
+      details: {
+        params: redactedWorkflowParams(nextParams),
+        started_at: engineCallStartedAt,
+      },
     });
 
     let result: RiddleProofEngineResult;
@@ -876,12 +917,24 @@ export async function runRiddleProofEngineHarness(
       result = await engine.execute(nextParams);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      recordEvent(state, {
+        kind: "engine.exception",
+        checkpoint: "engine_call_failed",
+        stage,
+        summary: message,
+        details: {
+          duration_ms: Date.now() - engineCallStartedMs,
+          started_at: engineCallStartedAt,
+          finished_at: timestamp(),
+        },
+      });
       return blockerResult(state, lastResult, {
         code: "riddle_engine_exception",
         checkpoint: "engine_call_failed",
         message,
       });
     }
+    const engineCallDurationMs = Date.now() - engineCallStartedMs;
 
     lastResult = result;
     const engineState = engineStatePath(result, state);
@@ -909,6 +962,9 @@ export async function runRiddleProofEngineHarness(
         ok: result.ok ?? null,
         engine_state_path: engineState || null,
         checkpoint: result.checkpoint || null,
+        duration_ms: engineCallDurationMs,
+        started_at: engineCallStartedAt,
+        finished_at: timestamp(),
       },
     });
 
