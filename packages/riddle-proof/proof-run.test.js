@@ -580,6 +580,9 @@ async function run() {
   const reconBlockedState = readJson(reconLoopStatePath);
   assert(reconBlockedState.stage_attempts.recon.count === 1, 'recon checkpoint should count as a stage attempt');
   assert(reconBlockedState.recon_status === 'needs_supervisor_judgment', 'recon should wait for supervising-agent judgment');
+  assert(Array.isArray(reconBlockedState.runtime_events), 'workflow runs should record runtime observability events');
+  assert(reconBlockedState.runtime_events.some((event) => event.kind === 'workflow.step.started' && event.step === 'recon'), 'runtime events should record the active workflow step');
+  assert(typeof reconBlocked.executed[0].duration_ms === 'number', 'executed steps should include duration_ms');
 
   const reconRetried = await localEngine.execute({
     action: 'run',
@@ -670,6 +673,8 @@ async function run() {
   assert(shipped.checkpointContract.ship_gate.ok === true, 'auto-ship should expose a passing ship gate contract');
   const afterShip = readJson(reconLoopStatePath);
   assert(afterShip.stage_attempts.ship.count === 1, 'ship attempt should be recorded');
+  assert(afterShip.current_runtime_step === null, 'completed workflow steps should clear the active runtime step');
+  assert(afterShip.last_runtime_step.step === 'ship', 'completed workflow steps should record the last runtime step');
 
   const holdReadyStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-hold-ready-')), 'state.json');
   writeJson(holdReadyStatePath, {

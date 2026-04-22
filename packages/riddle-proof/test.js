@@ -710,6 +710,13 @@ assert.equal(engineHarnessResult.branch, "agent/openclaw/riddle-proof-engine-har
 assert.equal(engineHarnessResult.current_stage, "ship");
 assert.equal(engineHarnessResult.state_path, path.join(engineFixture, "harness-state.json"));
 assert.equal(readRiddleProofRunStatus(engineHarnessResult.state_path).status, "shipped");
+const engineHarnessState = JSON.parse(readFileSync(engineHarnessResult.state_path, "utf-8"));
+const firstEngineCallEvent = engineHarnessState.events.find((event) => event.kind === "engine.call");
+const firstEngineResultEvent = engineHarnessState.events.find((event) => event.kind === "engine.result");
+assert.equal(firstEngineCallEvent.details.params.auth_localStorage_json, "[redacted]");
+assert.equal(typeof firstEngineCallEvent.details.started_at, "string");
+assert.equal(typeof firstEngineResultEvent.details.duration_ms, "number");
+assert.equal(typeof engineCalls[0].state_path, "string");
 assert.equal(engineCalls[0].auth_localStorage_json, "{\"session\":\"local\"}");
 assert.equal(engineCalls[0].auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
 assert.equal(engineCalls[0].auth_headers_json, "{\"Authorization\":\"Bearer token\"}");

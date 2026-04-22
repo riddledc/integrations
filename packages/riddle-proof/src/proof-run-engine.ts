@@ -115,6 +115,129 @@ function updateState(statePath: string, mutate: (state: any) => void) {
   return state;
 }
 
+interface WorkflowStepResult {
+  ok: boolean;
+  step: WorkflowStage;
+  haltedForApproval?: boolean;
+  autoApproved?: boolean;
+  approval?: unknown;
+  raw?: unknown;
+  error?: string | null;
+  stdout?: string;
+  stderr?: string;
+  duration_ms?: number;
+  started_at?: string;
+  finished_at?: string;
+}
+
+interface RuntimeStepTimer {
+  startedAt: string;
+  startedMs: number;
+}
+
+const RUNTIME_EVENT_LIMIT = 100;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function appendRuntimeEventToState(state: any, event: Record<string, unknown>) {
+  const events = Array.isArray(state.runtime_events) ? state.runtime_events : [];
+  state.runtime_events = [...events, event].slice(-RUNTIME_EVENT_LIMIT);
+  state.runtime_updated_at = event.ts;
+}
+
+function beginRuntimeStep(
+  statePath: string,
+  action: WorkflowAction,
+  step: WorkflowStage,
+  workflowPath: string,
+): RuntimeStepTimer {
+  const timer = {
+    startedAt: nowIso(),
+    startedMs: Date.now(),
+  };
+  updateState(statePath, (state) => {
+    const current = {
+      step,
+      action,
+      status: "running",
+      started_at: timer.startedAt,
+      workflow_file: path.basename(workflowPath),
+    };
+    state.current_runtime_step = current;
+    appendRuntimeEventToState(state, {
+      ts: timer.startedAt,
+      kind: "workflow.step.started",
+      step,
+      action,
+      summary: `Started ${step} workflow step.`,
+      details: {
+        workflow_file: path.basename(workflowPath),
+      },
+    });
+  });
+  return timer;
+}
+
+function finishRuntimeStep(
+  statePath: string,
+  action: WorkflowAction,
+  result: WorkflowStepResult,
+  timer: RuntimeStepTimer,
+): WorkflowStepResult {
+  const finishedAt = nowIso();
+  const durationMs = Date.now() - timer.startedMs;
+  const summary =
+    result.haltedForApproval ? `${result.step} halted for approval.` :
+      result.ok ? `Finished ${result.step} workflow step.` :
+        `${result.step} workflow step failed.`;
+
+  updateState(statePath, (state) => {
+    const completed = {
+      step: result.step,
+      action,
+      status: result.haltedForApproval ? "approval_required" : result.ok ? "completed" : "failed",
+      started_at: timer.startedAt,
+      finished_at: finishedAt,
+      duration_ms: durationMs,
+      ok: result.ok,
+      halted_for_approval: result.haltedForApproval || false,
+      auto_approved: result.autoApproved || false,
+      error: result.error || null,
+    };
+    state.current_runtime_step = null;
+    state.last_runtime_step = completed;
+    appendRuntimeEventToState(state, {
+      ts: finishedAt,
+      kind: "workflow.step.finished",
+      step: result.step,
+      action,
+      summary,
+      details: completed,
+    });
+  });
+
+  return {
+    ...result,
+    started_at: timer.startedAt,
+    finished_at: finishedAt,
+    duration_ms: durationMs,
+  };
+}
+
+function executedStep(res: WorkflowStepResult, extra: Record<string, unknown> = {}) {
+  const output: Record<string, unknown> = {
+    step: res.step,
+    ok: res.ok,
+    haltedForApproval: res.haltedForApproval || false,
+    autoApproved: res.autoApproved || false,
+    ...extra,
+  };
+  if (typeof res.duration_ms === "number") output.duration_ms = res.duration_ms;
+  return output;
+}
+
 function stageAdvanceOptionsFrom(stage: WorkflowStage) {
   const currentIndex = WORKFLOW_STAGE_ORDER.indexOf(stage);
   return WORKFLOW_STAGE_ORDER.slice(currentIndex);
@@ -639,55 +762,76 @@ export async function executeWorkflow(
     ? [process.env.RIDDLE_PROOF_LOBSTER_SCRIPT]
     : [];
 
-  const runOne = (step: WorkflowStage) => {
+  const runOne = (step: WorkflowStage): WorkflowStepResult => {
     const args = step === "setup" ? buildSetupArgs(params, config) : {};
+    const stepWorkflowFile = workflowFile(config.riddleProofDir, step);
+    const timer = beginRuntimeStep(config.statePath, action, step, stepWorkflowFile);
     let output: any;
     try {
       output = JSON.parse(
-        execFileSync(lobsterCommand, [...lobsterPrefix, "run", "--file", workflowFile(config.riddleProofDir, step), "--args-json", JSON.stringify(args)], {
+        execFileSync(lobsterCommand, [...lobsterPrefix, "run", "--file", stepWorkflowFile, "--args-json", JSON.stringify(args)], {
           encoding: "utf-8",
           env,
         }),
       );
     } catch (error: any) {
-      return {
+      return finishRuntimeStep(config.statePath, action, {
         ok: false,
         step,
         error: error?.message || String(error),
         stdout: String(error?.stdout || ""),
         stderr: String(error?.stderr || ""),
-      };
+      }, timer);
     }
     if (output?.status === "needs_approval") {
       if (!params.auto_approve) {
-        return {
+        return finishRuntimeStep(config.statePath, action, {
           ok: false,
           haltedForApproval: true,
           step,
           approval: output.requiresApproval || null,
           raw: output,
-        };
+        }, timer);
       }
       const token = output?.requiresApproval?.resumeToken;
-      if (!token) throw new Error(`${step} requested approval without a resume token.`);
-      const resumed = JSON.parse(
-        execFileSync(lobsterCommand, [...lobsterPrefix, "resume", "--token", token, "--approve", "yes"], {
-          encoding: "utf-8",
-          env,
-        }),
-      );
-      return {
+      if (!token) {
+        return finishRuntimeStep(config.statePath, action, {
+          ok: false,
+          step,
+          error: `${step} requested approval without a resume token.`,
+          raw: output,
+        }, timer);
+      }
+      let resumed: any;
+      try {
+        resumed = JSON.parse(
+          execFileSync(lobsterCommand, [...lobsterPrefix, "resume", "--token", token, "--approve", "yes"], {
+            encoding: "utf-8",
+            env,
+          }),
+        );
+      } catch (error: any) {
+        return finishRuntimeStep(config.statePath, action, {
+          ok: false,
+          step,
+          autoApproved: true,
+          error: error?.message || String(error),
+          stdout: String(error?.stdout || ""),
+          stderr: String(error?.stderr || ""),
+        }, timer);
+      }
+      return finishRuntimeStep(config.statePath, action, {
         ok: resumed?.ok !== false,
         step,
         autoApproved: true,
         raw: resumed,
-      };
+      }, timer);
     }
-    return {
+    return finishRuntimeStep(config.statePath, action, {
       ok: output?.ok !== false,
       step,
       raw: output,
-    };
+    }, timer);
   };
 
   let effectiveAdvanceStage: WorkflowStage | null = params.advance_stage || null;
@@ -856,7 +1000,7 @@ export async function executeWorkflow(
 
     if (!state || !state.workspace_ready || params.advance_stage === "setup") {
       const setupRes = runOne("setup");
-      executed.push({ step: "setup", ok: setupRes.ok, haltedForApproval: setupRes.haltedForApproval || false, autoApproved: setupRes.autoApproved || false });
+      executed.push(executedStep(setupRes));
       if (!setupRes.ok || setupRes.haltedForApproval) {
         return failedRun("setup", setupRes.haltedForApproval ? "setup halted for approval" : "setup failed", setupRes, {
           checkpoint: "setup_blocked",
@@ -1075,7 +1219,7 @@ export async function executeWorkflow(
 
     if (!state?.recon_results || state?.stage === "setup" || state?.stage === "preflight" || ["needs_agent_decision", "needs_supervisor_judgment"].includes(state?.recon_status || "") || requestedStage === "recon") {
       const reconRes = runOne("recon");
-      executed.push({ step: "recon", ok: reconRes.ok, haltedForApproval: reconRes.haltedForApproval || false, autoApproved: reconRes.autoApproved || false });
+      executed.push(executedStep(reconRes));
       if (!reconRes.ok || reconRes.haltedForApproval) {
         return failedRun("recon", reconRes.haltedForApproval ? "recon halted for approval" : "recon failed", reconRes, {
           checkpoint: "recon_failed",
@@ -1124,7 +1268,7 @@ export async function executeWorkflow(
     state = readState(config.statePath);
     if (!authorReady(state) || effectiveAdvanceStage === "author") {
       const authorRes = runOne("author");
-      executed.push({ step: "author", ok: authorRes.ok, haltedForApproval: authorRes.haltedForApproval || false, autoApproved: authorRes.autoApproved || false });
+      executed.push(executedStep(authorRes));
       if (!authorRes.ok || authorRes.haltedForApproval) {
         return failedRun("author", authorRes.haltedForApproval ? "author halted for approval" : "author failed", authorRes, {
           checkpoint: "author_failed",
@@ -1247,7 +1391,7 @@ export async function executeWorkflow(
 
     if (effectiveAdvanceStage === "implement") {
       const implementRes = runOne("implement");
-      executed.push({ step: "implement", ok: implementRes.ok, haltedForApproval: implementRes.haltedForApproval || false, autoApproved: implementRes.autoApproved || false });
+      executed.push(executedStep(implementRes));
       if (implementRes.haltedForApproval) {
         return failedRun("implement", "implement halted for approval", implementRes, {
           checkpoint: "implement_blocked",
@@ -1344,7 +1488,7 @@ export async function executeWorkflow(
       let verifyRes: any = { ok: true, step: "verify", reusedEvidence: canReuseVerifyEvidence };
       if (!canReuseVerifyEvidence) {
         verifyRes = runOne("verify");
-        executed.push({ step: "verify", ok: verifyRes.ok, haltedForApproval: verifyRes.haltedForApproval || false, autoApproved: verifyRes.autoApproved || false });
+        executed.push(executedStep(verifyRes));
         if (!verifyRes.ok || verifyRes.haltedForApproval) {
           return failedRun("verify", verifyRes.haltedForApproval ? "verify halted for approval" : "verify failed", verifyRes, {
             checkpoint: "verify_failed",
@@ -1353,7 +1497,7 @@ export async function executeWorkflow(
           });
         }
       } else {
-        executed.push({ step: "verify", ok: true, reusedEvidence: true, haltedForApproval: false, autoApproved: false });
+        executed.push(executedStep(verifyRes, { reusedEvidence: true }));
       }
 
       state = readState(config.statePath);
@@ -1500,7 +1644,7 @@ export async function executeWorkflow(
           details: { ...verifyDetails, shipGate },
         });
         const shipRes = runOne("ship");
-        executed.push({ step: "ship", ok: shipRes.ok, haltedForApproval: shipRes.haltedForApproval || false, autoApproved: shipRes.autoApproved || false });
+        executed.push(executedStep(shipRes));
         if (!shipRes.ok || shipRes.haltedForApproval) {
           const shipNextAction = shipRes?.error && String(shipRes.error).includes("temporary proof branch")
             ? "product bug: ship resolved a temporary proof branch; resolve the PR head branch before retrying ship"
@@ -1689,7 +1833,7 @@ export async function executeWorkflow(
         return shipGateBlocked(state, executed, { shipAssessment: shipAssessment.raw });
       }
       const shipRes = runOne("ship");
-      executed.push({ step: "ship", ok: shipRes.ok, haltedForApproval: shipRes.haltedForApproval || false, autoApproved: shipRes.autoApproved || false });
+      executed.push(executedStep(shipRes));
       if (!shipRes.ok || shipRes.haltedForApproval) {
         return failedRun("ship", shipRes.haltedForApproval ? "ship halted for approval" : "ship failed", shipRes, {
           checkpoint: "ship_failed",
