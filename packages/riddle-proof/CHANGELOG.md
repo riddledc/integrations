@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.3
+
+### Patch Changes
+
+- 23f4ad4: Add proof workflow substep timing events and surface active engine substeps from OpenClaw status snapshots.
+
 ## 0.5.2
 
 ### Patch Changes
