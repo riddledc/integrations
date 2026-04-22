@@ -1,5 +1,15 @@
 # @riddledc/riddle-proof
 
+## 0.5.0
+
+### Minor Changes
+
+- 7205bce: Add capture diagnostics helpers for redacted Riddle server preview evidence.
+
+### Patch Changes
+
+- f4c5ae2: Add generic authenticated proof inputs for OpenClaw wrappers: `auth_localStorage_json`, `auth_cookies_json`, and `auth_headers_json`.
+
 ## 0.4.5
 
 ### Patch Changes

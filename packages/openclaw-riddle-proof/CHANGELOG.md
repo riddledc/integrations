@@ -1,5 +1,20 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.9
+
+### Patch Changes
+
+- f4c5ae2: Add generic authenticated proof inputs for OpenClaw wrappers: `auth_localStorage_json`, `auth_cookies_json`, and `auth_headers_json`.
+- f2f7524: Add interface-agnostic background proof runs. `riddle_proof_change` now accepts
+  `run_mode: "background"` (or plugin config `defaultRunMode: "background"`) to
+  return a run state immediately while the proof continues in the gateway process.
+  Background runs append a durable `run.wake.requested` event when they settle so
+  Discord, Telegram, iMessage, CLI, or other OC surfaces can wake the originating
+  session with the same status/inspect/review contract.
+- Updated dependencies [f4c5ae2]
+- Updated dependencies [7205bce]
+  - @riddledc/riddle-proof@0.5.0
+
 ## 0.4.8
 
 ### Patch Changes
