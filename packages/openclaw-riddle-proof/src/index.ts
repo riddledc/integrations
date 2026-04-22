@@ -92,6 +92,7 @@ export interface OpenClawRiddleProofRuntimeConfig {
   defaultMaxIterations?: number;
   defaultShipMode?: "none" | "ship";
   defaultRunMode?: OpenClawRiddleProofRunMode;
+  autoReviewShipModeNone?: boolean;
   codexCommand?: CodexExecAgentConfig["codexCommand"];
   codexHome?: CodexExecAgentConfig["codexHome"];
   codexModel?: CodexExecAgentConfig["codexModel"];
@@ -175,6 +176,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const proofReviewMode = cfg.proofReviewMode === "main_agent" ? "main_agent" : "codex_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
+  const autoReviewShipModeNone = cfg.autoReviewShipModeNone === false ? false : true;
   const codexSandbox =
     cfg.codexSandbox === "read-only" ||
     cfg.codexSandbox === "workspace-write" ||
@@ -192,6 +194,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     defaultMaxIterations: typeof cfg.defaultMaxIterations === "number" ? cfg.defaultMaxIterations : undefined,
     defaultShipMode,
     defaultRunMode,
+    autoReviewShipModeNone,
     codexCommand: typeof cfg.codexCommand === "string" ? cfg.codexCommand : undefined,
     codexHome: typeof cfg.codexHome === "string" ? cfg.codexHome : undefined,
     codexModel: typeof cfg.codexModel === "string" ? cfg.codexModel : undefined,
@@ -261,6 +264,7 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
     defaultMaxIterations: config.defaultMaxIterations,
     defaultShipMode: config.defaultShipMode,
     defaultRunMode: config.defaultRunMode,
+    autoReviewShipModeNone: config.autoReviewShipModeNone,
     codexCommand: config.codexCommand,
     codexHome: config.codexHome,
     codexModel: config.codexModel,
@@ -409,7 +413,7 @@ function startOpenClawRiddleProofBackground(
 
 function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofAgentAdapter | undefined {
   const wrapForReview = (agent: RiddleProofAgentAdapter) =>
-    config.proofReviewMode === "main_agent" ? createMainAgentProofReviewAdapter(agent) : agent;
+    config.proofReviewMode === "main_agent" ? createMainAgentProofReviewAdapter(agent, config) : agent;
   if (config.agent) return wrapForReview(config.agent);
   if (config.agentMode !== "codex_exec") return undefined;
   return wrapForReview(createCodexExecAgentAdapter({
@@ -731,12 +735,80 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
   };
 }
 
-function createMainAgentProofReviewAdapter(delegate: RiddleProofAgentAdapter): RiddleProofAgentAdapter {
+function effectiveShipMode(
+  request: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]["request"],
+  config: OpenClawRiddleProofRuntimeConfig,
+) {
+  return request.ship_mode || config.defaultShipMode || "ship";
+}
+
+function afterScreenshotArtifact(inspection: Record<string, unknown>) {
+  const artifacts = Array.isArray(inspection.image_artifacts) ? inspection.image_artifacts : [];
+  return artifacts.some((item) => {
+    const record = recordValue(item);
+    return record && (record.role === "after" || record.name === "after") && stringValue(record.url);
+  });
+}
+
+function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
+  const visualDelta = recordValue(inspection.visual_delta);
+  return Boolean(
+    inspection.ok === true &&
+    inspection.ready_to_ship_candidate === true &&
+    inspection.route_matched === true &&
+    afterScreenshotArtifact(inspection) &&
+    (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
+  );
+}
+
+function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
+  return {
+    decision: "ready_to_ship",
+    summary:
+      "Auto-reviewed proof for ship_mode=none. The inspection packet marks this as a ready-to-ship candidate, the target route matched, an after screenshot artifact exists, and this mode can only advance to a held ready state without shipping.",
+    recommended_stage: "ship",
+    continue_with_stage: "ship",
+    escalation_target: "agent",
+    reasons: [
+      "ship_mode is none, so advancing can only reach the non-shipping ready_to_ship state.",
+      "The inspection packet marked the proof as a ready_to_ship_candidate.",
+      "The target route matched across available observations.",
+      "An after screenshot artifact was captured.",
+      "No failed visual delta was reported.",
+    ],
+    source: "openclaw_auto_ship_mode_none",
+    inspection_summary: {
+      expected_path: inspection.expected_path || null,
+      route_matched: inspection.route_matched,
+      visual_delta: inspection.visual_delta || null,
+      image_artifact_count: Array.isArray(inspection.image_artifacts) ? inspection.image_artifacts.length : 0,
+    },
+  };
+}
+
+function createMainAgentProofReviewAdapter(
+  delegate: RiddleProofAgentAdapter,
+  config: OpenClawRiddleProofRuntimeConfig,
+): RiddleProofAgentAdapter {
   return {
     assessRecon: (context) => delegate.assessRecon(context),
     authorProofPacket: (context) => delegate.authorProofPacket(context),
     implementChange: (context) => delegate.implementChange(context),
     async assessProof(context) {
+      const fullState = recordValue(context.fullRiddleState) || {};
+      const inspection = buildProofInspection(context.state, fullState, context.checkpoint);
+      if (
+        config.autoReviewShipModeNone !== false &&
+        effectiveShipMode(context.request, config) === "none" &&
+        proofInspectionCanAutoAdvance(inspection)
+      ) {
+        const payload = autoShipModeNoneAssessment(inspection);
+        return {
+          ok: true,
+          payload,
+          summary: payload.summary,
+        };
+      }
       const proofReview = buildMainAgentProofReviewPacket(context);
       return {
         ok: false,

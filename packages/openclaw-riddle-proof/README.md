@@ -32,6 +32,12 @@ The OpenClaw agent can inspect the screenshot evidence in its own conversation
 context and then resume the same run with `riddle_proof_review`.
 The ready verdict is intentionally strict: for visual polish, screenshots must
 prove a visible reviewer-scale change, not just a code or CSS difference.
+For smoke/debug runs where the effective ship mode is `none`, the wrapper can
+auto-advance this proof-review checkpoint only when the inspection packet already
+marks the evidence as a ready-to-ship candidate. That removes a handoff loop
+without allowing a merge, ready mark, or ship action. Set
+`autoReviewShipModeNone: false` to force manual review even in non-shipping
+runs.
 
 This keeps the currently working OpenClaw/Discord proof flow on the public
 `riddle_proof_change` path rather than a private skill/plugin prototype.
@@ -121,6 +127,11 @@ main-agent proof verdict. It is intended for runs that stopped at
 `main_agent_proof_review_required`; the submitted judgment is passed back to the
 underlying engine as `proof_assessment_json` so the workflow can ship, iterate,
 or escalate without losing run state.
+If `proofReviewMode: "main_agent"` and the run is non-shipping
+(`ship_mode: "none"` or `defaultShipMode: "none"`), the wrapper may auto-submit
+a conservative `ready_to_ship` proof assessment when `riddle_proof_inspect`
+would already return `ready_to_ship_candidate: true`. This is only a QOL path
+for held proof runs; shipping modes still require explicit proof review.
 
 ## Runtime Boundary
 
