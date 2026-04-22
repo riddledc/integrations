@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.18
+
+### Patch Changes
+
+- b6206f2: Auto-advance main-agent proof review for non-shipping runs when proof inspection already marks the evidence as ready to ship.
+
 ## 0.4.17
 
 ### Patch Changes
