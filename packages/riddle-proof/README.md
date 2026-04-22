@@ -8,10 +8,10 @@ Proof standardizes evidence, proof assessment, ship gates, terminal results,
 and integration metadata.
 
 This package includes the reusable runner harness that drives a request through
-preflight, setup, implementation, proof capture, judgment, shipping, and notification
-adapters. The current OpenClaw `proofed_change_run` implementation remains the
-reference workflow while adapter implementations are extracted behind parity
-tests.
+preflight, setup, implementation, proof capture, judgment, shipping, and
+notification adapters. The OpenClaw wrapper uses the public
+`riddle_proof_change` tool and the packaged `@riddledc/riddle-proof-run`
+checkpoint engine.
 
 ## Initial Scope
 
@@ -155,8 +155,8 @@ shape, and errors without rerunning blind.
 
 ## OpenClaw Adapter Boundary
 
-`@riddledc/riddle-proof/openclaw` translates the current
-`proofed_change_run`-style tool params into generic `RiddleProofRunParams`.
+`@riddledc/riddle-proof/openclaw` translates OpenClaw Riddle Proof tool params
+into generic `RiddleProofRunParams`.
 It preserves Discord routing metadata as `integration_context` and parses
 `assertions_json` into the shared assertions field. Compatibility params such as
 `ship_after_verify` and the explicit `leave_draft` escape hatch are preserved so

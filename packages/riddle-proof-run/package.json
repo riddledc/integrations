@@ -1,0 +1,50 @@
+{
+  "name": "@riddledc/riddle-proof-run",
+  "version": "0.1.0",
+  "description": "Riddle Proof checkpoint engine and bundled runtime assets.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/riddle-proof-run"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./core": "./dist/core.js",
+    "./engine": "./dist/engine.js"
+  },
+  "files": [
+    "dist",
+    "lib",
+    "runtime",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "scripts": {
+    "build": "tsup && cp openclaw.plugin.json dist/openclaw.plugin.json",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.32.35"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}

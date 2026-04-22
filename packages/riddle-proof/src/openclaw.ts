@@ -68,7 +68,7 @@ export function openClawIntegrationContext(params: OpenClawProofedChangeParams):
     source_url: params.discord_source_url,
     metadata: compactRecord({
       wrapper: "openclaw",
-      tool: "proofed_change_run",
+      tool: "riddle_proof_change",
     }) as Record<string, unknown>,
   }, "openclaw") as IntegrationContext;
 }
