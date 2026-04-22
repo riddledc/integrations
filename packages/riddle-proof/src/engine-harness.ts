@@ -455,6 +455,21 @@ function requirePayload(
   return null;
 }
 
+function engineFailureBlocker(result: RiddleProofEngineResult, checkpoint: string): RiddleProofBlocker | null {
+  if (result.ok !== false) return null;
+  if (!checkpoint.endsWith("_failed") && !checkpoint.endsWith("_blocked")) return null;
+  return {
+    code: checkpoint,
+    checkpoint,
+    message: result.summary || `Riddle Proof engine stopped at ${checkpoint}.`,
+    details: compactRecord({
+      error: result.error,
+      approval: result.approval,
+      checkpointContract: result.checkpointContract || null,
+    }),
+  };
+}
+
 function terminalResult(
   state: RiddleProofRunState,
   status: RiddleProofStatus,
@@ -647,6 +662,11 @@ async function routeCheckpoint(
     return {
       terminal: terminalResult(state, "completed", result, result.summary || "Riddle Proof engine completed."),
     };
+  }
+
+  const failureBlocker = engineFailureBlocker(result, checkpoint);
+  if (failureBlocker) {
+    return { blocker: failureBlocker };
   }
 
   if ([
