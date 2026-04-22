@@ -78,6 +78,19 @@ way to a ready PR after proof and CI; `leave_draft: true` is only an explicit
 debug or user-request escape hatch. The notification adapter is where a host
 updates Discord, OpenClaw, GitHub, or another integration.
 
+## Runtime Scratch Space
+
+The packaged proof-run setup uses isolated git worktrees for before and after
+states. By default those worktrees now live under
+`/tmp/.riddle-proof-worktrees`, with dependency caches under the matching local
+temp root. This keeps repeated `node_modules` cache materialization on local
+scratch storage instead of walking large dependency trees on EFS or other shared
+workspace filesystems.
+
+Set `RIDDLE_PROOF_WORKTREE_ROOT` to choose an explicit location. Set
+`RIDDLE_PROOF_USE_WORKSPACE_WORKTREE_ROOT=1` to keep the previous behavior of
+placing proof worktrees next to the active repository.
+
 ## Capture Diagnostics
 
 `@riddledc/riddle-proof/diagnostics` standardizes the evidence contract around
