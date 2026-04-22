@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.16
+
+### Patch Changes
+
+- fb219e9: Cache Riddle Proof dependency installs across proof runs by package/lockfile fingerprint so repeated browser proof runs can reuse installed node_modules instead of reinstalling for each new worktree.
+- Updated dependencies [fb219e9]
+  - @riddledc/riddle-proof@0.5.6
+
 ## 0.4.15
 
 ### Patch Changes
