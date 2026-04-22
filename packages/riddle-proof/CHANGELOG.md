@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.4
+
+### Patch Changes
+
+- 8ea62e9: Preserve real engine failure blockers during dry-run proofs and add dependency-install phase visibility during setup.
+
 ## 0.5.3
 
 ### Patch Changes

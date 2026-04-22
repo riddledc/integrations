@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.14
+
+### Patch Changes
+
+- 8ea62e9: Preserve real engine failure blockers during dry-run proofs and add dependency-install phase visibility during setup.
+- Updated dependencies [8ea62e9]
+  - @riddledc/riddle-proof@0.5.4
+
 ## 0.4.13
 
 ### Patch Changes
