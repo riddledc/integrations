@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.2
+
+### Patch Changes
+
+- 7f0d5f9: Fold the Riddle Proof checkpoint engine and bundled runtime into `@riddledc/riddle-proof`, and let the OpenClaw wrapper load that packaged engine by default instead of depending on a separate private runtime plugin.
+
 ## 0.5.1
 
 ### Patch Changes
