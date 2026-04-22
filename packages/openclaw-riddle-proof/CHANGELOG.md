@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.20
+
+### Patch Changes
+
+- 3cd4e9b: Give normal proof runs more default iteration runway while adding per-stage loop caps so recon, authoring, implementation, verification, and non-shipping auto-review can complete without allowing a bad phase to spin indefinitely.
+- Updated dependencies [3cd4e9b]
+  - @riddledc/riddle-proof@0.5.9
+
 ## 0.4.19
 
 ### Patch Changes
