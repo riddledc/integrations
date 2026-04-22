@@ -1,12 +1,12 @@
 """Setup: create worktrees, install deps, validate args, write state.
 
 Idempotent — safe to re-run. Creates per-run worktrees under the active
-workspace root by default:
-  <workspace>/.riddle-proof-worktrees/riddle-proof-<run_id>-before
-  <workspace>/.riddle-proof-worktrees/riddle-proof-<run_id>-after
+local temp storage by default:
+  /tmp/.riddle-proof-worktrees/riddle-proof-<run_id>-before
+  /tmp/.riddle-proof-worktrees/riddle-proof-<run_id>-after
 """
 
-import json, subprocess as sp, os, sys, shutil, time
+import json, subprocess as sp, os, sys, shutil, time, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
 
@@ -160,8 +160,14 @@ def resolve_worktree_root(repo_dir):
     configured = (s.get('worktree_root') or os.environ.get('RIDDLE_PROOF_WORKTREE_ROOT') or '').strip()
     if configured:
         return os.path.abspath(os.path.expanduser(configured))
-    repo_parent = os.path.dirname(os.path.abspath(repo_dir))
-    return os.path.join(repo_parent, '.riddle-proof-worktrees')
+    if os.environ.get('RIDDLE_PROOF_USE_WORKSPACE_WORKTREE_ROOT', '').strip().lower() in ('1', 'true', 'yes'):
+        repo_parent = os.path.dirname(os.path.abspath(repo_dir))
+        return os.path.join(repo_parent, '.riddle-proof-worktrees')
+
+    # Proof worktrees are scratch data. Keep them on local temp storage by
+    # default so dependency cache materialization does not crawl across EFS or
+    # other shared workspace filesystems.
+    return os.path.join(tempfile.gettempdir(), '.riddle-proof-worktrees')
 
 
 def cleanup_legacy_branch_worktrees(repo_dir, branch_name):
