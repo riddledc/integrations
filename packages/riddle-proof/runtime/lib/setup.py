@@ -77,6 +77,13 @@ def ensure_deps(project_dir, reuse_from=''):
     return result.get('status', '')
 
 
+def dependency_fingerprint(project_dir):
+    if not project_dir:
+        return ''
+    result = workspace_core('dependency-fingerprint', {'projectDir': project_dir}, timeout=30)
+    return result.get('fingerprint', '') or ''
+
+
 def record_setup_phase(phase, status='running', summary=''):
     global s
     ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
@@ -129,6 +136,24 @@ def ensure_deps_phase(phase, project_dir, reuse_from='', summary=''):
         raise
     record_setup_phase(phase, 'completed', status or 'no dependency install needed')
     return status
+
+
+def dependencies_match(left_dir, right_dir):
+    left = dependency_fingerprint(left_dir)
+    right = dependency_fingerprint(right_dir)
+    return bool(left and right and left == right)
+
+
+def compatible_reuse_source(source_dir, target_dirs):
+    if not source_dir:
+        return ''
+    source = dependency_fingerprint(source_dir)
+    if not source:
+        return ''
+    for target_dir in target_dirs:
+        if target_dir and dependency_fingerprint(target_dir) == source:
+            return source_dir
+    return ''
 
 
 def resolve_worktree_root(repo_dir):
@@ -401,17 +426,36 @@ print('After worktree: ' + AFTER_DIR + ' (' + AFTER_WORKTREE_BRANCH + ' -> ' + b
 apply_repo_profile(AFTER_DIR)
 save_state(s)
 
+target_dependency_dirs = [AFTER_DIR]
+if reference in ('before', 'both'):
+    target_dependency_dirs.append(BEFORE_DIR)
+
 reuse_source = repo_dir if os.path.exists(os.path.join(repo_dir, 'package.json')) else ''
-shared_status = ensure_deps_phase('shared_deps', reuse_source, summary='Ensuring shared repository dependencies.') if reuse_source else ''
-if shared_status:
-    print('Shared deps status: ' + shared_status)
+shared_reuse_source = compatible_reuse_source(reuse_source, target_dependency_dirs)
+shared_status = ''
+if shared_reuse_source:
+    shared_status = ensure_deps_phase('shared_deps', shared_reuse_source, summary='Ensuring shared repository dependencies.')
+    if shared_status:
+        print('Shared deps status: ' + shared_status)
+elif reuse_source:
+    record_setup_phase(
+        'shared_deps',
+        'completed',
+        'skipped: active workspace dependencies differ from proof worktrees',
+    )
+    print('Shared deps skipped: active workspace dependencies differ from proof worktrees')
 
 before_dep_status = ''
 if reference in ('before', 'both'):
-    before_dep_status = ensure_deps_phase('before_deps', BEFORE_DIR, reuse_from=reuse_source, summary='Ensuring before-worktree dependencies.')
+    before_dep_status = ensure_deps_phase('before_deps', BEFORE_DIR, reuse_from=shared_reuse_source, summary='Ensuring before-worktree dependencies.')
     print('Before deps status: ' + before_dep_status)
 
-after_dep_status = ensure_deps_phase('after_deps', AFTER_DIR, reuse_from=reuse_source, summary='Ensuring after-worktree dependencies.')
+after_reuse_source = ''
+if before_dep_status and dependencies_match(BEFORE_DIR, AFTER_DIR):
+    after_reuse_source = BEFORE_DIR
+elif shared_reuse_source:
+    after_reuse_source = shared_reuse_source
+after_dep_status = ensure_deps_phase('after_deps', AFTER_DIR, reuse_from=after_reuse_source, summary='Ensuring after-worktree dependencies.')
 print('After deps status: ' + after_dep_status)
 
 # Patch Next.js config in after worktree if needed

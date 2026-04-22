@@ -385,6 +385,9 @@ async function main() {
     case "ensure-deps":
       ok({ status: ensureDeps(payload) });
       return;
+    case "dependency-fingerprint":
+      ok({ fingerprint: computeDependencyFingerprint(payload.projectDir) });
+      return;
     default:
       throw new Error(`Unsupported command: ${command}`);
   }

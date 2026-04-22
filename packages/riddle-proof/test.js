@@ -776,4 +776,16 @@ assert.equal(dryRunFailureResult.status, "blocked");
 assert.equal(dryRunFailureResult.blocker.code, "setup_blocked");
 assert.equal(dryRunFailureResult.blocker.details.error, "workspace core timed out for ensure-deps");
 
+const workspaceCoreFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-workspace-core-"));
+writeFileSync(path.join(workspaceCoreFixture, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
+const workspaceCorePath = path.join(path.dirname(new URL(import.meta.url).pathname), "lib", "workspace-core.mjs");
+const fingerprintResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "dependency-fingerprint",
+  JSON.stringify({ projectDir: workspaceCoreFixture }),
+], { encoding: "utf-8" }));
+assert.equal(fingerprintResult.ok, true);
+assert.equal(typeof fingerprintResult.fingerprint, "string");
+assert.ok(fingerprintResult.fingerprint.length > 10);
+
 console.log(JSON.stringify({ ok: true }));
