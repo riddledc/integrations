@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.4
+
+### Patch Changes
+
+- a2e7c4f: Return the last observed server/build preview status when polling times out, including queued/running state, outputs, compute seconds, server errors, and build/container logs when available.
+
 ## 0.9.3
 
 ### Patch Changes
