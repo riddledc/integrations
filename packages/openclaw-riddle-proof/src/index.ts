@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import {
   appendRunEvent,
   createRunResult,
@@ -11,6 +12,7 @@ import {
   setRunStatus,
   type RiddleProofAgentAdapter,
   type RiddleProofEngine,
+  type RiddleProofRunParams,
   type RiddleProofRunResult,
   type RiddleProofRunState,
   type RiddleProofRunStatusSnapshot,
@@ -96,6 +98,13 @@ export interface OpenClawRiddleProofRuntimeConfig {
   codexTimeoutMs?: CodexExecAgentConfig["codexTimeoutMs"];
   codexSandbox?: CodexExecAgentConfig["codexSandbox"];
   codexFullAuto?: CodexExecAgentConfig["codexFullAuto"];
+}
+
+interface BackgroundWorkerData {
+  kind: "openclaw-riddle-proof-background";
+  request: RiddleProofRunParams;
+  state_path: string;
+  config: OpenClawRiddleProofRuntimeConfig;
 }
 
 export function createOpenClawRiddleProofResult(
@@ -240,6 +249,93 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
   persistRunState(state);
 }
 
+function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig): OpenClawRiddleProofRuntimeConfig {
+  return {
+    executionMode: config.executionMode,
+    agentMode: config.agentMode,
+    proofReviewMode: config.proofReviewMode,
+    riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+    riddleProofDir: config.riddleProofDir,
+    defaultReviewer: config.defaultReviewer,
+    stateDir: config.stateDir,
+    defaultMaxIterations: config.defaultMaxIterations,
+    defaultShipMode: config.defaultShipMode,
+    defaultRunMode: config.defaultRunMode,
+    codexCommand: config.codexCommand,
+    codexHome: config.codexHome,
+    codexModel: config.codexModel,
+    codexTimeoutMs: config.codexTimeoutMs,
+    codexSandbox: config.codexSandbox,
+    codexFullAuto: config.codexFullAuto,
+  };
+}
+
+function markBackgroundWorkerFailed(statePath: string, message: string) {
+  const state = readRunState(statePath);
+  if (!state) return;
+  state.blocker = {
+    code: "background_worker_failed",
+    checkpoint: state.last_checkpoint || "background_worker",
+    message,
+  };
+  appendRunEvent(state, {
+    kind: "run.background.failed",
+    checkpoint: state.blocker.checkpoint,
+    stage: state.current_stage || "setup",
+    summary: message,
+    details: { code: state.blocker.code },
+  });
+  setRunStatus(state, "failed");
+  persistRunState(state);
+  appendWakeRequest(state, createRunResult({
+    state,
+    status: "failed",
+    last_summary: message,
+  }));
+}
+
+async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
+  const config = data.config || {};
+  const result = await runRiddleProofEngineHarness({
+    request: data.request,
+    state_path: data.state_path,
+    max_iterations: data.request.max_iterations ?? config.defaultMaxIterations,
+    dry_run: data.request.dry_run,
+    auto_approve: data.request.auto_approve,
+    engine: config.engine,
+    agent: agentFromConfig(config),
+    config: {
+      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+      riddleProofDir: config.riddleProofDir,
+      defaultReviewer: config.defaultReviewer,
+      stateDir: config.stateDir,
+      defaultMaxIterations: config.defaultMaxIterations,
+      defaultShipMode: config.defaultShipMode,
+    },
+  });
+  const state = readRunState(data.state_path);
+  if (state) appendWakeRequest(state, result);
+  return result;
+}
+
+function startBackgroundWorker(request: RiddleProofRunParams, statePath: string, config: OpenClawRiddleProofRuntimeConfig) {
+  const worker = new Worker(new URL(import.meta.url), {
+    workerData: {
+      kind: "openclaw-riddle-proof-background",
+      request,
+      state_path: statePath,
+      config: serializableBackgroundConfig(config),
+    } satisfies BackgroundWorkerData,
+  });
+  worker.unref();
+  worker.on("error", (error) => {
+    markBackgroundWorkerFailed(statePath, error instanceof Error ? error.message : String(error));
+  });
+  worker.on("exit", (code) => {
+    if (code !== 0) markBackgroundWorkerFailed(statePath, `Riddle Proof background worker exited with code ${code}.`);
+  });
+}
+
 function runModeFrom(
   params: RiddleProofChangeParams,
   config: OpenClawRiddleProofRuntimeConfig,
@@ -279,49 +375,20 @@ function startOpenClawRiddleProofBackground(
   setRunStatus(state, "running");
   persistRunState(state);
 
-  setImmediate(() => {
-    void runRiddleProofEngineHarness({
-      request,
-      state,
-      state_path: statePath,
-      max_iterations: request.max_iterations ?? config.defaultMaxIterations,
-      dry_run: request.dry_run,
-      auto_approve: request.auto_approve,
-      engine: config.engine,
-      agent: agentFromConfig(config),
-      config: {
-        riddleEngineModuleUrl: config.riddleEngineModuleUrl,
-        riddleProofDir: config.riddleProofDir,
-        defaultReviewer: config.defaultReviewer,
-        stateDir: config.stateDir,
-        defaultMaxIterations: config.defaultMaxIterations,
-        defaultShipMode: config.defaultShipMode,
-      },
-    }).then((result) => {
-      appendWakeRequest(state, result);
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      state.blocker = {
-        code: "background_run_failed",
-        checkpoint: state.last_checkpoint || "background_run",
-        message,
-      };
-      appendRunEvent(state, {
-        kind: "run.background.failed",
-        checkpoint: state.blocker.checkpoint,
-        stage: state.current_stage || "setup",
-        summary: message,
-        details: { code: state.blocker.code },
+  if (config.engine || config.agent) {
+    setImmediate(() => {
+      void runBackgroundWorkerJob({
+        kind: "openclaw-riddle-proof-background",
+        request,
+        state_path: statePath,
+        config,
+      }).catch((error) => {
+        markBackgroundWorkerFailed(statePath, error instanceof Error ? error.message : String(error));
       });
-      setRunStatus(state, "failed");
-      persistRunState(state);
-      appendWakeRequest(state, createRunResult({
-        state,
-        status: "failed",
-        last_summary: message,
-      }));
     });
-  });
+  } else {
+    startBackgroundWorker(request, statePath, config);
+  }
 
   return createRunResult({
     state,
@@ -1108,4 +1175,21 @@ export default function register(api: any) {
     },
     { optional: true },
   );
+}
+
+if (!isMainThread) {
+  const data = workerData as BackgroundWorkerData | undefined;
+  if (data?.kind === "openclaw-riddle-proof-background") {
+    void runBackgroundWorkerJob(data).then((result) => {
+      parentPort?.postMessage({
+        ok: true,
+        status: result.status,
+        state_path: result.state_path,
+      });
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      markBackgroundWorkerFailed(data.state_path, message);
+      parentPort?.postMessage({ ok: false, error: message, state_path: data.state_path });
+    });
+  }
 }
