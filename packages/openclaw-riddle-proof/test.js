@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import register, {
@@ -13,6 +13,7 @@ import register, {
   createOpenClawRiddleProofResult,
   runOpenClawRiddleProof,
   inspectOpenClawRiddleProof,
+  readOpenClawRiddleProofStatus,
   submitOpenClawRiddleProofReview,
   syncOpenClawRiddleProof,
 } from "./dist/index.js";
@@ -198,6 +199,62 @@ assert.equal(engineModeResult.worktree_path, engineWorkdir);
 assert.equal(engineModeResult.branch, "agent/openclaw-wrapper-test");
 assert.deepEqual(wrapperAgentCalls, [engineWorkdir]);
 assert.equal(engineCalls.length, 2);
+
+const backgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-background-"));
+const backgroundEngineStatePath = path.join(backgroundFixture, "riddle-state.json");
+const backgroundWrapperStatePath = path.join(backgroundFixture, "wrapper-state.json");
+const backgroundEngineCalls = [];
+const backgroundResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    run_mode: "background",
+    dry_run: false,
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: backgroundWrapperStatePath,
+    state_path: backgroundEngineStatePath,
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute(engineParams) {
+        backgroundEngineCalls.push(engineParams);
+        writeFileSync(backgroundEngineStatePath, JSON.stringify({ branch: "agent/background-proof" }, null, 2));
+        return {
+          ok: true,
+          state_path: backgroundEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Background proof is ready for review.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+  },
+);
+assert.equal(backgroundResult.status, "running");
+assert.equal(backgroundResult.raw?.background, true);
+assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
+assert.equal(existsSync(backgroundWrapperStatePath), true);
+
+for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+assert.equal(backgroundEngineCalls.length, 1);
+let backgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+for (let attempt = 0; attempt < 50 && backgroundStatus?.status === "running"; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+}
+assert.equal(backgroundStatus?.status, "ready_to_ship");
+const backgroundState = JSON.parse(readFileSync(backgroundWrapperStatePath, "utf-8"));
+assert.equal(backgroundState.events[0].kind, "run.background.started");
+assert.equal(backgroundState.events.some((event) => event.checkpoint === "verify_ship_ready"), true);
+assert.equal(backgroundState.events.at(-1).kind, "run.wake.requested");
+assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
+  RIDDLE_PROOF_STATUS_TOOL_NAME,
+  RIDDLE_PROOF_SYNC_TOOL_NAME,
+]);
 
 const reviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-review-"));
 const reviewStatePath = path.join(reviewFixture, "riddle-state.json");

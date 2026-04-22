@@ -1,5 +1,7 @@
 import { Type } from "@sinclair/typebox";
-import { existsSync, readFileSync } from "node:fs";
+import crypto from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import {
   appendRunEvent,
   createRunResult,
@@ -41,7 +43,11 @@ export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 
-export type RiddleProofChangeParams = OpenClawProofedChangeParams;
+export type OpenClawRiddleProofRunMode = "blocking" | "background";
+export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
+  run_mode?: OpenClawRiddleProofRunMode;
+  background?: boolean;
+};
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
 export type OpenClawRiddleProofAgentMode = "disabled" | "codex_exec";
 export type OpenClawRiddleProofReviewMode = "codex_exec" | "main_agent";
@@ -83,6 +89,7 @@ export interface OpenClawRiddleProofRuntimeConfig {
   stateDir?: string;
   defaultMaxIterations?: number;
   defaultShipMode?: "none" | "ship";
+  defaultRunMode?: OpenClawRiddleProofRunMode;
   codexCommand?: CodexExecAgentConfig["codexCommand"];
   codexHome?: CodexExecAgentConfig["codexHome"];
   codexModel?: CodexExecAgentConfig["codexModel"];
@@ -158,6 +165,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const agentMode = cfg.agentMode === "codex_exec" ? "codex_exec" : "disabled";
   const proofReviewMode = cfg.proofReviewMode === "main_agent" ? "main_agent" : "codex_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
+  const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
   const codexSandbox =
     cfg.codexSandbox === "read-only" ||
     cfg.codexSandbox === "workspace-write" ||
@@ -174,6 +182,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     stateDir: typeof cfg.stateDir === "string" ? cfg.stateDir : undefined,
     defaultMaxIterations: typeof cfg.defaultMaxIterations === "number" ? cfg.defaultMaxIterations : undefined,
     defaultShipMode,
+    defaultRunMode,
     codexCommand: typeof cfg.codexCommand === "string" ? cfg.codexCommand : undefined,
     codexHome: typeof cfg.codexHome === "string" ? cfg.codexHome : undefined,
     codexModel: typeof cfg.codexModel === "string" ? cfg.codexModel : undefined,
@@ -181,6 +190,154 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     codexSandbox,
     codexFullAuto: typeof cfg.codexFullAuto === "boolean" ? cfg.codexFullAuto : undefined,
   };
+}
+
+function timestamp() {
+  return new Date().toISOString();
+}
+
+function createHarnessStatePath(stateDir = "/tmp") {
+  const stamp = timestamp().replace(/\D/g, "").slice(0, 14) || "unknown";
+  return path.join(stateDir, `riddle-proof-run-${stamp}-${crypto.randomUUID().slice(0, 8)}.json`);
+}
+
+function persistRunState(state: RiddleProofRunState) {
+  if (!state.state_path) return;
+  mkdirSync(path.dirname(state.state_path), { recursive: true });
+  writeFileSync(state.state_path, JSON.stringify(state, null, 2) + "\n");
+}
+
+function wakeNextToolsFor(result: RiddleProofRunResult) {
+  if (result.blocker?.code === "main_agent_proof_review_required") {
+    return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
+  }
+  if (result.status === "running") return [RIDDLE_PROOF_STATUS_TOOL_NAME];
+  if (result.status === "ready_to_ship" || result.status === "shipped") {
+    return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_SYNC_TOOL_NAME];
+  }
+  return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_INSPECT_TOOL_NAME];
+}
+
+function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
+  appendRunEvent(state, {
+    kind: "run.wake.requested",
+    checkpoint: result.last_checkpoint || state.last_checkpoint || null,
+    stage: state.current_stage || null,
+    summary:
+      result.blocker?.message ||
+      result.last_summary ||
+      `Riddle Proof background run reached status=${result.status}.`,
+    details: {
+      status: result.status,
+      state_path: state.state_path || result.state_path || null,
+      run_id: state.run_id || result.run_id || null,
+      blocker: result.blocker,
+      next_tools: wakeNextToolsFor(result),
+      note:
+        "Host/channel integrations should treat this durable event as the signal to re-enter the conversation with a status or review packet.",
+    },
+  });
+  persistRunState(state);
+}
+
+function runModeFrom(
+  params: RiddleProofChangeParams,
+  config: OpenClawRiddleProofRuntimeConfig,
+): OpenClawRiddleProofRunMode {
+  if (params.background === true) return "background";
+  if (params.run_mode === "background" || params.run_mode === "blocking") return params.run_mode;
+  return config.defaultRunMode || "blocking";
+}
+
+function startOpenClawRiddleProofBackground(
+  params: RiddleProofChangeParams,
+  config: OpenClawRiddleProofRuntimeConfig,
+): RiddleProofRunResult {
+  const request = toRiddleProofRunParams(params);
+  const statePath = request.harness_state_path || createHarnessStatePath(config.stateDir);
+  request.harness_state_path = statePath;
+  const state = createRunState({
+    request,
+    state_path: statePath,
+    status: "running",
+  });
+  appendRunEvent(state, {
+    kind: "run.background.started",
+    checkpoint: "background_started",
+    stage: "setup",
+    summary: "Riddle Proof background run accepted; poll status or inspect the state path for progress.",
+    details: {
+      state_path: statePath,
+      run_mode: "background",
+      next_tools: [
+        RIDDLE_PROOF_STATUS_TOOL_NAME,
+        RIDDLE_PROOF_INSPECT_TOOL_NAME,
+        RIDDLE_PROOF_REVIEW_TOOL_NAME,
+      ],
+    },
+  });
+  setRunStatus(state, "running");
+  persistRunState(state);
+
+  setImmediate(() => {
+    void runRiddleProofEngineHarness({
+      request,
+      state,
+      state_path: statePath,
+      max_iterations: request.max_iterations ?? config.defaultMaxIterations,
+      dry_run: request.dry_run,
+      auto_approve: request.auto_approve,
+      engine: config.engine,
+      agent: agentFromConfig(config),
+      config: {
+        riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+        riddleProofDir: config.riddleProofDir,
+        defaultReviewer: config.defaultReviewer,
+        stateDir: config.stateDir,
+        defaultMaxIterations: config.defaultMaxIterations,
+        defaultShipMode: config.defaultShipMode,
+      },
+    }).then((result) => {
+      appendWakeRequest(state, result);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      state.blocker = {
+        code: "background_run_failed",
+        checkpoint: state.last_checkpoint || "background_run",
+        message,
+      };
+      appendRunEvent(state, {
+        kind: "run.background.failed",
+        checkpoint: state.blocker.checkpoint,
+        stage: state.current_stage || "setup",
+        summary: message,
+        details: { code: state.blocker.code },
+      });
+      setRunStatus(state, "failed");
+      persistRunState(state);
+      appendWakeRequest(state, createRunResult({
+        state,
+        status: "failed",
+        last_summary: message,
+      }));
+    });
+  });
+
+  return createRunResult({
+    state,
+    status: "running",
+    last_summary: "Riddle Proof background run accepted; use riddle_proof_status for progress.",
+    raw: {
+      background: true,
+      run_mode: "background",
+      state_path: statePath,
+      next_actions: [
+        `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath} for progress.`,
+        `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath} when proof review is needed.`,
+        `Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with state_path=${statePath} to resume after a proof judgment.`,
+      ],
+    },
+  });
 }
 
 function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofAgentAdapter | undefined {
@@ -539,6 +696,10 @@ export async function runOpenClawRiddleProof(
   }
 
   const request = toRiddleProofRunParams(params);
+  if (runModeFrom(params, config) === "background") {
+    return startOpenClawRiddleProofBackground(params, config);
+  }
+
   return runRiddleProofEngineHarness({
     request,
     state_path: request.harness_state_path,
@@ -803,6 +964,14 @@ export const riddleProofChangeParameters = Type.Object({
     Type.Literal("none"),
     Type.Literal("ship"),
   ], { description: "Whether to ship after verification." })),
+  run_mode: Type.Optional(Type.Union([
+    Type.Literal("blocking"),
+    Type.Literal("background"),
+  ], {
+    description:
+      "blocking waits for the run result; background returns an accepted run state immediately so chat surfaces can poll status instead of holding one long reply open.",
+  })),
+  background: optionalBoolean("Compatibility shortcut for run_mode=background."),
   leave_draft: optionalBoolean("Opt-in escape hatch: keep the PR as draft after proof and CI instead of marking it ready."),
   state_path: optionalString("Existing underlying Riddle Proof engine state path to resume."),
   harness_state_path: optionalString("Existing Riddle Proof wrapper run state path to resume."),

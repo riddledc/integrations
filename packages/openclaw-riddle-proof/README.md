@@ -66,6 +66,19 @@ the exact commit, wait for CI, and mark the PR ready; `leave_draft: true` is an
 explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `RiddleProofRunResult`.
 
+For chat surfaces that should not keep one long tool reply open, pass
+`run_mode: "background"` or configure `defaultRunMode: "background"`. The tool
+then writes the wrapper state immediately, returns `status: "running"` with a
+`state_path`, and continues the proof in the gateway process. Any OC interface
+can poll `riddle_proof_status`, call `riddle_proof_inspect` when review evidence
+is ready, and resume with `riddle_proof_review`. This is intentionally
+channel-agnostic: Discord, Telegram, iMessage bridges, and CLIs all consume the
+same state contract instead of relying on a fragile transport-specific timeout.
+When a background run settles, the wrapper appends a durable
+`run.wake.requested` event with the final status, blocker if any, and suggested
+next tools. Host integrations can watch that event and re-enter the originating
+OC session without this package knowing which chat transport is in use.
+
 For pages behind login, pass generic browser auth as JSON strings:
 `auth_localStorage_json`, `auth_cookies_json`, or `auth_headers_json`. These
 are forwarded to the proof runtime so previews and script captures can exercise

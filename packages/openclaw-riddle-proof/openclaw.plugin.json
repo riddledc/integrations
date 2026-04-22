@@ -97,6 +97,14 @@
           "ship"
         ]
       },
+      "defaultRunMode": {
+        "type": "string",
+        "enum": [
+          "blocking",
+          "background"
+        ],
+        "description": "blocking waits for tool completion; background returns an accepted run state immediately so channel surfaces can poll status and inspect evidence."
+      },
       "codexCommand": {
         "type": "string"
       },
