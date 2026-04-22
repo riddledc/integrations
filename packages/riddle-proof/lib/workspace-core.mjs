@@ -2,9 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { execSync } from "node:child_process";
 import {
   existsSync,
+  copyFileSync,
   lstatSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   unlinkSync,
@@ -276,6 +278,7 @@ export function ensureWorktree({
 }
 
 const DEPS_MANIFEST = ".workspace-core-deps.json";
+const DEPS_INPUT_FILES = ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"];
 
 function depsManifestPath(projectDir) {
   return path.join(projectDir, "node_modules", DEPS_MANIFEST);
@@ -285,7 +288,7 @@ export function computeDependencyFingerprint(projectDir) {
   const packageJson = path.join(projectDir, "package.json");
   if (!existsSync(packageJson)) return "";
   const digest = createHash("sha256");
-  for (const name of ["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]) {
+  for (const name of DEPS_INPUT_FILES) {
     const filePath = path.join(projectDir, name);
     if (!existsSync(filePath)) continue;
     digest.update(name);
@@ -318,6 +321,93 @@ function writeDepsManifest(projectDir, fingerprint, installCmd) {
   writeFileSync(manifestPath, JSON.stringify({ fingerprint, install_cmd: installCmd }, null, 2));
 }
 
+function dependencyCacheRoot(projectDir) {
+  if (process.env.RIDDLE_PROOF_DISABLE_DEPS_CACHE === "1") return "";
+  const configured = (process.env.RIDDLE_PROOF_DEPS_CACHE_ROOT || "").trim();
+  if (configured) return path.resolve(configured);
+
+  const resolved = path.resolve(projectDir);
+  const worktreeMarker = `${path.sep}.riddle-proof-worktrees${path.sep}`;
+  const worktreeIndex = resolved.indexOf(worktreeMarker);
+  if (worktreeIndex >= 0) {
+    return path.join(resolved.slice(0, worktreeIndex), ".riddle-proof-deps-cache");
+  }
+  return path.join(path.dirname(resolved), ".riddle-proof-deps-cache");
+}
+
+function dependencyCacheKey(fingerprint, installCmd) {
+  const nodeMajor = (process.versions.node || "").split(".")[0] || "unknown";
+  return [
+    sanitizeFragment(installCmd, "install"),
+    process.platform,
+    process.arch,
+    `node${sanitizeFragment(nodeMajor, "unknown")}`,
+    fingerprint.slice(0, 24),
+  ].join("-");
+}
+
+function copyDependencyInputs(sourceDir, targetDir) {
+  mkdirSync(targetDir, { recursive: true });
+  for (const name of DEPS_INPUT_FILES) {
+    const sourcePath = path.join(sourceDir, name);
+    if (existsSync(sourcePath)) {
+      copyFileSync(sourcePath, path.join(targetDir, name));
+    }
+  }
+}
+
+function linkNodeModules(projectDir, sourceModules) {
+  const projectModules = path.join(projectDir, "node_modules");
+  removePath(projectModules);
+  symlinkSync(sourceModules, projectModules, "dir");
+}
+
+function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
+  const cacheRoot = dependencyCacheRoot(projectDir);
+  if (!cacheRoot) return "";
+
+  const cacheDir = path.join(cacheRoot, dependencyCacheKey(fingerprint, installCmd));
+  const cacheModules = path.join(cacheDir, "node_modules");
+  const cacheManifest = readDepsManifest(cacheDir);
+  if (cacheManifest.fingerprint === fingerprint && cacheManifest.install_cmd === installCmd && existsSync(cacheModules)) {
+    linkNodeModules(projectDir, cacheModules);
+    return `reused_cache:${cacheDir}`;
+  }
+
+  const tempCacheDir = `${cacheDir}.tmp-${process.pid}-${randomUUID().slice(0, 8)}`;
+  try {
+    mkdirSync(path.dirname(cacheDir), { recursive: true });
+    removePath(tempCacheDir);
+    copyDependencyInputs(projectDir, tempCacheDir);
+
+    const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, tempCacheDir, dependencyInstallTimeoutMs());
+    if (!installResult.ok) {
+      removePath(tempCacheDir);
+      return "";
+    }
+    writeDepsManifest(tempCacheDir, fingerprint, installCmd);
+
+    if (!existsSync(cacheDir)) {
+      try {
+        renameSync(tempCacheDir, cacheDir);
+      } catch {
+        removePath(tempCacheDir);
+      }
+    } else {
+      removePath(tempCacheDir);
+    }
+
+    const finalManifest = readDepsManifest(cacheDir);
+    if (finalManifest.fingerprint === fingerprint && finalManifest.install_cmd === installCmd && existsSync(cacheModules)) {
+      linkNodeModules(projectDir, cacheModules);
+      return `cached:${installCmd}`;
+    }
+  } catch {
+    removePath(tempCacheDir);
+  }
+  return "";
+}
+
 function dependencyInstallTimeoutMs() {
   const parsed = Number.parseInt(process.env.RIDDLE_PROOF_INSTALL_TIMEOUT_MS || "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 600000;
@@ -337,15 +427,17 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
     const sourceManifest = readDepsManifest(reuseFrom);
     const sourceModules = path.join(reuseFrom, "node_modules");
     if (sourceFingerprint === fingerprint && sourceManifest.fingerprint === fingerprint && existsSync(sourceModules)) {
-      const projectModules = path.join(projectDir, "node_modules");
-      removePath(projectModules);
-      symlinkSync(sourceModules, projectModules);
+      linkNodeModules(projectDir, sourceModules);
       return `reused_from:${reuseFrom}`;
     }
   }
 
   const installCmd = detectInstallCommand(projectDir);
   if (!installCmd) return "no_install_command";
+  const cachedStatus = tryEnsureCachedDeps({ projectDir, fingerprint, installCmd });
+  if (cachedStatus) return cachedStatus;
+
+  removePath(path.join(projectDir, "node_modules"));
   const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, projectDir, dependencyInstallTimeoutMs());
   if (!installResult.ok) {
     throw new Error(`dependency install failed in ${projectDir}: ${installResult.output.slice(0, 300)}`);

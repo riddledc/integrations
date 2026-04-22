@@ -788,4 +788,51 @@ assert.equal(fingerprintResult.ok, true);
 assert.equal(typeof fingerprintResult.fingerprint, "string");
 assert.ok(fingerprintResult.fingerprint.length > 10);
 
+function writeEmptyNpmFixture(projectDir) {
+  mkdirSync(projectDir, { recursive: true });
+  writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
+  writeFileSync(path.join(projectDir, "package-lock.json"), JSON.stringify({
+    name: "fixture",
+    version: "1.0.0",
+    lockfileVersion: 3,
+    requires: true,
+    packages: {
+      "": {
+        name: "fixture",
+        version: "1.0.0",
+      },
+    },
+  }));
+}
+
+const dependencyCacheRoot = path.join(workspaceCoreFixture, "deps-cache");
+const dependencyFixtureA = path.join(workspaceCoreFixture, "dependency-fixture-a");
+const dependencyFixtureB = path.join(workspaceCoreFixture, "dependency-fixture-b");
+writeEmptyNpmFixture(dependencyFixtureA);
+writeEmptyNpmFixture(dependencyFixtureB);
+const ensureDepsEnv = { ...process.env, RIDDLE_PROOF_DEPS_CACHE_ROOT: dependencyCacheRoot };
+const firstDepsResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "ensure-deps",
+  JSON.stringify({ projectDir: dependencyFixtureA }),
+], { encoding: "utf-8", env: ensureDepsEnv }));
+assert.equal(firstDepsResult.ok, true);
+assert.equal(firstDepsResult.status, "cached:npm ci");
+
+const secondDepsResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "ensure-deps",
+  JSON.stringify({ projectDir: dependencyFixtureB }),
+], { encoding: "utf-8", env: ensureDepsEnv }));
+assert.equal(secondDepsResult.ok, true);
+assert.match(secondDepsResult.status, /^reused_cache:/);
+
+const alreadyInstalledDepsResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "ensure-deps",
+  JSON.stringify({ projectDir: dependencyFixtureA }),
+], { encoding: "utf-8", env: ensureDepsEnv }));
+assert.equal(alreadyInstalledDepsResult.ok, true);
+assert.equal(alreadyInstalledDepsResult.status, "already_installed");
+
 console.log(JSON.stringify({ ok: true }));
