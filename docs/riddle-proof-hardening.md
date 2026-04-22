@@ -1,8 +1,7 @@
 # Riddle Proof Hardening Notes
 
-This checklist captures feedback from an OpenClaw run against the older
-`proofed_change_run` path. Treat it as acceptance criteria while extracting the
-new reusable Riddle Proof harness.
+This checklist captures feedback from OpenClaw dogfood runs. Treat it as
+acceptance criteria for the reusable Riddle Proof harness.
 
 ## Run Observability
 

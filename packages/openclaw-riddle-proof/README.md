@@ -16,7 +16,8 @@ a blocked result until execution is explicitly configured.
 
 When configured with `executionMode: "engine"` and a `riddleEngineModuleUrl`,
 the wrapper calls the reusable engine harness in `@riddledc/riddle-proof`.
-That harness drives the existing `riddle-proof-run` checkpoint engine directly.
+That harness drives the packaged `@riddledc/riddle-proof-run` checkpoint engine
+directly.
 By default it still stops at concrete blockers when an agent adapter is not
 configured. When `agentMode: "codex_exec"` is explicitly set, the wrapper uses a
 local `codex exec` adapter for recon judgment, proof packet authoring,
@@ -32,8 +33,8 @@ context and then resume the same run with `riddle_proof_review`.
 The ready verdict is intentionally strict: for visual polish, screenshots must
 prove a visible reviewer-scale change, not just a code or CSS difference.
 
-This keeps the currently working OpenClaw/Discord proof flow as the reference
-implementation while the new wrapper reaches parity.
+This keeps the currently working OpenClaw/Discord proof flow on the public
+`riddle_proof_change` path rather than a private skill/plugin prototype.
 
 ## Product Boundary
 
@@ -48,8 +49,8 @@ idea -> workspace setup -> agent implementation -> server-backed proof capture
 The wrapper owns the OpenClaw tool contract and integration metadata. The
 reusable harness behind it owns the hard workflow pieces: configured agent
 execution, Riddle server usage, proof assessment, ship gates, and notifications.
-The current wrapper stops after request normalization until those adapters are
-wired and parity-tested against the existing `proofed_change_run` flow.
+The current wrapper owns the public OpenClaw path; private instance repos should
+only provide deployment-specific defaults and credentials.
 
 ## Tool
 

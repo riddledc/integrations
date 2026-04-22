@@ -1,0 +1,387 @@
+"""Setup: create worktrees, install deps, validate args, write state.
+
+Idempotent — safe to re-run. Creates per-run worktrees under the active
+workspace root by default:
+  <workspace>/.riddle-proof-worktrees/riddle-proof-<run_id>-before
+  <workspace>/.riddle-proof-worktrees/riddle-proof-<run_id>-after
+"""
+
+import json, subprocess as sp, os, sys, shutil
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from util import load_state, save_state, git, shell_quote
+
+s = load_state()
+repo = s['repo']
+branch = (s.get('target_branch') or s['branch']).strip()
+repo_dir = s['repo_dir']
+base_branch = s.get('base_branch', 'main')
+before_ref_arg = (s.get('before_ref') or s.get('base_ref') or '').strip()
+mode = s.get('mode', 'server')
+reference = s.get('reference', 'both')  # prod, before, both
+run_id = (s.get('run_id') or '').strip()
+SAFE_RUN_ID = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '-' for ch in run_id) or 'run'
+
+AFTER_WORKTREE_BRANCH = 'riddle-proof/' + SAFE_RUN_ID + '-after'
+LEGACY_WORKTREE_DIRS = ('/tmp/riddle-proof-before', '/tmp/riddle-proof-after')
+
+if branch.startswith('riddle-proof/'):
+    raise SystemExit(
+        'Setup invariant failed: target_branch uses reserved riddle-proof/* namespace. '
+        'Run preflight again so it can choose a real agent/openclaw/* PR branch.'
+    )
+
+
+# In the packaged runtime, the shared workspace helper lives at package-root/lib
+# while the stage scripts live under package-root/runtime.
+SKILLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+WORKSPACE_CORE = os.path.join(SKILLS_ROOT, 'lib', 'workspace-core.mjs')
+
+
+def workspace_core(command, payload, timeout=180):
+    if not os.path.exists(WORKSPACE_CORE):
+        raise SystemExit('workspace core helper missing: ' + WORKSPACE_CORE)
+    try:
+        result = sp.run(
+            ['node', WORKSPACE_CORE, command, json.dumps(payload)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except sp.TimeoutExpired:
+        raise SystemExit('workspace core timed out for ' + command)
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or '').strip()
+        raise SystemExit('workspace core failed for ' + command + ': ' + detail[:300])
+
+    try:
+        return json.loads(result.stdout)
+    except Exception:
+        raise SystemExit('workspace core returned invalid JSON for ' + command + ': ' + result.stdout[:300])
+
+
+def ensure_deps(project_dir, reuse_from=''):
+    payload = {'projectDir': project_dir}
+    if reuse_from:
+        payload['reuseFrom'] = reuse_from
+    result = workspace_core('ensure-deps', payload, timeout=300)
+    return result.get('status', '')
+
+
+def resolve_worktree_root(repo_dir):
+    configured = (s.get('worktree_root') or os.environ.get('RIDDLE_PROOF_WORKTREE_ROOT') or '').strip()
+    if configured:
+        return os.path.abspath(os.path.expanduser(configured))
+    repo_parent = os.path.dirname(os.path.abspath(repo_dir))
+    return os.path.join(repo_parent, '.riddle-proof-worktrees')
+
+
+def cleanup_legacy_branch_worktrees(repo_dir, branch_name):
+    if not repo_dir or not os.path.exists(os.path.join(repo_dir, '.git')):
+        return
+    result = git('git worktree list --porcelain', repo_dir)
+    if result.returncode != 0:
+        return
+
+    worktrees = []
+    current = {}
+    for line in result.stdout.splitlines() + ['']:
+        if not line.strip():
+            if current:
+                worktrees.append(current)
+                current = {}
+            continue
+        key, _, value = line.partition(' ')
+        if key == 'worktree':
+            current['path'] = value.strip()
+        elif key == 'branch':
+            current['branch'] = value.strip()
+
+    locked_ref = 'refs/heads/' + branch_name
+    for wt in worktrees:
+        path = wt.get('path', '')
+        if not (path.startswith('/tmp/riddle-proof-') and path.endswith('-before')):
+            continue
+        if wt.get('branch') != locked_ref:
+            continue
+        print('Removing stale legacy riddle-proof worktree locked to ' + branch_name + ': ' + path)
+        sp.run(
+            'git worktree remove --force ' + shell_quote(path),
+            shell=True,
+            cwd=repo_dir,
+            capture_output=True,
+        )
+        if os.path.exists(path):
+            shutil.rmtree(path, ignore_errors=True)
+    git('git worktree prune', repo_dir)
+
+
+def ref_exists(repo_dir, ref):
+    if not ref:
+        return False
+    r = git('git rev-parse --verify --quiet ' + shell_quote(ref + '^{commit}'), repo_dir)
+    return r.returncode == 0
+
+
+def resolve_before_ref(repo_dir, base_branch, requested_ref):
+    candidates = []
+    if requested_ref:
+        candidates.append((requested_ref, 'requested'))
+    if base_branch:
+        candidates.append(('origin/' + base_branch, 'remote_base_branch'))
+        candidates.append((base_branch, 'local_base_branch_fallback'))
+
+    for ref, source in candidates:
+        if ref_exists(repo_dir, ref):
+            return ref, source
+    raise SystemExit(
+        'Failed to resolve before ref. Tried: ' +
+        ', '.join(ref for ref, _ in candidates if ref)
+    )
+
+
+def load_repo_profile(project_dir):
+    profile_path = os.path.join(project_dir, '.riddle-proof', 'profile.json')
+    if not os.path.exists(profile_path):
+        return {}, ''
+    try:
+        with open(profile_path) as f:
+            profile = json.load(f)
+    except Exception as exc:
+        print('Ignoring invalid Riddle Proof profile: ' + profile_path + ' (' + str(exc)[:180] + ')')
+        return {}, profile_path
+    if not isinstance(profile, dict):
+        print('Ignoring non-object Riddle Proof profile: ' + profile_path)
+        return {}, profile_path
+    return profile, profile_path
+
+
+def profile_matches_target(target, haystack):
+    keywords = target.get('keywords') if isinstance(target, dict) else []
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    matched = []
+    for keyword in keywords if isinstance(keywords, list) else []:
+        needle = str(keyword).strip().lower()
+        if needle and needle in haystack:
+            matched.append(str(keyword).strip())
+    name = str(target.get('name') or '').strip()
+    if name and name.lower() in haystack and name not in matched:
+        matched.append(name)
+    return matched
+
+
+def apply_repo_profile(project_dir):
+    profile, profile_path = load_repo_profile(project_dir)
+    if not profile:
+        return
+
+    haystack = ' '.join([
+        str(s.get('change_request') or ''),
+        str(s.get('context') or ''),
+        str(s.get('server_path') or ''),
+        str(s.get('capture_script') or ''),
+    ]).lower()
+
+    selected = {}
+    matched_keywords = []
+    targets = profile.get('targets')
+    if isinstance(targets, list):
+        for target in targets:
+            if not isinstance(target, dict):
+                continue
+            matched = profile_matches_target(target, haystack)
+            if matched:
+                selected = target
+                matched_keywords = matched
+                break
+
+    defaults = profile.get('defaults') if isinstance(profile.get('defaults'), dict) else {}
+    merged = dict(defaults)
+    if selected:
+        merged.update(selected)
+    if not merged:
+        return
+
+    applied = []
+    simple_fields = [
+        'mode',
+        'build_command',
+        'build_output',
+        'server_image',
+        'server_command',
+        'server_port',
+        'server_path',
+        'wait_for_selector',
+        'color_scheme',
+        'allow_static_preview_fallback',
+        'use_auth',
+        'success_criteria',
+        'capture_script',
+    ]
+    for field in simple_fields:
+        value = merged.get(field)
+        if value is None or str(value).strip() == '':
+            continue
+        if str(s.get(field) or '').strip():
+            continue
+        s[field] = str(value).strip()
+        applied.append(field)
+        if field == 'server_path':
+            s['server_path_source'] = 'repo_profile'
+
+    profile_context = str(merged.get('context') or merged.get('proof_context') or '').strip()
+    if profile_context:
+        existing = str(s.get('context') or '').strip()
+        note = 'Riddle Proof repo profile'
+        target_name = str(merged.get('name') or '').strip()
+        if target_name:
+            note += ' (' + target_name + ')'
+        note += ': ' + profile_context
+        s['context'] = (existing + '\n\n' + note).strip() if existing else note
+        applied.append('context')
+
+    if applied:
+        s['proof_profile'] = {
+            'path': profile_path,
+            'name': str(merged.get('name') or '').strip(),
+            'matched_keywords': matched_keywords,
+            'applied_fields': sorted(set(applied)),
+        }
+        print('Applied Riddle Proof repo profile: ' + ', '.join(s['proof_profile']['applied_fields']))
+
+# Ensure the repo is cloned and up to date via the shared workspace core.
+setup = workspace_core('prepare-repo', {
+    'repo': repo,
+    'branch': branch,
+    'repoDir': repo_dir,
+    'baseBranch': base_branch,
+    'workspaceRoot': os.environ.get('OPENCLAW_WORKSPACE', ''),
+}, timeout=300)
+repo_dir = setup.get('repoDir') or repo_dir
+branch = setup.get('branch') or branch
+target_branch = branch
+if target_branch.startswith('riddle-proof/'):
+    raise SystemExit(
+        'Setup invariant failed: workspace prepared a reserved riddle-proof/* branch instead of a real PR branch.'
+    )
+WORKTREE_ROOT = resolve_worktree_root(repo_dir)
+BEFORE_DIR = os.path.join(WORKTREE_ROOT, 'riddle-proof-' + SAFE_RUN_ID + '-before')
+AFTER_DIR = os.path.join(WORKTREE_ROOT, 'riddle-proof-' + SAFE_RUN_ID + '-after')
+s['repo_dir'] = repo_dir
+s['branch'] = branch
+s['target_branch'] = target_branch
+s['ship_target_branch'] = target_branch
+s['worktree_root'] = WORKTREE_ROOT
+save_state(s)
+print('Prepared workspace via ' + setup.get('source', 'workspace_core') + ': ' + repo_dir)
+os.makedirs(WORKTREE_ROOT, exist_ok=True)
+cleanup_legacy_branch_worktrees(repo_dir, base_branch)
+
+# Clean any stale worktrees for this run and the legacy fixed paths
+worktree_cleanup_dirs = []
+for candidate in (
+    BEFORE_DIR,
+    AFTER_DIR,
+    s.get('before_worktree'),
+    s.get('after_worktree'),
+    *LEGACY_WORKTREE_DIRS,
+):
+    if candidate and candidate not in worktree_cleanup_dirs:
+        worktree_cleanup_dirs.append(candidate)
+
+cleanup_branches = []
+for candidate in (AFTER_WORKTREE_BRANCH, s.get('after_worktree_branch', '').strip()):
+    if candidate and candidate not in cleanup_branches:
+        cleanup_branches.append(candidate)
+
+# Create before worktree (only if reference includes 'before')
+before_ref = ''
+before_ref_source = ''
+if reference in ('before', 'both'):
+    before_ref, before_ref_source = resolve_before_ref(repo_dir, base_branch, before_ref_arg)
+    workspace_core('ensure-worktree', {
+        'repoDir': repo_dir,
+        'worktreeDir': BEFORE_DIR,
+        'ref': before_ref,
+        'detach': True,
+        'cleanupPaths': worktree_cleanup_dirs,
+        'verifyPackageJson': True,
+    }, timeout=300)
+    print('Before worktree: ' + BEFORE_DIR + ' (' + before_ref + ', source=' + before_ref_source + ')')
+
+    # Patch Next.js config if needed (export -> standalone for server mode)
+    if mode == 'server':
+        for cf in (BEFORE_DIR + '/next.config.ts', BEFORE_DIR + '/next.config.js', BEFORE_DIR + '/next.config.mjs'):
+            if os.path.exists(cf):
+                with open(cf) as f:
+                    content = f.read()
+                if "output: 'export'" in content:
+                    with open(cf, 'w') as f:
+                        f.write(content.replace("output: 'export'", "output: 'standalone'"))
+                    print('Patched before config: export -> standalone')
+                break
+
+# Create after worktree
+after_cleanup_dirs = [candidate for candidate in worktree_cleanup_dirs if candidate != BEFORE_DIR]
+workspace_core('ensure-worktree', {
+    'repoDir': repo_dir,
+    'worktreeDir': AFTER_DIR,
+    'ref': branch,
+    'branchName': AFTER_WORKTREE_BRANCH,
+    'resetBranch': True,
+    'cleanupPaths': after_cleanup_dirs,
+    'cleanupBranches': cleanup_branches,
+    'verifyPackageJson': True,
+}, timeout=300)
+print('After worktree: ' + AFTER_DIR + ' (' + AFTER_WORKTREE_BRANCH + ' -> ' + branch + ')')
+apply_repo_profile(AFTER_DIR)
+save_state(s)
+
+reuse_source = repo_dir if os.path.exists(os.path.join(repo_dir, 'package.json')) else ''
+shared_status = ensure_deps(reuse_source) if reuse_source else ''
+if shared_status:
+    print('Shared deps status: ' + shared_status)
+
+before_dep_status = ''
+if reference in ('before', 'both'):
+    before_dep_status = ensure_deps(BEFORE_DIR, reuse_from=reuse_source)
+    print('Before deps status: ' + before_dep_status)
+
+after_dep_status = ensure_deps(AFTER_DIR, reuse_from=reuse_source)
+print('After deps status: ' + after_dep_status)
+
+# Patch Next.js config in after worktree if needed
+if mode == 'server':
+    for cf in (AFTER_DIR + '/next.config.ts', AFTER_DIR + '/next.config.js', AFTER_DIR + '/next.config.mjs'):
+        if os.path.exists(cf):
+            with open(cf) as f:
+                content = f.read()
+            if "output: 'export'" in content:
+                with open(cf, 'w') as f:
+                    f.write(content.replace("output: 'export'", "output: 'standalone'"))
+                print('Patched after config: export -> standalone')
+            break
+
+s['before_worktree'] = BEFORE_DIR if reference in ('before', 'both') else ''
+s['before_ref'] = before_ref or before_ref_arg
+s['before_ref_source'] = before_ref_source
+s['after_worktree'] = AFTER_DIR
+s['after_worktree_branch'] = AFTER_WORKTREE_BRANCH
+s['workspace_ready'] = True
+s['stage'] = 'setup'
+s['implementation_status'] = 'pending_recon'
+s['dependency_install'] = {
+    'shared': bool(shared_status),
+    'before': before_dep_status,
+    'after': after_dep_status,
+}
+if not (s.get('capture_script') or '').strip():
+    s['proof_plan_status'] = 'pending_recon'
+save_state(s)
+
+print('Setup complete.')
+if reference in ('before', 'both'):
+    print('  Before: ' + BEFORE_DIR + ' (detached ' + (before_ref or before_ref_arg) + ')')
+print('  After:  ' + AFTER_DIR + ' (' + AFTER_WORKTREE_BRANCH + ' -> ' + branch + ')')
+print(json.dumps({'ok': True}))

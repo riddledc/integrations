@@ -4,8 +4,10 @@ Public integration packages for RiddleDC.
 
 ## Packages
 - `@riddledc/riddle-proof` — reusable contracts and helpers for evidence-backed Riddle Proof workflows.
+- `@riddledc/riddle-proof-run` — checkpoint engine and bundled lobster/Python runtime for preview, proof, and ship workflows.
 - `@riddledc/riddle-mcp` — MCP-related utilities/server/client components (no secrets).
 - `@riddledc/openclaw-riddledc` — OpenClaw integration package (no secrets).
+- `@riddledc/openclaw-riddle-proof` — OpenClaw tool wrapper for the public Riddle Proof workflow.
 
 ## Trust model
 - No secrets are committed to this repo.

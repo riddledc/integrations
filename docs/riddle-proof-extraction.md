@@ -1,8 +1,9 @@
 # Riddle Proof Extraction Plan
 
 Riddle Proof is the reusable proof workflow behind evidence-backed agent changes.
-The current OpenClaw `proofed_change_run` plugin remains the working reference
-implementation until the package below reaches parity.
+The public package set now owns the OpenClaw proof wrapper, checkpoint engine,
+and bundled runtime assets that were first proven in a private OpenClaw
+prototype.
 
 See `docs/riddle-proof-hardening.md` for operational requirements captured from
 real OpenClaw dogfood runs.
@@ -31,16 +32,13 @@ thin, typed layers:
   reusable contracts, state/result helpers, evidence helpers,
   integration adapters, adapter interfaces
 
-OpenClaw proofed_change_run
-  current working reference; do not rewrite in place during extraction
-
 @riddledc/openclaw-riddle-proof
-  @riddledc/openclaw-riddle-proof wrapper that consumes @riddledc/riddle-proof
-  and exposes the OpenClaw tool surface
+  wrapper that consumes @riddledc/riddle-proof and exposes the
+  riddle_proof_change OpenClaw tool surface
 
-Riddle execution harness
+@riddledc/riddle-proof-run
   server-aware setup, implementation, proof capture, judge, ship, and notify
-  adapters that move a request from idea to PR
+  checkpoint engine plus bundled lobster/Python runtime assets
 
 future integrations
   CLI, GitHub Action, Discord bridge, Riddle-hosted workflow wrappers around
@@ -52,14 +50,14 @@ through adapters rather than invoking another plugin as a transport layer.
 
 ## Compatibility Rules
 
-- Do not change the live `proofed_change_run` behavior as part of package
-  scaffolding.
-- Keep the current plugin as a reference fixture for result shape, ship gates,
-  and Discord/GitHub metadata.
-- Introduce a new wrapper under a new name before switching any production
-  routing.
-- Only migrate the existing OC route after the new wrapper passes parity tests
-  against the reference workflow.
+- Keep instance-specific repos limited to config, deployment defaults, and
+  credentials.
+- Keep the public package contracts stable enough for OpenClaw, Codex, Claude
+  Code, CLI, GitHub Action, and hosted Riddle integrations to consume.
+- Preserve result shape, ship gates, and Discord/GitHub metadata through
+  package tests before changing production routing.
+- Treat the old private implementation as historical lineage, not as the
+  supported user-facing path.
 
 ## First Stable Contracts
 
@@ -91,10 +89,9 @@ The harness should be the reusable implementation of this sequence:
 - ship: commit, push, open or update the PR, and wait for CI when configured
 - notify: update Discord, OpenClaw, GitHub, or another integration
 
-The current OpenClaw `proofed_change_run` and `riddle-proof` skill/pipelines are
-the reference implementation for this behavior. The extraction should convert
-that reference into typed adapters and parity tests before any production route
-switches to the new wrapper.
+The public package set now carries this behavior. Future extraction should make
+individual adapters cleaner without moving product logic back into private
+OpenClaw repos.
 
 ## First Reusable Logic
 
@@ -108,14 +105,16 @@ The package now owns the low-risk pieces that were already stable:
 - adapter interfaces
 - event/state shape
 
-The next extraction layer is the reusable engine harness. It drives the current
-`riddle-proof-run` checkpoint engine directly, persists wrapper run state, emits
-stage heartbeats, exposes cheap status snapshots, and stops at concrete blockers
-when the engine, isolated worktree, or agent adapter is missing.
+The current extraction layer is the reusable engine harness. It drives the
+packaged `@riddledc/riddle-proof-run` checkpoint engine directly, persists
+wrapper run state, emits stage heartbeats, exposes cheap status snapshots, and
+stops at concrete blockers when the engine, isolated worktree, or agent adapter
+is missing.
 
-Keep the old `proofed_change_run` plugin as the production route until the new
-engine harness has a configured agent adapter and parity tests prove the full
-idea-to-PR path.
+The legacy private `proofed_change_run` plugin is no longer part of the public
+workflow. OpenClaw users should use `riddle_proof_change`; instance-specific
+repos should only carry deployment/config defaults, not the proof engine or
+runtime scripts.
 
 ## Packaging Target
 
@@ -124,6 +123,8 @@ not just instructions:
 
 - `@riddledc/riddle-proof`: shared run contracts, helper functions, the runner
   harness, and adapter interfaces
+- `@riddledc/riddle-proof-run`: packaged checkpoint engine plus bundled
+  lobster/Python runtime assets
 - `@riddledc/openclaw-riddle-proof`: the OpenClaw tool wrapper and adapter
   wiring point
 - examples and parity fixtures: a documented way to exercise a fake or dry-run
@@ -133,17 +134,17 @@ Hosted Riddle infrastructure can remain a configured service boundary. The npm
 packages must not publish Riddle secrets, Discord credentials, GitHub tokens, or
 OpenClaw-instance-specific configuration.
 
-## Future OpenClaw Wrapper
+## OpenClaw Wrapper
 
-Create a new wrapper before replacing the current reference plugin. A likely
-shape is:
+The OpenClaw package shape is:
 
 ```text
-plugin id: riddle-proof
+plugin id: openclaw-riddle-proof
 tool name: riddle_proof_change
 review tool: riddle_proof_review
 package: @riddledc/openclaw-riddle-proof
 core dependency: @riddledc/riddle-proof
+engine dependency: @riddledc/riddle-proof-run
 ```
 
 The wrapper should:
@@ -156,5 +157,3 @@ The wrapper should:
   screenshot/evidence review packet, then resume via `riddle_proof_review`
 - pass Discord/OpenClaw context as `integration_context`
 - return `RiddleProofRunResult`
-- leave the current `proofed_change_run` plugin untouched until parity is
-  proven

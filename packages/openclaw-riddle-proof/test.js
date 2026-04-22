@@ -477,7 +477,7 @@ const executed = await changeTool.tool.execute("test-call", params);
 assert.equal(executed.content[0].type, "text");
 const parsed = JSON.parse(executed.content[0].text);
 assert.equal(parsed.status, "blocked");
-assert.equal(parsed.raw.request.integration_context.metadata.tool, "proofed_change_run");
+assert.equal(parsed.raw.request.integration_context.metadata.tool, "riddle_proof_change");
 
 const statusExecuted = await statusTool.tool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);

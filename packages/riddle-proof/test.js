@@ -349,7 +349,7 @@ assert.deepEqual(referenceMetadata, {
 
 assert.equal(referenceParams.integration_context.source, "discord");
 assert.equal(referenceParams.integration_context.thread_id, "111111111111111111");
-assert.equal(referenceParams.integration_context.metadata.tool, "proofed_change_run");
+assert.equal(referenceParams.integration_context.metadata.tool, "riddle_proof_change");
 assert.equal(referenceParams.assertions.interactive_elements, 11);
 assert.equal(referenceParams.auth_localStorage_json, "{\"session\":\"local\"}");
 assert.equal(referenceParams.auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");

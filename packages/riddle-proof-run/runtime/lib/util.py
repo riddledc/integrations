@@ -1,0 +1,673 @@
+"""Shared helpers for Riddle Proof pipeline."""
+
+import json, subprocess as sp, os, shlex, time
+from urllib.parse import urljoin
+from urllib.request import urlopen
+
+STATE_FILE = os.environ.get('RIDDLE_PROOF_STATE_FILE', '/tmp/riddle-proof-state.json')
+ARGS_FILE = os.environ.get('RIDDLE_PROOF_ARGS_FILE', '/tmp/riddle-proof-args.json')
+RIDDLE_DIRECT_TOOLS = {
+    'riddle_preview',
+    'riddle_preview_delete',
+    'riddle_server_preview',
+    'riddle_build_preview',
+    'riddle_script',
+    'riddle_run',
+}
+CAPTURE_ARTIFACT_JSON_LIMIT = 256 * 1024
+_JSON_ARTIFACT_CACHE = {}
+CAPTURE_DIAGNOSTIC_VERSION = 'riddle-proof.capture-diagnostic.v1'
+DEBUG_STRING_LIMIT = 2000
+SENSITIVE_KEY_FRAGMENTS = (
+    'authorization',
+    'apikey',
+    'api_key',
+    'cookie',
+    'header',
+    'localstorage',
+    'password',
+    'secret',
+    'token',
+)
+
+
+def load_state():
+    with open(STATE_FILE) as f:
+        return json.load(f)
+
+
+def save_state(s):
+    with open(STATE_FILE, 'w') as f:
+        json.dump(s, f, indent=2)
+
+
+def compact_debug_value(value, limit=DEBUG_STRING_LIMIT):
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit] + '... [truncated]'
+    return value
+
+
+def redact_for_diagnostics(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, child in value.items():
+            normalized = ''.join(ch for ch in str(key).lower() if ch.isalnum() or ch == '_')
+            if any(fragment.replace('_', '') in normalized.replace('_', '') for fragment in SENSITIVE_KEY_FRAGMENTS):
+                redacted[key] = '[redacted]'
+            else:
+                redacted[key] = redact_for_diagnostics(child)
+        return redacted
+    if isinstance(value, list):
+        return [redact_for_diagnostics(child) for child in value[:50]]
+    return compact_debug_value(value)
+
+
+def capture_diagnostic(label, tool, args, payload):
+    payload = payload if isinstance(payload, dict) else {'raw': payload}
+    return {
+        'version': CAPTURE_DIAGNOSTIC_VERSION,
+        'label': label,
+        'tool': tool,
+        'captured_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'ok': payload.get('ok'),
+        'timeout': bool(payload.get('timeout')),
+        'error': compact_debug_value(str(payload.get('error') or payload.get('stderr') or '')),
+        'args': redact_for_diagnostics({} if args is None else args),
+        'artifact_summary': summarize_capture_artifacts(payload),
+    }
+
+
+def append_capture_diagnostic(state, label, tool, args, payload):
+    diagnostics = list(state.get('capture_diagnostics') or [])
+    diagnostics.append(capture_diagnostic(label, tool, args, payload))
+    state['capture_diagnostics'] = diagnostics[-20:]
+    return state['capture_diagnostics'][-1]
+
+
+def truthy(value):
+    return str(value or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+
+
+def has_auth_context(state):
+    return bool(
+        truthy(state.get('use_auth'))
+        or state.get('auth_localStorage')
+        or state.get('auth_cookies')
+        or state.get('auth_headers')
+    )
+
+
+def apply_auth_context(state, args):
+    if state.get('auth_localStorage'):
+        args['localStorage'] = state['auth_localStorage']
+    if state.get('auth_cookies'):
+        args['cookies'] = state['auth_cookies']
+    if state.get('auth_headers'):
+        args['headers'] = state['auth_headers']
+    return args
+
+
+def direct_riddle_enabled():
+    return os.environ.get('RIDDLE_PROOF_DIRECT_RIDDLE', '1').lower() not in ('0', 'false', 'no')
+
+
+def nested_riddle_fallback_enabled():
+    return os.environ.get('RIDDLE_PROOF_ALLOW_NESTED_RIDDLE', '').lower() in ('1', 'true', 'yes')
+
+
+def nested_non_riddle_enabled():
+    return os.environ.get('RIDDLE_PROOF_ALLOW_NESTED_NON_RIDDLE', '').lower() in ('1', 'true', 'yes')
+
+
+def invoke_riddle_core(tool, args, timeout=180):
+    """Call Riddle's shared core package directly, without nested OpenClaw tool invocation."""
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'riddle_core_call.mjs')
+    try:
+        r = sp.run(
+            ['node', script, tool, json.dumps(args)],
+            capture_output=True, text=True, timeout=timeout
+        )
+    except sp.TimeoutExpired as e:
+        print('direct_riddle(' + tool + ') TIMED OUT after ' + str(timeout) + 's')
+        if e.stdout:
+            print('  stdout: ' + e.stdout[:500])
+        if e.stderr:
+            print('  stderr: ' + e.stderr[:500])
+        return {
+            'ok': False,
+            'timeout': True,
+            'error': f'direct_riddle({tool}) timed out after {timeout}s',
+            'stdout': (e.stdout or '')[:500],
+            'stderr': (e.stderr or '')[:500],
+        }
+
+    if r.returncode != 0:
+        print('direct_riddle(' + tool + ') FAILED rc=' + str(r.returncode))
+        print('  stdout: ' + r.stdout[:500])
+        print('  stderr: ' + r.stderr[:500])
+
+    try:
+        return json.loads(r.stdout)
+    except:
+        print('direct_riddle(' + tool + ') JSON parse failed')
+        print('  stdout: ' + r.stdout[:500])
+        print('  stderr: ' + r.stderr[:500])
+        return {'ok': False, 'error': r.stdout[:300], 'stderr': r.stderr[:300]}
+
+
+def invoke(tool, args, timeout=180):
+    """Call an OpenClaw tool via openclaw.invoke CLI."""
+    if tool in RIDDLE_DIRECT_TOOLS and direct_riddle_enabled():
+        result = invoke_riddle_core(tool, args, timeout=timeout)
+        if result.get('ok') or not nested_riddle_fallback_enabled():
+            return result
+        print('direct_riddle(' + tool + ') failed; falling back to openclaw.invoke because RIDDLE_PROOF_ALLOW_NESTED_RIDDLE is set.')
+
+    if tool not in RIDDLE_DIRECT_TOOLS and not nested_non_riddle_enabled():
+        return {
+            'ok': False,
+            'error': (
+                'Nested OpenClaw tool invocation is disabled for ' + tool +
+                '. Set RIDDLE_PROOF_ALLOW_NESTED_NON_RIDDLE=1 only if this workflow intentionally needs another plugin.'
+            ),
+        }
+
+    try:
+        r = sp.run(
+            ['openclaw.invoke', '--tool', tool, '--args-json', json.dumps(args)],
+            capture_output=True, text=True, timeout=timeout
+        )
+    except sp.TimeoutExpired as e:
+        print('invoke(' + tool + ') TIMED OUT after ' + str(timeout) + 's')
+        if e.stdout:
+            print('  stdout: ' + e.stdout[:500])
+        if e.stderr:
+            print('  stderr: ' + e.stderr[:500])
+        return {
+            'ok': False,
+            'timeout': True,
+            'error': f'invoke({tool}) timed out after {timeout}s',
+            'stdout': (e.stdout or '')[:500],
+            'stderr': (e.stderr or '')[:500],
+        }
+    if r.returncode != 0:
+        print('invoke(' + tool + ') FAILED rc=' + str(r.returncode))
+        print('  stdout: ' + r.stdout[:500])
+        print('  stderr: ' + r.stderr[:500])
+    try:
+        outer = json.loads(r.stdout)
+        if 'result' in outer and 'content' in outer['result']:
+            for c in outer['result']['content']:
+                if c.get('type') == 'text':
+                    try:
+                        return json.loads(c['text'])
+                    except:
+                        return {'ok': True, 'raw': c['text']}
+        return outer
+    except:
+        print('invoke(' + tool + ') JSON parse failed')
+        print('  stdout: ' + r.stdout[:500])
+        print('  stderr: ' + r.stderr[:500])
+        return {'ok': False, 'error': r.stdout[:300], 'stderr': r.stderr[:300]}
+
+
+def invoke_retry(tool, args, retries=3, timeout=180):
+    """Call an OpenClaw tool with automatic retries on failure."""
+    last_result = None
+    for attempt in range(1, retries + 1):
+        result = invoke(tool, args, timeout=timeout)
+        last_result = result
+        # Check for success indicators
+        if result.get('ok') or result.get('outputs') or result.get('screenshots'):
+            return result
+        print(f'invoke_retry({tool}) attempt {attempt}/{retries} failed: {str(result.get("error", "no output"))[:200]}')
+        if attempt < retries:
+            import time
+            time.sleep(5)
+    print(f'invoke_retry({tool}) all {retries} attempts failed')
+    return last_result or {'ok': False, 'error': 'all retries exhausted'}
+
+
+def capture_output_item(payload, name):
+    if not isinstance(payload, dict):
+        return None
+    for item in payload.get('outputs') or []:
+        if isinstance(item, dict) and item.get('name') == name and item.get('url'):
+            return item
+    return None
+
+
+def fetch_json_artifact(url, max_bytes=CAPTURE_ARTIFACT_JSON_LIMIT):
+    if not str(url or '').startswith(('http://', 'https://')):
+        return None, 'unsupported artifact url'
+    if url in _JSON_ARTIFACT_CACHE:
+        return _JSON_ARTIFACT_CACHE[url]
+    try:
+        with urlopen(url, timeout=15) as response:
+            data = response.read(max_bytes + 1)
+    except Exception as e:
+        result = (None, type(e).__name__ + ': ' + str(e))
+        _JSON_ARTIFACT_CACHE[url] = result
+        return result
+    if len(data) > max_bytes:
+        result = (None, 'artifact exceeds ' + str(max_bytes) + ' bytes')
+        _JSON_ARTIFACT_CACHE[url] = result
+        return result
+    try:
+        result = (json.loads(data.decode('utf-8')), '')
+    except Exception as e:
+        result = (None, 'json parse failed: ' + str(e))
+    _JSON_ARTIFACT_CACHE[url] = result
+    return result
+
+
+def enrich_capture_payload(payload):
+    """Attach JSON artifacts that Riddle previews return as URLs instead of inline data."""
+    if not isinstance(payload, dict):
+        return payload
+    enriched = dict(payload)
+    artifact_json = dict(enriched.get('_artifact_json') or {})
+    artifact_errors = dict(enriched.get('_artifact_errors') or {})
+
+    for name in ('console.json', 'proof.json'):
+        if name in artifact_json or name in artifact_errors:
+            continue
+        item = capture_output_item(enriched, name)
+        if not item:
+            continue
+        data, error = fetch_json_artifact(item.get('url', ''))
+        if error:
+            artifact_errors[name] = error
+        elif data is not None:
+            artifact_json[name] = data
+
+    if artifact_json:
+        enriched['_artifact_json'] = artifact_json
+    if artifact_errors:
+        enriched['_artifact_errors'] = artifact_errors
+
+    console_json = artifact_json.get('console.json')
+    if console_json is not None and not enriched.get('console'):
+        enriched['console'] = console_json
+
+    proof_json = artifact_json.get('proof.json')
+    if isinstance(proof_json, dict):
+        enriched['_proof_json'] = proof_json
+        if not enriched.get('result'):
+            for key in ('result', 'script_result', 'return_value', 'value'):
+                result = proof_json.get(key)
+                if isinstance(result, dict):
+                    enriched['result'] = result
+                    break
+
+    return enriched
+
+
+def summarize_capture_artifacts(payload):
+    if not isinstance(payload, dict):
+        return {}
+    enriched = enrich_capture_payload(payload)
+    proof_json = enriched.get('_proof_json') or {}
+    console_json = (enriched.get('_artifact_json') or {}).get('console.json')
+    result = enriched.get('result') if isinstance(enriched.get('result'), dict) else {}
+    return {
+        'outputs': [
+            {'name': item.get('name', ''), 'url': item.get('url', '')}
+            for item in (enriched.get('outputs') or [])
+            if isinstance(item, dict)
+        ][:20],
+        'screenshots': [
+            {'name': item.get('name', ''), 'url': item.get('url', '')}
+            for item in (enriched.get('screenshots') or [])
+            if isinstance(item, dict)
+        ][:10],
+        'artifacts': [
+            summarize_capture_artifact_item(item)
+            for item in (enriched.get('artifacts') or [])
+            if isinstance(item, dict)
+        ][:20],
+        'result_keys': sorted(result.keys()),
+        'artifact_json': sorted((enriched.get('_artifact_json') or {}).keys()),
+        'artifact_errors': dict(enriched.get('_artifact_errors') or {}),
+        'proof_script_error': bool(isinstance(proof_json, dict) and proof_json.get('script_error')),
+        'console_summary': console_json.get('summary', {}) if isinstance(console_json, dict) else {},
+    }
+
+
+def summarize_capture_artifact_item(item):
+    summary = {
+        'name': item.get('name', ''),
+        'kind': item.get('kind'),
+        'role': item.get('role'),
+        'url': item.get('url'),
+        'path': item.get('path'),
+        'content_type': item.get('content_type'),
+        'size_bytes': item.get('size_bytes'),
+        'source': 'artifacts',
+    }
+    metadata = item.get('metadata')
+    if isinstance(metadata, dict):
+        summary['metadata_keys'] = sorted(metadata.keys())
+    return {key: value for key, value in summary.items() if value not in (None, '')}
+
+
+def git(cmd, cwd):
+    """Run a shell command in a repo directory."""
+    return sp.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
+
+
+def load_package_json(project_dir):
+    package_json = os.path.join(project_dir, 'package.json')
+    if not os.path.exists(package_json):
+        return {}
+    try:
+        with open(package_json) as f:
+            return json.load(f)
+    except:
+        return {}
+
+
+def truthy(value):
+    return str(value or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
+
+
+def should_use_static_preview(project_dir, state):
+    if not truthy(state.get('allow_static_preview_fallback')):
+        return ''
+
+    build_dir = detect_static_build_dir(project_dir, state)
+    if not os.path.exists(os.path.join(build_dir, 'index.html')):
+        return ''
+    if os.path.exists(os.path.join(project_dir, '.next', 'standalone', 'server.js')):
+        return ''
+
+    pkg = load_package_json(project_dir)
+    scripts = pkg.get('scripts') or {}
+    start_cmd = ' '.join(str(scripts.get(k, '')).lower() for k in ('start', 'preview', 'dev'))
+    if 'vite' in start_cmd:
+        return 'package.json scripts indicate a Vite static app'
+    if 'react-scripts' in start_cmd:
+        return 'package.json scripts indicate a static SPA preview'
+    if os.path.exists(os.path.join(project_dir, 'server.js')):
+        return ''
+    server_command = str(state.get('server_command') or '').lower()
+    if 'vite' in server_command:
+        return 'configured server command points at Vite rather than a standalone server'
+    return ''
+
+
+def capture_script_saves_screenshot(capture_script):
+    return 'saveScreenshot' in (capture_script or '')
+
+
+def join_url_path(base_url, target_path=''):
+    base = (base_url or '').strip()
+    path = (target_path or '').strip()
+    if not path or path == '/':
+        return base
+    if not base:
+        return path
+    return urljoin(base.rstrip('/') + '/', path.lstrip('/'))
+
+
+def build_capture_script(url, capture_script, label, wait_for_selector=''):
+    pieces = [
+        'await page.goto(' + json.dumps(url) + ');',
+    ]
+    selector = (wait_for_selector or '').strip()
+    if selector:
+        pieces.append('await page.waitForSelector(' + json.dumps(selector) + ');')
+    pieces.append('await page.waitForTimeout(1500);')
+    if (capture_script or '').strip():
+        pieces.append((capture_script or '').strip().rstrip(';') + ';')
+    if not capture_script_saves_screenshot(capture_script):
+        pieces.append('await saveScreenshot(' + json.dumps(label) + ');')
+    return ' '.join(pieces)
+
+
+def capture_static_preview(state, project_dir, label, capture_script, timeout=300, target_path=''):
+    build_dir = detect_static_build_dir(project_dir, state)
+    if not build_dir:
+        return {
+            'ok': False,
+            'preview_id': '',
+            'preview_url': '',
+            'url': '',
+            'raw': {'ok': False, 'error': 'No static build output found. Tried configured build_output, dist, build, out.'},
+        }
+
+    preview = invoke_retry('riddle_preview', {'directory': build_dir, 'label': label}, retries=3, timeout=timeout)
+    if not preview.get('ok'):
+        return {
+            'ok': False,
+            'preview_id': preview.get('id', ''),
+            'preview_url': preview.get('preview_url') or preview.get('previewUrl') or '',
+            'url': '',
+            'raw': preview,
+        }
+    preview_url = preview.get('preview_url') or preview.get('previewUrl') or ''
+    preview_id = preview.get('id', '')
+    capture_url = join_url_path(preview_url, target_path or state.get('server_path', ''))
+
+    script = build_capture_script(capture_url, capture_script, label, state.get('wait_for_selector', ''))
+    args = {'script': script, 'timeout_sec': 60}
+    apply_auth_context(state, args)
+    shot = invoke_retry('riddle_script', args, retries=3, timeout=max(timeout, 120))
+    screenshots = shot.get('screenshots') or []
+    url = screenshots[0].get('url', '') if screenshots else ''
+    return {
+        'ok': bool(url),
+        'preview_id': preview_id,
+        'preview_url': preview_url,
+        'capture_url': capture_url,
+        'url': url,
+        'raw': {
+            'preview': preview,
+            'capture': shot,
+        },
+    }
+
+
+def shell_quote(value):
+    return shlex.quote(str(value))
+
+
+def detect_static_build_dir(project_dir, state):
+    candidates = []
+    configured = (state.get('build_output') or '').strip()
+    if configured:
+        candidates.append(configured)
+    candidates += ['dist', 'build', 'out']
+
+    seen = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        build_dir = candidate if os.path.isabs(candidate) else os.path.join(project_dir, candidate)
+        if os.path.exists(os.path.join(build_dir, 'index.html')):
+            return build_dir
+    return ''
+
+
+def is_vite_project(project_dir):
+    pkg = load_package_json(project_dir)
+    scripts = pkg.get('scripts') or {}
+    script_text = ' '.join(str(v).lower() for v in scripts.values())
+    if 'vite' in script_text:
+        return True
+    for name in ('vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.cjs'):
+        if os.path.exists(os.path.join(project_dir, name)):
+            return True
+    return False
+
+
+def write_static_spa_server(build_dir):
+    server_path = os.path.join(build_dir, 'riddle-proof-server.js')
+    server_code = r"""const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const root = process.cwd();
+const port = Number(process.env.PORT || 3000);
+const host = process.env.HOSTNAME || '0.0.0.0';
+const types = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.wav': 'audio/wav',
+  '.mp3': 'audio/mpeg',
+  '.ogg': 'audio/ogg',
+};
+
+function sendFile(res, filePath) {
+  res.setHeader('Content-Type', types[path.extname(filePath).toLowerCase()] || 'application/octet-stream');
+  fs.createReadStream(filePath)
+    .on('error', () => {
+      res.statusCode = 500;
+      res.end('Failed to read file');
+    })
+    .pipe(res);
+}
+
+function safePathFromParts(parts) {
+  const filePath = path.join(root, ...parts);
+  return filePath.startsWith(root) ? filePath : '';
+}
+
+function resolveStaticPath(pathname) {
+  const parts = pathname.split('/').filter(Boolean);
+  const candidates = [safePathFromParts(parts)];
+  for (let i = 1; i < parts.length; i += 1) {
+    candidates.push(safePathFromParts(parts.slice(i)));
+  }
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const stat = fs.statSync(candidate);
+      if (stat.isDirectory()) {
+        const indexPath = path.join(candidate, 'index.html');
+        if (fs.existsSync(indexPath)) return indexPath;
+      }
+      if (stat.isFile()) return candidate;
+    } catch (_) {
+      // Try the next stripped base-path candidate before falling back to the SPA shell.
+    }
+  }
+  return '';
+}
+
+http.createServer((req, res) => {
+  const parsed = new URL(req.url || '/', 'http://127.0.0.1');
+  const pathname = decodeURIComponent(parsed.pathname || '/');
+  const filePath = resolveStaticPath(pathname);
+  if (filePath && !filePath.startsWith(root)) {
+    res.statusCode = 403;
+    res.end('Forbidden');
+    return;
+  }
+
+  if (filePath) {
+    sendFile(res, filePath);
+    return;
+  }
+  sendFile(res, path.join(root, 'index.html'));
+}).listen(port, host, () => {
+  console.log(`riddle-proof static server listening on http://${host}:${port}`);
+});
+"""
+    with open(server_path, 'w') as f:
+        f.write(server_code)
+    return server_path
+
+
+def find_next_standalone_dir(project_dir):
+    standalone = os.path.join(project_dir, '.next', 'standalone')
+    if not os.path.exists(standalone):
+        return ''
+
+    if os.path.exists(os.path.join(standalone, 'server.js')):
+        return standalone
+
+    for d in os.listdir(standalone):
+        candidate = os.path.join(standalone, d)
+        if os.path.exists(os.path.join(candidate, 'server.js')):
+            return candidate
+    return ''
+
+
+def prepare_server_preview(project_dir, state):
+    """Return (directory, command, exclude) for riddle_server_preview after build."""
+    standalone = find_next_standalone_dir(project_dir)
+    if standalone:
+        sp.run(
+            'cp -r ' + shell_quote(os.path.join(project_dir, '.next', 'static')) + ' ' + shell_quote(os.path.join(standalone, '.next', 'static')),
+            shell=True,
+            capture_output=True,
+        )
+        sp.run(
+            'cp -r ' + shell_quote(os.path.join(project_dir, 'public')) + ' ' + shell_quote(os.path.join(standalone, 'public')) + ' 2>/dev/null',
+            shell=True,
+            capture_output=True,
+        )
+        return standalone, 'node server.js', ['.git', '*.log']
+
+    if is_vite_project(project_dir):
+        build_dir = detect_static_build_dir(project_dir, state)
+        if build_dir:
+            write_static_spa_server(build_dir)
+            return build_dir, 'node riddle-proof-server.js', ['.git', '*.log', 'node_modules']
+
+    return project_dir, state['server_command'], ['.git', '*.log', 'node_modules']
+
+
+def prepare_standalone(project_dir):
+    """Prepare Next.js standalone dir. Returns the correct build dir path.
+
+    Next.js standalone output may nest under a subdir matching the project
+    folder name (e.g. .next/standalone/my-project/server.js). This finds
+    the right dir and copies static assets + public into it.
+    """
+    standalone = project_dir + '/.next/standalone'
+    if not os.path.exists(standalone):
+        return project_dir
+
+    # Find the dir containing server.js
+    if not os.path.exists(standalone + '/server.js'):
+        for d in os.listdir(standalone):
+            candidate = standalone + '/' + d + '/server.js'
+            if os.path.exists(candidate):
+                standalone = standalone + '/' + d
+                break
+
+    if not os.path.exists(standalone + '/server.js'):
+        return project_dir
+
+    # Copy static assets
+    sp.run('cp -r ' + project_dir + '/.next/static ' + standalone + '/.next/static',
+           shell=True, capture_output=True)
+    sp.run('cp -r ' + project_dir + '/public ' + standalone + '/public 2>/dev/null',
+           shell=True, capture_output=True)
+
+    # Standalone requires 'node server.js', not 'npm start' / 'next start'
+    # Update state if loaded
+    try:
+        if os.path.exists(STATE_FILE):
+            s = json.load(open(STATE_FILE))
+            if s.get('server_command') in ('npm start', 'next start'):
+                s['server_command'] = 'node server.js'
+                json.dump(s, open(STATE_FILE, 'w'), indent=2)
+    except:
+        pass
+
+    return standalone
