@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.15
+
+### Patch Changes
+
+- 8dee58c: Make OpenClaw proof runs background by default, skip useless shared dependency installs when the active workspace fingerprint does not match proof worktrees, reuse before-worktree dependencies for matching after worktrees, and expose richer status guidance for wake/watch monitoring.
+- Updated dependencies [8dee58c]
+  - @riddledc/riddle-proof@0.5.5
+
 ## 0.4.14
 
 ### Patch Changes

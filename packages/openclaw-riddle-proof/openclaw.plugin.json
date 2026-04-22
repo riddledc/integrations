@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.4.14",
+  "version": "0.4.15",
   "type": "plugin",
   "bundledSkills": [
     "riddle-proof"
