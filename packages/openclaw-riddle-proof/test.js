@@ -400,6 +400,7 @@ const reviewBlocked = await runOpenClawRiddleProof(
     executionMode: "engine",
     defaultShipMode: "none",
     proofReviewMode: "main_agent",
+    autoReviewShipModeNone: false,
     engine: {
       async execute(engineParams) {
         reviewEngineCalls.push(engineParams);
@@ -433,6 +434,86 @@ assert.equal(inspectResult.ready_to_ship_candidate, true);
 assert.deepEqual(inspectResult.visible_change?.after_buttons, ["Reset Game"]);
 assert.equal(inspectResult.structured_evidence?.proof_evidence_present, true);
 assert.match(inspectResult.structured_evidence?.proof_evidence_sample, /attack_ms_after/);
+
+const autoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-auto-review-"));
+const autoReviewStatePath = path.join(autoReviewFixture, "riddle-state.json");
+const autoReviewWrapperStatePath = path.join(autoReviewFixture, "wrapper-state.json");
+writeFileSync(autoReviewStatePath, JSON.stringify({
+  branch: "agent/auto-review-fixture",
+  before_cdn: "https://example.com/auto-before.png",
+  after_cdn: "https://example.com/auto-after.png",
+  evidence_bundle: {
+    expected_path: "/games/tic-tac-toe",
+    after: {
+      screenshot_url: "https://example.com/auto-after.png",
+      visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/games/tic-tac-toe",
+    visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    semantic_context: {
+      route: {
+        expected_path: "/games/tic-tac-toe",
+        before_observed_path: "/games/tic-tac-toe",
+        after_observed_path: "/games/tic-tac-toe",
+      },
+      after: {
+        valid: true,
+        headings: ["Tic Tac Toe"],
+        buttons: ["Reset Game"],
+        visible_text_sample: "Tic Tac Toe Reset Game",
+      },
+    },
+  },
+}, null, 2));
+const autoReviewEngineCalls = [];
+const autoReviewResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    run_mode: "blocking",
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: autoReviewWrapperStatePath,
+    state_path: autoReviewStatePath,
+    change_request: "Make Tic Tac Toe board polish visibly stronger",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    engine: {
+      async execute(engineParams) {
+        autoReviewEngineCalls.push(engineParams);
+        if (engineParams.proof_assessment_json) {
+          const proofAssessment = JSON.parse(engineParams.proof_assessment_json);
+          assert.equal(proofAssessment.decision, "ready_to_ship");
+          assert.equal(proofAssessment.source, "openclaw_auto_ship_mode_none");
+          assert.equal(proofAssessment.continue_with_stage, "ship");
+          return {
+            ok: true,
+            state_path: autoReviewStatePath,
+            checkpoint: "verify_ship_ready",
+            summary: "Proof is ready but ship mode is held.",
+            shipGate: { ok: true },
+          };
+        }
+        return {
+          ok: false,
+          state_path: autoReviewStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof evidence needs judgment.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(autoReviewResult.status, "ready_to_ship");
+assert.equal(autoReviewResult.ok, true);
+assert.equal(autoReviewEngineCalls.length, 2);
+assert.ok(autoReviewEngineCalls[1].proof_assessment_json);
 
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(

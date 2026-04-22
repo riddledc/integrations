@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.4.16",
+  "version": "0.4.17",
   "type": "plugin",
   "bundledSkills": [
     "riddle-proof"
@@ -107,6 +107,11 @@
         ],
         "default": "background",
         "description": "background returns an accepted run state immediately so channel surfaces can watch status without holding the chat turn; blocking waits for tool completion."
+      },
+      "autoReviewShipModeNone": {
+        "type": "boolean",
+        "default": true,
+        "description": "When proofReviewMode=main_agent and ship_mode resolves to none, automatically advance proof review only when inspection already marks the evidence as a ready-to-ship candidate. This never ships or marks a PR ready."
       },
       "codexCommand": {
         "type": "string"

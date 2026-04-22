@@ -15,7 +15,7 @@ Use `riddle_proof_change` for browser-visible changes that need evidence before 
 4. Return the initial `state_path` to the user, then keep the main conversation responsive.
 5. Do not run a tight manual polling loop in the main chat. If `sessions_spawn` is available, use it for monitoring long proof runs; otherwise poll status only when the user asks or after the returned `recommended_poll_after_ms`.
 6. When the run reaches a checkpoint, blocker, or ready state, use `riddle_proof_status` and usually `riddle_proof_inspect` before deciding what to report or how to resume.
-7. If the run blocks for main-agent proof review, inspect the evidence packet, judge the screenshots/artifacts directly, and resume with `riddle_proof_review`.
+7. If the run blocks for main-agent proof review, inspect the evidence packet, judge the screenshots/artifacts directly, and resume with `riddle_proof_review`. For non-shipping runs (`ship_mode: "none"`), the plugin may auto-advance when inspection already marks the proof as a ready-to-ship candidate; report the held result instead of repeating the review loop.
 
 ## Background Monitoring
 
