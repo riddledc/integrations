@@ -110,6 +110,18 @@ export interface RunRiddleProofEngineHarnessInput {
   auto_approve?: boolean;
 }
 
+const DEFAULT_MAX_ITERATIONS = 12;
+const DEFAULT_STAGE_ITERATION_LIMITS: Partial<Record<RiddleProofStage, number>> = {
+  setup: 2,
+  recon: 4,
+  author: 3,
+  implement: 3,
+  prove: 3,
+  verify: 4,
+  ship: 2,
+  notify: 2,
+};
+
 interface RouteResult {
   next?: RiddleProofWorkflowParams;
   terminal?: RiddleProofRunResult;
@@ -863,7 +875,7 @@ export async function runRiddleProofEngineHarness(
   const agent = input.agent || createDisabledRiddleProofAgentAdapter();
   const maxIterations = Math.max(
     1,
-    Math.trunc(input.max_iterations ?? request.max_iterations ?? input.config?.defaultMaxIterations ?? 8),
+    Math.trunc(input.max_iterations ?? request.max_iterations ?? input.config?.defaultMaxIterations ?? DEFAULT_MAX_ITERATIONS),
   );
 
   state.status = "running";
@@ -900,6 +912,7 @@ export async function runRiddleProofEngineHarness(
 
   let nextParams = input.resume_params || initialRunParams(request, input, state);
   let lastResult: RiddleProofEngineResult | null = null;
+  const stageIterations: Partial<Record<RiddleProofStage, number>> = {};
 
   for (let index = 0; index < maxIterations; index += 1) {
     if (request.leave_draft && nextParams.leave_draft === undefined) {
@@ -962,6 +975,7 @@ export async function runRiddleProofEngineHarness(
     state.last_checkpoint = result.checkpoint || state.last_checkpoint || null;
 
     const resultStage = stageFromCheckpoint(result);
+    stageIterations[resultStage] = (stageIterations[resultStage] || 0) + 1;
     heartbeat(state, {
       stage: resultStage,
       summary: `${resultStage} stage is active.`,
@@ -987,6 +1001,23 @@ export async function runRiddleProofEngineHarness(
         finished_at: timestamp(),
       },
     });
+
+    const stageLimit = DEFAULT_STAGE_ITERATION_LIMITS[resultStage];
+    if (stageLimit && stageIterations[resultStage] > stageLimit) {
+      return blockerResult(state, result, {
+        code: "stage_iteration_limit_reached",
+        checkpoint: result.checkpoint || null,
+        message: `The harness exceeded the ${resultStage} stage iteration limit before the proof was ready or shipped.`,
+        details: {
+          stage: resultStage,
+          stage_iterations: stageIterations[resultStage],
+          stage_iteration_limit: stageLimit,
+          max_iterations: maxIterations,
+          lastCheckpoint: result.checkpoint || null,
+          lastSummary: result.summary || null,
+        },
+      });
+    }
 
     const routed = await routeCheckpoint(request, state, result, agent, input);
     if (routed.terminal) return routed.terminal;

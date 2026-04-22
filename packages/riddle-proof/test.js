@@ -723,6 +723,225 @@ assert.equal(engineCalls[0].auth_headers_json, "{\"Authorization\":\"Bearer toke
 assert.equal(engineCalls.at(-1).ship_after_verify, true);
 assert.equal(engineCalls.at(-1).leave_draft, true);
 
+const runwayFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-iteration-runway-"));
+const runwayWorkdir = path.join(runwayFixture, "after");
+mkdirSync(runwayWorkdir);
+execFileSync("git", ["init"], { cwd: runwayWorkdir, stdio: "ignore" });
+const runwayStatePath = path.join(runwayFixture, "riddle-state.json");
+writeFileSync(runwayStatePath, JSON.stringify({
+  after_worktree: runwayWorkdir,
+  branch: "agent/openclaw/iteration-runway",
+}, null, 2));
+
+let runwayReconAttempts = 0;
+let runwayAuthorPackets = 0;
+const runwayEngineCalls = [];
+const runwayResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Exercise a long non-shipping proof path.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: path.join(runwayFixture, "harness-state.json"),
+    engine_state_path: runwayStatePath,
+  },
+  engine: {
+    async execute(params) {
+      runwayEngineCalls.push(params);
+      if (params.proof_assessment_json) {
+        return {
+          ok: true,
+          state_path: runwayStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Proof is ready but ship mode is held.",
+          shipGate: { ok: true },
+        };
+      }
+      if (params.author_packet_json && runwayAuthorPackets > 1) {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof evidence needs judgment after proof plan revision.",
+        };
+      }
+      if (params.advance_stage === "verify") {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "verify_capture_retry",
+          summary: "Capture needs a proof packet revision before final judgment.",
+          checkpointContract: {
+            resume: { continue_with_stage: "author" },
+          },
+        };
+      }
+      if (params.implementation_notes) {
+        return {
+          ok: true,
+          state_path: runwayStatePath,
+          checkpoint: "implement_review",
+          summary: "Implementation review ready.",
+        };
+      }
+      if (params.author_packet_json) {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "implement_changes_missing",
+          summary: "Implementation changes are required.",
+        };
+      }
+      if (params.recon_assessment_json && runwayReconAttempts > 1) {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "author_supervisor_judgment",
+          summary: "Author packet required.",
+        };
+      }
+      if (params.recon_assessment_json) {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "recon_supervisor_judgment",
+          summary: "Retry recon before authoring.",
+        };
+      }
+      if (params.advance_stage === "recon") {
+        return {
+          ok: false,
+          state_path: runwayStatePath,
+          checkpoint: "recon_supervisor_judgment",
+          summary: "Initial recon assessment required.",
+        };
+      }
+      return {
+        ok: false,
+        state_path: runwayStatePath,
+        checkpoint: "awaiting_stage_advance",
+        stage: "setup",
+        summary: "Setup is complete; advance to recon.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() {
+      runwayReconAttempts += 1;
+      return {
+        ok: true,
+        summary: runwayReconAttempts === 1 ? "Retry recon once." : "Recon is specific enough.",
+        payload: {
+          decision: runwayReconAttempts === 1 ? "retry_recon" : "ready_for_author",
+          continue_with_stage: runwayReconAttempts === 1 ? "recon" : "author",
+          source: "supervising_agent",
+        },
+      };
+    },
+    async authorProofPacket() {
+      runwayAuthorPackets += 1;
+      return {
+        ok: true,
+        summary: `Proof packet ${runwayAuthorPackets} ready.`,
+        payload: {
+          proof_plan: `Capture proof attempt ${runwayAuthorPackets}.`,
+          capture_script: "await saveScreenshot('after-proof')",
+          summary: "Capture after proof.",
+        },
+      };
+    },
+    async implementChange() {
+      writeFileSync(path.join(runwayWorkdir, "feature.txt"), "changed\n");
+      return {
+        ok: true,
+        summary: "Changed the after worktree.",
+        diffDetected: true,
+        changedFiles: ["feature.txt"],
+        implementationNotes: "Created a focused fixture diff.",
+      };
+    },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Proof is ready.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["after evidence satisfies the request"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+
+assert.equal(runwayResult.status, "ready_to_ship");
+assert.equal(runwayResult.ok, true);
+assert.equal(runwayResult.blocker, undefined);
+assert.equal(runwayEngineCalls.length, 9);
+assert.equal(runwayEngineCalls.at(-1).proof_assessment_json !== undefined, true);
+
+const reconLoopFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-recon-loop-"));
+const reconLoopStatePath = path.join(reconLoopFixture, "riddle-state.json");
+writeFileSync(reconLoopStatePath, JSON.stringify({}, null, 2));
+const reconLoopResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Exercise a bad recon loop.",
+    verification_mode: "visual",
+    harness_state_path: path.join(reconLoopFixture, "harness-state.json"),
+    engine_state_path: reconLoopStatePath,
+  },
+  engine: {
+    async execute(params) {
+      if (!params.advance_stage && !params.recon_assessment_json) {
+        return {
+          ok: false,
+          state_path: reconLoopStatePath,
+          checkpoint: "awaiting_stage_advance",
+          stage: "setup",
+          summary: "Setup is complete; advance to recon.",
+        };
+      }
+      return {
+        ok: false,
+        state_path: reconLoopStatePath,
+        checkpoint: "recon_supervisor_judgment",
+        summary: "Recon still needs another retry.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() {
+      return {
+        ok: true,
+        summary: "Retry recon.",
+        payload: {
+          decision: "retry_recon",
+          continue_with_stage: "recon",
+          source: "supervising_agent",
+        },
+      };
+    },
+    async authorProofPacket() {
+      throw new Error("author should not run in recon loop fixture");
+    },
+    async implementChange() {
+      throw new Error("implementation should not run in recon loop fixture");
+    },
+    async assessProof() {
+      throw new Error("proof assessment should not run in recon loop fixture");
+    },
+  },
+});
+
+assert.equal(reconLoopResult.status, "blocked");
+assert.equal(reconLoopResult.blocker.code, "stage_iteration_limit_reached");
+assert.equal(reconLoopResult.blocker.details.stage, "recon");
+assert.equal(reconLoopResult.blocker.details.stage_iteration_limit, 4);
+
 const missingWorktreeStatePath = path.join(engineFixture, "missing-worktree-riddle-state.json");
 writeFileSync(missingWorktreeStatePath, JSON.stringify({}, null, 2));
 const missingWorktreeResult = await runRiddleProofEngineHarness({
