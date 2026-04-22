@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.12
+
+### Patch Changes
+
+- bb14dbd: Run production background proof workflows in a worker thread so long-running recon, proof, and Codex subprocess work does not block the OpenClaw gateway from answering follow-up messages or status requests.
+
 ## 0.4.11
 
 ### Patch Changes
