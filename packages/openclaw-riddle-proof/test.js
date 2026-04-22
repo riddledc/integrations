@@ -141,6 +141,7 @@ const engineModeResult = await runOpenClawRiddleProof(
   {
     ...params,
     dry_run: false,
+    run_mode: "blocking",
     ship_after_verify: false,
     ship_mode: "none",
     harness_state_path: path.join(engineFixture, "wrapper-state.json"),
@@ -262,6 +263,9 @@ writeFileSync(backgroundEngineStatePath, JSON.stringify({
     action: "run",
     status: "running",
     started_at: new Date(Date.now() - 250).toISOString(),
+    phase: "capture",
+    phase_status: "running",
+    phase_started_at: new Date(Date.now() - 125).toISOString(),
     workflow_file: "riddle-proof-verify.lobster",
   },
   runtime_events: [
@@ -276,10 +280,57 @@ writeFileSync(backgroundEngineStatePath, JSON.stringify({
 }, null, 2));
 const enrichedBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
 assert.equal(enrichedBackgroundStatus?.engine_state_path, backgroundEngineStatePath);
+assert.equal(enrichedBackgroundStatus?.current_stage, "verify");
+assert.equal(enrichedBackgroundStatus?.wrapper_current_stage, "verify");
+assert.equal(enrichedBackgroundStatus?.engine_current_stage, "verify");
 assert.equal(enrichedBackgroundStatus?.active_substep?.step, "verify");
 assert.equal(enrichedBackgroundStatus?.engine_latest_event?.kind, "workflow.step.started");
 assert.equal(enrichedBackgroundStatus?.engine_runtime_event_count, 1);
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
+assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
+assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
+assert.equal(enrichedBackgroundStatus?.wake_strategy?.signal, "run.wake.requested");
+writeFileSync(backgroundWrapperStatePath, JSON.stringify({
+  ...backgroundState,
+  status: "running",
+  current_stage: "setup",
+}, null, 2));
+const runningBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+assert.equal(runningBackgroundStatus?.current_stage, "verify");
+assert.equal(runningBackgroundStatus?.wrapper_current_stage, "setup");
+assert.equal(runningBackgroundStatus?.engine_current_stage, "verify");
+assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 30000);
+
+const defaultBackgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-default-background-"));
+const defaultBackgroundEngineStatePath = path.join(defaultBackgroundFixture, "riddle-state.json");
+const defaultBackgroundResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: path.join(defaultBackgroundFixture, "wrapper-state.json"),
+    state_path: defaultBackgroundEngineStatePath,
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute() {
+        writeFileSync(defaultBackgroundEngineStatePath, JSON.stringify({ branch: "agent/default-background-proof" }, null, 2));
+        return {
+          ok: true,
+          state_path: defaultBackgroundEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Default background proof is ready.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+  },
+);
+assert.equal(defaultBackgroundResult.status, "running");
+assert.equal(defaultBackgroundResult.raw?.run_mode, "background");
 
 const reviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-review-"));
 const reviewStatePath = path.join(reviewFixture, "riddle-state.json");
@@ -338,6 +389,7 @@ const reviewBlocked = await runOpenClawRiddleProof(
   {
     ...params,
     dry_run: false,
+    run_mode: "blocking",
     ship_after_verify: false,
     ship_mode: "none",
     harness_state_path: reviewWrapperStatePath,

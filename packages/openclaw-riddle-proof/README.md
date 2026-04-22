@@ -67,14 +67,19 @@ the exact commit, wait for CI, and mark the PR ready; `leave_draft: true` is an
 explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `RiddleProofRunResult`.
 
-For chat surfaces that should not keep one long tool reply open, pass
-`run_mode: "background"` or configure `defaultRunMode: "background"`. The tool
+For chat surfaces that should not keep one long tool reply open, background mode
+is the default. Pass `run_mode: "blocking"` only for deliberate synchronous
+debugging, or configure `defaultRunMode: "blocking"` in runtimes that really
+need the old behavior. In background mode, the tool
 then writes the wrapper state immediately, returns `status: "running"` with a
 `state_path`, and continues the proof in the gateway process. Any OC interface
 can poll `riddle_proof_status`, call `riddle_proof_inspect` when review evidence
 is ready, and resume with `riddle_proof_review`. This is intentionally
 channel-agnostic: Discord, Telegram, iMessage bridges, and CLIs all consume the
 same state contract instead of relying on a fragile transport-specific timeout.
+The normal UX should keep polling out of the main chat turn: use an OC
+`sessions_spawn` monitor or host worker when available, and otherwise poll at
+the returned `recommended_poll_after_ms` cadence.
 When a background run settles, the wrapper appends a durable
 `run.wake.requested` event with the final status, blocker if any, and suggested
 next tools. Host integrations can watch that event and re-enter the originating
@@ -89,7 +94,11 @@ configured their own auth helper.
 
 `riddle_proof_status` accepts a wrapper `state_path` returned by
 `riddle_proof_change` and returns a cheap status snapshot with run id, stage,
-elapsed time, blocker, worktree path, and latest event.
+elapsed time, blocker, worktree path, and latest event. Engine-backed background
+runs also include `active_substep`, `phase_elapsed_ms`, `engine_latest_event`,
+`engine_runtime_event_count`, `recommended_poll_after_ms`, and a `wake_strategy`
+hint so agents and host surfaces can monitor long proof runs without noisy main
+conversation polling.
 
 `riddle_proof_inspect` accepts the same wrapper `state_path` and returns a
 proof-native review packet: route match, repo profile usage, artifact URLs,

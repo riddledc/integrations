@@ -342,7 +342,7 @@ function runModeFrom(
 ): OpenClawRiddleProofRunMode {
   if (params.background === true) return "background";
   if (params.run_mode === "background" || params.run_mode === "blocking") return params.run_mode;
-  return config.defaultRunMode || "blocking";
+  return config.defaultRunMode || "background";
 }
 
 function startOpenClawRiddleProofBackground(
@@ -801,6 +801,14 @@ function elapsedMsSince(isoTime: unknown) {
   return Math.max(0, Date.now() - startedMs);
 }
 
+function recommendedPollAfterMs(activeSubstep: Record<string, unknown> | null, snapshot: RiddleProofRunStatusSnapshot) {
+  if (snapshot.status !== "running") return null;
+  const phase = stringValue(activeSubstep?.phase);
+  if (phase.endsWith("_deps")) return 60_000;
+  if (activeSubstep?.status === "running") return 30_000;
+  return 10_000;
+}
+
 export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRunStatusSnapshot | null {
   const snapshot = readRiddleProofRunStatus(state_path);
   if (!snapshot) return null;
@@ -812,13 +820,25 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
   const engineState = readJsonRecord(engineStatePath);
   const activeSubstep = recordValue(engineState?.current_runtime_step);
   const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  const engineCurrentStage = stringValue(activeSubstep?.step);
+  const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
   return {
     ...snapshot,
+    current_stage: effectiveStage,
+    wrapper_current_stage: snapshot.current_stage ?? null,
+    engine_current_stage: engineCurrentStage || null,
     engine_state_path: engineStatePath,
     active_substep: activeSubstep,
     substep_elapsed_ms: activeSubstep?.status === "running" ? elapsedMsSince(activeSubstep.started_at) : null,
+    phase_elapsed_ms: activeSubstep?.phase_status === "running" ? elapsedMsSince(activeSubstep.phase_started_at) : null,
     engine_latest_event: latestRuntimeEvent(engineState),
     engine_runtime_event_count: runtimeEvents.length,
+    recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
+    wake_strategy: {
+      signal: "run.wake.requested",
+      recommendation:
+        "For normal chat UX, do not tight-poll in the main conversation. Watch this state from a background session or host worker and re-enter when the run reaches a checkpoint, blocker, or ready state.",
+    },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
 }
 
@@ -1068,7 +1088,7 @@ export const riddleProofChangeParameters = Type.Object({
     Type.Literal("background"),
   ], {
     description:
-      "blocking waits for the run result; background returns an accepted run state immediately so chat surfaces can poll status instead of holding one long reply open.",
+      "background returns an accepted run state immediately so chat surfaces can watch status instead of holding one long reply open. This is the default; use blocking only for synchronous debug runs.",
   })),
   background: optionalBoolean("Compatibility shortcut for run_mode=background."),
   leave_draft: optionalBoolean("Opt-in escape hatch: keep the PR as draft after proof and CI instead of marking it ready."),

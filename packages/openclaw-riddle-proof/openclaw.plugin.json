@@ -4,7 +4,9 @@
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
   "version": "0.4.14",
   "type": "plugin",
-  "bundledSkills": [],
+  "bundledSkills": [
+    "riddle-proof"
+  ],
   "capabilities": {
     "network": {
       "egress": [],
@@ -103,7 +105,8 @@
           "blocking",
           "background"
         ],
-        "description": "blocking waits for tool completion; background returns an accepted run state immediately so channel surfaces can poll status and inspect evidence."
+        "default": "background",
+        "description": "background returns an accepted run state immediately so channel surfaces can watch status without holding the chat turn; blocking waits for tool completion."
       },
       "codexCommand": {
         "type": "string"
