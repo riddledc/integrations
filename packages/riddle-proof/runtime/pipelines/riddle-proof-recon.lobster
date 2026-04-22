@@ -30,7 +30,7 @@ steps:
 
   - id: run_recon
     command: |
-      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/riddle-proof-run/runtime}"
+      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof/runtime}"
       python3 "${RP}/lib/recon.py"
 
   - id: summarize_recon

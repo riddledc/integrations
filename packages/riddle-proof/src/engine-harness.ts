@@ -512,7 +512,11 @@ async function resolveEngine(input: RunRiddleProofEngineHarnessInput): Promise<R
 
   const moduleUrl = input.config?.riddleEngineModuleUrl;
   if (!moduleUrl) {
-    throw new Error("No riddle engine adapter or riddleEngineModuleUrl is configured.");
+    const mod = await import("./proof-run-engine.js");
+    return mod.createRiddleProofEngine({
+      riddleProofDir: input.config?.riddleProofDir,
+      defaultReviewer: input.config?.defaultReviewer,
+    }) as RiddleProofEngine;
   }
   const mod = await import(moduleUrl);
   if (typeof mod.createRiddleProofEngine !== "function") {

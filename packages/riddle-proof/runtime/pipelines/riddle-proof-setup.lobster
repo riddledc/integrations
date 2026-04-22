@@ -132,10 +132,10 @@ steps:
       with open(args_file, 'w') as f:
           json.dump(args, f, indent=2)
       PYEOF
-      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/riddle-proof-run/runtime}"
+      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof/runtime}"
       python3 "${RP}/lib/preflight.py"
 
   - id: setup
     command: |
-      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/riddle-proof-run/runtime}"
+      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof/runtime}"
       python3 "${RP}/lib/setup.py"
