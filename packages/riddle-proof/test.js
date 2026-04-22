@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -818,6 +818,7 @@ const firstDepsResult = JSON.parse(execFileSync("node", [
 ], { encoding: "utf-8", env: ensureDepsEnv }));
 assert.equal(firstDepsResult.ok, true);
 assert.equal(firstDepsResult.status, "cached:npm ci");
+assert.equal(lstatSync(path.join(dependencyFixtureA, "node_modules")).isSymbolicLink(), false);
 
 const secondDepsResult = JSON.parse(execFileSync("node", [
   workspaceCorePath,
@@ -826,6 +827,18 @@ const secondDepsResult = JSON.parse(execFileSync("node", [
 ], { encoding: "utf-8", env: ensureDepsEnv }));
 assert.equal(secondDepsResult.ok, true);
 assert.match(secondDepsResult.status, /^reused_cache:/);
+assert.equal(lstatSync(path.join(dependencyFixtureB, "node_modules")).isSymbolicLink(), false);
+
+const dependencyFixtureC = path.join(workspaceCoreFixture, "dependency-fixture-c");
+writeEmptyNpmFixture(dependencyFixtureC);
+const reusedFromDepsResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "ensure-deps",
+  JSON.stringify({ projectDir: dependencyFixtureC, reuseFrom: dependencyFixtureB }),
+], { encoding: "utf-8", env: ensureDepsEnv }));
+assert.equal(reusedFromDepsResult.ok, true);
+assert.match(reusedFromDepsResult.status, /^reused_from:/);
+assert.equal(lstatSync(path.join(dependencyFixtureC, "node_modules")).isSymbolicLink(), false);
 
 const alreadyInstalledDepsResult = JSON.parse(execFileSync("node", [
   workspaceCorePath,
