@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.17
+
+### Patch Changes
+
+- 0427377: Materialize cached Riddle Proof node_modules with hardlinks or copies instead of symlinks so server-preview tarballs cannot be rejected for symlinked dependency directories.
+- Updated dependencies [0427377]
+  - @riddledc/riddle-proof@0.5.7
+
 ## 0.4.16
 
 ### Patch Changes

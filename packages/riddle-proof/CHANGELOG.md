@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.7
+
+### Patch Changes
+
+- 0427377: Materialize cached Riddle Proof node_modules with hardlinks or copies instead of symlinks so server-preview tarballs cannot be rejected for symlinked dependency directories.
+
 ## 0.5.6
 
 ### Patch Changes
