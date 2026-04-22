@@ -6,7 +6,7 @@ workspace root by default:
   <workspace>/.riddle-proof-worktrees/riddle-proof-<run_id>-after
 """
 
-import json, subprocess as sp, os, sys, shutil
+import json, subprocess as sp, os, sys, shutil, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
 
@@ -37,6 +37,15 @@ SKILLS_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__fil
 WORKSPACE_CORE = os.path.join(SKILLS_ROOT, 'lib', 'workspace-core.mjs')
 
 
+def dependency_timeout_seconds():
+    raw = os.environ.get('RIDDLE_PROOF_INSTALL_TIMEOUT_MS', '').strip()
+    try:
+        millis = int(raw)
+    except Exception:
+        millis = 600000
+    return max(660, int((millis + 999) / 1000) + 30)
+
+
 def workspace_core(command, payload, timeout=180):
     if not os.path.exists(WORKSPACE_CORE):
         raise SystemExit('workspace core helper missing: ' + WORKSPACE_CORE)
@@ -64,8 +73,62 @@ def ensure_deps(project_dir, reuse_from=''):
     payload = {'projectDir': project_dir}
     if reuse_from:
         payload['reuseFrom'] = reuse_from
-    result = workspace_core('ensure-deps', payload, timeout=300)
+    result = workspace_core('ensure-deps', payload, timeout=dependency_timeout_seconds())
     return result.get('status', '')
+
+
+def record_setup_phase(phase, status='running', summary=''):
+    global s
+    ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    try:
+        current = load_state()
+    except Exception:
+        current = dict(s)
+    runtime_step = current.get('current_runtime_step') if isinstance(current.get('current_runtime_step'), dict) else {}
+    if not runtime_step:
+        runtime_step = {
+            'step': 'setup',
+            'action': 'run',
+            'status': 'running',
+            'started_at': ts,
+            'workflow_file': 'riddle-proof-setup.lobster',
+        }
+    runtime_step['phase'] = phase
+    runtime_step['phase_status'] = status
+    if status == 'running':
+        runtime_step['phase_started_at'] = ts
+        runtime_step.pop('phase_finished_at', None)
+    else:
+        runtime_step['phase_finished_at'] = ts
+    if summary:
+        runtime_step['summary'] = summary
+    current['current_runtime_step'] = runtime_step
+    events = current.get('runtime_events') if isinstance(current.get('runtime_events'), list) else []
+    events.append({
+        'ts': ts,
+        'kind': 'workflow.phase.' + ('started' if status == 'running' else 'finished'),
+        'step': 'setup',
+        'phase': phase,
+        'summary': summary or (phase + ' ' + status),
+        'details': {'status': status},
+    })
+    current['runtime_events'] = events[-100:]
+    current['runtime_updated_at'] = ts
+    save_state(current)
+    for key in ('current_runtime_step', 'runtime_events', 'runtime_updated_at'):
+        if key in current:
+            s[key] = current[key]
+
+
+def ensure_deps_phase(phase, project_dir, reuse_from='', summary=''):
+    record_setup_phase(phase, 'running', summary)
+    try:
+        status = ensure_deps(project_dir, reuse_from=reuse_from)
+    except BaseException as exc:
+        record_setup_phase(phase, 'failed', str(exc)[:300])
+        raise
+    record_setup_phase(phase, 'completed', status or 'no dependency install needed')
+    return status
 
 
 def resolve_worktree_root(repo_dir):
@@ -339,16 +402,16 @@ apply_repo_profile(AFTER_DIR)
 save_state(s)
 
 reuse_source = repo_dir if os.path.exists(os.path.join(repo_dir, 'package.json')) else ''
-shared_status = ensure_deps(reuse_source) if reuse_source else ''
+shared_status = ensure_deps_phase('shared_deps', reuse_source, summary='Ensuring shared repository dependencies.') if reuse_source else ''
 if shared_status:
     print('Shared deps status: ' + shared_status)
 
 before_dep_status = ''
 if reference in ('before', 'both'):
-    before_dep_status = ensure_deps(BEFORE_DIR, reuse_from=reuse_source)
+    before_dep_status = ensure_deps_phase('before_deps', BEFORE_DIR, reuse_from=reuse_source, summary='Ensuring before-worktree dependencies.')
     print('Before deps status: ' + before_dep_status)
 
-after_dep_status = ensure_deps(AFTER_DIR, reuse_from=reuse_source)
+after_dep_status = ensure_deps_phase('after_deps', AFTER_DIR, reuse_from=reuse_source, summary='Ensuring after-worktree dependencies.')
 print('After deps status: ' + after_dep_status)
 
 # Patch Next.js config in after worktree if needed

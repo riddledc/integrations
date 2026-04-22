@@ -318,6 +318,11 @@ function writeDepsManifest(projectDir, fingerprint, installCmd) {
   writeFileSync(manifestPath, JSON.stringify({ fingerprint, install_cmd: installCmd }, null, 2));
 }
 
+function dependencyInstallTimeoutMs() {
+  const parsed = Number.parseInt(process.env.RIDDLE_PROOF_INSTALL_TIMEOUT_MS || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 600000;
+}
+
 export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
   const fingerprint = computeDependencyFingerprint(projectDir);
   if (!fingerprint) return "no_package_json";
@@ -341,7 +346,7 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
 
   const installCmd = detectInstallCommand(projectDir);
   if (!installCmd) return "no_install_command";
-  const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, projectDir, 300000);
+  const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, projectDir, dependencyInstallTimeoutMs());
   if (!installResult.ok) {
     throw new Error(`dependency install failed in ${projectDir}: ${installResult.output.slice(0, 300)}`);
   }

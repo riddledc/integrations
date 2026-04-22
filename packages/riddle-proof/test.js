@@ -749,4 +749,31 @@ const missingWorktreeResult = await runRiddleProofEngineHarness({
 assert.equal(missingWorktreeResult.status, "blocked");
 assert.equal(missingWorktreeResult.blocker.code, "implementation_worktree_missing");
 
+const dryRunFailureResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Surface setup failures during dry-run.",
+    verification_mode: "visual",
+    dry_run: true,
+    harness_state_path: path.join(engineFixture, "dry-run-failure-harness-state.json"),
+  },
+  max_iterations: 1,
+  engine: {
+    async execute() {
+      return {
+        ok: false,
+        state_path: path.join(engineFixture, "dry-run-failure-riddle-state.json"),
+        checkpoint: "setup_blocked",
+        summary: "setup failed",
+        error: "workspace core timed out for ensure-deps",
+      };
+    },
+  },
+  agent: createDisabledRiddleProofAgentAdapter(),
+});
+
+assert.equal(dryRunFailureResult.status, "blocked");
+assert.equal(dryRunFailureResult.blocker.code, "setup_blocked");
+assert.equal(dryRunFailureResult.blocker.details.error, "workspace core timed out for ensure-deps");
+
 console.log(JSON.stringify({ ok: true }));
