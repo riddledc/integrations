@@ -7,8 +7,8 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  realpathSync,
   rmSync,
-  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -356,10 +356,27 @@ function copyDependencyInputs(sourceDir, targetDir) {
   }
 }
 
-function linkNodeModules(projectDir, sourceModules) {
+function materializeNodeModules(projectDir, sourceModules) {
   const projectModules = path.join(projectDir, "node_modules");
   removePath(projectModules);
-  symlinkSync(sourceModules, projectModules, "dir");
+  const resolvedSource = realpathSync(sourceModules);
+  const hardlinkResult = runSafe(
+    `cp -al ${shellQuote(resolvedSource)} ${shellQuote(projectModules)}`,
+    undefined,
+    dependencyInstallTimeoutMs(),
+  );
+  if (hardlinkResult.ok && existsSync(projectModules)) return "hardlinked";
+
+  removePath(projectModules);
+  const copyResult = runSafe(
+    `cp -a ${shellQuote(resolvedSource)} ${shellQuote(projectModules)}`,
+    undefined,
+    dependencyInstallTimeoutMs(),
+  );
+  if (!copyResult.ok || !existsSync(projectModules)) {
+    throw new Error(`dependency materialization failed in ${projectDir}: ${copyResult.output.slice(0, 300)}`);
+  }
+  return "copied";
 }
 
 function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
@@ -370,7 +387,7 @@ function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
   const cacheModules = path.join(cacheDir, "node_modules");
   const cacheManifest = readDepsManifest(cacheDir);
   if (cacheManifest.fingerprint === fingerprint && cacheManifest.install_cmd === installCmd && existsSync(cacheModules)) {
-    linkNodeModules(projectDir, cacheModules);
+    materializeNodeModules(projectDir, cacheModules);
     return `reused_cache:${cacheDir}`;
   }
 
@@ -399,7 +416,7 @@ function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
 
     const finalManifest = readDepsManifest(cacheDir);
     if (finalManifest.fingerprint === fingerprint && finalManifest.install_cmd === installCmd && existsSync(cacheModules)) {
-      linkNodeModules(projectDir, cacheModules);
+      materializeNodeModules(projectDir, cacheModules);
       return `cached:${installCmd}`;
     }
   } catch {
@@ -427,7 +444,7 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
     const sourceManifest = readDepsManifest(reuseFrom);
     const sourceModules = path.join(reuseFrom, "node_modules");
     if (sourceFingerprint === fingerprint && sourceManifest.fingerprint === fingerprint && existsSync(sourceModules)) {
-      linkNodeModules(projectDir, sourceModules);
+      materializeNodeModules(projectDir, sourceModules);
       return `reused_from:${reuseFrom}`;
     }
   }
