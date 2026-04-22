@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-run",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Riddle Proof checkpoint engine and bundled runtime assets.",
   "license": "MIT",
   "author": "RiddleDC",

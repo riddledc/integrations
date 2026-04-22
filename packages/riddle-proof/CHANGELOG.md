@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.1
+
+### Patch Changes
+
+- c23a745: Move the Riddle Proof checkpoint engine and bundled runtime assets into the public integrations workspace, and label OpenClaw requests with the public `riddle_proof_change` tool name.
+
 ## 0.5.0
 
 ### Minor Changes
