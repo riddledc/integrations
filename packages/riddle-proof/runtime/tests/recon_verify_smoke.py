@@ -768,6 +768,13 @@ def run_verify_requests_supervisor_assessment():
         assert after_details['observed_path_raw'] == '/s/pv-after/pricing', after_details
         assert 'Buy Now' in after_details['visible_text_sample'], after_details
         assert after_details['buttons'] == ['Buy Now'], after_details
+        runtime_events = after_verify.get('runtime_events') or []
+        assert any(event.get('kind') == 'workflow.phase.started' and event.get('step') == 'verify' and event.get('phase') == 'build' for event in runtime_events)
+        assert any(event.get('kind') == 'workflow.phase.finished' and event.get('step') == 'verify' and event.get('phase') == 'build' for event in runtime_events)
+        assert any(event.get('kind') == 'workflow.phase.started' and event.get('step') == 'verify' and event.get('phase') == 'capture' for event in runtime_events)
+        assert any(event.get('kind') == 'workflow.phase.finished' and event.get('step') == 'verify' and event.get('phase') == 'capture' for event in runtime_events)
+        assert any(event.get('kind') == 'workflow.phase.started' and event.get('step') == 'verify' and event.get('phase') == 'assessment' for event in runtime_events)
+        assert any(event.get('kind') == 'workflow.phase.finished' and event.get('step') == 'verify' and event.get('phase') == 'assessment' for event in runtime_events)
 
         return {
             'ok': True,
