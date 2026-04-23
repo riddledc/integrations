@@ -295,6 +295,10 @@ assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
 ]);
 writeFileSync(backgroundEngineStatePath, JSON.stringify({
   branch: "agent/background-proof",
+  scratch_cleanup: {
+    skipped: "enough_free_space",
+    free_bytes: 123456789,
+  },
   current_runtime_step: {
     step: "verify",
     action: "run",
@@ -323,6 +327,8 @@ assert.equal(enrichedBackgroundStatus?.engine_current_stage, "verify");
 assert.equal(enrichedBackgroundStatus?.active_substep?.step, "verify");
 assert.equal(enrichedBackgroundStatus?.engine_latest_event?.kind, "workflow.step.started");
 assert.equal(enrichedBackgroundStatus?.engine_runtime_event_count, 1);
+assert.equal(enrichedBackgroundStatus?.scratch_cleanup?.skipped, "enough_free_space");
+assert.equal(enrichedBackgroundStatus?.scratch_cleanup_status, "enough_free_space");
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
 assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
@@ -387,6 +393,10 @@ writeFileSync(reviewStatePath, JSON.stringify({
   branch: "agent/review-fixture",
   before_cdn: "https://example.com/before.png",
   after_cdn: "https://example.com/after.png",
+  scratch_cleanup: {
+    skipped: "enough_free_space",
+    free_bytes: 987654321,
+  },
   proof_profile: {
     name: "Tic Tac Toe",
     applied_fields: ["server_path", "wait_for_selector"],
@@ -482,6 +492,67 @@ assert.equal(inspectResult.ready_to_ship_candidate, true);
 assert.deepEqual(inspectResult.visible_change?.after_buttons, ["Reset Game"]);
 assert.equal(inspectResult.structured_evidence?.proof_evidence_present, true);
 assert.match(inspectResult.structured_evidence?.proof_evidence_sample, /attack_ms_after/);
+assert.equal(inspectResult.structured_evidence?.proof_evidence_has_concerns, false);
+assert.equal(inspectResult.scratch_cleanup?.skipped, "enough_free_space");
+
+const concernFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-evidence-concern-"));
+const concernStatePath = path.join(concernFixture, "riddle-state.json");
+const concernWrapperStatePath = path.join(concernFixture, "wrapper-state.json");
+writeFileSync(concernStatePath, JSON.stringify({
+  branch: "agent/evidence-concern-fixture",
+  before_cdn: "https://example.com/concern-before.png",
+  after_cdn: "https://example.com/concern-after.png",
+  evidence_bundle: {
+    expected_path: "/",
+    proof_evidence: {
+      newHeroCopyVisible: false,
+      oldHeroCopyRemoved: true,
+      normalizedTextSample: "Send a Playwright script. Get screenshots, console logs, network HAR, and page evidence.",
+    },
+    after: {
+      screenshot_url: "https://example.com/concern-after.png",
+      visual_delta: { status: "measured", passed: true },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/",
+    visual_delta: { status: "measured", passed: true },
+    semantic_context: {
+      route: {
+        expected_path: "/",
+        before_observed_path: "/",
+        after_observed_path: "/",
+      },
+      after: {
+        valid: true,
+        headings: ["Evidence-backed agent browser proof"],
+        buttons: ["Start Free Today"],
+        visible_text_sample: "Send a Playwright script. Get screenshots, console logs, network HAR, and page evidence.",
+      },
+    },
+  },
+}, null, 2));
+writeFileSync(concernWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_evidence_concern",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  request: {
+    repo: "davisdiehl/riddle-site",
+    change_request: "Clarify homepage proof copy",
+    engine_state_path: concernStatePath,
+  },
+  iterations: 3,
+  events: [],
+}, null, 2));
+const concernInspectResult = inspectOpenClawRiddleProof({ state_path: concernWrapperStatePath });
+assert.equal(concernInspectResult.route_matched, true);
+assert.equal(concernInspectResult.structured_evidence?.proof_evidence_has_concerns, true);
+assert.equal(concernInspectResult.structured_evidence?.proof_evidence_concerns?.[0]?.key, "newHeroCopyVisible");
+assert.equal(concernInspectResult.ready_to_ship_candidate, false);
 
 const autoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-auto-review-"));
 const autoReviewStatePath = path.join(autoReviewFixture, "riddle-state.json");
