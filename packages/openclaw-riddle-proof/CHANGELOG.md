@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.35
+
+### Patch Changes
+
+- 72f910a: Improve proof monitoring guidance and speed up verify builds.
+- Updated dependencies [72f910a]
+  - @riddledc/riddle-proof@0.5.16
+
 ## 0.4.34
 
 ### Patch Changes

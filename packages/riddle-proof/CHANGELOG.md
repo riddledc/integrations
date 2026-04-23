@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.16
+
+### Patch Changes
+
+- 72f910a: Improve proof monitoring guidance and speed up verify builds.
+
 ## 0.5.15
 
 ### Patch Changes
