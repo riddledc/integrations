@@ -68,6 +68,14 @@ assert.deepEqual(result.raw?.request?.assertions, { must_show_confirmation: true
 assert.equal(result.raw?.request?.integration_context?.source, "discord");
 assert.equal(result.event_count, 1);
 
+const terminalOnlyResult = createOpenClawRiddleProofResult({
+  ...params,
+  report_mode: "terminal_only",
+  wait_for_terminal: true,
+});
+assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.report_mode, "terminal_only");
+assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.wait_for_terminal, true);
+
 const runtimeResult = await runOpenClawRiddleProof(params, { executionMode: "disabled" });
 assert.equal(runtimeResult.status, "blocked");
 assert.equal(runtimeResult.blocker?.code, "execution_adapter_not_configured");
@@ -273,6 +281,8 @@ const backgroundResult = await runOpenClawRiddleProof(
 assert.equal(backgroundResult.status, "running");
 assert.equal(backgroundResult.raw?.background, true);
 assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
+assert.equal(backgroundResult.raw?.monitor_contract?.report_mode, "checkpoint");
+assert.equal(backgroundResult.raw?.monitor_contract?.response_gate, "checkpoint_ok");
 assert.equal(existsSync(backgroundWrapperStatePath), true);
 
 for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
@@ -285,6 +295,8 @@ for (let attempt = 0; attempt < 50 && backgroundStatus?.status === "running"; at
   backgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
 }
 assert.equal(backgroundStatus?.status, "ready_to_ship");
+assert.equal(backgroundStatus?.monitor_contract?.report_mode, "checkpoint");
+assert.equal(backgroundStatus?.monitor_contract?.response_gate, "release_terminal");
 const backgroundState = JSON.parse(readFileSync(backgroundWrapperStatePath, "utf-8"));
 assert.equal(backgroundState.events[0].kind, "run.background.started");
 assert.equal(backgroundState.events.some((event) => event.checkpoint === "verify_ship_ready"), true);
@@ -530,6 +542,8 @@ const reviewBlocked = await runOpenClawRiddleProof(
     run_mode: "blocking",
     ship_after_verify: false,
     ship_mode: "none",
+    report_mode: "terminal_only",
+    wait_for_terminal: true,
     harness_state_path: reviewWrapperStatePath,
     state_path: reviewStatePath,
     change_request: "Make Tic Tac Toe board polish visibly stronger",
@@ -566,6 +580,8 @@ assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.stat
 const inspectResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath });
 assert.equal(inspectResult.ok, true);
 assert.equal(inspectResult.route_matched, true);
+assert.equal(inspectResult.monitor_contract.report_mode, "terminal_only");
+assert.equal(inspectResult.monitor_contract.response_gate, "release_terminal");
 assert.equal(inspectResult.proof_profile_applied, true);
 assert.equal(inspectResult.proof_profile?.name, "Tic Tac Toe");
 assert.equal(inspectResult.ready_to_ship_candidate, true);
@@ -751,8 +767,9 @@ const autoReviewResult = await runOpenClawRiddleProof(
 );
 assert.equal(autoReviewResult.status, "ready_to_ship");
 assert.equal(autoReviewResult.ok, true);
-assert.equal(autoReviewEngineCalls.length, 1);
+assert.equal(autoReviewEngineCalls.length, 2);
 assert.equal(autoReviewEngineCalls[0].proof_assessment_json, undefined);
+assert.ok(autoReviewEngineCalls[1].proof_assessment_json);
 const autoReviewState = JSON.parse(readFileSync(autoReviewWrapperStatePath, "utf-8"));
 const autoReviewEvent = autoReviewState.events.find((event) => event.kind === "agent.proof_assessment.completed");
 assert.equal(autoReviewEvent.details.payload.source, "openclaw_auto_ship_mode_none");
@@ -880,7 +897,7 @@ const executed = await changeTool.tool.execute("test-call", params);
 assert.equal(executed.content[0].type, "text");
 const parsed = JSON.parse(executed.content[0].text);
 assert.equal(parsed.status, "blocked");
-assert.equal(parsed.raw.request.integration_context.metadata.tool, "riddle_proof_change");
+assert.equal(parsed.raw.request.integration_context.metadata.tool, "proofed_change_run");
 
 const statusExecuted = await statusTool.tool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);
@@ -894,11 +911,43 @@ assert.equal(engineOnlyStatusParsed.diagnostics.path_exists, true);
 assert.equal(engineOnlyStatusParsed.diagnostics.expected_state_path_type, "wrapper_run_state");
 assert.equal(engineOnlyStatusParsed.diagnostics.looks_like_engine_state, true);
 
+const terminalStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");
+assert.equal(terminalStatus.monitor_contract.should_continue_monitoring, false);
+
+const terminalOnlyRunningWrapperStatePath = path.join(reviewFixture, "wrapper-running.json");
+writeFileSync(terminalOnlyRunningWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_running_terminal_only",
+  status: "running",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Polish Tic Tac Toe status",
+    engine_state_path: reviewStatePath,
+    integration_context: {
+      source: "openclaw",
+      metadata: {
+        report_mode: "terminal_only",
+        wait_for_terminal: true,
+      },
+    },
+  },
+  iterations: 1,
+  events: [],
+}, null, 2));
+const runningTerminalStatus = readOpenClawRiddleProofStatus(terminalOnlyRunningWrapperStatePath);
+assert.equal(runningTerminalStatus.monitor_contract.report_mode, "terminal_only");
+assert.equal(runningTerminalStatus.monitor_contract.should_continue_monitoring, true);
+assert.equal(runningTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
+
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
 assert.equal(inspectParsed.route_matched, true);
 assert.equal(inspectParsed.proof_profile_applied, true);
 assert.equal(inspectParsed.structured_evidence.proof_evidence_present, true);
+assert.equal(inspectParsed.monitor_contract.response_gate, "release_terminal");
 
 const statusDebugExecuted = await statusTool.tool.execute("test-status-debug", { state_path: reviewWrapperStatePath, debug: true });
 const statusDebugParsed = JSON.parse(statusDebugExecuted.content[0].text);
