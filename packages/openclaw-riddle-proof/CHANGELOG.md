@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.32
+
+### Patch Changes
+
+- a32f02b: Emit real verify runtime phase events for build, capture, and assessment so status and inspect can report verify subphase timings on live proof runs.
+- Updated dependencies [a32f02b]
+  - @riddledc/riddle-proof@0.5.15
+
 ## 0.4.31
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.15
+
+### Patch Changes
+
+- a32f02b: Emit real verify runtime phase events for build, capture, and assessment so status and inspect can report verify subphase timings on live proof runs.
+
 ## 0.5.14
 
 ### Patch Changes
