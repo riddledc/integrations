@@ -499,6 +499,20 @@ function proofEvidenceConcerns(proofEvidence: unknown, proofEvidenceSample: stri
     }));
 }
 
+function scratchCleanupStatusLabel(scratchCleanup: Record<string, unknown> | null) {
+  if (!scratchCleanup) return null;
+  const errors = listValue(scratchCleanup.errors, 12);
+  if (errors.length > 0) return "cleanup_error";
+  const removed = listValue(scratchCleanup.removed, 12);
+  if (removed.length > 0) return "removed_worktrees";
+  const skipped = stringValue(scratchCleanup.skipped);
+  if (skipped) return `skipped_${skipped}`;
+  const status = stringValue(scratchCleanup.status);
+  if (status && status !== "recorded") return status;
+  if (scratchCleanup.requested === true) return "requested";
+  return status || "recorded";
+}
+
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -723,6 +737,7 @@ function buildProofInspection(
       structured_result_keys: listValue(supportingArtifacts.structured_result_keys, 12),
     },
     scratch_cleanup: scratchCleanup,
+    scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
     visible_change: visibleChange,
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyToShipCandidate,
@@ -1012,9 +1027,7 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
     engine_latest_event: latestRuntimeEvent(engineState),
     engine_runtime_event_count: runtimeEvents.length,
     scratch_cleanup: scratchCleanup,
-    scratch_cleanup_status: scratchCleanup
-      ? stringValue(scratchCleanup.status) || stringValue(scratchCleanup.skipped) || "recorded"
-      : null,
+    scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
     recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
     ...checkpoint,
     wake_strategy: {
