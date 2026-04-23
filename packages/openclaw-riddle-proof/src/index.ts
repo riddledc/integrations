@@ -459,6 +459,46 @@ function compactValue(value: unknown, limit = 1200) {
   return text.length <= limit ? text : `${text.slice(0, limit - 20).trimEnd()}...`;
 }
 
+function parseJsonRecord(value: string) {
+  if (!value) return null;
+  try {
+    return recordValue(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function evidenceKeyMeansClaim(key: string) {
+  if (!key) return false;
+  const lower = key.toLowerCase();
+  return (
+    /(?:visible|present|exists?|matches?|matched|found|detected|passed|valid|changed|applied|rendered|loaded|shown|contains|includes|removed|absent|gone|cleared)/.test(lower) ||
+    /(?:has|is)[A-Z]/.test(key)
+  );
+}
+
+function evidenceKeyMeansKnownNonClaim(key: string) {
+  return /(?:count|index|width|height|x|y|ms|duration|elapsed|sample|snippet|text|copy|path|route|url|href)$/i.test(key);
+}
+
+function proofEvidenceConcerns(proofEvidence: unknown, proofEvidenceSample: string) {
+  const source = recordValue(proofEvidence) || parseJsonRecord(proofEvidenceSample);
+  if (!source) return [];
+  return Object.entries(source)
+    .filter(([key, value]) => (
+      value === false &&
+      evidenceKeyMeansClaim(key) &&
+      !evidenceKeyMeansKnownNonClaim(key)
+    ))
+    .slice(0, 12)
+    .map(([key, value]) => ({
+      key,
+      value,
+      reason:
+        "Structured proof evidence contains a failed boolean claim. Reconcile this with the screenshots/text evidence before auto-reviewing.",
+    }));
+}
+
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -632,6 +672,7 @@ function buildProofInspection(
     stringValue(after.proof_evidence_sample) ||
     stringValue(supportingArtifacts.proof_evidence_sample) ||
     compactValue(proofEvidence);
+  const proofEvidenceConcernList = proofEvidenceConcerns(proofEvidence, proofEvidenceSample);
   const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
   const route = recordValue(semanticContext.route);
   const imageArtifacts: Array<Record<string, unknown>> = [];
@@ -652,6 +693,8 @@ function buildProofInspection(
     imageArtifacts.some((item) => item.role === "after" || item.name === "after") &&
     (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
   );
+  const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
+  const scratchCleanup = recordValue(fullState.scratch_cleanup);
   return {
     ok: true,
     status: wrapperState.status,
@@ -673,14 +716,17 @@ function buildProofInspection(
     structured_evidence: {
       proof_evidence_present: Boolean(proofEvidence !== null && proofEvidence !== undefined) || Boolean(supportingArtifacts.proof_evidence_present),
       proof_evidence_sample: proofEvidenceSample,
+      proof_evidence_has_concerns: proofEvidenceConcernList.length > 0,
+      proof_evidence_concerns: proofEvidenceConcernList,
       data_outputs: listValue(supportingArtifacts.data_outputs, 12),
       result_keys: listValue(supportingArtifacts.result_keys, 12),
       structured_result_keys: listValue(supportingArtifacts.structured_result_keys, 12),
     },
+    scratch_cleanup: scratchCleanup,
     visible_change: visibleChange,
     semantic_context: semanticContext,
-    ready_to_ship_candidate: readyCandidate,
-    next_action: readyCandidate
+    ready_to_ship_candidate: readyToShipCandidate,
+    next_action: readyToShipCandidate
       ? `If the screenshots visually satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
       : "Use this inspection packet to choose needs_implementation, needs_richer_proof, revise_capture, or needs_recon.",
   };
@@ -727,6 +773,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
     semantic_context: semanticContext,
+    scratch_cleanup: recordValue(fullState.scratch_cleanup),
     proof_assessment_request: assessmentRequest,
     review_prompt: [
       "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
@@ -766,11 +813,13 @@ function afterScreenshotArtifact(inspection: Record<string, unknown>) {
 
 function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
   const visualDelta = recordValue(inspection.visual_delta);
+  const structuredEvidence = recordValue(inspection.structured_evidence);
   return Boolean(
     inspection.ok === true &&
     inspection.ready_to_ship_candidate === true &&
     inspection.route_matched === true &&
     afterScreenshotArtifact(inspection) &&
+    structuredEvidence?.proof_evidence_has_concerns !== true &&
     (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
   );
 }
@@ -789,6 +838,7 @@ function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
       "The target route matched across available observations.",
       "An after screenshot artifact was captured.",
       "No failed visual delta was reported.",
+      "No structured proof evidence concerns were reported.",
     ],
     source: "openclaw_auto_ship_mode_none",
     inspection_summary: {
@@ -949,6 +999,7 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
   const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
   const engineCurrentStage = stringValue(activeSubstep?.step);
   const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
+  const scratchCleanup = recordValue(engineState?.scratch_cleanup);
   return {
     ...snapshot,
     current_stage: effectiveStage,
@@ -960,6 +1011,10 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
     phase_elapsed_ms: activeSubstep?.phase_status === "running" ? elapsedMsSince(activeSubstep.phase_started_at) : null,
     engine_latest_event: latestRuntimeEvent(engineState),
     engine_runtime_event_count: runtimeEvents.length,
+    scratch_cleanup: scratchCleanup,
+    scratch_cleanup_status: scratchCleanup
+      ? stringValue(scratchCleanup.status) || stringValue(scratchCleanup.skipped) || "recorded"
+      : null,
     recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
     ...checkpoint,
     wake_strategy: {
