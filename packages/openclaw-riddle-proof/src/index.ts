@@ -888,13 +888,61 @@ function recommendedPollAfterMs(activeSubstep: Record<string, unknown> | null, s
   return 10_000;
 }
 
+const ROUTABLE_CHECKPOINTS = new Set([
+  "awaiting_stage_advance",
+  "recon_supervisor_judgment",
+  "author_supervisor_judgment",
+  "verify_capture_retry",
+  "verify_agent_retry",
+  "implement_changes_missing",
+  "implement_required",
+  "implement_review",
+  "verify_supervisor_judgment",
+]);
+
+const REVIEW_CHECKPOINTS = new Set([
+  "main_agent_proof_review_required",
+  "verify_human_escalation",
+  "recon_human_escalation",
+]);
+
+function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
+  const snapshotRecord = snapshot as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+  const checkpoint = snapshot.last_checkpoint || snapshot.blocker?.checkpoint || null;
+  const isTerminal = typeof snapshotRecord.is_terminal === "boolean" ? snapshotRecord.is_terminal : snapshot.status !== "running";
+  const isRoutable = snapshot.status === "running" && Boolean(checkpoint && ROUTABLE_CHECKPOINTS.has(checkpoint));
+  const isReviewRequired = Boolean(
+    snapshot.blocker?.code === "main_agent_proof_review_required" ||
+    (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
+  );
+  const monitorShouldContinue = snapshot.status === "running" && !isTerminal && !isReviewRequired;
+  return {
+    checkpoint,
+    is_terminal: isTerminal,
+    is_routable_checkpoint: isRoutable,
+    monitor_should_continue: monitorShouldContinue,
+    checkpoint_classification:
+      isTerminal ? "terminal" :
+        isReviewRequired ? "review_required" :
+          isRoutable ? "routable" :
+            snapshot.status === "running" ? "in_progress" :
+              "blocked",
+    suggested_next_action:
+      monitorShouldContinue ? "continue_monitoring" :
+        isReviewRequired ? "inspect_or_review" :
+          isTerminal ? "report_terminal_status" :
+            "inspect_blocker",
+  };
+}
+
 export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRunStatusSnapshot | null {
   const snapshot = readRiddleProofRunStatus(state_path);
   if (!snapshot) return null;
+  const checkpoint = checkpointStatus(snapshot);
 
   const wrapperState = readRunState(state_path);
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
-  if (!engineStatePath) return snapshot;
+  if (!engineStatePath) return { ...snapshot, ...checkpoint } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
 
   const engineState = readJsonRecord(engineStatePath);
   const activeSubstep = recordValue(engineState?.current_runtime_step);
@@ -913,10 +961,11 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
     engine_latest_event: latestRuntimeEvent(engineState),
     engine_runtime_event_count: runtimeEvents.length,
     recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
+    ...checkpoint,
     wake_strategy: {
       signal: "run.wake.requested",
       recommendation:
-        "For normal chat UX, do not tight-poll in the main conversation. Watch this state from a background session or host worker and re-enter when the run reaches a checkpoint, blocker, or ready state.",
+        "For normal chat UX, do not tight-poll in the main conversation. A background monitor should continue while monitor_should_continue is true and report only when the status is terminal or suggested_next_action is not continue_monitoring.",
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
 }

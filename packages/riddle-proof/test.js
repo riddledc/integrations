@@ -139,6 +139,8 @@ assert.equal(mergedState.cleanup_report?.worktrees_removed, 2);
 const mergedSnapshot = createRunStatusSnapshot(mergedState, "2026-04-16T05:00:01.000Z");
 assert.equal(mergedSnapshot.pr_state?.status, "merged");
 assert.equal(mergedSnapshot.merge_commit, "merge123");
+assert.equal(mergedSnapshot.is_terminal, true);
+assert.equal(mergedSnapshot.monitor_should_continue, false);
 
 const result = createRunResult({
   state,
@@ -427,6 +429,8 @@ assert.equal(statusSnapshot.state_path, "/tmp/riddle-proof/state.json");
 assert.equal(statusSnapshot.worktree_path, "/tmp/riddle-proof/worktree");
 assert.equal(statusSnapshot.branch, "proof/worktree");
 assert.equal(statusSnapshot.elapsed_ms, 10000);
+assert.equal(statusSnapshot.is_terminal, false);
+assert.equal(statusSnapshot.monitor_should_continue, true);
 assert.equal(statusSnapshot.latest_event.kind, "stage.heartbeat");
 assert.equal(statusSnapshot.latest_event.details.wait_reason, "waiting_for_clean_worktree");
 

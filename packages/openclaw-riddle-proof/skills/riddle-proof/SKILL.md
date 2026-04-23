@@ -14,8 +14,9 @@ Use `riddle_proof_change` for browser-visible changes that need evidence before 
 3. Pass the repo, branch, concrete change request, verification mode, known route/auth/selector hints, and any chat routing metadata available.
 4. Return the initial `state_path` to the user, then keep the main conversation responsive.
 5. Do not run a tight manual polling loop in the main chat. If `sessions_spawn` is available, use it for monitoring long proof runs; otherwise poll status only when the user asks or after the returned `recommended_poll_after_ms`.
-6. When the run reaches a checkpoint, blocker, or ready state, use `riddle_proof_status` and usually `riddle_proof_inspect` before deciding what to report or how to resume.
-7. If the run blocks for main-agent proof review, inspect the evidence packet, judge the screenshots/artifacts directly, and resume with `riddle_proof_review`. For non-shipping runs (`ship_mode: "none"`), the plugin may auto-advance when inspection already marks the proof as a ready-to-ship candidate; report the held result instead of repeating the review loop.
+6. Use `riddle_proof_status` to decide whether monitoring should continue. If `monitor_should_continue` is `true`, keep monitoring; do not report routable internal checkpoints such as `implement_changes_missing` as final outcomes.
+7. When `monitor_should_continue` is `false`, use `suggested_next_action` to decide what to report or how to resume; use `riddle_proof_inspect` before any proof judgment.
+8. If the run blocks for main-agent proof review, inspect the evidence packet, judge the screenshots/artifacts directly, and resume with `riddle_proof_review`. For non-shipping runs (`ship_mode: "none"`), the plugin may auto-advance when inspection already marks the proof as a ready-to-ship candidate; report the held result instead of repeating the review loop.
 
 ## Background Monitoring
 
@@ -25,11 +26,11 @@ For long runs, prefer this pattern:
 
 ```yaml
 sessions_spawn:
-  task: "Monitor Riddle Proof state_path=/tmp/riddle-proof-run-...json. Poll riddle_proof_status at its recommended interval until a checkpoint, blocker, ready_to_ship, shipped, failed, or completed state. Then report the compact status and suggested next tool."
+  task: "Monitor Riddle Proof state_path=/tmp/riddle-proof-run-...json. Poll riddle_proof_status at its recommended interval while monitor_should_continue is true. Report only when monitor_should_continue is false, including status, checkpoint_classification, suggested_next_action, blocker if present, and artifact URLs if available."
   label: "riddle-proof monitor"
 ```
 
-If `sessions_spawn` is unavailable, keep polling sparse. Dependency setup can legitimately take minutes; status snapshots expose `active_substep`, `phase_elapsed_ms`, `engine_latest_event`, and `recommended_poll_after_ms` so the agent can avoid noisy updates.
+If `sessions_spawn` is unavailable, keep polling sparse. Dependency setup can legitimately take minutes; status snapshots expose `active_substep`, `phase_elapsed_ms`, `engine_latest_event`, `recommended_poll_after_ms`, `is_terminal`, `is_routable_checkpoint`, `monitor_should_continue`, and `suggested_next_action` so the agent can avoid noisy or premature updates.
 
 ## Shipping Rules
 

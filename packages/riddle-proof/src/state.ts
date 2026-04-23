@@ -8,7 +8,7 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
-import { compactRecord, nonEmptyString, recordValue } from "./result";
+import { compactRecord, isTerminalStatus, nonEmptyString, recordValue } from "./result";
 
 export const RIDDLE_PROOF_RUN_STATE_VERSION = "riddle-proof.run-state.v1" as const;
 
@@ -228,6 +228,8 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
   return compactRecord({
     run_id: runId,
     status: state.status,
+    is_terminal: isTerminalStatus(state.status),
+    monitor_should_continue: !isTerminalStatus(state.status),
     current_stage: state.current_stage ?? null,
     state_path: state.state_path ?? null,
     worktree_path: state.worktree_path ?? null,

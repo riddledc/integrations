@@ -325,17 +325,28 @@ assert.equal(enrichedBackgroundStatus?.engine_runtime_event_count, 1);
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
 assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
+assert.equal(enrichedBackgroundStatus?.is_terminal, true);
+assert.equal(enrichedBackgroundStatus?.monitor_should_continue, false);
+assert.equal(enrichedBackgroundStatus?.is_routable_checkpoint, false);
+assert.equal(enrichedBackgroundStatus?.checkpoint_classification, "terminal");
+assert.equal(enrichedBackgroundStatus?.suggested_next_action, "report_terminal_status");
 assert.equal(enrichedBackgroundStatus?.wake_strategy?.signal, "run.wake.requested");
 writeFileSync(backgroundWrapperStatePath, JSON.stringify({
   ...backgroundState,
   status: "running",
   current_stage: "setup",
+  last_checkpoint: "implement_changes_missing",
 }, null, 2));
 const runningBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
 assert.equal(runningBackgroundStatus?.current_stage, "verify");
 assert.equal(runningBackgroundStatus?.wrapper_current_stage, "setup");
 assert.equal(runningBackgroundStatus?.engine_current_stage, "verify");
 assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 30000);
+assert.equal(runningBackgroundStatus?.is_terminal, false);
+assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
+assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);
+assert.equal(runningBackgroundStatus?.checkpoint_classification, "routable");
+assert.equal(runningBackgroundStatus?.suggested_next_action, "continue_monitoring");
 
 const defaultBackgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-default-background-"));
 const defaultBackgroundEngineStatePath = path.join(defaultBackgroundFixture, "riddle-state.json");

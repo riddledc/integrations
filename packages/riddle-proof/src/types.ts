@@ -203,6 +203,8 @@ export interface RiddleProofRunResult {
 export interface RiddleProofRunStatusSnapshot {
   run_id: string;
   status: RiddleProofStatus;
+  is_terminal?: boolean;
+  monitor_should_continue?: boolean;
   current_stage?: RiddleProofStage | null;
   state_path?: string | null;
   worktree_path?: string | null;
