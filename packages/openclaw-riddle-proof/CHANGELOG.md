@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.30
+
+### Patch Changes
+
+- e1f83e4: Treat resumable blocked checkpoints as non-terminal for terminal-only monitoring so wrappers keep holding replies through implementation and similar internal proof loops.
+
 ## 0.4.29
 
 ### Patch Changes
