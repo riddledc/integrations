@@ -1,3 +1,4 @@
+---
 "@riddledc/openclaw-riddle-proof": patch
 "@riddledc/riddle-proof": patch
 ---
