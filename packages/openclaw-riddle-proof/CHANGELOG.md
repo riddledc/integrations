@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.31
+
+### Patch Changes
+
+- 483d722: Tighten proof monitor poll cadence around resumable checkpoints and expose verify subphase timings in status and inspect output.
+
 ## 0.4.30
 
 ### Patch Changes
