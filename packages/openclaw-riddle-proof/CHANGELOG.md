@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.27
+
+### Patch Changes
+
+- a6fbae0: Add timing summaries, opt-in debug status payloads, and reusable last-good capture hints for faster proof runs.
+- Updated dependencies [a6fbae0]
+  - @riddledc/riddle-proof@0.5.13
+
 ## 0.4.26
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.13
+
+### Patch Changes
+
+- a6fbae0: Add timing summaries, opt-in debug status payloads, and reusable last-good capture hints for faster proof runs.
+
 ## 0.5.12
 
 ### Patch Changes
