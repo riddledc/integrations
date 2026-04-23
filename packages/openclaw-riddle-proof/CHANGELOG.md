@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.22
+
+### Patch Changes
+
+- b65fed0: Hold non-shipping proof runs at `ready_to_ship` after a ready proof assessment instead of re-entering verify or advancing toward ship.
+- Updated dependencies [b65fed0]
+  - @riddledc/riddle-proof@0.5.10
+
 ## 0.4.21
 
 ### Patch Changes
