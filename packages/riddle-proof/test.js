@@ -880,8 +880,11 @@ const runwayResult = await runRiddleProofEngineHarness({
 assert.equal(runwayResult.status, "ready_to_ship");
 assert.equal(runwayResult.ok, true);
 assert.equal(runwayResult.blocker, undefined);
-assert.equal(runwayEngineCalls.length, 9);
-assert.equal(runwayEngineCalls.at(-1).proof_assessment_json !== undefined, true);
+assert.equal(runwayEngineCalls.length, 8);
+assert.equal(runwayEngineCalls.at(-1).proof_assessment_json, undefined);
+const runwayHarnessState = JSON.parse(readFileSync(path.join(runwayFixture, "harness-state.json"), "utf-8"));
+const runwayProofAssessment = runwayHarnessState.events.find((event) => event.kind === "agent.proof_assessment.completed");
+assert.equal(runwayProofAssessment.details.payload.continue_with_stage, "ship");
 
 const reconLoopFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-recon-loop-"));
 const reconLoopStatePath = path.join(reconLoopFixture, "riddle-state.json");

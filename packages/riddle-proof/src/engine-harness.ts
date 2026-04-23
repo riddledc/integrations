@@ -409,21 +409,11 @@ function proofAssessmentRequestsShip(payload: Record<string, unknown>) {
 }
 
 function proofAssessmentContinuation(
-  request: RiddleProofRunParams,
   result: RiddleProofEngineResult,
   payload: Record<string, unknown>,
-  config?: RiddleProofEngineHarnessConfig,
 ): RiddleProofWorkflowParams {
   const proof_assessment_json = jsonParam(payload);
-  if (effectiveShipMode(request, config) === "ship" || !proofAssessmentRequestsShip(payload)) {
-    return { ...baseContinuation(result), proof_assessment_json };
-  }
-  return {
-    action: "run",
-    state_path: String(result.state_path || ""),
-    advance_stage: "verify",
-    proof_assessment_json,
-  };
+  return { ...baseContinuation(result), proof_assessment_json };
 }
 
 function contextFor(
@@ -819,7 +809,21 @@ async function routeCheckpoint(
       summary: assessment.summary,
       details: { payload },
     });
-    return { next: proofAssessmentContinuation(request, result, payload, input.config) };
+    if (effectiveShipMode(request, input.config) !== "ship" && proofAssessmentRequestsShip(payload)) {
+      return {
+        terminal: terminalResult(
+          state,
+          "ready_to_ship",
+          result,
+          assessment.summary || result.summary || "Riddle Proof is ready to ship.",
+          {
+            ship_held: true,
+            proof_assessment: payload,
+          },
+        ),
+      };
+    }
+    return { next: proofAssessmentContinuation(result, payload) };
   }
 
   if (checkpoint === "verify_agent_retry") {
