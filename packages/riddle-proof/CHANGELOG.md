@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.14
+
+### Patch Changes
+
+- e555136: Honor learned root-path capture hints during recon so proof runs stop wasting retries on distracting route literals.
+
 ## 0.5.13
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.28
+
+### Patch Changes
+
+- e555136: Honor learned root-path capture hints during recon so proof runs stop wasting retries on distracting route literals.
+- Updated dependencies [e555136]
+  - @riddledc/riddle-proof@0.5.14
+
 ## 0.4.27
 
 ### Patch Changes
