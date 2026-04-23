@@ -207,6 +207,30 @@ class FakeRiddle:
                         'largeVisibleElements': [{'tag': 'button', 'text': 'Reset Game'}],
                     }),
                 }
+            if (
+                'preview.example.com' in script
+                and '/pricing' not in script
+                and '/games/tic-tac-toe' not in script
+                and '/wrong' not in script
+            ):
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/home-before.png'}],
+                    'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/home-before.png'}],
+                    'console': state_console({
+                        'bodyTextLength': 180,
+                        'visibleTextSample': 'Riddle Proof homepage hero Start Free',
+                        'interactiveElements': 4,
+                        'visibleInteractiveElements': 4,
+                        'pathname': '/',
+                        'title': 'Riddle',
+                        'buttons': ['Start Free'],
+                        'headings': ['Riddle Proof'],
+                        'links': [],
+                        'canvasCount': 0,
+                        'largeVisibleElements': [{'tag': 'button', 'text': 'Start Free'}],
+                    }),
+                }
             raise AssertionError(f'unexpected riddle_script payload: {script}')
         raise AssertionError(f'unexpected invoke_retry tool: {tool}')
 
@@ -575,6 +599,53 @@ def run_recon_prefers_route_literals_over_import_paths():
         return {
             'ok': True,
             'target_path': current_plan['target_path'],
+            'candidate_paths': candidate_paths,
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_recon_prefers_hint_root_over_single_route_literal():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-hint-root-'))
+    state_path = tempdir / 'state.json'
+    try:
+        route_snippet = "export const routes = [{ path: '/docs/riddle-proof/markdown', element: <Docs /> }];\n"
+        state = base_state(tempdir, reference='before')
+        make_project(tempdir / 'before', route_snippet)
+        make_project(tempdir / 'after', route_snippet)
+        state.update({
+            'server_path': '/',
+            'server_path_source': 'hint_cache',
+            'capture_hint': {
+                'source': 'hint_cache',
+                'applied_fields': ['server_path'],
+                'selected': {'server_path': '/'},
+            },
+            'change_request': 'Make a tiny harmless homepage copy tweak',
+            'success_criteria': 'The homepage hero copy reflects the tiny tweak.',
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('recon_hint_root_preference', RECON_PATH)
+        after_recon = json.loads(state_path.read_text())
+
+        current_plan = after_recon['recon_results']['current_plan']
+        candidate_paths = [item['path'] for item in current_plan['route_candidates']]
+        assert current_plan['target_path'] == '/', current_plan
+        assert current_plan['path_source'] == 'state.server_path:hint_cache', current_plan
+        assert '/docs/riddle-proof/markdown' in candidate_paths, candidate_paths
+        details = after_recon['recon_results']['attempt_history'][-1]['observations']['before']['details']
+        assert details['observed_path'] == '/'
+        assert 'Start Free' in details['visible_text_sample'], details
+        assert details['buttons'] == ['Start Free'], details
+
+        return {
+            'ok': True,
+            'target_path': current_plan['target_path'],
+            'path_source': current_plan['path_source'],
             'candidate_paths': candidate_paths,
         }
     finally:
@@ -1182,6 +1253,7 @@ if __name__ == '__main__':
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
         'recon_then_author_request': run_recon_then_author_request(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),
+        'recon_hint_root_preference': run_recon_prefers_hint_root_over_single_route_literal(),
         'author_applies_supervisor_packet': run_author_applies_supervisor_packet(),
         'verify_requests_supervisor_assessment': run_verify_requests_supervisor_assessment(),
         'verify_structured_evidence_without_screenshot': run_verify_structured_evidence_without_screenshot(),

@@ -244,7 +244,7 @@ def score_route_candidate(path, tokens):
 def choose_target_path(explicit_path, prod_url, route_hints, tokens=None, explicit_source=''):
     explicit = (explicit_path or '').strip()
     explicit_source = (explicit_source or '').strip()
-    is_meaningful_explicit = bool(explicit) and (explicit != '/' or explicit_source in ('user', 'tool_param', 'supervising_agent'))
+    is_meaningful_explicit = bool(explicit) and (explicit != '/' or bool(explicit_source))
     if is_meaningful_explicit:
         return explicit if explicit.startswith('/') else '/' + explicit
     candidates = route_candidates(route_hints, prod_url)
@@ -719,7 +719,7 @@ initial_target_path = choose_target_path(s.get('server_path', ''), s.get('prod_u
 selected_route = next((item for item in route_options if item.get('path') == initial_target_path), None)
 initial_hypothesis = {
     'target_path': initial_target_path,
-    'path_source': 'state.server_path' if (s.get('server_path') or '').strip() and (s.get('server_path') != '/' or server_path_source) else ((selected_route or {}).get('reason') or 'fallback root'),
+    'path_source': ('state.server_path:' + server_path_source) if (s.get('server_path') or '').strip() and (s.get('server_path') != '/' or server_path_source) else ((selected_route or {}).get('reason') or 'fallback root'),
     'reference': requested_reference,
     'mode': s.get('mode', 'server'),
     'wait_for_selector': (s.get('wait_for_selector') or '').strip(),
