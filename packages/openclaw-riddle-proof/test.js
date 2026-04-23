@@ -134,6 +134,7 @@ const engineStatePath = path.join(engineFixture, "riddle-state.json");
 writeFileSync(engineStatePath, JSON.stringify({
   after_worktree: engineWorkdir,
   branch: "agent/openclaw-wrapper-test",
+  runtime_events: [],
 }, null, 2));
 const engineCalls = [];
 const wrapperAgentCalls = [];
@@ -693,6 +694,14 @@ assert.equal(parsed.raw.request.integration_context.metadata.tool, "riddle_proof
 const statusExecuted = await statusTool.tool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);
 assert.equal(statusParsed.status, "not_found");
+assert.equal(statusParsed.diagnostics.path_exists, false);
+
+const engineOnlyStatusExecuted = await statusTool.tool.execute("test-status-engine", { state_path: engineStatePath });
+const engineOnlyStatusParsed = JSON.parse(engineOnlyStatusExecuted.content[0].text);
+assert.equal(engineOnlyStatusParsed.status, "not_found");
+assert.equal(engineOnlyStatusParsed.diagnostics.path_exists, true);
+assert.equal(engineOnlyStatusParsed.diagnostics.expected_state_path_type, "wrapper_run_state");
+assert.equal(engineOnlyStatusParsed.diagnostics.looks_like_engine_state, true);
 
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
