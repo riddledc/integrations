@@ -9,11 +9,13 @@ import register, {
   RIDDLE_PROOF_REVIEW_TOOL_NAME,
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
+  RIDDLE_PROOF_WAIT_TOOL_NAME,
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
   runOpenClawRiddleProof,
   inspectOpenClawRiddleProof,
   readOpenClawRiddleProofStatus,
+  waitOpenClawRiddleProof,
   submitOpenClawRiddleProofReview,
   syncOpenClawRiddleProof,
 } from "./dist/index.js";
@@ -317,6 +319,7 @@ assert.equal(backgroundResult.raw?.background, true);
 assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
 assert.equal(backgroundResult.raw?.monitor_contract?.report_mode, "checkpoint");
 assert.equal(backgroundResult.raw?.monitor_contract?.response_gate, "checkpoint_ok");
+assert.ok(backgroundResult.raw?.next_actions?.[0]?.includes(RIDDLE_PROOF_WAIT_TOOL_NAME));
 assert.equal(existsSync(backgroundWrapperStatePath), true);
 
 for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
@@ -403,6 +406,9 @@ assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
 assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);
 assert.equal(runningBackgroundStatus?.checkpoint_classification, "routable");
 assert.equal(runningBackgroundStatus?.suggested_next_action, "continue_monitoring");
+const timeoutWait = await waitOpenClawRiddleProof({ state_path: backgroundWrapperStatePath, timeout_ms: 1000 });
+assert.equal(timeoutWait.wait_result, "timeout");
+assert.ok(timeoutWait.waited_ms >= 1000);
 
 const defaultBackgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-default-background-"));
 const defaultBackgroundEngineStatePath = path.join(defaultBackgroundFixture, "riddle-state.json");
@@ -932,19 +938,22 @@ register({
   },
 });
 
-assert.equal(registered.length, 5);
+assert.equal(registered.length, 6);
 const changeTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
 const statusTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
+const waitTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_WAIT_TOOL_NAME);
 const inspectTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_INSPECT_TOOL_NAME);
 const reviewTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
 const syncTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_SYNC_TOOL_NAME);
 assert.ok(changeTool);
 assert.ok(statusTool);
+assert.ok(waitTool);
 assert.ok(inspectTool);
 assert.ok(reviewTool);
 assert.ok(syncTool);
 assert.equal(changeTool.options.optional, true);
 assert.equal(statusTool.options.optional, true);
+assert.equal(waitTool.options.optional, true);
 assert.equal(inspectTool.options.optional, true);
 assert.equal(reviewTool.options.optional, true);
 assert.equal(syncTool.options.optional, true);
@@ -960,6 +969,10 @@ const statusParsed = JSON.parse(statusExecuted.content[0].text);
 assert.equal(statusParsed.status, "not_found");
 assert.equal(statusParsed.diagnostics.path_exists, false);
 
+const waitExecuted = await waitTool.tool.execute("test-wait", { state_path: reviewWrapperStatePath, timeout_ms: 1000 });
+const waitParsed = JSON.parse(waitExecuted.content[0].text);
+assert.equal(waitParsed.wait_result, "already_reportable");
+
 const engineOnlyStatusExecuted = await statusTool.tool.execute("test-status-engine", { state_path: engineStatePath });
 const engineOnlyStatusParsed = JSON.parse(engineOnlyStatusExecuted.content[0].text);
 assert.equal(engineOnlyStatusParsed.status, "not_found");
@@ -970,6 +983,9 @@ assert.equal(engineOnlyStatusParsed.diagnostics.looks_like_engine_state, true);
 const terminalStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
 assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");
 assert.equal(terminalStatus.monitor_contract.should_continue_monitoring, false);
+const immediateWait = await waitOpenClawRiddleProof({ state_path: reviewWrapperStatePath, timeout_ms: 1000 });
+assert.equal(immediateWait.wait_result, "already_reportable");
+assert.equal(immediateWait.poll_count, 0);
 
 const terminalOnlyRunningWrapperStatePath = path.join(reviewFixture, "wrapper-running.json");
 writeFileSync(terminalOnlyRunningWrapperStatePath, JSON.stringify({
