@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.24
+
+### Patch Changes
+
+- bba5a57: Prune stale proof scratch worktrees when local temp storage is low, and add clearer status diagnostics when an OpenClaw monitor passes a non-wrapper state path.
+- Updated dependencies [bba5a57]
+  - @riddledc/riddle-proof@0.5.12
+
 ## 0.4.23
 
 ### Patch Changes
