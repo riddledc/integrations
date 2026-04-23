@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.33
+
+### Patch Changes
+
+- 450a53b: Preserve cached verify timing details in `riddle_proof_status` when the live engine snapshot is momentarily thinner than the final wake event payload.
+
 ## 0.4.32
 
 ### Patch Changes
