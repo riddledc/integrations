@@ -48,9 +48,12 @@ const MIN_DEFAULT_MAX_ITERATIONS = 12;
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
+export type RiddleProofReportMode = "checkpoint" | "terminal_only";
 export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
   run_mode?: OpenClawRiddleProofRunMode;
   background?: boolean;
+  report_mode?: RiddleProofReportMode;
+  wait_for_terminal?: boolean;
 };
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
 export type OpenClawRiddleProofAgentMode = "disabled" | "codex_exec";
@@ -81,6 +84,15 @@ export interface RiddleProofStatusParams {
 export interface RiddleProofInspectParams {
   state_path: string;
   debug?: boolean;
+}
+
+export interface OpenClawRiddleProofMonitorContract {
+  contract_version: "riddle_proof.oc_wrapper.v1";
+  report_mode: RiddleProofReportMode;
+  wait_for_terminal: boolean;
+  response_gate: "checkpoint_ok" | "hold_for_terminal" | "release_terminal";
+  should_report_now: boolean;
+  should_continue_monitoring: boolean;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -120,7 +132,7 @@ export function createOpenClawRiddleProofResult(
   params: RiddleProofChangeParams,
   options: CreateOpenClawRiddleProofResultOptions = {},
 ): RiddleProofRunResult {
-  const request = toRiddleProofRunParams(params);
+  const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
   const state = createRunState({ request });
 
   appendRunEvent(state, {
@@ -259,6 +271,7 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
 }
 
 function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
+  const monitorContract = monitorContractFor(result.status, state.request);
   appendRunEvent(state, {
     kind: "run.wake.requested",
     checkpoint: result.last_checkpoint || state.last_checkpoint || null,
@@ -273,6 +286,7 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
       run_id: state.run_id || result.run_id || null,
       blocker: result.blocker,
       next_tools: wakeNextToolsFor(result),
+      monitor_contract: monitorContract,
       note:
         "Host/channel integrations should treat this durable event as the signal to re-enter the conversation with a status or review packet.",
     },
@@ -370,11 +384,80 @@ function runModeFrom(
   return config.defaultRunMode || "background";
 }
 
+function isTerminalStatusLike(status: string | null | undefined) {
+  return (
+    status === "blocked" ||
+    status === "failed" ||
+    status === "ready_to_ship" ||
+    status === "shipped" ||
+    status === "completed"
+  );
+}
+
+function reportModeFromParams(params: Pick<RiddleProofChangeParams, "report_mode" | "wait_for_terminal">) {
+  if (params.report_mode === "terminal_only" || params.wait_for_terminal === true) return "terminal_only" as const;
+  if (params.report_mode === "checkpoint") return "checkpoint" as const;
+  return undefined;
+}
+
+function readWrapperMetadata(request: RiddleProofRunParams) {
+  return recordValue(request.integration_context?.metadata) || {};
+}
+
+function applyWrapperMonitorSettings(
+  request: RiddleProofRunParams,
+  params: Pick<RiddleProofChangeParams, "report_mode" | "wait_for_terminal">,
+) {
+  const metadata = {
+    ...readWrapperMetadata(request),
+  };
+  const reportMode = reportModeFromParams(params);
+  if (reportMode) metadata.report_mode = reportMode;
+  if (typeof params.wait_for_terminal === "boolean") metadata.wait_for_terminal = params.wait_for_terminal;
+  request.integration_context = {
+    ...(request.integration_context || {}),
+    metadata: Object.keys(metadata).length ? metadata : undefined,
+  };
+  return request;
+}
+
+function reportModeFromRequest(request: RiddleProofRunParams): RiddleProofReportMode {
+  return readWrapperMetadata(request).report_mode === "terminal_only" ? "terminal_only" : "checkpoint";
+}
+
+function waitForTerminalFromRequest(request: RiddleProofRunParams) {
+  const metadata = readWrapperMetadata(request);
+  return metadata.wait_for_terminal === true || metadata.report_mode === "terminal_only";
+}
+
+function monitorContractFor(
+  status: string | null | undefined,
+  request: RiddleProofRunParams,
+): OpenClawRiddleProofMonitorContract {
+  const reportMode = reportModeFromRequest(request);
+  const waitForTerminal = waitForTerminalFromRequest(request);
+  const terminal = isTerminalStatusLike(status);
+  const responseGate =
+    waitForTerminal && !terminal
+      ? "hold_for_terminal"
+      : terminal
+        ? "release_terminal"
+        : "checkpoint_ok";
+  return {
+    contract_version: "riddle_proof.oc_wrapper.v1",
+    report_mode: reportMode,
+    wait_for_terminal: waitForTerminal,
+    response_gate: responseGate,
+    should_report_now: responseGate !== "hold_for_terminal",
+    should_continue_monitoring: responseGate === "hold_for_terminal",
+  };
+}
+
 function startOpenClawRiddleProofBackground(
   params: RiddleProofChangeParams,
   config: OpenClawRiddleProofRuntimeConfig,
 ): RiddleProofRunResult {
-  const request = toRiddleProofRunParams(params);
+  const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
   const statePath = request.harness_state_path || createHarnessStatePath(config.stateDir);
   request.harness_state_path = statePath;
   const state = createRunState({
@@ -390,6 +473,7 @@ function startOpenClawRiddleProofBackground(
     details: {
       state_path: statePath,
       run_mode: "background",
+      monitor_contract: monitorContractFor("running", request),
       next_tools: [
         RIDDLE_PROOF_STATUS_TOOL_NAME,
         RIDDLE_PROOF_INSPECT_TOOL_NAME,
@@ -423,6 +507,7 @@ function startOpenClawRiddleProofBackground(
       background: true,
       run_mode: "background",
       state_path: statePath,
+      monitor_contract: monitorContractFor("running", request),
       next_actions: [
         `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath} for progress.`,
         `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath} when proof review is needed.`,
@@ -903,6 +988,7 @@ function buildProofInspection(
     branch: stringValue(fullState.branch) || wrapperState.branch || wrapperState.request.branch || null,
     change_request: wrapperState.request.change_request || fullState.change_request || "",
     verification_mode: wrapperState.request.verification_mode || fullState.verification_mode || "proof",
+    monitor_contract: monitorContractFor(wrapperState.status, wrapperState.request),
     proof_profile_applied: Boolean(profile),
     proof_profile: profile,
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path) || null,
@@ -1109,7 +1195,7 @@ export async function runOpenClawRiddleProof(
     return createOpenClawRiddleProofResult(params);
   }
 
-  const request = toRiddleProofRunParams(params);
+  const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
   if (runModeFrom(params, config) === "background") {
     return startOpenClawRiddleProofBackground(params, config);
   }
@@ -1187,7 +1273,7 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
         isReviewRequired ? "review_required" :
           isRoutable ? "routable" :
             snapshot.status === "running" ? "in_progress" :
-              "blocked",
+            "blocked",
     suggested_next_action:
       monitorShouldContinue ? "continue_monitoring" :
         isReviewRequired ? "inspect_or_review" :
@@ -1201,11 +1287,13 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   if (!snapshot) return null;
   const checkpoint = checkpointStatus(snapshot);
   const wrapperState = readRunState(state_path);
+  const monitorContract = wrapperState ? monitorContractFor(snapshot.status, wrapperState.request) : undefined;
 
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
   if (!engineStatePath) {
     const baseStatus = {
       ...snapshot,
+      monitor_contract: monitorContract,
       timing_summary: buildTimingSummary(snapshot, wrapperState, null),
       ...checkpoint,
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
@@ -1221,6 +1309,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
   const status = {
     ...snapshot,
+    monitor_contract: monitorContract,
     current_stage: effectiveStage,
     wrapper_current_stage: snapshot.current_stage ?? null,
     engine_current_stage: engineCurrentStage || null,
@@ -1538,6 +1627,14 @@ export const riddleProofChangeParameters = Type.Object({
       "background returns an accepted run state immediately so chat surfaces can watch status instead of holding one long reply open. This is the default; use blocking only for synchronous debug runs.",
   })),
   background: optionalBoolean("Compatibility shortcut for run_mode=background."),
+  report_mode: Type.Optional(Type.Union([
+    Type.Literal("checkpoint"),
+    Type.Literal("terminal_only"),
+  ], {
+    description:
+      "checkpoint allows partial/progress reports at meaningful checkpoints; terminal_only tells wrappers and monitors to hold replies until terminal state.",
+  })),
+  wait_for_terminal: optionalBoolean("Compatibility shortcut for report_mode=terminal_only."),
   leave_draft: optionalBoolean("Opt-in escape hatch: keep the PR as draft after proof and CI instead of marking it ready."),
   state_path: optionalString("Existing underlying Riddle Proof engine state path to resume."),
   harness_state_path: optionalString("Existing Riddle Proof wrapper run state path to resume."),
