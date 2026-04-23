@@ -20,6 +20,7 @@ from util import (
     load_state,
     prepare_server_preview,
     record_successful_capture_hint,
+    run_project_build,
     save_state,
     should_use_static_preview,
     summarize_capture_artifacts,
@@ -1028,14 +1029,17 @@ if existing_prod:
 
 # AFTER (always from after worktree)
 record_verify_phase('build', 'running', 'Building after worktree for verify capture.')
-print('Cleaning after .next cache...')
-sp.run('rm -rf .next', shell=True, cwd=after_dir, capture_output=True)
-
 print('Building after worktree...')
-br = sp.run(build_cmd, shell=True, cwd=after_dir, capture_output=True, text=True, timeout=600)
+build_attempt = run_project_build(after_dir, build_cmd, timeout=600, clean_cache_dir='.next')
+br = build_attempt.get('result')
+if build_attempt.get('clean_retry_used'):
+    print('Verify build recovered after cleaning .next cache.')
 if br.returncode != 0:
     record_verify_phase('build', 'failed', 'After build failed: ' + br.stderr[:300])
     raise SystemExit('After build failed: ' + br.stderr[:500])
+if build_attempt.get('attempts'):
+    s['verify_build_attempts'] = build_attempt['attempts']
+    s['verify_build_clean_retry_used'] = bool(build_attempt.get('clean_retry_used'))
 record_verify_phase('build', 'completed', 'After worktree build completed.')
 
 after_payload = {}

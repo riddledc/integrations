@@ -508,6 +508,38 @@ def base_state(tempdir: Path, *, reference='before', prod_url=''):
     }
 
 
+def run_project_build_retries_after_clean_failure():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-build-retry-'))
+    cache_dir = tempdir / '.next'
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    util = load_module('util_build_retry', UTIL_PATH)
+    original_run = util.sp.run
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+        if cmd == 'npm run build':
+            build_attempts = calls.count('npm run build')
+            if build_attempts == 1:
+                return sp.CompletedProcess(cmd, 1, '', 'stale cache')
+            return sp.CompletedProcess(cmd, 0, 'ok', '')
+        if cmd == 'rm -rf .next':
+            shutil.rmtree(cache_dir, ignore_errors=True)
+            return sp.CompletedProcess(cmd, 0, '', '')
+        raise AssertionError(f'unexpected command: {cmd}')
+
+    try:
+        util.sp.run = fake_run
+        result = util.run_project_build(str(tempdir), 'npm run build', timeout=30, clean_cache_dir='.next')
+        assert result['clean_retry_used'] is True
+        assert result['result'].returncode == 0
+        assert calls == ['npm run build', 'rm -rf .next', 'npm run build']
+        assert not cache_dir.exists()
+    finally:
+        util.sp.run = original_run
+        shutil.rmtree(tempdir)
+
+
 def run_recon_then_author_request():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-supervisor-request-'))
     state_path = tempdir / 'state.json'
@@ -1257,6 +1289,7 @@ if __name__ == '__main__':
         'capture_artifact_enrichment': run_capture_artifact_enrichment(),
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),
+        'run_project_build_retries_after_clean_failure': run_project_build_retries_after_clean_failure(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
         'recon_then_author_request': run_recon_then_author_request(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),
