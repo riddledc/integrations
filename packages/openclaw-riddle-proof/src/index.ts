@@ -43,6 +43,7 @@ export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
 export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
+const MIN_DEFAULT_MAX_ITERATIONS = 12;
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
@@ -191,7 +192,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     riddleProofDir: typeof cfg.riddleProofDir === "string" ? cfg.riddleProofDir : undefined,
     defaultReviewer: typeof cfg.defaultReviewer === "string" ? cfg.defaultReviewer : undefined,
     stateDir: typeof cfg.stateDir === "string" ? cfg.stateDir : undefined,
-    defaultMaxIterations: typeof cfg.defaultMaxIterations === "number" ? cfg.defaultMaxIterations : undefined,
+    defaultMaxIterations: normalizeDefaultMaxIterations(cfg.defaultMaxIterations),
     defaultShipMode,
     defaultRunMode,
     autoReviewShipModeNone,
@@ -201,6 +202,26 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     codexTimeoutMs: typeof cfg.codexTimeoutMs === "number" ? cfg.codexTimeoutMs : undefined,
     codexSandbox,
     codexFullAuto: typeof cfg.codexFullAuto === "boolean" ? cfg.codexFullAuto : undefined,
+  };
+}
+
+function normalizeDefaultMaxIterations(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(MIN_DEFAULT_MAX_ITERATIONS, Math.trunc(value));
+}
+
+function effectiveMaxIterations(request: RiddleProofRunParams, config: OpenClawRiddleProofRuntimeConfig) {
+  return request.max_iterations ?? normalizeDefaultMaxIterations(config.defaultMaxIterations);
+}
+
+function effectiveHarnessConfig(config: OpenClawRiddleProofRuntimeConfig) {
+  return {
+    riddleEngineModuleUrl: config.riddleEngineModuleUrl,
+    riddleProofDir: config.riddleProofDir,
+    defaultReviewer: config.defaultReviewer,
+    stateDir: config.stateDir,
+    defaultMaxIterations: normalizeDefaultMaxIterations(config.defaultMaxIterations),
+    defaultShipMode: config.defaultShipMode,
   };
 }
 
@@ -261,7 +282,7 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
     riddleProofDir: config.riddleProofDir,
     defaultReviewer: config.defaultReviewer,
     stateDir: config.stateDir,
-    defaultMaxIterations: config.defaultMaxIterations,
+    defaultMaxIterations: normalizeDefaultMaxIterations(config.defaultMaxIterations),
     defaultShipMode: config.defaultShipMode,
     defaultRunMode: config.defaultRunMode,
     autoReviewShipModeNone: config.autoReviewShipModeNone,
@@ -303,19 +324,12 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
   const result = await runRiddleProofEngineHarness({
     request: data.request,
     state_path: data.state_path,
-    max_iterations: data.request.max_iterations ?? config.defaultMaxIterations,
+    max_iterations: effectiveMaxIterations(data.request, config),
     dry_run: data.request.dry_run,
     auto_approve: data.request.auto_approve,
     engine: config.engine,
     agent: agentFromConfig(config),
-    config: {
-      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
-      riddleProofDir: config.riddleProofDir,
-      defaultReviewer: config.defaultReviewer,
-      stateDir: config.stateDir,
-      defaultMaxIterations: config.defaultMaxIterations,
-      defaultShipMode: config.defaultShipMode,
-    },
+    config: effectiveHarnessConfig(config),
   });
   const state = readRunState(data.state_path);
   if (state) appendWakeRequest(state, result);
@@ -842,19 +856,12 @@ export async function runOpenClawRiddleProof(
   return runRiddleProofEngineHarness({
     request,
     state_path: request.harness_state_path,
-    max_iterations: request.max_iterations ?? config.defaultMaxIterations,
+    max_iterations: effectiveMaxIterations(request, config),
     dry_run: request.dry_run,
     auto_approve: request.auto_approve,
     engine: config.engine,
     agent: agentFromConfig(config),
-    config: {
-      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
-      riddleProofDir: config.riddleProofDir,
-      defaultReviewer: config.defaultReviewer,
-      stateDir: config.stateDir,
-      defaultMaxIterations: config.defaultMaxIterations,
-      defaultShipMode: config.defaultShipMode,
-    },
+    config: effectiveHarnessConfig(config),
   });
 }
 
@@ -1030,19 +1037,12 @@ export async function submitOpenClawRiddleProofReview(
     state,
     state_path: params.state_path,
     resume_params: resumeParams,
-    max_iterations: state.request.max_iterations ?? config.defaultMaxIterations,
+    max_iterations: effectiveMaxIterations(state.request, config),
     dry_run: state.request.dry_run,
     auto_approve: state.request.auto_approve,
     engine: config.engine,
     agent: agentFromConfig(config),
-    config: {
-      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
-      riddleProofDir: config.riddleProofDir,
-      defaultReviewer: config.defaultReviewer,
-      stateDir: config.stateDir,
-      defaultMaxIterations: config.defaultMaxIterations,
-      defaultShipMode: config.defaultShipMode,
-    },
+    config: effectiveHarnessConfig(config),
   });
 }
 
@@ -1103,14 +1103,7 @@ export async function syncOpenClawRiddleProof(
     auto_approve: state.request.auto_approve,
     engine: config.engine,
     agent: agentFromConfig(config),
-    config: {
-      riddleEngineModuleUrl: config.riddleEngineModuleUrl,
-      riddleProofDir: config.riddleProofDir,
-      defaultReviewer: config.defaultReviewer,
-      stateDir: config.stateDir,
-      defaultMaxIterations: config.defaultMaxIterations,
-      defaultShipMode: config.defaultShipMode,
-    },
+    config: effectiveHarnessConfig(config),
   });
 }
 

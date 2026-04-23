@@ -201,6 +201,42 @@ assert.equal(engineModeResult.branch, "agent/openclaw-wrapper-test");
 assert.deepEqual(wrapperAgentCalls, [engineWorkdir]);
 assert.equal(engineCalls.length, 2);
 
+const legacyMaxFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-legacy-max-"));
+const legacyMaxStatePath = path.join(legacyMaxFixture, "riddle-state.json");
+const legacyMaxWrapperStatePath = path.join(legacyMaxFixture, "wrapper-state.json");
+const legacyMaxParams = {
+  ...params,
+  run_mode: "blocking",
+  dry_run: false,
+  ship_after_verify: false,
+  ship_mode: "none",
+  harness_state_path: legacyMaxWrapperStatePath,
+  state_path: legacyMaxStatePath,
+};
+delete legacyMaxParams.max_iterations;
+const legacyMaxResult = await runOpenClawRiddleProof(
+  legacyMaxParams,
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    defaultMaxIterations: 8,
+    engine: {
+      async execute() {
+        return {
+          ok: false,
+          state_path: legacyMaxStatePath,
+          checkpoint: "setup_blocked",
+          summary: "Stop after recording harness defaults.",
+        };
+      },
+    },
+  },
+);
+assert.equal(legacyMaxResult.status, "blocked");
+const legacyMaxState = JSON.parse(readFileSync(legacyMaxWrapperStatePath, "utf-8"));
+const legacyMaxStarted = legacyMaxState.events.find((event) => event.kind === "engine_harness.started");
+assert.equal(legacyMaxStarted.details.max_iterations, 12);
+
 const backgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-background-"));
 const backgroundEngineStatePath = path.join(backgroundFixture, "riddle-state.json");
 const backgroundWrapperStatePath = path.join(backgroundFixture, "wrapper-state.json");

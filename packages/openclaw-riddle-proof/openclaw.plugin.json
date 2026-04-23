@@ -90,7 +90,9 @@
         "type": "string"
       },
       "defaultMaxIterations": {
-        "type": "number"
+        "type": "number",
+        "default": 12,
+        "description": "Default engine/checkpoint iteration runway. Values below 12 are treated as legacy config and normalized to 12; explicit per-run max_iterations still overrides this default."
       },
       "defaultShipMode": {
         "type": "string",
