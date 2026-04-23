@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.23
+
+### Patch Changes
+
+- 65c5165: Add monitor-facing status fields so OpenClaw can continue through routable proof checkpoints instead of reporting intermediate states as final failures.
+- Updated dependencies [65c5165]
+  - @riddledc/riddle-proof@0.5.11
+
 ## 0.4.22
 
 ### Patch Changes
