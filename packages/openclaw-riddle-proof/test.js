@@ -328,7 +328,7 @@ assert.equal(enrichedBackgroundStatus?.active_substep?.step, "verify");
 assert.equal(enrichedBackgroundStatus?.engine_latest_event?.kind, "workflow.step.started");
 assert.equal(enrichedBackgroundStatus?.engine_runtime_event_count, 1);
 assert.equal(enrichedBackgroundStatus?.scratch_cleanup?.skipped, "enough_free_space");
-assert.equal(enrichedBackgroundStatus?.scratch_cleanup_status, "enough_free_space");
+assert.equal(enrichedBackgroundStatus?.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
 assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
@@ -494,6 +494,28 @@ assert.equal(inspectResult.structured_evidence?.proof_evidence_present, true);
 assert.match(inspectResult.structured_evidence?.proof_evidence_sample, /attack_ms_after/);
 assert.equal(inspectResult.structured_evidence?.proof_evidence_has_concerns, false);
 assert.equal(inspectResult.scratch_cleanup?.skipped, "enough_free_space");
+assert.equal(inspectResult.scratch_cleanup_status, "skipped_enough_free_space");
+
+writeFileSync(backgroundEngineStatePath, JSON.stringify({
+  branch: "agent/background-proof",
+  scratch_cleanup: {
+    requested: true,
+    removed: [
+      { path: "/tmp/.riddle-proof-worktrees/example-before", via: "git" },
+      { path: "/tmp/.riddle-proof-worktrees/example-after", via: "git" },
+    ],
+    errors: [],
+  },
+  current_runtime_step: {
+    step: "verify",
+    action: "run",
+    status: "running",
+    started_at: new Date(Date.now() - 250).toISOString(),
+  },
+  runtime_events: [],
+}, null, 2));
+const removedBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+assert.equal(removedBackgroundStatus?.scratch_cleanup_status, "removed_worktrees");
 
 const concernFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-evidence-concern-"));
 const concernStatePath = path.join(concernFixture, "riddle-state.json");
