@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.21
+
+### Patch Changes
+
+- 4cc0457: Normalize legacy OpenClaw plugin `defaultMaxIterations` values below 12 to the public proof-run minimum while preserving explicit per-run `max_iterations` overrides.
+
 ## 0.4.20
 
 ### Patch Changes
