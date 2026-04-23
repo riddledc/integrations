@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.34
+
+### Patch Changes
+
+- 538d58c: Add `riddle_proof_wait` for detached proof monitoring and expose an explicit monitor plan so callers can avoid ad hoc sleep loops around status polling.
+
 ## 0.4.33
 
 ### Patch Changes
