@@ -394,6 +394,17 @@ function isTerminalStatusLike(status: string | null | undefined) {
   );
 }
 
+function resumableCheckpointLike(
+  status: string | null | undefined,
+  checkpoint: string | null | undefined,
+  blockerCode?: string | null,
+) {
+  if (!checkpoint || !ROUTABLE_CHECKPOINTS.has(checkpoint)) return false;
+  if (blockerCode === "main_agent_proof_review_required") return false;
+  if (REVIEW_CHECKPOINTS.has(checkpoint)) return false;
+  return status === "running" || status === "blocked";
+}
+
 function reportModeFromParams(params: Pick<RiddleProofChangeParams, "report_mode" | "wait_for_terminal">) {
   if (params.report_mode === "terminal_only" || params.wait_for_terminal === true) return "terminal_only" as const;
   if (params.report_mode === "checkpoint") return "checkpoint" as const;
@@ -433,10 +444,15 @@ function waitForTerminalFromRequest(request: RiddleProofRunParams) {
 function monitorContractFor(
   status: string | null | undefined,
   request: RiddleProofRunParams,
+  options: {
+    checkpoint?: string | null;
+    blockerCode?: string | null;
+  } = {},
 ): OpenClawRiddleProofMonitorContract {
   const reportMode = reportModeFromRequest(request);
   const waitForTerminal = waitForTerminalFromRequest(request);
-  const terminal = isTerminalStatusLike(status);
+  const resumable = resumableCheckpointLike(status, options.checkpoint, options.blockerCode);
+  const terminal = !resumable && isTerminalStatusLike(status);
   const responseGate =
     waitForTerminal && !terminal
       ? "hold_for_terminal"
@@ -988,7 +1004,10 @@ function buildProofInspection(
     branch: stringValue(fullState.branch) || wrapperState.branch || wrapperState.request.branch || null,
     change_request: wrapperState.request.change_request || fullState.change_request || "",
     verification_mode: wrapperState.request.verification_mode || fullState.verification_mode || "proof",
-    monitor_contract: monitorContractFor(wrapperState.status, wrapperState.request),
+    monitor_contract: monitorContractFor(wrapperState.status, wrapperState.request, {
+      checkpoint: checkpoint || wrapperState.last_checkpoint || null,
+      blockerCode: wrapperState.blocker?.code || null,
+    }),
     proof_profile_applied: Boolean(profile),
     proof_profile: profile,
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path) || null,
@@ -1256,13 +1275,16 @@ const REVIEW_CHECKPOINTS = new Set([
 function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   const snapshotRecord = snapshot as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   const checkpoint = snapshot.last_checkpoint || snapshot.blocker?.checkpoint || null;
-  const isTerminal = typeof snapshotRecord.is_terminal === "boolean" ? snapshotRecord.is_terminal : snapshot.status !== "running";
-  const isRoutable = snapshot.status === "running" && Boolean(checkpoint && ROUTABLE_CHECKPOINTS.has(checkpoint));
+  const resumable = resumableCheckpointLike(snapshot.status, checkpoint, snapshot.blocker?.code);
+  const isTerminal = typeof snapshotRecord.is_terminal === "boolean"
+    ? snapshotRecord.is_terminal && !resumable
+    : snapshot.status !== "running" && !resumable;
+  const isRoutable = Boolean(resumable);
   const isReviewRequired = Boolean(
     snapshot.blocker?.code === "main_agent_proof_review_required" ||
     (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
   );
-  const monitorShouldContinue = snapshot.status === "running" && !isTerminal && !isReviewRequired;
+  const monitorShouldContinue = !isTerminal && !isReviewRequired;
   return {
     checkpoint,
     is_terminal: isTerminal,
@@ -1287,7 +1309,12 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   if (!snapshot) return null;
   const checkpoint = checkpointStatus(snapshot);
   const wrapperState = readRunState(state_path);
-  const monitorContract = wrapperState ? monitorContractFor(snapshot.status, wrapperState.request) : undefined;
+  const monitorContract = wrapperState
+    ? monitorContractFor(snapshot.status, wrapperState.request, {
+        checkpoint: checkpoint.checkpoint,
+        blockerCode: snapshot.blocker?.code || null,
+      })
+    : undefined;
 
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
   if (!engineStatePath) {

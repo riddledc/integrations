@@ -944,6 +944,47 @@ assert.equal(runningTerminalStatus.monitor_contract.report_mode, "terminal_only"
 assert.equal(runningTerminalStatus.monitor_contract.should_continue_monitoring, true);
 assert.equal(runningTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
 
+const terminalOnlyBlockedWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-routable.json");
+writeFileSync(terminalOnlyBlockedWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_blocked_terminal_only",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Polish Tic Tac Toe status",
+    engine_state_path: reviewStatePath,
+    verification_mode: "visual",
+    integration_context: {
+      source: "openclaw",
+      metadata: {
+        report_mode: "terminal_only",
+        wait_for_terminal: true,
+      },
+    },
+  },
+  last_checkpoint: "implement_changes_missing",
+  blocker: {
+    code: "implement_changes_missing",
+    checkpoint: "implement_changes_missing",
+    message: "No implementation detected on the after worktree.",
+  },
+  iterations: 2,
+  events: [],
+}, null, 2));
+const blockedTerminalStatus = readOpenClawRiddleProofStatus(terminalOnlyBlockedWrapperStatePath);
+assert.equal(blockedTerminalStatus.monitor_contract.report_mode, "terminal_only");
+assert.equal(blockedTerminalStatus.monitor_contract.should_continue_monitoring, true);
+assert.equal(blockedTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
+assert.equal(blockedTerminalStatus.checkpoint_classification, "routable");
+assert.equal(blockedTerminalStatus.suggested_next_action, "continue_monitoring");
+
+const blockedInspectResult = inspectOpenClawRiddleProof({ state_path: terminalOnlyBlockedWrapperStatePath });
+assert.equal(blockedInspectResult.monitor_contract.report_mode, "terminal_only");
+assert.equal(blockedInspectResult.monitor_contract.should_continue_monitoring, true);
+assert.equal(blockedInspectResult.monitor_contract.response_gate, "hold_for_terminal");
+
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
 assert.equal(inspectParsed.route_matched, true);
