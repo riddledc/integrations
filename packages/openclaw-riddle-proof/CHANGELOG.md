@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.25
+
+### Patch Changes
+
+- 7b013d0: Surface Riddle Proof scratch cleanup status in OpenClaw status and inspect output, and block automatic ready review when structured proof evidence contains failed positive assertions.
+
 ## 0.4.24
 
 ### Patch Changes
