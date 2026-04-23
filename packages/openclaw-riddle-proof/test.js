@@ -266,7 +266,41 @@ const backgroundResult = await runOpenClawRiddleProof(
     engine: {
       async execute(engineParams) {
         backgroundEngineCalls.push(engineParams);
-        writeFileSync(backgroundEngineStatePath, JSON.stringify({ branch: "agent/background-proof" }, null, 2));
+        writeFileSync(backgroundEngineStatePath, JSON.stringify({
+          branch: "agent/background-proof",
+          runtime_events: [
+            {
+              ts: "2026-04-23T00:00:00.000Z",
+              kind: "workflow.phase.started",
+              step: "verify",
+              phase: "build",
+              summary: "Started verify build.",
+            },
+            {
+              ts: "2026-04-23T00:00:12.000Z",
+              kind: "workflow.phase.finished",
+              step: "verify",
+              phase: "build",
+              summary: "Finished verify build.",
+              details: { status: "completed" },
+            },
+            {
+              ts: "2026-04-23T00:00:12.000Z",
+              kind: "workflow.phase.started",
+              step: "verify",
+              phase: "capture",
+              summary: "Started verify capture.",
+            },
+            {
+              ts: "2026-04-23T00:00:27.000Z",
+              kind: "workflow.phase.finished",
+              step: "verify",
+              phase: "capture",
+              summary: "Finished verify capture.",
+              details: { status: "completed" },
+            },
+          ],
+        }, null, 2));
         return {
           ok: true,
           state_path: backgroundEngineStatePath,
@@ -305,6 +339,7 @@ assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
 ]);
+assert.equal(backgroundState.events.at(-1).details.timing_summary.verify_subphase_durations_ms.capture, 15000);
 writeFileSync(backgroundEngineStatePath, JSON.stringify({
   branch: "agent/background-proof",
   scratch_cleanup: {
@@ -343,6 +378,7 @@ assert.equal(enrichedBackgroundStatus?.scratch_cleanup?.skipped, "enough_free_sp
 assert.equal(enrichedBackgroundStatus?.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
+assert.equal(enrichedBackgroundStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 15000);
 assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
 assert.equal(enrichedBackgroundStatus?.is_terminal, true);
 assert.equal(enrichedBackgroundStatus?.monitor_should_continue, false);
@@ -361,6 +397,7 @@ assert.equal(runningBackgroundStatus?.current_stage, "verify");
 assert.equal(runningBackgroundStatus?.wrapper_current_stage, "setup");
 assert.equal(runningBackgroundStatus?.engine_current_stage, "verify");
 assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 15000);
+assert.equal(runningBackgroundStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 15000);
 assert.equal(runningBackgroundStatus?.is_terminal, false);
 assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
 assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);

@@ -271,6 +271,9 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
 }
 
 function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
+  const engineStatePath = stringValue(state.request.engine_state_path);
+  const engineState = engineStatePath ? readJsonRecord(engineStatePath) : null;
+  const timingSummary = buildTimingSummary(createRunStatusSnapshot(state), state, engineState);
   const monitorContract = monitorContractFor(result.status, state.request);
   appendRunEvent(state, {
     kind: "run.wake.requested",
@@ -285,6 +288,7 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
       state_path: state.state_path || result.state_path || null,
       run_id: state.run_id || result.run_id || null,
       blocker: result.blocker,
+      timing_summary: timingSummary,
       next_tools: wakeNextToolsFor(result),
       monitor_contract: monitorContract,
       note:
@@ -725,6 +729,35 @@ function buildTimingSummary(
     } : null,
     capture_hint: summarizeCaptureHint(engineState),
   };
+}
+
+function latestWakeTimingSummary(wrapperState: RiddleProofRunState | null) {
+  const events = Array.isArray(wrapperState?.events) ? wrapperState.events : [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const record = recordValue(events[index]);
+    if (stringValue(record?.kind) !== "run.wake.requested") continue;
+    const details = recordValue(record?.details);
+    const timingSummary = recordValue(details?.timing_summary);
+    if (timingSummary) return timingSummary;
+  }
+  return null;
+}
+
+function mergeTimingSummary(
+  liveSummary: ReturnType<typeof buildTimingSummary>,
+  wakeSummary: Record<string, unknown> | null,
+) {
+  if (!wakeSummary) return liveSummary;
+  const merged: Record<string, unknown> = {
+    ...wakeSummary,
+    ...liveSummary,
+  };
+  for (const [key, value] of Object.entries(liveSummary)) {
+    if ((value === null || value === undefined) && wakeSummary[key] !== undefined) {
+      merged[key] = wakeSummary[key];
+    }
+  }
+  return merged;
 }
 
 function compactDebugEvent(event: unknown) {
@@ -1333,6 +1366,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   if (!snapshot) return null;
   const checkpoint = checkpointStatus(snapshot);
   const wrapperState = readRunState(state_path);
+  const wakeTimingSummary = latestWakeTimingSummary(wrapperState);
   const monitorContract = wrapperState
     ? monitorContractFor(snapshot.status, wrapperState.request, {
         checkpoint: checkpoint.checkpoint,
@@ -1345,7 +1379,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     const baseStatus = {
       ...snapshot,
       monitor_contract: monitorContract,
-      timing_summary: buildTimingSummary(snapshot, wrapperState, null),
+      timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
       ...checkpoint,
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
     if (options.debug) baseStatus.debug = buildDebugPayload(wrapperState, null);
@@ -1373,7 +1407,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
     capture_hint: summarizeCaptureHint(engineState),
-    timing_summary: buildTimingSummary(snapshot, wrapperState, engineState),
+    timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
     recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
     ...checkpoint,
     wake_strategy: {
