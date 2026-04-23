@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.26
+
+### Patch Changes
+
+- 8564064: Expose semantic scratch cleanup status labels in OpenClaw proof status and inspect output, including skipped cleanup and removed worktree cases.
+
 ## 0.4.25
 
 ### Patch Changes
