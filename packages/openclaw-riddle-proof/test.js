@@ -548,8 +548,11 @@ const autoReviewResult = await runOpenClawRiddleProof(
 );
 assert.equal(autoReviewResult.status, "ready_to_ship");
 assert.equal(autoReviewResult.ok, true);
-assert.equal(autoReviewEngineCalls.length, 2);
-assert.ok(autoReviewEngineCalls[1].proof_assessment_json);
+assert.equal(autoReviewEngineCalls.length, 1);
+assert.equal(autoReviewEngineCalls[0].proof_assessment_json, undefined);
+const autoReviewState = JSON.parse(readFileSync(autoReviewWrapperStatePath, "utf-8"));
+const autoReviewEvent = autoReviewState.events.find((event) => event.kind === "agent.proof_assessment.completed");
+assert.equal(autoReviewEvent.details.payload.source, "openclaw_auto_ship_mode_none");
 
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(
@@ -580,8 +583,11 @@ const reviewResumed = await submitOpenClawRiddleProofReview(
   },
 );
 assert.equal(reviewResumed.status, "ready_to_ship");
-assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).source, "supervising_agent");
-assert.equal(JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json).continue_with_stage, "ship");
+assert.equal(reviewResumeEngineCalls.length, 0);
+const reviewResumedState = JSON.parse(readFileSync(reviewWrapperStatePath, "utf-8"));
+const reviewResumedEvent = reviewResumedState.events.findLast((event) => event.kind === "agent.proof_assessment.completed");
+assert.equal(reviewResumedEvent.details.payload.source, "supervising_agent");
+assert.equal(reviewResumedEvent.details.payload.continue_with_stage, "ship");
 
 const syncFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-sync-"));
 const syncStatePath = path.join(syncFixture, "riddle-state.json");
