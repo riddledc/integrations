@@ -496,14 +496,13 @@ function startOpenClawRiddleProofBackground(
     kind: "run.background.started",
     checkpoint: "background_started",
     stage: "setup",
-    summary: "Riddle Proof background run accepted; poll status or inspect the state path for progress.",
+    summary: `Riddle Proof background run accepted; prefer ${RIDDLE_PROOF_WAIT_TOOL_NAME} for monitoring progress.`,
     details: {
       state_path: statePath,
       run_mode: "background",
       monitor_contract: monitorContractFor("running", request),
       next_tools: [
         RIDDLE_PROOF_WAIT_TOOL_NAME,
-        RIDDLE_PROOF_STATUS_TOOL_NAME,
         RIDDLE_PROOF_INSPECT_TOOL_NAME,
         RIDDLE_PROOF_REVIEW_TOOL_NAME,
       ],
@@ -530,7 +529,7 @@ function startOpenClawRiddleProofBackground(
   return createRunResult({
     state,
     status: "running",
-    last_summary: "Riddle Proof background run accepted; use riddle_proof_status for progress.",
+    last_summary: `Riddle Proof background run accepted; use ${RIDDLE_PROOF_WAIT_TOOL_NAME} to follow the monitor contract.`,
     raw: {
       background: true,
       run_mode: "background",
@@ -538,7 +537,7 @@ function startOpenClawRiddleProofBackground(
       monitor_contract: monitorContractFor("running", request),
       next_actions: [
         `Call ${RIDDLE_PROOF_WAIT_TOOL_NAME} with state_path=${statePath} to wait for the next reportable state without ad hoc sleep loops.`,
-        `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath} for progress.`,
+        `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath} only for a one-off debug snapshot.`,
         `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath} when proof review is needed.`,
         `Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with state_path=${statePath} to resume after a proof judgment.`,
       ],
@@ -1464,7 +1463,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     wake_strategy: {
       signal: "run.wake.requested",
       recommendation:
-        `For detached monitoring, prefer ${RIDDLE_PROOF_WAIT_TOOL_NAME} over ad hoc sleep loops. If using ${RIDDLE_PROOF_STATUS_TOOL_NAME} directly, follow recommended_poll_after_ms and continue only while monitor_should_continue is true.`,
+        `For detached monitoring, use ${RIDDLE_PROOF_WAIT_TOOL_NAME}. ${RIDDLE_PROOF_STATUS_TOOL_NAME} is for one-off debug/final inspection snapshots, not status-loop polling.`,
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);
@@ -1925,7 +1924,7 @@ export default function register(api: any) {
   api.registerTool(
     {
       name: RIDDLE_PROOF_STATUS_TOOL_NAME,
-      description: "Return a cheap status snapshot for a Riddle Proof wrapper run state path.",
+      description: `Return a cheap status snapshot for a Riddle Proof wrapper run state path. Use ${RIDDLE_PROOF_WAIT_TOOL_NAME} for monitoring loops; use status for one-off debug or final inspection.`,
       parameters: riddleProofStatusParameters,
       async execute(_id: string, params: RiddleProofStatusParams) {
         const snapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });

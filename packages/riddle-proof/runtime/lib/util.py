@@ -566,6 +566,41 @@ def git(cmd, cwd):
     return sp.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True)
 
 
+def run_project_build(project_dir, build_cmd, timeout=600, clean_cache_dir='.next'):
+    """Build once with existing cache, then retry clean if the cached build fails."""
+    attempts = []
+    for clean_first in (False, True):
+        if clean_first and clean_cache_dir:
+            cache_path = os.path.join(project_dir, clean_cache_dir)
+            if os.path.exists(cache_path):
+                sp.run(
+                    'rm -rf ' + shell_quote(clean_cache_dir),
+                    shell=True,
+                    cwd=project_dir,
+                    capture_output=True,
+                    text=True,
+                )
+        result = sp.run(build_cmd, shell=True, cwd=project_dir, capture_output=True, text=True, timeout=timeout)
+        attempts.append({
+            'clean_first': clean_first,
+            'returncode': int(result.returncode),
+            'stderr': (result.stderr or '')[:500],
+        })
+        if result.returncode == 0:
+            return {
+                'result': result,
+                'clean_retry_used': clean_first,
+                'attempts': attempts,
+            }
+        if not clean_cache_dir or clean_first:
+            break
+    return {
+        'result': result,
+        'clean_retry_used': False,
+        'attempts': attempts,
+    }
+
+
 def load_package_json(project_dir):
     package_json = os.path.join(project_dir, 'package.json')
     if not os.path.exists(package_json):

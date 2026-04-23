@@ -320,6 +320,7 @@ assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
 assert.equal(backgroundResult.raw?.monitor_contract?.report_mode, "checkpoint");
 assert.equal(backgroundResult.raw?.monitor_contract?.response_gate, "checkpoint_ok");
 assert.ok(backgroundResult.raw?.next_actions?.[0]?.includes(RIDDLE_PROOF_WAIT_TOOL_NAME));
+assert.ok(backgroundResult.raw?.next_actions?.[1]?.includes("one-off debug snapshot"));
 assert.equal(existsSync(backgroundWrapperStatePath), true);
 
 for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
@@ -338,6 +339,11 @@ const backgroundState = JSON.parse(readFileSync(backgroundWrapperStatePath, "utf
 assert.equal(backgroundState.events[0].kind, "run.background.started");
 assert.equal(backgroundState.events.some((event) => event.checkpoint === "verify_ship_ready"), true);
 assert.equal(backgroundState.events.at(-1).kind, "run.wake.requested");
+assert.deepEqual(backgroundState.events[0].details.next_tools, [
+  RIDDLE_PROOF_WAIT_TOOL_NAME,
+  RIDDLE_PROOF_INSPECT_TOOL_NAME,
+  RIDDLE_PROOF_REVIEW_TOOL_NAME,
+]);
 assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
