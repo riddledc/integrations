@@ -7,6 +7,7 @@ import {
   appendRunEvent,
   createRunResult,
   createRunState,
+  createRunStatusSnapshot,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   setRunStatus,
@@ -72,8 +73,14 @@ export interface RiddleProofSyncParams {
   update_base_checkout?: boolean;
 }
 
+export interface RiddleProofStatusParams {
+  state_path: string;
+  debug?: boolean;
+}
+
 export interface RiddleProofInspectParams {
   state_path: string;
+  debug?: boolean;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -459,6 +466,181 @@ function compactValue(value: unknown, limit = 1200) {
   return text.length <= limit ? text : `${text.slice(0, limit - 20).trimEnd()}...`;
 }
 
+function numericValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
+function isoToMs(value: unknown): number | null {
+  const text = stringValue(value);
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function summarizeWrapperStageDurations(state: RiddleProofRunState | null, snapshot: RiddleProofRunStatusSnapshot) {
+  const events = Array.isArray(state?.events) ? state.events : [];
+  const totals: Record<string, number> = {};
+  let activeStage = "";
+  let activeStartedMs: number | null = null;
+
+  for (const event of events) {
+    const record = recordValue(event);
+    const stage = stringValue(record?.stage);
+    const tsMs = isoToMs(record?.ts);
+    if (!stage || tsMs === null) continue;
+    if (!activeStage) {
+      activeStage = stage;
+      activeStartedMs = tsMs;
+      continue;
+    }
+    if (stage === activeStage) continue;
+    if (activeStartedMs !== null) {
+      totals[activeStage] = (totals[activeStage] || 0) + Math.max(0, tsMs - activeStartedMs);
+    }
+    activeStage = stage;
+    activeStartedMs = tsMs;
+  }
+
+  const finishedAtMs = isoToMs(snapshot.updated_at) ?? Date.now();
+  if (activeStage && activeStartedMs !== null) {
+    totals[activeStage] = (totals[activeStage] || 0) + Math.max(0, finishedAtMs - activeStartedMs);
+  }
+
+  return Object.keys(totals).length ? totals : null;
+}
+
+function summarizeRuntimeStepDurations(engineState: Record<string, unknown> | null) {
+  const events = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  const totals: Record<string, number> = {};
+  for (const event of events) {
+    const record = recordValue(event);
+    if (!record || stringValue(record.kind) !== "workflow.step.finished") continue;
+    const step = stringValue(record.step);
+    const details = recordValue(record.details);
+    const durationMs = numericValue(details?.duration_ms);
+    if (!step || durationMs === null) continue;
+    totals[step] = (totals[step] || 0) + durationMs;
+  }
+  return Object.keys(totals).length ? totals : null;
+}
+
+function summarizeRuntimePhaseDurations(engineState: Record<string, unknown> | null) {
+  const events = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  const totals: Record<string, number> = {};
+  const active = new Map<string, number>();
+
+  for (const event of events) {
+    const record = recordValue(event);
+    if (!record) continue;
+    const kind = stringValue(record.kind);
+    const step = stringValue(record.step);
+    const phase = stringValue(record.phase);
+    const tsMs = isoToMs(record.ts);
+    if (!step || !phase || tsMs === null) continue;
+    const key = `${step}:${phase}`;
+    if (kind === "workflow.phase.started") {
+      active.set(key, tsMs);
+      continue;
+    }
+    if (kind === "workflow.phase.finished") {
+      const startedMs = active.get(key);
+      if (startedMs !== undefined) {
+        totals[key] = (totals[key] || 0) + Math.max(0, tsMs - startedMs);
+        active.delete(key);
+      }
+    }
+  }
+
+  return Object.keys(totals).length ? totals : null;
+}
+
+function summarizeRetryCounts(engineState: Record<string, unknown> | null) {
+  const stageAttempts = recordValue(engineState?.stage_attempts);
+  if (!stageAttempts) return null;
+  const retries: Record<string, number> = {};
+  for (const [stage, value] of Object.entries(stageAttempts)) {
+    const attempt = recordValue(value);
+    const count = numericValue(attempt?.count);
+    if (count !== null && count > 1) retries[stage] = count - 1;
+  }
+  return Object.keys(retries).length ? retries : null;
+}
+
+function summarizeCaptureHint(engineState: Record<string, unknown> | null) {
+  const captureHint = recordValue(engineState?.capture_hint);
+  if (!captureHint) return null;
+  const selected = recordValue(captureHint.selected);
+  const saved = recordValue(engineState?.capture_hint_saved);
+  return {
+    applied: Boolean(captureHint.applied),
+    applied_fields: Array.isArray(captureHint.applied_fields) ? captureHint.applied_fields : [],
+    matched_tokens: Array.isArray(captureHint.matched_tokens) ? captureHint.matched_tokens : [],
+    selection_reason: stringValue(captureHint.selection_reason) || null,
+    source: stringValue(captureHint.source) || null,
+    server_path: stringValue(selected?.server_path) || null,
+    wait_for_selector: stringValue(selected?.wait_for_selector) || null,
+    fallback_triggered: captureHint.fallback_triggered === true,
+    fallback_reason: stringValue(captureHint.fallback_reason) || null,
+    saved_status: stringValue(saved?.status) || null,
+  };
+}
+
+function buildTimingSummary(
+  snapshot: RiddleProofRunStatusSnapshot,
+  wrapperState: RiddleProofRunState | null,
+  engineState: Record<string, unknown> | null,
+) {
+  const currentRuntimeStep = recordValue(engineState?.current_runtime_step);
+  return {
+    total_elapsed_ms: numericValue(snapshot.elapsed_ms) ?? null,
+    current_stage_elapsed_ms: numericValue(snapshot.stage_elapsed_ms) ?? null,
+    wrapper_stage_durations_ms: summarizeWrapperStageDurations(wrapperState, snapshot),
+    workflow_step_durations_ms: summarizeRuntimeStepDurations(engineState),
+    workflow_phase_durations_ms: summarizeRuntimePhaseDurations(engineState),
+    retry_counts: summarizeRetryCounts(engineState),
+    active_runtime_step: currentRuntimeStep ? {
+      step: stringValue(currentRuntimeStep.step) || null,
+      phase: stringValue(currentRuntimeStep.phase) || null,
+      status: stringValue(currentRuntimeStep.status) || null,
+      elapsed_ms: currentRuntimeStep.status === "running" ? elapsedMsSince(currentRuntimeStep.started_at) : null,
+      phase_elapsed_ms: currentRuntimeStep.phase_status === "running" ? elapsedMsSince(currentRuntimeStep.phase_started_at) : null,
+    } : null,
+    capture_hint: summarizeCaptureHint(engineState),
+  };
+}
+
+function compactDebugEvent(event: unknown) {
+  const record = recordValue(event);
+  if (!record) return null;
+  const details = recordValue(record.details);
+  return {
+    ts: stringValue(record.ts) || null,
+    kind: stringValue(record.kind) || null,
+    checkpoint: stringValue(record.checkpoint) || null,
+    stage: stringValue(record.stage) || null,
+    step: stringValue(record.step) || null,
+    phase: stringValue(record.phase) || null,
+    summary: stringValue(record.summary) || null,
+    status: stringValue(details?.status) || null,
+    duration_ms: numericValue(details?.duration_ms),
+    error: stringValue(details?.error) || null,
+  };
+}
+
+function buildDebugPayload(wrapperState: RiddleProofRunState | null, engineState: Record<string, unknown> | null) {
+  const wrapperEvents = Array.isArray(wrapperState?.events) ? wrapperState.events : [];
+  const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  const captureDiagnostics = Array.isArray(engineState?.capture_diagnostics) ? engineState.capture_diagnostics : [];
+  const stageAttempts = recordValue(engineState?.stage_attempts);
+  return {
+    wrapper_events_recent: wrapperEvents.slice(-8).map(compactDebugEvent).filter(Boolean),
+    engine_runtime_events_recent: runtimeEvents.slice(-8).map(compactDebugEvent).filter(Boolean),
+    capture_diagnostics_recent: captureDiagnostics.slice(-4),
+    stage_attempts: stageAttempts || null,
+  };
+}
+
 function parseJsonRecord(value: string) {
   if (!value) return null;
   try {
@@ -668,6 +850,7 @@ function buildProofInspection(
   wrapperState: RiddleProofRunState,
   fullState: Record<string, unknown>,
   checkpoint?: string | null,
+  options: { debug?: boolean } = {},
 ) {
   const assessmentRequest =
     recordValue(fullState.proof_assessment_request) ||
@@ -709,7 +892,7 @@ function buildProofInspection(
   );
   const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
   const scratchCleanup = recordValue(fullState.scratch_cleanup);
-  return {
+  const inspection = {
     ok: true,
     status: wrapperState.status,
     run_id: wrapperState.run_id || null,
@@ -738,6 +921,12 @@ function buildProofInspection(
     },
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
+    capture_hint: summarizeCaptureHint(fullState),
+    timing_summary: buildTimingSummary(
+      createRunStatusSnapshot(wrapperState),
+      wrapperState,
+      fullState,
+    ),
     visible_change: visibleChange,
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyToShipCandidate,
@@ -745,6 +934,13 @@ function buildProofInspection(
       ? `If the screenshots visually satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
       : "Use this inspection packet to choose needs_implementation, needs_richer_proof, revise_capture, or needs_recon.",
   };
+  if (options.debug) {
+    return {
+      ...inspection,
+      debug: buildDebugPayload(wrapperState, fullState),
+    };
+  }
+  return inspection;
 }
 
 function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
@@ -1000,14 +1196,22 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   };
 }
 
-export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRunStatusSnapshot | null {
+export function readOpenClawRiddleProofStatus(state_path: string, options: { debug?: boolean } = {}): RiddleProofRunStatusSnapshot | null {
   const snapshot = readRiddleProofRunStatus(state_path);
   if (!snapshot) return null;
   const checkpoint = checkpointStatus(snapshot);
-
   const wrapperState = readRunState(state_path);
+
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
-  if (!engineStatePath) return { ...snapshot, ...checkpoint } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+  if (!engineStatePath) {
+    const baseStatus = {
+      ...snapshot,
+      timing_summary: buildTimingSummary(snapshot, wrapperState, null),
+      ...checkpoint,
+    } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+    if (options.debug) baseStatus.debug = buildDebugPayload(wrapperState, null);
+    return baseStatus;
+  }
 
   const engineState = readJsonRecord(engineStatePath);
   const activeSubstep = recordValue(engineState?.current_runtime_step);
@@ -1015,7 +1219,7 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
   const engineCurrentStage = stringValue(activeSubstep?.step);
   const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
-  return {
+  const status = {
     ...snapshot,
     current_stage: effectiveStage,
     wrapper_current_stage: snapshot.current_stage ?? null,
@@ -1028,6 +1232,8 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
     engine_runtime_event_count: runtimeEvents.length,
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
+    capture_hint: summarizeCaptureHint(engineState),
+    timing_summary: buildTimingSummary(snapshot, wrapperState, engineState),
     recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
     ...checkpoint,
     wake_strategy: {
@@ -1036,6 +1242,8 @@ export function readOpenClawRiddleProofStatus(state_path: string): RiddleProofRu
         "For normal chat UX, do not tight-poll in the main conversation. A background monitor should continue while monitor_should_continue is true and report only when the status is terminal or suggested_next_action is not continue_monitoring.",
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+  if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);
+  return status;
 }
 
 function readRunState(statePath: string): RiddleProofRunState | null {
@@ -1123,7 +1331,7 @@ export function inspectOpenClawRiddleProof(params: RiddleProofInspectParams) {
     };
   }
 
-  return buildProofInspection(state, engineState, state.last_checkpoint);
+  return buildProofInspection(state, engineState, state.last_checkpoint, { debug: params.debug === true });
 }
 
 export async function submitOpenClawRiddleProofReview(
@@ -1344,10 +1552,12 @@ export const riddleProofChangeParameters = Type.Object({
 
 export const riddleProofStatusParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+  debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics for debugging slow or stuck runs."),
 });
 
 export const riddleProofInspectParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+  debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics for debugging slow or ambiguous proof packets."),
 });
 
 export const riddleProofSyncParameters = Type.Object({
@@ -1411,8 +1621,8 @@ export default function register(api: any) {
       name: RIDDLE_PROOF_STATUS_TOOL_NAME,
       description: "Return a cheap status snapshot for a Riddle Proof wrapper run state path.",
       parameters: riddleProofStatusParameters,
-      async execute(_id: string, params: { state_path: string }) {
-        const snapshot = readOpenClawRiddleProofStatus(params.state_path);
+      async execute(_id: string, params: RiddleProofStatusParams) {
+        const snapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
         const result = snapshot || {
           ok: false,
           status: "not_found",

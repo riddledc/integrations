@@ -9,6 +9,7 @@ local temp storage by default:
 import json, subprocess as sp, os, sys, shutil, time, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
+from util import apply_capture_hint
 
 s = load_state()
 repo = s['repo']
@@ -474,6 +475,9 @@ s['branch'] = branch
 s['target_branch'] = target_branch
 s['ship_target_branch'] = target_branch
 s['worktree_root'] = WORKTREE_ROOT
+capture_hint = apply_capture_hint(s)
+if capture_hint and capture_hint.get('applied_fields'):
+    print('Applied last-good capture hint: ' + ', '.join(capture_hint.get('applied_fields') or []))
 save_state(s)
 print('Prepared workspace via ' + setup.get('source', 'workspace_core') + ': ' + repo_dir)
 os.makedirs(WORKTREE_ROOT, exist_ok=True)

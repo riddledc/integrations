@@ -1,6 +1,6 @@
 """Shared helpers for Riddle Proof pipeline."""
 
-import json, subprocess as sp, os, shlex, time
+import hashlib, json, os, re, shlex, subprocess as sp, tempfile, time
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
@@ -18,6 +18,8 @@ CAPTURE_ARTIFACT_JSON_LIMIT = 256 * 1024
 _JSON_ARTIFACT_CACHE = {}
 CAPTURE_DIAGNOSTIC_VERSION = 'riddle-proof.capture-diagnostic.v1'
 DEBUG_STRING_LIMIT = 2000
+CAPTURE_HINT_CACHE_VERSION = 'riddle-proof.capture-hints.v1'
+CAPTURE_HINT_CACHE_LIMIT = 12
 SENSITIVE_KEY_FRAGMENTS = (
     'authorization',
     'apikey',
@@ -29,6 +31,14 @@ SENSITIVE_KEY_FRAGMENTS = (
     'secret',
     'token',
 )
+HINT_TOKEN_STOPWORDS = {
+    'about', 'after', 'agent', 'agents', 'around', 'before', 'browser', 'change',
+    'changes', 'clarify', 'component', 'copy', 'debug', 'default', 'evidence',
+    'flow', 'homepage', 'improve', 'just', 'main', 'make', 'need', 'normal',
+    'page', 'proof', 'report', 'results', 'review', 'run', 'screen', 'script',
+    'small', 'status', 'text', 'tiny', 'update', 'user', 'verify', 'visible',
+    'workflow',
+}
 
 
 def load_state():
@@ -39,6 +49,206 @@ def load_state():
 def save_state(s):
     with open(STATE_FILE, 'w') as f:
         json.dump(s, f, indent=2)
+
+
+def request_shape_tokens(state, limit=8):
+    haystack = ' '.join([
+        str(state.get('change_request') or ''),
+        str(state.get('context') or ''),
+        str(state.get('success_criteria') or ''),
+    ]).lower()
+    tokens = []
+    for word in re.findall(r'[a-z0-9]+', haystack):
+        if len(word) < 4 or word in HINT_TOKEN_STOPWORDS or word in tokens:
+            continue
+        tokens.append(word)
+        if len(tokens) >= limit:
+            break
+    return tokens
+
+
+def capture_hint_cache_path(state):
+    repo_key = str(state.get('repo') or state.get('repo_dir') or '').strip()
+    if not repo_key:
+        return ''
+    digest = hashlib.sha1(repo_key.encode('utf-8')).hexdigest()
+    return os.path.join(tempfile.gettempdir(), '.riddle-proof-capture-hints', digest + '.json')
+
+
+def load_capture_hint_cache(state):
+    cache_path = capture_hint_cache_path(state)
+    if not cache_path or not os.path.exists(cache_path):
+        return ({'version': CAPTURE_HINT_CACHE_VERSION, 'hints': []}, cache_path)
+    try:
+        with open(cache_path) as f:
+            payload = json.load(f)
+    except Exception:
+        return ({'version': CAPTURE_HINT_CACHE_VERSION, 'hints': []}, cache_path)
+    if not isinstance(payload, dict):
+        return ({'version': CAPTURE_HINT_CACHE_VERSION, 'hints': []}, cache_path)
+    hints = payload.get('hints') if isinstance(payload.get('hints'), list) else []
+    payload['version'] = CAPTURE_HINT_CACHE_VERSION
+    payload['hints'] = hints
+    return payload, cache_path
+
+
+def select_capture_hint(state):
+    payload, cache_path = load_capture_hint_cache(state)
+    hints = payload.get('hints') or []
+    current_tokens = request_shape_tokens(state)
+    current_mode = str(state.get('verification_mode') or '').strip().lower()
+    scored = []
+    for hint in hints:
+        if not isinstance(hint, dict):
+            continue
+        server_path = str(hint.get('server_path') or '').strip()
+        wait_for_selector = str(hint.get('wait_for_selector') or '').strip()
+        if not server_path and not wait_for_selector:
+            continue
+        hint_mode = str(hint.get('verification_mode') or '').strip().lower()
+        hint_tokens = [
+            str(item).strip().lower()
+            for item in (hint.get('request_tokens') or [])
+            if str(item).strip()
+        ]
+        matched_tokens = [token for token in current_tokens if token in hint_tokens]
+        score = len(matched_tokens) * 3
+        if current_mode and hint_mode == current_mode:
+            score += 2
+        if score <= 0:
+            continue
+        scored.append({
+            'score': score,
+            'matched_tokens': matched_tokens,
+            'selection_reason': 'token_overlap_and_mode' if matched_tokens and current_mode and hint_mode == current_mode else (
+                'token_overlap' if matched_tokens else 'verification_mode_match'
+            ),
+            'hint': hint,
+        })
+
+    if not scored:
+        return None
+
+    scored.sort(
+        key=lambda item: (
+            int(item['score']),
+            str(item['hint'].get('saved_at') or ''),
+        ),
+        reverse=True,
+    )
+    selected = scored[0]
+    return {
+        'cache_path': cache_path,
+        'available_count': len(hints),
+        'score': selected['score'],
+        'matched_tokens': selected['matched_tokens'],
+        'selection_reason': selected['selection_reason'],
+        'hint': selected['hint'],
+    }
+
+
+def apply_capture_hint(state):
+    selected = select_capture_hint(state)
+    if not selected:
+        return None
+
+    hint = selected['hint']
+    applied_fields = []
+    server_path = str(hint.get('server_path') or '').strip()
+    wait_for_selector = str(hint.get('wait_for_selector') or '').strip()
+
+    if server_path and not str(state.get('server_path') or '').strip():
+        state['server_path'] = server_path
+        state['server_path_source'] = 'hint_cache'
+        applied_fields.append('server_path')
+    if wait_for_selector and not str(state.get('wait_for_selector') or '').strip():
+        state['wait_for_selector'] = wait_for_selector
+        state['wait_for_selector_source'] = 'hint_cache'
+        applied_fields.append('wait_for_selector')
+
+    if not applied_fields:
+        return None
+
+    state['capture_hint'] = {
+        'source': 'hint_cache',
+        'cache_path': selected['cache_path'],
+        'applied': True,
+        'applied_fields': applied_fields,
+        'matched_tokens': selected['matched_tokens'],
+        'selection_reason': selected['selection_reason'],
+        'available_count': selected['available_count'],
+        'selected': {
+            'saved_at': str(hint.get('saved_at') or ''),
+            'verification_mode': str(hint.get('verification_mode') or ''),
+            'server_path': server_path,
+            'wait_for_selector': wait_for_selector,
+            'observed_path': str(hint.get('observed_path') or ''),
+            'proof_profile_name': str(hint.get('proof_profile_name') or ''),
+            'request_tokens': hint.get('request_tokens') or [],
+        },
+        'fallback_triggered': False,
+    }
+    return state['capture_hint']
+
+
+def record_successful_capture_hint(state, server_path='', wait_for_selector='', observed_path='', source_stage='verify', success_signal=''):
+    server_path = str(server_path or '').strip()
+    wait_for_selector = str(wait_for_selector or '').strip()
+    if not server_path and not wait_for_selector:
+        return {'status': 'skipped_missing_inputs'}
+
+    payload, cache_path = load_capture_hint_cache(state)
+    hints = payload.get('hints') or []
+    request_tokens = request_shape_tokens(state)
+    entry = {
+        'saved_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'verification_mode': str(state.get('verification_mode') or '').strip().lower(),
+        'request_tokens': request_tokens,
+        'request_sample': compact_debug_value(str(state.get('change_request') or '')[:240]),
+        'server_path': server_path,
+        'wait_for_selector': wait_for_selector,
+        'observed_path': str(observed_path or '').strip(),
+        'proof_profile_name': str(((state.get('proof_profile') or {}).get('name')) or '').strip(),
+        'source_stage': str(source_stage or '').strip(),
+        'success_signal': str(success_signal or '').strip(),
+    }
+
+    deduped = []
+    for hint in hints:
+        if not isinstance(hint, dict):
+            continue
+        if (
+            str(hint.get('verification_mode') or '').strip().lower() == entry['verification_mode']
+            and str(hint.get('server_path') or '').strip() == entry['server_path']
+            and str(hint.get('wait_for_selector') or '').strip() == entry['wait_for_selector']
+            and list(hint.get('request_tokens') or []) == entry['request_tokens']
+        ):
+            continue
+        deduped.append(hint)
+
+    next_payload = {
+        'version': CAPTURE_HINT_CACHE_VERSION,
+        'repo': str(state.get('repo') or state.get('repo_dir') or '').strip(),
+        'updated_at': entry['saved_at'],
+        'hints': [entry] + deduped[:CAPTURE_HINT_CACHE_LIMIT - 1],
+    }
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, 'w') as f:
+            json.dump(next_payload, f, indent=2)
+    except Exception as exc:
+        return {
+            'status': 'error',
+            'cache_path': cache_path,
+            'error': str(exc)[:240],
+        }
+
+    return {
+        'status': 'saved',
+        'cache_path': cache_path,
+        'entry': entry,
+        'hint_count': len(next_payload['hints']),
+    }
 
 
 def compact_debug_value(value, limit=DEBUG_STRING_LIMIT):

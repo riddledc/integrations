@@ -393,10 +393,90 @@ writeFileSync(reviewStatePath, JSON.stringify({
   branch: "agent/review-fixture",
   before_cdn: "https://example.com/before.png",
   after_cdn: "https://example.com/after.png",
+  current_runtime_step: {
+    step: "verify",
+    action: "run",
+    status: "running",
+    started_at: "2026-04-23T00:05:00.000Z",
+    phase: "capture",
+    phase_status: "running",
+    phase_started_at: "2026-04-23T00:05:30.000Z",
+  },
+  runtime_events: [
+    {
+      ts: "2026-04-23T00:02:00.000Z",
+      kind: "workflow.step.started",
+      step: "setup",
+      action: "run",
+      summary: "Started setup workflow step.",
+    },
+    {
+      ts: "2026-04-23T00:02:15.000Z",
+      kind: "workflow.phase.started",
+      step: "setup",
+      phase: "shared_deps",
+      summary: "Ensuring shared repository dependencies.",
+    },
+    {
+      ts: "2026-04-23T00:02:45.000Z",
+      kind: "workflow.phase.finished",
+      step: "setup",
+      phase: "shared_deps",
+      summary: "Shared dependencies ready.",
+      details: { status: "completed" },
+    },
+    {
+      ts: "2026-04-23T00:03:00.000Z",
+      kind: "workflow.step.finished",
+      step: "setup",
+      action: "run",
+      summary: "Finished setup workflow step.",
+      details: { duration_ms: 60000, status: "completed" },
+    },
+    {
+      ts: "2026-04-23T00:05:00.000Z",
+      kind: "workflow.step.started",
+      step: "verify",
+      action: "run",
+      summary: "Started verify workflow step.",
+    },
+  ],
+  stage_attempts: {
+    recon: { count: 2 },
+    verify: { count: 1 },
+  },
   scratch_cleanup: {
     skipped: "enough_free_space",
     free_bytes: 987654321,
   },
+  capture_hint: {
+    source: "hint_cache",
+    applied: true,
+    applied_fields: ["server_path", "wait_for_selector"],
+    matched_tokens: ["tic", "board"],
+    selection_reason: "token_overlap_and_mode",
+    selected: {
+      saved_at: "2026-04-22T23:59:00.000Z",
+      verification_mode: "visual",
+      server_path: "/games/tic-tac-toe",
+      wait_for_selector: "main#game-root, h1",
+    },
+    fallback_triggered: false,
+  },
+  capture_hint_saved: {
+    status: "saved",
+  },
+  capture_diagnostics: [
+    {
+      label: "after",
+      tool: "riddle_server_preview",
+      captured_at: "2026-04-23T00:05:40.000Z",
+      ok: true,
+      artifact_summary: {
+        outputs: [{ name: "after-proof.png" }],
+      },
+    },
+  ],
   proof_profile: {
     name: "Tic Tac Toe",
     applied_fields: ["server_path", "wait_for_selector"],
@@ -495,6 +575,24 @@ assert.match(inspectResult.structured_evidence?.proof_evidence_sample, /attack_m
 assert.equal(inspectResult.structured_evidence?.proof_evidence_has_concerns, false);
 assert.equal(inspectResult.scratch_cleanup?.skipped, "enough_free_space");
 assert.equal(inspectResult.scratch_cleanup_status, "skipped_enough_free_space");
+assert.equal(inspectResult.capture_hint?.server_path, "/games/tic-tac-toe");
+assert.equal(inspectResult.timing_summary?.workflow_step_durations_ms?.setup, 60000);
+assert.equal(inspectResult.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(inspectResult.timing_summary?.retry_counts?.recon, 1);
+assert.equal(inspectResult.timing_summary?.capture_hint?.saved_status, "saved");
+
+const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
+assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
+assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
+assert.equal(reviewStatus?.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
+assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
+assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
+assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
+
+const inspectDebugResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath, debug: true });
+assert.equal(Array.isArray(inspectDebugResult.debug?.engine_runtime_events_recent), true);
+assert.equal(Array.isArray(inspectDebugResult.debug?.capture_diagnostics_recent), true);
 
 writeFileSync(backgroundEngineStatePath, JSON.stringify({
   branch: "agent/background-proof",
@@ -801,5 +899,15 @@ const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
 assert.equal(inspectParsed.route_matched, true);
 assert.equal(inspectParsed.proof_profile_applied, true);
 assert.equal(inspectParsed.structured_evidence.proof_evidence_present, true);
+
+const statusDebugExecuted = await statusTool.tool.execute("test-status-debug", { state_path: reviewWrapperStatePath, debug: true });
+const statusDebugParsed = JSON.parse(statusDebugExecuted.content[0].text);
+assert.equal(statusDebugParsed.timing_summary.workflow_step_durations_ms.setup, 60000);
+assert.equal(Array.isArray(statusDebugParsed.debug.engine_runtime_events_recent), true);
+
+const inspectDebugExecuted = await inspectTool.tool.execute("test-inspect-debug", { state_path: reviewWrapperStatePath, debug: true });
+const inspectDebugParsed = JSON.parse(inspectDebugExecuted.content[0].text);
+assert.equal(inspectDebugParsed.timing_summary.capture_hint.server_path, "/games/tic-tac-toe");
+assert.equal(Array.isArray(inspectDebugParsed.debug.capture_diagnostics_recent), true);
 
 console.log(JSON.stringify({ ok: true }));

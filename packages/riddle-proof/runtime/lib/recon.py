@@ -783,6 +783,25 @@ elif plan_history:
         'changes': diff_plan(plan_history[-1], current_plan),
         'reason': 'Resumed recon with the current state inputs.',
     })
+
+capture_hint = s.get('capture_hint') if isinstance(s.get('capture_hint'), dict) else {}
+selected_hint = capture_hint.get('selected') if isinstance(capture_hint.get('selected'), dict) else {}
+if capture_hint.get('applied') and selected_hint:
+    fallback_changes = {}
+    hinted_path = str(selected_hint.get('server_path') or '').strip()
+    hinted_selector = str(selected_hint.get('wait_for_selector') or '').strip()
+    if hinted_path and current_plan.get('target_path') != hinted_path:
+        fallback_changes['server_path'] = {'from': hinted_path, 'to': current_plan.get('target_path')}
+    if hinted_selector and current_plan.get('wait_for_selector') != hinted_selector:
+        fallback_changes['wait_for_selector'] = {'from': hinted_selector, 'to': current_plan.get('wait_for_selector')}
+    if fallback_changes:
+        capture_hint['fallback_triggered'] = True
+        capture_hint['fallback_reason'] = (
+            str(previous_assessment.get('decision') or '').strip() if has_previous_assessment else 'plan_refined'
+        ) or 'plan_refined'
+        capture_hint['fallback_changes'] = fallback_changes
+        s['capture_hint'] = capture_hint
+
 plan_history.append(current_plan)
 
 summary_bits = []
