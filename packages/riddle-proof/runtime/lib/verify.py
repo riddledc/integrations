@@ -19,6 +19,7 @@ from util import (
     invoke_retry,
     load_state,
     prepare_server_preview,
+    record_successful_capture_hint,
     save_state,
     should_use_static_preview,
     summarize_capture_artifacts,
@@ -1138,6 +1139,16 @@ if proof_evidence_required_for_mode(s.get('verification_mode')):
         summary_lines.append('Structured proof evidence gate: ' + proof_evidence_blocker)
 
 has_good_evidence = required_baseline_present and after_observation.get('valid') and not proof_evidence_blocker
+
+if has_good_evidence:
+    s['capture_hint_saved'] = record_successful_capture_hint(
+        s,
+        server_path=expected_path or s.get('server_path') or '/',
+        wait_for_selector=s.get('wait_for_selector') or '',
+        observed_path=observed_path,
+        source_stage='verify',
+        success_signal='evidence_captured',
+    )
 
 if has_good_evidence:
     supervisor_request = build_supervisor_assessment_request(s, after_payload, after_observation, required_baseline_present, expected_path, evidence_bundle)
