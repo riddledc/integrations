@@ -42,6 +42,7 @@ export type {
 
 export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";
+export const RIDDLE_PROOF_WAIT_TOOL_NAME = "riddle_proof_wait";
 export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 const MIN_DEFAULT_MAX_ITERATIONS = 12;
@@ -78,6 +79,12 @@ export interface RiddleProofSyncParams {
 
 export interface RiddleProofStatusParams {
   state_path: string;
+  debug?: boolean;
+}
+
+export interface RiddleProofWaitParams {
+  state_path: string;
+  timeout_ms?: number;
   debug?: boolean;
 }
 
@@ -263,7 +270,7 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
   if (result.blocker?.code === "main_agent_proof_review_required") {
     return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
   }
-  if (result.status === "running") return [RIDDLE_PROOF_STATUS_TOOL_NAME];
+  if (result.status === "running") return [RIDDLE_PROOF_WAIT_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
   if (result.status === "ready_to_ship" || result.status === "shipped") {
     return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_SYNC_TOOL_NAME];
   }
@@ -495,6 +502,7 @@ function startOpenClawRiddleProofBackground(
       run_mode: "background",
       monitor_contract: monitorContractFor("running", request),
       next_tools: [
+        RIDDLE_PROOF_WAIT_TOOL_NAME,
         RIDDLE_PROOF_STATUS_TOOL_NAME,
         RIDDLE_PROOF_INSPECT_TOOL_NAME,
         RIDDLE_PROOF_REVIEW_TOOL_NAME,
@@ -529,6 +537,7 @@ function startOpenClawRiddleProofBackground(
       state_path: statePath,
       monitor_contract: monitorContractFor("running", request),
       next_actions: [
+        `Call ${RIDDLE_PROOF_WAIT_TOOL_NAME} with state_path=${statePath} to wait for the next reportable state without ad hoc sleep loops.`,
         `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath} for progress.`,
         `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath} when proof review is needed.`,
         `Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with state_path=${statePath} to resume after a proof judgment.`,
@@ -1311,6 +1320,25 @@ function recommendedPollAfterMs(activeSubstep: Record<string, unknown> | null, s
   return 10_000;
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitSnapshotKey(snapshot: Record<string, unknown>) {
+  const activeSubstep = recordValue(snapshot.active_substep);
+  return JSON.stringify({
+    status: stringValue(snapshot.status),
+    checkpoint: stringValue(snapshot.checkpoint) || stringValue(snapshot.last_checkpoint),
+    suggested_next_action: stringValue(snapshot.suggested_next_action),
+    current_stage: stringValue(snapshot.current_stage),
+    engine_current_stage: stringValue(snapshot.engine_current_stage),
+    active_step: stringValue(activeSubstep?.step),
+    active_phase: stringValue(activeSubstep?.phase),
+    active_status: stringValue(activeSubstep?.status),
+    engine_runtime_event_count: numericValue(snapshot.engine_runtime_event_count),
+  });
+}
+
 const ROUTABLE_CHECKPOINTS = new Set([
   "awaiting_stage_advance",
   "recon_supervisor_judgment",
@@ -1376,11 +1404,23 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
 
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
   if (!engineStatePath) {
+    const recommendedPollMs = recommendedPollAfterMs(null, snapshot);
     const baseStatus = {
       ...snapshot,
       monitor_contract: monitorContract,
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
+      recommended_poll_after_ms: recommendedPollMs,
       ...checkpoint,
+      monitor_plan: {
+        preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
+        state_path,
+        continue_while: "monitor_should_continue",
+        stop_when:
+          checkpoint.suggested_next_action === "continue_monitoring"
+            ? "suggested_next_action != continue_monitoring or terminal status"
+            : "already_reportable",
+        poll_after_ms: recommendedPollMs,
+      },
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
     if (options.debug) baseStatus.debug = buildDebugPayload(wrapperState, null);
     return baseStatus;
@@ -1392,6 +1432,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const engineCurrentStage = stringValue(activeSubstep?.step);
   const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
+  const recommendedPollMs = recommendedPollAfterMs(activeSubstep, snapshot);
   const status = {
     ...snapshot,
     monitor_contract: monitorContract,
@@ -1408,16 +1449,93 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
     capture_hint: summarizeCaptureHint(engineState),
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
-    recommended_poll_after_ms: recommendedPollAfterMs(activeSubstep, snapshot),
+    recommended_poll_after_ms: recommendedPollMs,
     ...checkpoint,
+    monitor_plan: {
+      preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
+      state_path,
+      continue_while: "monitor_should_continue",
+      stop_when:
+        checkpoint.suggested_next_action === "continue_monitoring"
+          ? "suggested_next_action != continue_monitoring or terminal status"
+          : "already_reportable",
+      poll_after_ms: recommendedPollMs,
+    },
     wake_strategy: {
       signal: "run.wake.requested",
       recommendation:
-        "For normal chat UX, do not tight-poll in the main conversation. A background monitor should continue while monitor_should_continue is true and report only when the status is terminal or suggested_next_action is not continue_monitoring.",
+        `For detached monitoring, prefer ${RIDDLE_PROOF_WAIT_TOOL_NAME} over ad hoc sleep loops. If using ${RIDDLE_PROOF_STATUS_TOOL_NAME} directly, follow recommended_poll_after_ms and continue only while monitor_should_continue is true.`,
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);
   return status;
+}
+
+export async function waitOpenClawRiddleProof(params: RiddleProofWaitParams) {
+  const timeoutMs = Math.max(1_000, Math.min(15 * 60 * 1000, Math.trunc(params.timeout_ms ?? 5 * 60 * 1000)));
+  const startedAt = Date.now();
+  let snapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
+  if (!snapshot) {
+    return {
+      ok: false,
+      status: "not_found",
+      state_path: params.state_path,
+      message: "No readable Riddle Proof wrapper run state exists at state_path. Pass the wrapper state_path returned by riddle_proof_change, not the underlying engine state path.",
+      diagnostics: statePathDiagnostics(params.state_path),
+    };
+  }
+
+  let snapshotRecord = snapshot as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+  const initialKey = waitSnapshotKey(snapshotRecord);
+  if (snapshotRecord.monitor_should_continue !== true || stringValue(snapshotRecord.suggested_next_action) !== "continue_monitoring") {
+    return {
+      ...snapshotRecord,
+      wait_result: "already_reportable",
+      waited_ms: 0,
+      poll_count: 0,
+    };
+  }
+
+  let pollCount = 0;
+  let lastKey = initialKey;
+  while (Date.now() - startedAt < timeoutMs) {
+    const sleepMs = Math.max(1_000, Math.min(60_000, Math.trunc(numericValue(snapshotRecord.recommended_poll_after_ms) ?? 10_000)));
+    await delay(sleepMs);
+    pollCount += 1;
+    const nextSnapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
+    if (!nextSnapshot) {
+      return {
+        ok: false,
+        status: "not_found",
+        state_path: params.state_path,
+        message: "Riddle Proof wrapper run state disappeared while waiting.",
+        waited_ms: Date.now() - startedAt,
+        poll_count: pollCount,
+      };
+    }
+    snapshot = nextSnapshot;
+    snapshotRecord = snapshot as RiddleProofRunStatusSnapshot & Record<string, unknown>;
+    const nextKey = waitSnapshotKey(snapshotRecord);
+    if (snapshotRecord.monitor_should_continue !== true || stringValue(snapshotRecord.suggested_next_action) !== "continue_monitoring") {
+      return {
+        ...snapshotRecord,
+        wait_result: "reportable_state",
+        waited_ms: Date.now() - startedAt,
+        poll_count: pollCount,
+      };
+    }
+    if (nextKey !== lastKey) {
+      lastKey = nextKey;
+      continue;
+    }
+  }
+
+  return {
+    ...snapshotRecord,
+    wait_result: "timeout",
+    waited_ms: Date.now() - startedAt,
+    poll_count: pollCount,
+  };
 }
 
 function readRunState(statePath: string): RiddleProofRunState | null {
@@ -1737,6 +1855,12 @@ export const riddleProofStatusParameters = Type.Object({
   debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics for debugging slow or stuck runs."),
 });
 
+export const riddleProofWaitParameters = Type.Object({
+  state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
+  timeout_ms: Type.Optional(Type.Number({ description: "Maximum wait time before returning the latest snapshot. Defaults to 300000." })),
+  debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics in the returned snapshot."),
+});
+
 export const riddleProofInspectParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
   debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics for debugging slow or ambiguous proof packets."),
@@ -1812,6 +1936,20 @@ export default function register(api: any) {
           message: "No readable Riddle Proof wrapper run state exists at state_path. Pass the wrapper state_path returned by riddle_proof_change, not the underlying engine state path.",
           diagnostics: statePathDiagnostics(params.state_path),
         };
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      },
+    },
+    { optional: true },
+  );
+
+  api.registerTool(
+    {
+      name: RIDDLE_PROOF_WAIT_TOOL_NAME,
+      description:
+        "Wait for the next reportable Riddle Proof status instead of manual sleep loops. Uses the wrapper's own monitor contract and recommended poll cadence.",
+      parameters: riddleProofWaitParameters,
+      async execute(_id: string, params: RiddleProofWaitParams) {
+        const result = await waitOpenClawRiddleProof(params);
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },
