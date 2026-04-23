@@ -170,6 +170,113 @@ def resolve_worktree_root(repo_dir):
     return os.path.join(tempfile.gettempdir(), '.riddle-proof-worktrees')
 
 
+def env_flag(name, default=False):
+    raw = os.environ.get(name, '').strip().lower()
+    if raw in ('1', 'true', 'yes', 'on'):
+        return True
+    if raw in ('0', 'false', 'no', 'off'):
+        return False
+    return default
+
+
+def env_int(name, default):
+    raw = os.environ.get(name, '').strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return default
+    return value if value > 0 else default
+
+
+def disk_free_bytes(path):
+    probe = path
+    while probe and not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    try:
+        return shutil.disk_usage(probe or tempfile.gettempdir()).free
+    except Exception:
+        return 0
+
+
+def prune_scratch_worktrees(worktree_root, keep_dirs, repo_dir):
+    report = {
+        'requested': True,
+        'worktree_root': worktree_root,
+        'removed': [],
+        'errors': [],
+    }
+    if env_flag('RIDDLE_PROOF_KEEP_SCRATCH_WORKTREES', False):
+        report['skipped'] = 'RIDDLE_PROOF_KEEP_SCRATCH_WORKTREES'
+        return report
+    if not worktree_root:
+        report['skipped'] = 'missing_worktree_root'
+        return report
+
+    root = os.path.abspath(os.path.expanduser(worktree_root))
+    temp_root = os.path.abspath(tempfile.gettempdir())
+    if root in ('/', temp_root) or not root.endswith('.riddle-proof-worktrees'):
+        report['skipped'] = 'unsafe_worktree_root'
+        return report
+    if not os.path.isdir(root):
+        report['skipped'] = 'worktree_root_missing'
+        return report
+
+    min_free_bytes = env_int('RIDDLE_PROOF_MIN_SCRATCH_FREE_MB', 2048) * 1024 * 1024
+    free_before = disk_free_bytes(root)
+    report['free_before_bytes'] = free_before
+    report['min_free_bytes'] = min_free_bytes
+    if free_before >= min_free_bytes:
+        report['skipped'] = 'enough_free_space'
+        return report
+
+    keep = set(os.path.abspath(os.path.expanduser(p)) for p in keep_dirs if p)
+    candidates = []
+    for name in os.listdir(root):
+        if not name.startswith('riddle-proof-'):
+            continue
+        path = os.path.join(root, name)
+        resolved = os.path.abspath(path)
+        if resolved in keep or not os.path.isdir(path):
+            continue
+        try:
+            mtime = os.path.getmtime(path)
+        except Exception:
+            mtime = 0
+        candidates.append((mtime, path))
+    candidates.sort()
+
+    for _, path in candidates:
+        if disk_free_bytes(root) >= min_free_bytes:
+            break
+        removed_by_git = False
+        git_error = ''
+        if repo_dir and os.path.exists(os.path.join(repo_dir, '.git')):
+            remove_result = sp.run(
+                'git worktree remove --force ' + shell_quote(path),
+                shell=True,
+                cwd=repo_dir,
+                capture_output=True,
+                text=True,
+            )
+            removed_by_git = remove_result.returncode == 0
+            if remove_result.returncode != 0 and os.path.exists(path):
+                git_error = (remove_result.stderr or remove_result.stdout or '')[:300]
+        if os.path.exists(path):
+            shutil.rmtree(path, ignore_errors=True)
+        if not os.path.exists(path):
+            report['removed'].append({'path': path, 'via': 'git' if removed_by_git else 'filesystem'})
+        elif git_error:
+            report['errors'].append({'path': path, 'git_error': git_error})
+
+    if repo_dir and os.path.exists(os.path.join(repo_dir, '.git')):
+        git('git worktree prune', repo_dir)
+    report['free_after_bytes'] = disk_free_bytes(root)
+    return report
+
+
 def cleanup_legacy_branch_worktrees(repo_dir, branch_name):
     if not repo_dir or not os.path.exists(os.path.join(repo_dir, '.git')):
         return
@@ -370,6 +477,11 @@ s['worktree_root'] = WORKTREE_ROOT
 save_state(s)
 print('Prepared workspace via ' + setup.get('source', 'workspace_core') + ': ' + repo_dir)
 os.makedirs(WORKTREE_ROOT, exist_ok=True)
+scratch_cleanup = prune_scratch_worktrees(WORKTREE_ROOT, (BEFORE_DIR, AFTER_DIR), repo_dir)
+if scratch_cleanup.get('removed') or scratch_cleanup.get('errors'):
+    print('Scratch cleanup: removed ' + str(len(scratch_cleanup.get('removed') or [])) + ' stale proof worktree(s)')
+s['scratch_cleanup'] = scratch_cleanup
+save_state(s)
 cleanup_legacy_branch_worktrees(repo_dir, base_branch)
 
 # Clean any stale worktrees for this run and the legacy fixed paths

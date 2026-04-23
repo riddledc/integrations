@@ -105,6 +105,9 @@ runs also include `active_substep`, `phase_elapsed_ms`, `engine_latest_event`,
 `engine_runtime_event_count`, `recommended_poll_after_ms`, and a `wake_strategy`
 hint so agents and host surfaces can monitor long proof runs without noisy main
 conversation polling.
+If the supplied path exists but is not the wrapper run state, the not-found
+response includes diagnostics that distinguish a missing file from accidentally
+passing an underlying engine state path.
 
 `riddle_proof_inspect` accepts the same wrapper `state_path` and returns a
 proof-native review packet: route match, repo profile usage, artifact URLs,

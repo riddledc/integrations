@@ -982,6 +982,37 @@ function readRunState(statePath: string): RiddleProofRunState | null {
   }
 }
 
+function statePathDiagnostics(statePath: string) {
+  const diagnostics: Record<string, unknown> = {
+    path_exists: false,
+    expected_state_path_type: "wrapper_run_state",
+  };
+  if (!statePath || !existsSync(statePath)) return diagnostics;
+
+  diagnostics.path_exists = true;
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf-8"));
+    const record = recordValue(parsed);
+    const version = stringValue(record?.version);
+    diagnostics.path_version = version || null;
+    diagnostics.is_wrapper_run_state = version === "riddle-proof.run-state.v1" && Array.isArray(record?.events);
+    diagnostics.looks_like_engine_state = !diagnostics.is_wrapper_run_state && (
+      Array.isArray(record?.runtime_events) ||
+      Boolean(record?.repo && record?.stage) ||
+      Boolean(record?.run_id && record?.status)
+    );
+    const request = recordValue(record?.request);
+    const wrapperPath =
+      stringValue(record?.harness_state_path) ||
+      stringValue(request?.harness_state_path) ||
+      stringValue(record?.wrapper_state_path);
+    if (wrapperPath) diagnostics.wrapper_state_path = wrapperPath;
+  } catch (error) {
+    diagnostics.parse_error = error instanceof Error ? error.message : String(error);
+  }
+  return diagnostics;
+}
+
 function readJsonRecord(statePath: string): Record<string, unknown> | null {
   if (!statePath || !existsSync(statePath)) return null;
   try {
@@ -1006,7 +1037,8 @@ export function inspectOpenClawRiddleProof(params: RiddleProofInspectParams) {
       ok: false,
       status: "not_found",
       state_path: params.state_path,
-      message: "No readable Riddle Proof wrapper run state exists at state_path.",
+      message: "No readable Riddle Proof wrapper run state exists at state_path. Pass the wrapper state_path returned by riddle_proof_change, not the underlying engine state path.",
+      diagnostics: statePathDiagnostics(params.state_path),
     };
   }
 
@@ -1019,6 +1051,7 @@ export function inspectOpenClawRiddleProof(params: RiddleProofInspectParams) {
       state_path: params.state_path,
       engine_state_path: engineStatePath || null,
       message: "No readable Riddle Proof engine state exists for this wrapper run.",
+      diagnostics: engineStatePath ? statePathDiagnostics(engineStatePath) : null,
     };
   }
 
@@ -1316,7 +1349,8 @@ export default function register(api: any) {
           ok: false,
           status: "not_found",
           state_path: params.state_path,
-          message: "No readable Riddle Proof run state exists at state_path.",
+          message: "No readable Riddle Proof wrapper run state exists at state_path. Pass the wrapper state_path returned by riddle_proof_change, not the underlying engine state path.",
+          diagnostics: statePathDiagnostics(params.state_path),
         };
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },

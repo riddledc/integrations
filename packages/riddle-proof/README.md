@@ -91,6 +91,13 @@ Set `RIDDLE_PROOF_WORKTREE_ROOT` to choose an explicit location. Set
 `RIDDLE_PROOF_USE_WORKSPACE_WORKTREE_ROOT=1` to keep the previous behavior of
 placing proof worktrees next to the active repository.
 
+When local scratch storage is low, setup prunes stale
+`riddle-proof-*` worktrees from the scratch root before creating the next run.
+This preserves the dependency cache for speed while avoiding old failed runs
+filling `/tmp`. Set `RIDDLE_PROOF_KEEP_SCRATCH_WORKTREES=1` to disable that
+cleanup for debugging, or tune the low-space threshold with
+`RIDDLE_PROOF_MIN_SCRATCH_FREE_MB`.
+
 ## Capture Diagnostics
 
 `@riddledc/riddle-proof/diagnostics` standardizes the evidence contract around
