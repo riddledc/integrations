@@ -360,7 +360,7 @@ const runningBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperS
 assert.equal(runningBackgroundStatus?.current_stage, "verify");
 assert.equal(runningBackgroundStatus?.wrapper_current_stage, "setup");
 assert.equal(runningBackgroundStatus?.engine_current_stage, "verify");
-assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 30000);
+assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 15000);
 assert.equal(runningBackgroundStatus?.is_terminal, false);
 assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
 assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);
@@ -451,6 +451,21 @@ writeFileSync(reviewStatePath, JSON.stringify({
       step: "verify",
       action: "run",
       summary: "Started verify workflow step.",
+    },
+    {
+      ts: "2026-04-23T00:05:05.000Z",
+      kind: "workflow.phase.started",
+      step: "verify",
+      phase: "capture",
+      summary: "Started verify capture phase.",
+    },
+    {
+      ts: "2026-04-23T00:05:25.000Z",
+      kind: "workflow.phase.finished",
+      step: "verify",
+      phase: "capture",
+      summary: "Finished verify capture phase.",
+      details: { status: "completed" },
     },
   ],
   stage_attempts: {
@@ -594,6 +609,7 @@ assert.equal(inspectResult.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(inspectResult.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(inspectResult.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(inspectResult.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(inspectResult.timing_summary?.verify_subphase_durations_ms?.capture, 20000);
 assert.equal(inspectResult.timing_summary?.retry_counts?.recon, 1);
 assert.equal(inspectResult.timing_summary?.capture_hint?.saved_status, "saved");
 
@@ -601,6 +617,7 @@ const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { deb
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(reviewStatus?.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(reviewStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 20000);
 assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
@@ -978,6 +995,7 @@ assert.equal(blockedTerminalStatus.monitor_contract.report_mode, "terminal_only"
 assert.equal(blockedTerminalStatus.monitor_contract.should_continue_monitoring, true);
 assert.equal(blockedTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
 assert.equal(blockedTerminalStatus.checkpoint_classification, "routable");
+assert.equal(blockedTerminalStatus.recommended_poll_after_ms, 15000);
 assert.equal(blockedTerminalStatus.suggested_next_action, "continue_monitoring");
 
 const blockedInspectResult = inspectOpenClawRiddleProof({ state_path: terminalOnlyBlockedWrapperStatePath });

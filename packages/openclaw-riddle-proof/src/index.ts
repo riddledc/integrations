@@ -656,6 +656,21 @@ function summarizeRuntimePhaseDurations(engineState: Record<string, unknown> | n
   return Object.keys(totals).length ? totals : null;
 }
 
+function summarizeStagePhaseDurations(
+  engineState: Record<string, unknown> | null,
+  stage: string,
+) {
+  const phaseDurations = summarizeRuntimePhaseDurations(engineState);
+  if (!phaseDurations) return null;
+  const prefix = `${stage}:`;
+  const totals: Record<string, number> = {};
+  for (const [key, durationMs] of Object.entries(phaseDurations)) {
+    if (!key.startsWith(prefix)) continue;
+    totals[key.slice(prefix.length)] = durationMs;
+  }
+  return Object.keys(totals).length ? totals : null;
+}
+
 function summarizeRetryCounts(engineState: Record<string, unknown> | null) {
   const stageAttempts = recordValue(engineState?.stage_attempts);
   if (!stageAttempts) return null;
@@ -699,6 +714,7 @@ function buildTimingSummary(
     wrapper_stage_durations_ms: summarizeWrapperStageDurations(wrapperState, snapshot),
     workflow_step_durations_ms: summarizeRuntimeStepDurations(engineState),
     workflow_phase_durations_ms: summarizeRuntimePhaseDurations(engineState),
+    verify_subphase_durations_ms: summarizeStagePhaseDurations(engineState, "verify"),
     retry_counts: summarizeRetryCounts(engineState),
     active_runtime_step: currentRuntimeStep ? {
       step: stringValue(currentRuntimeStep.step) || null,
@@ -1247,10 +1263,18 @@ function elapsedMsSince(isoTime: unknown) {
 }
 
 function recommendedPollAfterMs(activeSubstep: Record<string, unknown> | null, snapshot: RiddleProofRunStatusSnapshot) {
-  if (snapshot.status !== "running") return null;
+  const checkpoint = snapshot.last_checkpoint || snapshot.blocker?.checkpoint || null;
+  const resumable = resumableCheckpointLike(snapshot.status, checkpoint, snapshot.blocker?.code);
+  if (snapshot.status !== "running" && !resumable) return null;
+
+  const step = stringValue(activeSubstep?.step) || snapshot.current_stage || null;
   const phase = stringValue(activeSubstep?.phase);
   if (phase.endsWith("_deps")) return 60_000;
-  if (activeSubstep?.status === "running") return 30_000;
+  if (step === "implement") return 5_000;
+  if (step === "author") return 10_000;
+  if (step === "recon" || step === "verify") return 15_000;
+  if (activeSubstep?.status === "running") return 20_000;
+  if (resumable) return 10_000;
   return 10_000;
 }
 
