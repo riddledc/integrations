@@ -7,7 +7,7 @@ while good captures produce a structured evidence packet that the supervising ag
 must assess before the wrapper routes back into author/implement/recon work or ship.
 """
 
-import json, os, sys
+import json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import (
     append_capture_diagnostic,
@@ -83,6 +83,53 @@ def auto_screenshot_for_mode(verification_mode):
     return normalized_verification_mode(verification_mode) not in STRUCTURED_FIRST_MODES
 
 
+def record_verify_phase(phase, status='running', summary=''):
+    global s
+    ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    try:
+        current = load_state()
+    except Exception:
+        current = dict(s)
+    runtime_step = current.get('current_runtime_step') if isinstance(current.get('current_runtime_step'), dict) else {}
+    if not runtime_step:
+        runtime_step = {
+            'step': 'verify',
+            'action': 'run',
+            'status': 'running',
+            'started_at': ts,
+            'workflow_file': 'riddle-proof-verify.lobster',
+        }
+    runtime_step['step'] = 'verify'
+    runtime_step['action'] = 'run'
+    runtime_step['status'] = 'running'
+    runtime_step['workflow_file'] = 'riddle-proof-verify.lobster'
+    runtime_step['phase'] = phase
+    runtime_step['phase_status'] = status
+    if status == 'running':
+        runtime_step['phase_started_at'] = ts
+        runtime_step.pop('phase_finished_at', None)
+    else:
+        runtime_step['phase_finished_at'] = ts
+    if summary:
+        runtime_step['summary'] = summary
+    current['current_runtime_step'] = runtime_step
+    events = current.get('runtime_events') if isinstance(current.get('runtime_events'), list) else []
+    events.append({
+        'ts': ts,
+        'kind': 'workflow.phase.' + ('started' if status == 'running' else 'finished'),
+        'step': 'verify',
+        'phase': phase,
+        'summary': summary or (phase + ' ' + status),
+        'details': {'status': status},
+    })
+    current['runtime_events'] = events[-100:]
+    current['runtime_updated_at'] = ts
+    save_state(current)
+    for key in ('current_runtime_step', 'runtime_events', 'runtime_updated_at'):
+        if key in current:
+            s[key] = current[key]
+
+
 def payload_has_capture_artifacts(payload):
     if not isinstance(payload, dict):
         return False
@@ -108,6 +155,7 @@ def capture_payload_error(payload):
 
 def abort_capture_failure(state, results, expected_path, message, raw_payload):
     summary = 'After capture failed before usable proof artifacts were produced: ' + str(message).strip()
+    record_verify_phase('capture', 'failed', summary)
     observation = {
         'valid': False,
         'reason': summary,
@@ -979,16 +1027,20 @@ if existing_prod:
     print('Prod baseline: ' + existing_prod)
 
 # AFTER (always from after worktree)
+record_verify_phase('build', 'running', 'Building after worktree for verify capture.')
 print('Cleaning after .next cache...')
 sp.run('rm -rf .next', shell=True, cwd=after_dir, capture_output=True)
 
 print('Building after worktree...')
 br = sp.run(build_cmd, shell=True, cwd=after_dir, capture_output=True, text=True, timeout=600)
 if br.returncode != 0:
+    record_verify_phase('build', 'failed', 'After build failed: ' + br.stderr[:300])
     raise SystemExit('After build failed: ' + br.stderr[:500])
+record_verify_phase('build', 'completed', 'After worktree build completed.')
 
 after_payload = {}
 static_reason = should_use_static_preview(after_dir, s) if mode == 'server' else ''
+record_verify_phase('capture', 'running', 'Capturing after-proof evidence.')
 if mode == 'server' and not static_reason:
     build_dir, server_command, server_exclude = prepare_server_preview(after_dir, s)
 
@@ -1051,8 +1103,10 @@ else:
 after_observation = evaluate_capture_quality(after_payload, expected_path, verification_mode)
 results['after']['observation'] = after_observation
 results['after']['supporting_artifacts'] = collect_supporting_artifacts(after_payload)
+record_verify_phase('capture', 'completed', 'After-proof capture completed.')
 
 # Structured proof summary
+record_verify_phase('assessment', 'running', 'Assessing verify evidence bundle.')
 s['verify_results'] = results
 s['stage'] = 'verify'
 assertions = s.get('parsed_assertions')
@@ -1211,6 +1265,7 @@ s['evidence_notes'] = [
 ]
 
 save_state(s)
+record_verify_phase('assessment', 'completed', 'Verify evidence assessment completed.')
 
 assessment_status = 'awaiting_supervising_agent' if s.get('verify_status') == 'evidence_captured' else 'capture_incomplete'
 
