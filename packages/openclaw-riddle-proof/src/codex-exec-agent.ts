@@ -546,10 +546,18 @@ export function createCodexExecAgentAdapter(
 
       const changedFiles = stringArray(raw.json.changed_files);
       const blockers = stringArray(raw.json.blockers);
+      const testsRun = stringArray(raw.json.tests_run);
       const softVerificationBlockers = changedFiles.length
         ? blockers.filter(isHarnessVerificationOnlyBlocker)
         : [];
       const hardBlockers = blockers.filter((item) => !softVerificationBlockers.includes(item));
+      const implementationNotesRaw = typeof raw.json.implementation_notes === "string" ? raw.json.implementation_notes : "";
+      const agentDetails = {
+        agent_summary: typeof raw.json.summary === "string" ? raw.json.summary : "",
+        agent_changed_files: changedFiles,
+        agent_tests_run: testsRun,
+        agent_blockers: blockers,
+      };
       if (hardBlockers.length) {
         return {
           ok: false,
@@ -557,13 +565,19 @@ export function createCodexExecAgentAdapter(
             code: "codex_implementation_blocked",
             checkpoint: context.checkpoint,
             message: String(raw.json.summary || "Codex reported implementation blockers."),
-            details: { blockers: hardBlockers, changedFiles },
+            details: {
+              blockers: hardBlockers,
+              changedFiles,
+              testsRun,
+              implementationNotes: implementationNotesRaw,
+              ...agentDetails,
+            },
           },
         };
       }
 
       const implementationNotes = [
-        typeof raw.json.implementation_notes === "string" ? raw.json.implementation_notes : "",
+        implementationNotesRaw,
         ...softVerificationBlockers.map((item) => `Harness verification note: ${item}`),
       ].filter(Boolean).join("\n");
       return {
@@ -571,6 +585,13 @@ export function createCodexExecAgentAdapter(
         summary: typeof raw.json.summary === "string" ? raw.json.summary : undefined,
         implementationNotes: implementationNotes || undefined,
         changedFiles,
+        testsRun,
+        details: {
+          ...agentDetails,
+          implementation_notes: implementationNotes || implementationNotesRaw || "",
+          soft_verification_blockers: softVerificationBlockers,
+          hard_blocker_count: hardBlockers.length,
+        },
       };
     },
 

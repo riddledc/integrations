@@ -77,7 +77,9 @@ export interface RiddleProofAgentPayload {
   blocker?: RiddleProofBlocker;
   diffDetected?: boolean;
   changedFiles?: string[];
+  testsRun?: string[];
   implementationNotes?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface RiddleProofEngineHarnessContext {
@@ -603,8 +605,32 @@ async function handleImplementation(
     };
   }
 
+  recordEvent(state, {
+    kind: "agent.implementation.started",
+    checkpoint: result.checkpoint || null,
+    stage: "implement",
+    summary: "Implementation agent started working in the after worktree.",
+    details: {
+      worktree_path: workdir || null,
+    },
+  });
+
   const implementation = await agent.implementChange({ ...context, workdir });
   if (implementation.blocker || implementation.ok === false) {
+    recordEvent(state, {
+      kind: "agent.implementation.blocked",
+      checkpoint: result.checkpoint || null,
+      stage: "implement",
+      summary: implementation.summary || implementation.blocker?.message || "Implementation adapter reported a blocker.",
+      details: compactRecord({
+        worktree_path: workdir || null,
+        changed_files: implementation.changedFiles || [],
+        tests_run: implementation.testsRun || [],
+        implementation_notes: implementation.implementationNotes || null,
+        blocker: implementation.blocker || null,
+        adapter_details: implementation.details || null,
+      }) as Record<string, unknown>,
+    });
     return {
       blocker: implementation.blocker || {
         code: "implementation_blocked",
@@ -617,13 +643,32 @@ async function handleImplementation(
   const cleanedArtifacts = removeEmptyToolArtifacts(workdir);
   const diffDetected = implementation.diffDetected === true || hasGitDiff(workdir);
   if (!diffDetected) {
+    recordEvent(state, {
+      kind: "agent.implementation.no_diff",
+      checkpoint: result.checkpoint || null,
+      stage: "implement",
+      summary: implementation.summary || "Implementation adapter returned without leaving a detectable git diff.",
+      details: compactRecord({
+        worktree_path: workdir || null,
+        changed_files: implementation.changedFiles || [],
+        tests_run: implementation.testsRun || [],
+        implementation_notes: implementation.implementationNotes || null,
+        adapter_details: implementation.details || null,
+      }) as Record<string, unknown>,
+    });
     return {
       blocker: {
         code: "implementation_diff_missing",
         checkpoint: result.checkpoint || null,
         message:
           "The implementation adapter returned, but the after worktree has no detectable git diff. The harness will not advance to verify.",
-        details: { worktree_path: workdir || null },
+        details: compactRecord({
+          worktree_path: workdir || null,
+          changed_files: implementation.changedFiles || [],
+          tests_run: implementation.testsRun || [],
+          implementation_notes: implementation.implementationNotes || null,
+          adapter_details: implementation.details || null,
+        }) as Record<string, unknown>,
       },
     };
   }
@@ -637,6 +682,9 @@ async function handleImplementation(
       worktree_path: workdir || null,
       diffDetected,
       changed_files: implementation.changedFiles || [],
+      tests_run: implementation.testsRun || [],
+      implementation_notes: implementation.implementationNotes || null,
+      adapter_details: implementation.details || null,
       cleaned_artifacts: cleanedArtifacts,
     },
   });
