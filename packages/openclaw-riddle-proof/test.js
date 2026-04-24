@@ -1305,6 +1305,19 @@ assert.equal(blockedDuringAttemptStatus.implementation_agent_attempt_count, 1);
 assert.equal(blockedDuringAttemptStatus.implementation_gap_origin, "during_agent_attempt");
 assert.equal(blockedDuringAttemptStatus.implementation_agent_last_event.kind, "agent.implementation.started");
 assert.equal(blockedDuringAttemptStatus.implementation_agent_last_outcome, null);
+assert.equal(blockedDuringAttemptStatus.checkpoint_classification, "in_progress");
+assert.equal(blockedDuringAttemptStatus.checkpoint_disposition, "implementation_in_flight");
+assert.equal(blockedDuringAttemptStatus.monitor_contract.response_gate, "hold_for_implementation_outcome");
+assert.equal(blockedDuringAttemptStatus.monitor_contract.should_continue_monitoring, true);
+assert.equal(
+  blockedDuringAttemptStatus.monitor_plan.stop_when,
+  "implementation outcome, reportable state, or terminal status",
+);
+
+const blockedDuringAttemptInspect = inspectOpenClawRiddleProof({ state_path: blockedDuringAttemptWrapperStatePath });
+assert.equal(blockedDuringAttemptInspect.implementation_gap_origin, "during_agent_attempt");
+assert.equal(blockedDuringAttemptInspect.monitor_contract.response_gate, "hold_for_implementation_outcome");
+assert.equal(blockedDuringAttemptInspect.monitor_contract.should_continue_monitoring, true);
 
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);

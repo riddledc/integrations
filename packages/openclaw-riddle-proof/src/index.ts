@@ -97,7 +97,7 @@ export interface OpenClawRiddleProofMonitorContract {
   contract_version: "riddle_proof.oc_wrapper.v1";
   report_mode: RiddleProofReportMode;
   wait_for_terminal: boolean;
-  response_gate: "checkpoint_ok" | "hold_for_terminal" | "release_terminal";
+  response_gate: "checkpoint_ok" | "hold_for_terminal" | "hold_for_implementation_outcome" | "release_terminal";
   should_report_now: boolean;
   should_continue_monitoring: boolean;
 }
@@ -458,14 +458,18 @@ function monitorContractFor(
   options: {
     checkpoint?: string | null;
     blockerCode?: string | null;
+    implementationGapOrigin?: string | null;
   } = {},
 ): OpenClawRiddleProofMonitorContract {
   const reportMode = reportModeFromRequest(request);
   const waitForTerminal = waitForTerminalFromRequest(request);
   const resumable = resumableCheckpointLike(status, options.checkpoint, options.blockerCode);
   const terminal = !resumable && isTerminalStatusLike(status);
+  const implementationInFlight = options.implementationGapOrigin === "during_agent_attempt";
   const responseGate =
-    waitForTerminal && !terminal
+    implementationInFlight
+      ? "hold_for_implementation_outcome"
+      : waitForTerminal && !terminal
       ? "hold_for_terminal"
       : terminal
         ? "release_terminal"
@@ -475,8 +479,9 @@ function monitorContractFor(
     report_mode: reportMode,
     wait_for_terminal: waitForTerminal,
     response_gate: responseGate,
-    should_report_now: responseGate !== "hold_for_terminal",
-    should_continue_monitoring: responseGate === "hold_for_terminal",
+    should_report_now: responseGate === "checkpoint_ok" || responseGate === "release_terminal",
+    should_continue_monitoring:
+      responseGate === "hold_for_terminal" || responseGate === "hold_for_implementation_outcome",
   };
 }
 
@@ -889,6 +894,19 @@ function implementationGapOrigin(
   if (!implementationAgent.last_outcome) return "during_agent_attempt";
   return "after_agent_attempt";
 }
+
+function waitStopCondition(
+  responseGate: OpenClawRiddleProofMonitorContract["response_gate"] | undefined,
+  suggestedNextAction: string | null | undefined,
+) {
+  if (responseGate === "hold_for_implementation_outcome") {
+    return "implementation outcome, reportable state, or terminal status";
+  }
+  if (suggestedNextAction === "continue_monitoring") {
+    return "suggested_next_action != continue_monitoring or terminal status";
+  }
+  return "already_reportable";
+}
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -1047,6 +1065,7 @@ function buildProofInspection(
   options: { debug?: boolean } = {},
 ) {
   const implementationAgent = summarizeImplementationAgent(wrapperState);
+  const implementationGap = implementationGapOrigin(createRunStatusSnapshot(wrapperState), implementationAgent);
   const assessmentRequest =
     recordValue(fullState.proof_assessment_request) ||
     recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
@@ -1105,6 +1124,7 @@ function buildProofInspection(
     monitor_contract: monitorContractFor(wrapperState.status, wrapperState.request, {
       checkpoint: checkpoint || wrapperState.last_checkpoint || null,
       blockerCode: wrapperState.blocker?.code || null,
+      implementationGapOrigin: implementationGap,
     }),
     proof_profile_applied: Boolean(profile),
     proof_profile: profile,
@@ -1134,7 +1154,7 @@ function buildProofInspection(
     implementation_agent_attempt_count: implementationAgent.attempt_count,
     implementation_agent_last_event: implementationAgent.last_event,
     implementation_agent_last_outcome: implementationAgent.last_outcome,
-    implementation_gap_origin: implementationGapOrigin(createRunStatusSnapshot(wrapperState), implementationAgent),
+    implementation_gap_origin: implementationGap,
     capture_hint: summarizeCaptureHint(fullState),
     timing_summary: buildTimingSummary(
       createRunStatusSnapshot(wrapperState),
@@ -1424,10 +1444,12 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     snapshot.blocker?.code === "implement_changes_missing" ||
     snapshot.blocker?.code === "implement_required",
   );
+  const implementationGapOriginValue = stringValue(snapshotRecord.implementation_gap_origin);
+  const implementationInFlight = implementationGap && implementationGapOriginValue === "during_agent_attempt";
   const isTerminal = typeof snapshotRecord.is_terminal === "boolean"
     ? snapshotRecord.is_terminal && !resumable
     : snapshot.status !== "running" && !resumable;
-  const isRoutable = Boolean(resumable);
+  const isRoutable = Boolean(resumable) && !implementationInFlight;
   const isReviewRequired = Boolean(
     snapshot.blocker?.code === "main_agent_proof_review_required" ||
     (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
@@ -1441,12 +1463,14 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     checkpoint_classification:
       isTerminal ? "terminal" :
         isReviewRequired ? "review_required" :
+          implementationInFlight ? "in_progress" :
           isRoutable ? "routable" :
             snapshot.status === "running" ? "in_progress" :
             "blocked",
     checkpoint_disposition:
       isTerminal ? "terminal" :
         isReviewRequired ? "review_required" :
+          implementationInFlight ? "implementation_in_flight" :
           implementationGap ? "retryable_implementation_gap" :
             isRoutable ? "routable" :
               snapshot.status === "running" ? "in_progress" :
@@ -1462,14 +1486,19 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
 export function readOpenClawRiddleProofStatus(state_path: string, options: { debug?: boolean } = {}): RiddleProofRunStatusSnapshot | null {
   const snapshot = readRiddleProofRunStatus(state_path);
   if (!snapshot) return null;
-  const checkpoint = checkpointStatus(snapshot);
   const wrapperState = readRunState(state_path);
   const implementationAgent = summarizeImplementationAgent(wrapperState);
+  const implementationGap = implementationGapOrigin(snapshot, implementationAgent);
+  const checkpoint = checkpointStatus({
+    ...snapshot,
+    implementation_gap_origin: implementationGap,
+  } as RiddleProofRunStatusSnapshot);
   const wakeTimingSummary = latestWakeTimingSummary(wrapperState);
   const monitorContract = wrapperState
     ? monitorContractFor(snapshot.status, wrapperState.request, {
         checkpoint: checkpoint.checkpoint,
         blockerCode: snapshot.blocker?.code || null,
+        implementationGapOrigin: implementationGap,
       })
     : undefined;
 
@@ -1486,10 +1515,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
         preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
         state_path,
         continue_while: "monitor_should_continue",
-        stop_when:
-          checkpoint.suggested_next_action === "continue_monitoring"
-            ? "suggested_next_action != continue_monitoring or terminal status"
-            : "already_reportable",
+        stop_when: waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
         poll_after_ms: recommendedPollMs,
       },
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
@@ -1526,7 +1552,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     implementation_agent_attempt_count: implementationAgent.attempt_count,
     implementation_agent_last_event: implementationAgent.last_event,
     implementation_agent_last_outcome: implementationAgent.last_outcome,
-    implementation_gap_origin: implementationGapOrigin(snapshot, implementationAgent),
+    implementation_gap_origin: implementationGap,
     capture_hint: summarizeCaptureHint(engineState),
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
     recommended_poll_after_ms: recommendedPollMs,
@@ -1535,10 +1561,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
       preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
       state_path,
       continue_while: "monitor_should_continue",
-      stop_when:
-        checkpoint.suggested_next_action === "continue_monitoring"
-          ? "suggested_next_action != continue_monitoring or terminal status"
-          : "already_reportable",
+      stop_when: waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
       poll_after_ms: recommendedPollMs,
     },
     wake_strategy: {
