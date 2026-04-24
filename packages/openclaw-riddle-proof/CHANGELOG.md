@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.37
+
+### Patch Changes
+
+- a4824b2: Persist and surface structured implement-gap diagnostics through the proof runtime and OpenClaw wrapper.
+- Updated dependencies [a4824b2]
+  - @riddledc/riddle-proof@0.5.18
+
 ## 0.4.36
 
 ### Patch Changes
