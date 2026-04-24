@@ -39,6 +39,16 @@ export type {
   CodexJsonResult,
   CodexJsonRunner,
 } from "./codex-exec-agent";
+export {
+  buildOpenClawAgentInvocationPlan,
+  buildOpenClawAgentSessionKey,
+} from "./oc-agent-routing";
+export type {
+  OpenClawAgentInvocationPlan,
+  OpenClawAgentInvocationRequest,
+  OpenClawAgentRoutingMode,
+  OpenClawAgentThinking,
+} from "./oc-agent-routing";
 
 export const RIDDLE_PROOF_CHANGE_TOOL_NAME = "riddle_proof_change";
 export const RIDDLE_PROOF_STATUS_TOOL_NAME = "riddle_proof_status";

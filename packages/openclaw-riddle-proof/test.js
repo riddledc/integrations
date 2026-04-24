@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import os from "node:os";
 import path from "node:path";
 import register, {
+  buildOpenClawAgentInvocationPlan,
+  buildOpenClawAgentSessionKey,
   RIDDLE_PROOF_CHANGE_TOOL_NAME,
   RIDDLE_PROOF_INSPECT_TOOL_NAME,
   RIDDLE_PROOF_REVIEW_TOOL_NAME,
@@ -77,6 +79,53 @@ const terminalOnlyResult = createOpenClawRiddleProofResult({
 });
 assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.report_mode, "terminal_only");
 assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.wait_for_terminal, true);
+
+assert.equal(buildOpenClawAgentSessionKey("main", "fresh-123"), "agent:main:fresh-123");
+const cliPlan = buildOpenClawAgentInvocationPlan({
+  agentId: "main",
+  sessionId: "fresh-123",
+  message: "pong",
+});
+assert.equal(cliPlan.routingMode, "agent_session_id");
+assert.equal(cliPlan.command, "openclaw");
+assert.deepEqual(cliPlan.args.slice(0, 9), [
+  "agent",
+  "--agent",
+  "main",
+  "--local",
+  "--json",
+  "--session-id",
+  "fresh-123",
+  "--thinking",
+  "minimal",
+]);
+assert.equal(cliPlan.sessionKey, "agent:main:fresh-123");
+
+const gatewayPlan = buildOpenClawAgentInvocationPlan(
+  {
+    agentId: "main",
+    sessionId: "fresh-456",
+    message: "pong",
+    timeoutSeconds: 45,
+  },
+  "gateway_session_key",
+);
+assert.equal(gatewayPlan.routingMode, "gateway_session_key");
+assert.equal(gatewayPlan.command, "openclaw");
+assert.deepEqual(gatewayPlan.args.slice(0, 4), [
+  "gateway",
+  "call",
+  "agent",
+  "--params",
+]);
+assert.match(gatewayPlan.args[4], /"sessionKey":"agent:main:fresh-456"/);
+assert.deepEqual(gatewayPlan.args.slice(5), [
+  "--expect-final",
+  "--timeout",
+  "45000",
+  "--json",
+]);
+assert.equal(gatewayPlan.sessionKey, "agent:main:fresh-456");
 
 const runtimeResult = await runOpenClawRiddleProof(params, { executionMode: "disabled" });
 assert.equal(runtimeResult.status, "blocked");
