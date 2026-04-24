@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.39
+
+### Patch Changes
+
+- 8a53333: Clarify implement-gap reporting by distinguishing before-agent, during-agent, and after-agent no-diff states.
+
 ## 0.4.38
 
 ### Patch Changes
