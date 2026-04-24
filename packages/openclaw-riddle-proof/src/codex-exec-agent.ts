@@ -462,6 +462,34 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function hasGitDiff(workdir: string) {
+  try {
+    return git(["status", "--porcelain"], workdir).trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function buildImplementationPrompt(
+  context: RiddleProofEngineHarnessContext & { workdir?: string | null },
+  extraLines: string[] = [],
+) {
+  return [
+    basePrompt(context, "Implement the requested code change in the after worktree."),
+    "Make the code changes directly in this repository.",
+    "Use the recon-approved baseline understanding in the state to decide exactly what prior UI/state is being changed.",
+    "Run focused checks when practical.",
+    "If a focused check is blocked only by the harness sandbox writing Vite temp config into a shared/symlinked node_modules path (for example EROFS on node_modules/.vite-temp/vite.config...), do not treat that as an implementation blocker when the requested git diff exists. Record it in tests_run or implementation_notes instead so the harness can advance to its own verify stage.",
+    "Leave a real git diff in the after worktree. Do not commit or push.",
+    "Before you return success, run git status --short and git diff --name-only in this repository and verify they show the intended change.",
+    "Do not return success with empty changed_files or a clean git status. If you cannot create the requested diff, explain why in blockers instead.",
+    "changed_files should match the real git diff as closely as practical.",
+    "Return changed_files, implementation_notes, tests_run, and blockers if any.",
+    "Use empty arrays for tests_run or blockers when none apply.",
+    ...extraLines,
+  ].join("\n");
+}
+
 export function createCodexExecAgentAdapter(
   config: CodexExecAgentConfig = {},
   runner: CodexJsonRunner = createCodexExecJsonRunner(config),
@@ -526,71 +554,117 @@ export function createCodexExecAgentAdapter(
           },
         };
       }
+      const workdir = context.workdir;
 
-      const raw = await callRunner(runner, {
-        purpose: "implementation",
-        workdir: context.workdir,
-        schema: IMPLEMENT_SCHEMA,
-        prompt: [
-          basePrompt(context, "Implement the requested code change in the after worktree."),
-          "Make the code changes directly in this repository.",
-          "Use the recon-approved baseline understanding in the state to decide exactly what prior UI/state is being changed.",
-          "Run focused checks when practical.",
-          "If a focused check is blocked only by the harness sandbox writing Vite temp config into a shared/symlinked node_modules path (for example EROFS on node_modules/.vite-temp/vite.config...), do not treat that as an implementation blocker when the requested git diff exists. Record it in tests_run or implementation_notes instead so the harness can advance to its own verify stage.",
-          "Leave a real git diff in the after worktree. Do not commit or push.",
-          "Return changed_files, implementation_notes, tests_run, and blockers if any.",
-          "Use empty arrays for tests_run or blockers when none apply.",
-        ].join("\n"),
-      });
-      if (!raw.ok || !raw.json) return payloadOrBlocker(raw, context.checkpoint);
+      const attemptSummaries: Array<Record<string, unknown>> = [];
 
-      const changedFiles = stringArray(raw.json.changed_files);
-      const blockers = stringArray(raw.json.blockers);
-      const testsRun = stringArray(raw.json.tests_run);
-      const softVerificationBlockers = changedFiles.length
-        ? blockers.filter(isHarnessVerificationOnlyBlocker)
-        : [];
-      const hardBlockers = blockers.filter((item) => !softVerificationBlockers.includes(item));
-      const implementationNotesRaw = typeof raw.json.implementation_notes === "string" ? raw.json.implementation_notes : "";
-      const agentDetails = {
-        agent_summary: typeof raw.json.summary === "string" ? raw.json.summary : "",
-        agent_changed_files: changedFiles,
-        agent_tests_run: testsRun,
-        agent_blockers: blockers,
-      };
-      if (hardBlockers.length) {
-        return {
-          ok: false,
-          blocker: {
-            code: "codex_implementation_blocked",
-            checkpoint: context.checkpoint,
-            message: String(raw.json.summary || "Codex reported implementation blockers."),
-            details: {
-              blockers: hardBlockers,
-              changedFiles,
-              testsRun,
-              implementationNotes: implementationNotesRaw,
-              ...agentDetails,
-            },
-          },
+      const runImplementationAttempt = async (purpose: string, extraLines: string[] = []) => {
+        const raw = await callRunner(runner, {
+          purpose,
+          workdir,
+          schema: IMPLEMENT_SCHEMA,
+          prompt: buildImplementationPrompt(context, extraLines),
+        });
+        if (!raw.ok || !raw.json) {
+          return {
+            ok: false as const,
+            payload: payloadOrBlocker(raw, context.checkpoint),
+          };
+        }
+
+        const changedFiles = stringArray(raw.json.changed_files);
+        const blockers = stringArray(raw.json.blockers);
+        const testsRun = stringArray(raw.json.tests_run);
+        const softVerificationBlockers = changedFiles.length
+          ? blockers.filter(isHarnessVerificationOnlyBlocker)
+          : [];
+        const hardBlockers = blockers.filter((item) => !softVerificationBlockers.includes(item));
+        const implementationNotesRaw = typeof raw.json.implementation_notes === "string" ? raw.json.implementation_notes : "";
+        const summary = typeof raw.json.summary === "string" ? raw.json.summary : "";
+        const implementationNotes = [
+          implementationNotesRaw,
+          ...softVerificationBlockers.map((item) => `Harness verification note: ${item}`),
+        ].filter(Boolean).join("\n");
+        const agentDetails = {
+          agent_purpose: purpose,
+          agent_summary: summary,
+          agent_changed_files: changedFiles,
+          agent_tests_run: testsRun,
+          agent_blockers: blockers,
         };
+
+        attemptSummaries.push({
+          purpose,
+          summary,
+          changed_files: changedFiles,
+          tests_run: testsRun,
+          blockers,
+        });
+
+        if (hardBlockers.length) {
+          return {
+            ok: false as const,
+            payload: {
+              ok: false,
+              blocker: {
+                code: "codex_implementation_blocked",
+                checkpoint: context.checkpoint,
+                message: summary || "Codex reported implementation blockers.",
+                details: {
+                  blockers: hardBlockers,
+                  changedFiles,
+                  testsRun,
+                  implementationNotes: implementationNotesRaw,
+                  ...agentDetails,
+                },
+              },
+            } satisfies RiddleProofAgentPayload,
+          };
+        }
+
+        return {
+          ok: true as const,
+          summary,
+          changedFiles,
+          testsRun,
+          implementationNotes,
+          implementationNotesRaw,
+          softVerificationBlockers,
+          hardBlockers,
+          agentDetails,
+        };
+      };
+
+      let attempt = await runImplementationAttempt("implementation");
+      if (!attempt.ok) return attempt.payload;
+
+      let diffDetected = hasGitDiff(workdir);
+      if (!diffDetected) {
+        attempt = await runImplementationAttempt("implementation retry", [
+          "The previous implementation attempt returned without a detectable git diff in this repository.",
+          `Previous summary: ${attempt.summary || "(none)"}`,
+          `Previous changed_files: ${JSON.stringify(attempt.changedFiles)}`,
+          "Before you return success this time, run git status --short and git diff --name-only. If they are still empty, do not return success; either keep editing or explain the blocker.",
+        ]);
+        if (!attempt.ok) return attempt.payload;
+        diffDetected = hasGitDiff(workdir);
       }
 
-      const implementationNotes = [
-        implementationNotesRaw,
-        ...softVerificationBlockers.map((item) => `Harness verification note: ${item}`),
-      ].filter(Boolean).join("\n");
       return {
         ok: true,
-        summary: typeof raw.json.summary === "string" ? raw.json.summary : undefined,
-        implementationNotes: implementationNotes || undefined,
-        changedFiles,
-        testsRun,
+        summary: attempt.summary || undefined,
+        implementationNotes: attempt.implementationNotes || undefined,
+        changedFiles: attempt.changedFiles,
+        testsRun: attempt.testsRun,
         details: {
-          ...agentDetails,
-          implementation_notes: implementationNotes || implementationNotesRaw || "",
-          soft_verification_blockers: softVerificationBlockers,
-          hard_blocker_count: hardBlockers.length,
+          ...attempt.agentDetails,
+          implementation_notes: attempt.implementationNotes || attempt.implementationNotesRaw || "",
+          soft_verification_blockers: attempt.softVerificationBlockers,
+          hard_blocker_count: attempt.hardBlockers.length,
+          retry_attempted: attemptSummaries.length > 1,
+          attempt_count: attemptSummaries.length,
+          attempt_summaries: attemptSummaries,
+          post_agent_diff_detected: diffDetected,
         },
       };
     },
