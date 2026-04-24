@@ -83,12 +83,20 @@ assert.equal(runtimeResult.status, "blocked");
 assert.equal(runtimeResult.blocker?.code, "execution_adapter_not_configured");
 
 const adapterWorkdir = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-adapter-"));
+execFileSync("git", ["init", "-b", "main"], { cwd: adapterWorkdir, stdio: "ignore" });
+execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: adapterWorkdir, stdio: "ignore" });
+execFileSync("git", ["config", "user.name", "OpenClaw Riddle Proof Test"], { cwd: adapterWorkdir, stdio: "ignore" });
+writeFileSync(path.join(adapterWorkdir, "baseline.txt"), "base\n");
+execFileSync("git", ["add", "baseline.txt"], { cwd: adapterWorkdir, stdio: "ignore" });
+execFileSync("git", ["commit", "-m", "initial"], { cwd: adapterWorkdir, stdio: "ignore" });
 const codexCalls = [];
 const adapter = createCodexExecAgentAdapter({}, async (request) => {
   codexCalls.push(request);
   assert.equal(request.purpose, "implementation");
   assert.equal(request.workdir, adapterWorkdir);
   assert.ok(request.prompt.includes("Implement the requested code change"));
+  assert.ok(request.prompt.includes("git status --short"));
+  assert.ok(request.prompt.includes("git diff --name-only"));
   assert.ok(JSON.stringify(request.schema).includes("changed_files"));
   writeFileSync(path.join(request.workdir, "feature.txt"), "changed\n");
   return {
@@ -114,6 +122,57 @@ assert.equal(adapterResult.ok, true);
 assert.equal(adapterResult.summary, "Changed the fixture.");
 assert.deepEqual(adapterResult.changedFiles, ["feature.txt"]);
 assert.equal(codexCalls.length, 1);
+
+const retryWorkdir = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-adapter-retry-"));
+execFileSync("git", ["init", "-b", "main"], { cwd: retryWorkdir, stdio: "ignore" });
+execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: retryWorkdir, stdio: "ignore" });
+execFileSync("git", ["config", "user.name", "OpenClaw Riddle Proof Test"], { cwd: retryWorkdir, stdio: "ignore" });
+writeFileSync(path.join(retryWorkdir, "baseline.txt"), "base\n");
+execFileSync("git", ["add", "baseline.txt"], { cwd: retryWorkdir, stdio: "ignore" });
+execFileSync("git", ["commit", "-m", "initial"], { cwd: retryWorkdir, stdio: "ignore" });
+const retryCalls = [];
+const retryingAdapter = createCodexExecAgentAdapter({}, async (request) => {
+  retryCalls.push(request);
+  if (request.purpose === "implementation") {
+    return {
+      ok: true,
+      json: {
+        summary: "Thought through the change but did not leave a diff yet.",
+        implementation_notes: "",
+        changed_files: [],
+        tests_run: [],
+        blockers: [],
+      },
+    };
+  }
+  assert.equal(request.purpose, "implementation retry");
+  assert.ok(request.prompt.includes("previous implementation attempt returned without a detectable git diff"));
+  writeFileSync(path.join(request.workdir, "retry.txt"), "changed\n");
+  return {
+    ok: true,
+    json: {
+      summary: "Created the retry fixture diff.",
+      implementation_notes: "Retried after confirming the first attempt left no diff.",
+      changed_files: ["retry.txt"],
+      tests_run: ["git status --short", "git diff --name-only"],
+      blockers: [],
+    },
+  };
+});
+const retryAdapterResult = await retryingAdapter.implementChange({
+  request: { repo: "riddledc/example", change_request: "Change the fixture after a clean first pass." },
+  state: { run_id: "rp_adapter_retry", events: [] },
+  engineResult: { state_path: "/tmp/riddle-engine-state.json", checkpoint: "implement_required" },
+  fullRiddleState: { after_worktree: retryWorkdir },
+  checkpoint: "implement_required",
+  workdir: retryWorkdir,
+});
+assert.equal(retryAdapterResult.ok, true);
+assert.equal(retryAdapterResult.summary, "Created the retry fixture diff.");
+assert.deepEqual(retryAdapterResult.changedFiles, ["retry.txt"]);
+assert.equal(retryAdapterResult.details.retry_attempted, true);
+assert.equal(retryAdapterResult.details.attempt_count, 2);
+assert.equal(retryCalls.length, 2);
 
 const blockedAdapter = createCodexExecAgentAdapter({}, async () => ({
   ok: true,
