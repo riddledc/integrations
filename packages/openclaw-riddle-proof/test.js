@@ -1210,6 +1210,43 @@ assert.equal(blockedAfterAttemptStatus.implementation_agent_attempt_count, 1);
 assert.equal(blockedAfterAttemptStatus.implementation_gap_origin, "after_agent_attempt");
 assert.equal(blockedAfterAttemptStatus.implementation_agent_last_outcome.kind, "agent.implementation.no_diff");
 
+const blockedDuringAttemptWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-routable-during-attempt.json");
+writeFileSync(blockedDuringAttemptWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_blocked_during_attempt",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Polish Tic Tac Toe status",
+    engine_state_path: blockedImplementEngineStatePath,
+    verification_mode: "visual",
+  },
+  last_checkpoint: "implement_changes_missing",
+  blocker: {
+    code: "implement_changes_missing",
+    checkpoint: "implement_changes_missing",
+    message: "No implementation detected on the after worktree.",
+  },
+  iterations: 3,
+  events: [
+    {
+      ts: "2026-04-23T00:01:00.000Z",
+      kind: "agent.implementation.started",
+      checkpoint: "implement_changes_missing",
+      stage: "implement",
+      summary: "Implementation agent started working in the after worktree.",
+      details: { worktree_path: "/tmp/example-after" },
+    },
+  ],
+}, null, 2));
+const blockedDuringAttemptStatus = readOpenClawRiddleProofStatus(blockedDuringAttemptWrapperStatePath);
+assert.equal(blockedDuringAttemptStatus.implementation_agent_attempt_count, 1);
+assert.equal(blockedDuringAttemptStatus.implementation_gap_origin, "during_agent_attempt");
+assert.equal(blockedDuringAttemptStatus.implementation_agent_last_event.kind, "agent.implementation.started");
+assert.equal(blockedDuringAttemptStatus.implementation_agent_last_outcome, null);
+
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
 assert.equal(inspectParsed.route_matched, true);

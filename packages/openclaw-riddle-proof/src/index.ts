@@ -885,9 +885,10 @@ function implementationGapOrigin(
   const checkpoint = stringValue(snapshot.last_checkpoint) || stringValue(snapshot.blocker?.checkpoint) || stringValue(snapshot.blocker?.code);
   const isImplementationGap = checkpoint === "implement_changes_missing" || checkpoint === "implement_required";
   if (!isImplementationGap) return null;
-  return implementationAgent.attempt_count > 0 ? "after_agent_attempt" : "before_agent_edit";
+  if (implementationAgent.attempt_count === 0) return "before_agent_edit";
+  if (!implementationAgent.last_outcome) return "during_agent_attempt";
+  return "after_agent_attempt";
 }
-
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
