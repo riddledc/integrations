@@ -844,6 +844,8 @@ export async function executeWorkflow(
       checkpoint?: string | null;
       haltedForApproval?: boolean;
       autoApproved?: boolean;
+      retryable?: boolean;
+      checkpointDisposition?: string | null;
       error?: string | null;
       details?: Record<string, unknown>;
     } = {},
@@ -856,6 +858,8 @@ export async function executeWorkflow(
         requestedAdvanceStage: effectiveAdvanceStage || null,
         haltedForApproval: extra.haltedForApproval,
         autoApproved: extra.autoApproved,
+        retryable: extra.retryable,
+        checkpointDisposition: extra.checkpointDisposition || null,
         error: extra.error || null,
         details: extra.details || {},
       });
@@ -1402,10 +1406,26 @@ export async function executeWorkflow(
       if (!implementRes.ok) {
         const implementError = `${implementRes.error || ""}\n${implementRes.stdout || ""}\n${implementRes.stderr || ""}`;
         if (implementError.includes("No implementation detected")) {
+          const implementationState = readState(config.statePath) || {};
+          const implementationSummary = stringValue(implementationState?.implementation_summary) || null;
+          const implementationDetectionSummary = stringValue(implementationState?.implementation_detection_summary) || null;
+          const implementationDetection =
+            implementationState?.implementation_detection &&
+            typeof implementationState.implementation_detection === "object" &&
+            !Array.isArray(implementationState.implementation_detection)
+              ? implementationState.implementation_detection as Record<string, unknown>
+              : null;
           recordAttempt("implement", "checkpoint", "Implementation checkpoint found no material code changes yet.", {
             checkpoint: "implement_changes_missing",
             error: implementRes.error || null,
-            details: { executed },
+            retryable: true,
+            checkpointDisposition: "retryable_implementation_gap",
+            details: {
+              executed,
+              implementationSummary,
+              implementationDetectionSummary,
+              implementationDetection,
+            },
           });
           return checkpoint(
             "implement",
@@ -1416,7 +1436,17 @@ export async function executeWorkflow(
               advanceOptions: ["implement", "author", "recon"],
               recommendedAdvanceStage: "implement",
               blocking: true,
-              details: { executed },
+              retryable: true,
+              checkpointDisposition: "retryable_implementation_gap",
+              details: {
+                executed,
+                implementationSummary,
+                implementationDetectionSummary,
+                implementationDetection,
+              },
+              implementationSummary,
+              implementationDetectionSummary,
+              implementationDetection,
               executed,
             },
           );

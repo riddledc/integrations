@@ -342,6 +342,8 @@ export function recordStageAttempt(
     requestedAdvanceStage?: WorkflowStage | null;
     haltedForApproval?: boolean;
     autoApproved?: boolean;
+    retryable?: boolean;
+    checkpointDisposition?: string | null;
     error?: string | null;
     details?: Record<string, unknown>;
   } = {},
@@ -358,6 +360,8 @@ export function recordStageAttempt(
     requested_advance_stage: entry.requestedAdvanceStage || null,
     halted_for_approval: Boolean(entry.haltedForApproval),
     auto_approved: Boolean(entry.autoApproved),
+    retryable: Boolean(entry.retryable),
+    checkpoint_disposition: entry.checkpointDisposition || null,
     error: entry.error || null,
     details: entry.details || {},
     attempted_at: new Date().toISOString(),
@@ -966,6 +970,8 @@ export function summarizeState(state: any) {
     recon_hypothesis: state.recon_hypothesis || null,
     implementation_status: state.implementation_status || null,
     implementation_summary: state.implementation_summary || null,
+    implementation_detection_summary: state.implementation_detection_summary || null,
+    implementation_detection: state.implementation_detection || null,
     implementation_environment_issues: state.implementation_environment_issues || [],
     verify_status: state.verify_status || null,
     verify_summary: state.verify_summary || null,

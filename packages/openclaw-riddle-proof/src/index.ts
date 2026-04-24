@@ -1053,6 +1053,7 @@ function buildProofInspection(
   );
   const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
   const scratchCleanup = recordValue(fullState.scratch_cleanup);
+  const implementationDetection = recordValue(fullState.implementation_detection);
   const inspection = {
     ok: true,
     status: wrapperState.status,
@@ -1089,6 +1090,10 @@ function buildProofInspection(
     },
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
+    implementation_status: stringValue(fullState.implementation_status) || null,
+    implementation_summary: stringValue(fullState.implementation_summary) || null,
+    implementation_detection_summary: stringValue(fullState.implementation_detection_summary) || null,
+    implementation_detection: implementationDetection,
     capture_hint: summarizeCaptureHint(fullState),
     timing_summary: buildTimingSummary(
       createRunStatusSnapshot(wrapperState),
@@ -1372,6 +1377,12 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   const snapshotRecord = snapshot as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   const checkpoint = snapshot.last_checkpoint || snapshot.blocker?.checkpoint || null;
   const resumable = resumableCheckpointLike(snapshot.status, checkpoint, snapshot.blocker?.code);
+  const implementationGap = Boolean(
+    checkpoint === "implement_changes_missing" ||
+    checkpoint === "implement_required" ||
+    snapshot.blocker?.code === "implement_changes_missing" ||
+    snapshot.blocker?.code === "implement_required",
+  );
   const isTerminal = typeof snapshotRecord.is_terminal === "boolean"
     ? snapshotRecord.is_terminal && !resumable
     : snapshot.status !== "running" && !resumable;
@@ -1392,6 +1403,13 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
           isRoutable ? "routable" :
             snapshot.status === "running" ? "in_progress" :
             "blocked",
+    checkpoint_disposition:
+      isTerminal ? "terminal" :
+        isReviewRequired ? "review_required" :
+          implementationGap ? "retryable_implementation_gap" :
+            isRoutable ? "routable" :
+              snapshot.status === "running" ? "in_progress" :
+                "blocked",
     suggested_next_action:
       monitorShouldContinue ? "continue_monitoring" :
         isReviewRequired ? "inspect_or_review" :
@@ -1443,6 +1461,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const engineCurrentStage = stringValue(activeSubstep?.step);
   const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
+  const implementationDetection = recordValue(engineState?.implementation_detection);
   const recommendedPollMs = recommendedPollAfterMs(activeSubstep, snapshot);
   const status = {
     ...snapshot,
@@ -1458,6 +1477,10 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     engine_runtime_event_count: runtimeEvents.length,
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
+    implementation_status: stringValue(engineState?.implementation_status) || null,
+    implementation_summary: stringValue(engineState?.implementation_summary) || null,
+    implementation_detection_summary: stringValue(engineState?.implementation_detection_summary) || null,
+    implementation_detection: implementationDetection,
     capture_hint: summarizeCaptureHint(engineState),
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
     recommended_poll_after_ms: recommendedPollMs,
