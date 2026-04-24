@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.40
+
+### Patch Changes
+
+- f77204c: Retry the implementation Codex step once when the first successful response leaves no detectable git diff, and tighten the implementation prompt to require a git self-check before returning success.
+
 ## 0.4.39
 
 ### Patch Changes
