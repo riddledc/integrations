@@ -42,6 +42,28 @@ runs.
 This keeps the currently working OpenClaw/Discord proof flow on the public
 `riddle_proof_change` path rather than a private skill/plugin prototype.
 
+## OC Session Routing
+
+For direct OC harnesses and benchmark tooling that need fresh isolation per run,
+do not assume `openclaw agent --agent ... --session-id ...` is sufficient.
+The package now exports helpers that make the routing decision explicit:
+
+- `buildOpenClawAgentSessionKey(agentId, sessionId)`
+- `buildOpenClawAgentInvocationPlan(request, routingMode)`
+
+Supported routing modes:
+
+- `agent_session_id`
+- `gateway_session_key`
+
+Current recommendation for isolation-sensitive harnesses:
+
+- prefer `gateway_session_key`
+- use `agent_session_id` only when you intentionally want current CLI semantics
+
+This is not a global default claim yet. The decision should be based on harness
+data, not intuition.
+
 ## Product Boundary
 
 This package is meant to become the OpenClaw entry point for the full Riddle
