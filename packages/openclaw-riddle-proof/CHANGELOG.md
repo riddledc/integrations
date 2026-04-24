@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.38
+
+### Patch Changes
+
+- 4771be7: Clarify implementation-gap status by surfacing implementation agent attempt telemetry and distinguishing pre-agent gaps from post-attempt no-diff cases.
+- Updated dependencies [4771be7]
+  - @riddledc/riddle-proof@0.5.19
+
 ## 0.4.37
 
 ### Patch Changes
