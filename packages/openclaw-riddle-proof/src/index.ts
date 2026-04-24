@@ -1022,6 +1022,9 @@ function buildProofInspection(
   const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
   const supportingArtifacts = recordValue(after.supporting_artifacts) || {};
   const proofEvidence = evidenceBundle.proof_evidence ?? after.proof_evidence ?? null;
+  const artifactContract = recordValue(evidenceBundle.artifact_contract) || recordValue(assessmentRequest.artifact_contract) || null;
+  const artifactProduction = recordValue(evidenceBundle.artifact_production) || recordValue(assessmentRequest.artifact_production) || null;
+  const artifactUsage = recordValue(evidenceBundle.artifact_usage) || recordValue(assessmentRequest.artifact_usage) || null;
   const proofEvidenceSample =
     stringValue(evidenceBundle.proof_evidence_sample) ||
     stringValue(after.proof_evidence_sample) ||
@@ -1070,6 +1073,9 @@ function buildProofInspection(
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path) || null,
     route,
     route_matched: routeMatches(route),
+    artifact_contract: artifactContract,
+    artifact_production: artifactProduction,
+    artifact_usage: artifactUsage,
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
     structured_evidence: {
@@ -1119,6 +1125,9 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
   const after = recordValue(evidenceBundle.after) || {};
   const visualDelta = recordValue(after.visual_delta) || recordValue(assessmentRequest.visual_delta) || null;
   const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
+  const artifactContract = recordValue(evidenceBundle.artifact_contract) || recordValue(assessmentRequest.artifact_contract) || null;
+  const artifactProduction = recordValue(evidenceBundle.artifact_production) || recordValue(assessmentRequest.artifact_production) || null;
+  const artifactUsage = recordValue(evidenceBundle.artifact_usage) || recordValue(assessmentRequest.artifact_usage) || null;
   const imageArtifacts: Array<Record<string, unknown>> = [];
   for (const [role, url] of [
     ["before", fullState.before_cdn],
@@ -1143,6 +1152,9 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     verification_mode: context.request.verification_mode || "proof",
     success_criteria: context.request.success_criteria || "",
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || null,
+    artifact_contract: artifactContract,
+    artifact_production: artifactProduction,
+    artifact_usage: artifactUsage,
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
     semantic_context: semanticContext,
