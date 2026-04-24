@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.41
+
+### Patch Changes
+
+- d198e21: Treat an in-flight implementation attempt as a monitor hold state so detached monitors keep waiting for a real implementation outcome instead of surfacing the checkpoint as a generic retryable gap.
+
 ## 0.4.40
 
 ### Patch Changes
