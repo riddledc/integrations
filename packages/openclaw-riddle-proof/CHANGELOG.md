@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.36
+
+### Patch Changes
+
+- 968c52a: Expose verify artifact contract, production, and usage summaries through the proof assessment contract and OpenClaw inspection surfaces.
+- Updated dependencies [968c52a]
+  - @riddledc/riddle-proof@0.5.17
+
 ## 0.4.35
 
 ### Patch Changes
