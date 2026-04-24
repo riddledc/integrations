@@ -559,6 +559,47 @@ writeFileSync(reviewStatePath, JSON.stringify({
   },
   evidence_bundle: {
     expected_path: "/games/tic-tac-toe",
+    artifact_contract: {
+      verification_mode: "visual",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: false,
+      },
+      preferred: {
+        page_state: true,
+        structured_payload: false,
+        visual_delta: true,
+      },
+      optional: {
+        console_summary: true,
+        json_artifacts: true,
+        image_outputs: true,
+      },
+    },
+    artifact_production: {
+      output_names: ["after-proof.png", "proof.json"],
+      screenshot_names: ["after-proof.png"],
+      artifact_json: ["proof.json"],
+      artifact_error_names: [],
+      image_output_count: 1,
+      data_output_count: 1,
+      other_output_count: 0,
+      console_entries: 2,
+      structured_result_keys: ["proof_evidence", "summary"],
+      proof_evidence_present: true,
+      has_structured_payload: true,
+    },
+    artifact_usage: {
+      required_signals: ["baseline_context", "route_semantics", "screenshot"],
+      preferred_signals: ["page_state", "visual_delta"],
+      optional_signals: ["console_summary", "json_artifacts", "image_outputs"],
+      available_signals: ["baseline_context", "route_semantics", "screenshot", "page_state", "console_summary", "json_artifacts", "image_outputs"],
+      missing_required_signals: [],
+      capture_quality_signals: ["screenshot", "page_state", "console_summary"],
+      supervisor_review_signals: ["recon-baseline", "after-capture", "semantic-context"],
+    },
     proof_evidence: { modality: "audio", attack_ms_after: 12, passed: true },
     proof_evidence_sample: "{\"modality\":\"audio\",\"attack_ms_after\":12,\"passed\":true}",
     after: {
@@ -570,6 +611,25 @@ writeFileSync(reviewStatePath, JSON.stringify({
   },
   proof_assessment_request: {
     expected_path: "/games/tic-tac-toe",
+    artifact_contract: {
+      verification_mode: "visual",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: false,
+      },
+    },
+    artifact_production: {
+      image_output_count: 1,
+      data_output_count: 1,
+      proof_evidence_present: true,
+      has_structured_payload: true,
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+      supervisor_review_signals: ["recon-baseline", "after-capture", "semantic-context"],
+    },
     visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
     semantic_context: {
       route: {
@@ -639,6 +699,9 @@ assert.equal(
 );
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.route?.after_observed_path, "/games/tic-tac-toe");
 assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.after?.buttons, ["Reset Game"]);
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_contract?.required?.screenshot, true);
+assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.artifact_usage?.missing_required_signals, []);
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_production?.image_output_count, 1);
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
 
 const inspectResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath });
@@ -661,6 +724,9 @@ assert.equal(inspectResult.timing_summary?.workflow_phase_durations_ms?.["setup:
 assert.equal(inspectResult.timing_summary?.verify_subphase_durations_ms?.capture, 20000);
 assert.equal(inspectResult.timing_summary?.retry_counts?.recon, 1);
 assert.equal(inspectResult.timing_summary?.capture_hint?.saved_status, "saved");
+assert.equal(inspectResult.artifact_contract?.required?.screenshot, true);
+assert.equal(inspectResult.artifact_production?.image_output_count, 1);
+assert.equal(inspectResult.artifact_usage?.supervisor_review_signals?.includes("semantic-context"), true);
 
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");

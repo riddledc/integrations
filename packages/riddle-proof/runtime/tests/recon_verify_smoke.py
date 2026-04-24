@@ -790,6 +790,20 @@ def run_verify_requests_supervisor_assessment():
         assert semantic_context['after']['headings'] == ['Pricing'], semantic_context
         assert 'semantic-context' in after_verify['proof_assessment_request']['evidence_basis']
         assert after_verify['proof_assessment_request']['evidence_bundle']['semantic_context']['after']['buttons'] == ['Buy Now']
+        artifact_contract = after_verify['proof_assessment_request']['artifact_contract']
+        assert artifact_contract['required']['baseline_context'] is True
+        assert artifact_contract['required']['screenshot'] is True
+        artifact_production = after_verify['proof_assessment_request']['artifact_production']
+        assert artifact_production['image_output_count'] >= 1
+        assert artifact_production['proof_evidence_present'] is False
+        artifact_usage = after_verify['proof_assessment_request']['artifact_usage']
+        assert artifact_usage['missing_required_signals'] == []
+        assert 'after-capture' in artifact_usage['supervisor_review_signals']
+        assert 'baseline_context' in artifact_usage['required_signals']
+        assert 'route_semantics' in artifact_usage['available_signals']
+        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_contract']['required']['screenshot'] is True
+        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_production']['image_output_count'] >= 1
+        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_usage']['missing_required_signals'] == []
         assert 'capture success is not proof' in '\n'.join(after_verify['proof_assessment_request']['instructions'])
         assert after_verify['verify_decision_request']['continue_with_stage'] is None
         assert after_verify['verify_results']['baseline']['before']['source'] == 'recon'

@@ -625,6 +625,111 @@ def collect_supporting_artifacts(payload):
     }
 
 
+def artifact_contract_for_mode(verification_mode):
+    mode = normalized_verification_mode(verification_mode)
+    return {
+        'verification_mode': mode,
+        'required': {
+            'baseline_context': True,
+            'route_semantics': True,
+            'screenshot': screenshot_required_for_mode(mode),
+            'proof_evidence': proof_evidence_required_for_mode(mode),
+        },
+        'preferred': {
+            'page_state': True,
+            'structured_payload': mode in STRUCTURED_FIRST_MODES or proof_evidence_required_for_mode(mode),
+            'visual_delta': visual_delta_applies(mode),
+        },
+        'optional': {
+            'console_summary': True,
+            'json_artifacts': True,
+            'image_outputs': True,
+        },
+    }
+
+
+def artifact_production_summary(payload, supporting):
+    artifact_summary = summarize_capture_artifacts(payload)
+    return {
+        'output_names': [str(item.get('name') or '') for item in (artifact_summary.get('outputs') or [])[:20]],
+        'screenshot_names': [str(item.get('name') or '') for item in (artifact_summary.get('screenshots') or [])[:10]],
+        'artifact_json': list(artifact_summary.get('artifact_json') or []),
+        'artifact_error_names': sorted((artifact_summary.get('artifact_errors') or {}).keys()),
+        'image_output_count': len(supporting.get('image_outputs') or []),
+        'data_output_count': len(supporting.get('data_outputs') or []),
+        'other_output_count': len(supporting.get('other_outputs') or []),
+        'console_entries': int(supporting.get('console_entries') or 0),
+        'structured_result_keys': list(supporting.get('structured_result_keys') or []),
+        'proof_evidence_present': bool(supporting.get('proof_evidence_present')),
+        'has_structured_payload': bool(supporting.get('has_structured_payload')),
+    }
+
+
+def artifact_signal_availability(state, after_observation, supporting, visual_delta, required_baseline_present, semantic_context):
+    details = (after_observation or {}).get('details') or {}
+    route = (semantic_context or {}).get('route') or {}
+    return {
+        'baseline_context': bool(required_baseline_present),
+        'route_semantics': bool(route.get('after_observed_path') or details.get('observed_path')),
+        'screenshot': bool(details.get('has_screenshot')),
+        'page_state': bool(
+            details.get('visible_text_sample')
+            or details.get('headings')
+            or details.get('buttons')
+            or details.get('links')
+            or details.get('semantic_anchor_count')
+        ),
+        'structured_payload': bool(supporting.get('has_structured_payload')),
+        'proof_evidence': bool(supporting.get('proof_evidence_present')),
+        'visual_delta': bool((visual_delta or {}).get('status') not in ('', None, 'not_applicable')),
+        'console_summary': bool(supporting.get('console_entries')),
+        'json_artifacts': bool(supporting.get('data_outputs')),
+        'image_outputs': bool(supporting.get('image_outputs')),
+        'assertions': bool(state.get('parsed_assertions')),
+        'success_criteria': bool((state.get('success_criteria') or '').strip()),
+    }
+
+
+def artifact_usage_summary(state, after_observation, supporting, visual_delta, required_baseline_present, semantic_context, evidence_basis):
+    contract = artifact_contract_for_mode(state.get('verification_mode'))
+    available = artifact_signal_availability(
+        state,
+        after_observation,
+        supporting,
+        visual_delta,
+        required_baseline_present,
+        semantic_context,
+    )
+    capture_quality = []
+    details = (after_observation or {}).get('details') or {}
+    if details.get('has_screenshot'):
+        capture_quality.append('screenshot')
+    if available.get('page_state'):
+        capture_quality.append('page_state')
+    if available.get('console_summary'):
+        capture_quality.append('console_summary')
+    if available.get('structured_payload'):
+        capture_quality.append('structured_payload')
+    if available.get('proof_evidence'):
+        capture_quality.append('proof_evidence')
+    if available.get('visual_delta'):
+        capture_quality.append('visual_delta')
+
+    required_signals = [key for key, enabled in (contract.get('required') or {}).items() if enabled]
+    preferred_signals = [key for key, enabled in (contract.get('preferred') or {}).items() if enabled]
+    optional_signals = [key for key, enabled in (contract.get('optional') or {}).items() if enabled]
+
+    return {
+        'required_signals': required_signals,
+        'preferred_signals': preferred_signals,
+        'optional_signals': optional_signals,
+        'available_signals': [key for key, enabled in available.items() if enabled],
+        'missing_required_signals': [key for key in required_signals if not available.get(key)],
+        'capture_quality_signals': capture_quality,
+        'supervisor_review_signals': list(evidence_basis or []),
+    }
+
+
 def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     payload = enrich_capture_payload(payload)
     mode = normalized_verification_mode(verification_mode)
@@ -863,6 +968,17 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         else {'status': 'not_applicable', 'passed': None, 'reason': 'Verification mode does not require visual delta gating.'}
     )
     semantic_context = build_semantic_context(state, results, after_observation, expected_path)
+    artifact_contract = artifact_contract_for_mode(state.get('verification_mode'))
+    artifact_production = artifact_production_summary(after_payload, supporting)
+    artifact_usage = artifact_usage_summary(
+        state,
+        after_observation,
+        supporting,
+        visual_delta,
+        required_baseline_present,
+        semantic_context,
+        [],
+    )
     return {
         'verification_mode': normalized_verification_mode(state.get('verification_mode')),
         'reference': state.get('requested_reference') or state.get('reference', 'both'),
@@ -870,6 +986,9 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         'required_baseline_present': required_baseline_present,
         'baseline': results.get('baseline') or {},
         'semantic_context': semantic_context,
+        'artifact_contract': artifact_contract,
+        'artifact_production': artifact_production,
+        'artifact_usage': artifact_usage,
         'after': {
             'screenshot_url': state.get('after_cdn') or '',
             'observation': after_observation,
@@ -910,6 +1029,26 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
     if has_success_criteria:
         evidence_basis.append('success-criteria')
 
+    artifact_contract = (evidence_bundle or {}).get('artifact_contract') if isinstance(evidence_bundle, dict) else None
+    if not isinstance(artifact_contract, dict):
+        artifact_contract = artifact_contract_for_mode(verification_mode)
+    artifact_production = (evidence_bundle or {}).get('artifact_production') if isinstance(evidence_bundle, dict) else None
+    if not isinstance(artifact_production, dict):
+        artifact_production = artifact_production_summary(payload, supporting)
+    artifact_usage = artifact_usage_summary(
+        state,
+        after_observation,
+        supporting,
+        visual_delta,
+        required_baseline_present,
+        semantic_context,
+        evidence_basis,
+    )
+    if isinstance(evidence_bundle, dict):
+        evidence_bundle['artifact_contract'] = artifact_contract
+        evidence_bundle['artifact_production'] = artifact_production
+        evidence_bundle['artifact_usage'] = artifact_usage
+
     return {
         'status': 'needs_supervising_agent_assessment',
         'verification_mode': verification_mode,
@@ -921,6 +1060,9 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'semantic_context': semantic_context,
         'evidence_bundle': evidence_bundle or {},
         'evidence_basis': evidence_basis,
+        'artifact_contract': artifact_contract,
+        'artifact_production': artifact_production,
+        'artifact_usage': artifact_usage,
         'instructions': [
             'The supervising agent owns proof assessment. Inspect the recon baseline(s), after evidence, and any structured artifacts together.',
             'Decide whether the evidence is ready_to_ship or should continue internally through author, implement, or recon.',
