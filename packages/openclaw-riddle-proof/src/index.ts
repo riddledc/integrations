@@ -853,6 +853,41 @@ function scratchCleanupStatusLabel(scratchCleanup: Record<string, unknown> | nul
   return status || "recorded";
 }
 
+function summarizeImplementationAgent(wrapperState: RiddleProofRunState | null | undefined) {
+  const events = Array.isArray(wrapperState?.events) ? wrapperState.events : [];
+  const implementationEvents = events
+    .map((event) => recordValue(event))
+    .filter((event): event is Record<string, unknown> => Boolean(event) && stringValue(event?.kind || "").startsWith("agent.implementation."));
+  const attempts = implementationEvents.filter((event) => stringValue(event.kind) === "agent.implementation.started");
+  const lastEvent = implementationEvents.length ? implementationEvents[implementationEvents.length - 1] : null;
+  const lastOutcome = [...implementationEvents].reverse().find((event) => stringValue(event.kind) !== "agent.implementation.started") || null;
+  return {
+    attempt_count: attempts.length,
+    last_event: lastEvent ? {
+      kind: stringValue(lastEvent.kind) || null,
+      summary: stringValue(lastEvent.summary) || null,
+      ts: stringValue(lastEvent.ts) || null,
+      details: recordValue(lastEvent.details) || null,
+    } : null,
+    last_outcome: lastOutcome ? {
+      kind: stringValue(lastOutcome.kind) || null,
+      summary: stringValue(lastOutcome.summary) || null,
+      ts: stringValue(lastOutcome.ts) || null,
+      details: recordValue(lastOutcome.details) || null,
+    } : null,
+  };
+}
+
+function implementationGapOrigin(
+  snapshot: RiddleProofRunStatusSnapshot,
+  implementationAgent: ReturnType<typeof summarizeImplementationAgent>,
+) {
+  const checkpoint = stringValue(snapshot.last_checkpoint) || stringValue(snapshot.blocker?.checkpoint) || stringValue(snapshot.blocker?.code);
+  const isImplementationGap = checkpoint === "implement_changes_missing" || checkpoint === "implement_required";
+  if (!isImplementationGap) return null;
+  return implementationAgent.attempt_count > 0 ? "after_agent_attempt" : "before_agent_edit";
+}
+
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -1010,6 +1045,7 @@ function buildProofInspection(
   checkpoint?: string | null,
   options: { debug?: boolean } = {},
 ) {
+  const implementationAgent = summarizeImplementationAgent(wrapperState);
   const assessmentRequest =
     recordValue(fullState.proof_assessment_request) ||
     recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
@@ -1094,6 +1130,10 @@ function buildProofInspection(
     implementation_summary: stringValue(fullState.implementation_summary) || null,
     implementation_detection_summary: stringValue(fullState.implementation_detection_summary) || null,
     implementation_detection: implementationDetection,
+    implementation_agent_attempt_count: implementationAgent.attempt_count,
+    implementation_agent_last_event: implementationAgent.last_event,
+    implementation_agent_last_outcome: implementationAgent.last_outcome,
+    implementation_gap_origin: implementationGapOrigin(createRunStatusSnapshot(wrapperState), implementationAgent),
     capture_hint: summarizeCaptureHint(fullState),
     timing_summary: buildTimingSummary(
       createRunStatusSnapshot(wrapperState),
@@ -1423,6 +1463,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   if (!snapshot) return null;
   const checkpoint = checkpointStatus(snapshot);
   const wrapperState = readRunState(state_path);
+  const implementationAgent = summarizeImplementationAgent(wrapperState);
   const wakeTimingSummary = latestWakeTimingSummary(wrapperState);
   const monitorContract = wrapperState
     ? monitorContractFor(snapshot.status, wrapperState.request, {
@@ -1481,6 +1522,10 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     implementation_summary: stringValue(engineState?.implementation_summary) || null,
     implementation_detection_summary: stringValue(engineState?.implementation_detection_summary) || null,
     implementation_detection: implementationDetection,
+    implementation_agent_attempt_count: implementationAgent.attempt_count,
+    implementation_agent_last_event: implementationAgent.last_event,
+    implementation_agent_last_outcome: implementationAgent.last_outcome,
+    implementation_gap_origin: implementationGapOrigin(snapshot, implementationAgent),
     capture_hint: summarizeCaptureHint(engineState),
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
     recommended_poll_after_ms: recommendedPollMs,

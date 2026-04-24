@@ -1148,6 +1148,8 @@ assert.equal(blockedTerminalStatus.implementation_status, "changes_missing");
 assert.equal(blockedTerminalStatus.implementation_summary, "No implementation detected on the after worktree.");
 assert.equal(blockedTerminalStatus.implementation_detection_summary.includes("no material code changes"), true);
 assert.equal(blockedTerminalStatus.implementation_detection?.outcome, "no_changes_detected");
+assert.equal(blockedTerminalStatus.implementation_agent_attempt_count, 0);
+assert.equal(blockedTerminalStatus.implementation_gap_origin, "before_agent_edit");
 
 const blockedInspectResult = inspectOpenClawRiddleProof({ state_path: terminalOnlyBlockedWrapperStatePath });
 assert.equal(blockedInspectResult.monitor_contract.report_mode, "terminal_only");
@@ -1156,6 +1158,57 @@ assert.equal(blockedInspectResult.monitor_contract.response_gate, "hold_for_term
 assert.equal(blockedInspectResult.implementation_status, "changes_missing");
 assert.equal(blockedInspectResult.implementation_detection?.diff_detected, false);
 assert.equal(blockedInspectResult.implementation_detection?.diff_probes?.[0]?.label, "requested_base");
+assert.equal(blockedInspectResult.implementation_agent_attempt_count, 0);
+assert.equal(blockedInspectResult.implementation_gap_origin, "before_agent_edit");
+
+const blockedAfterAttemptWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-routable-after-attempt.json");
+writeFileSync(blockedAfterAttemptWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_blocked_after_attempt",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Polish Tic Tac Toe status",
+    engine_state_path: blockedImplementEngineStatePath,
+    verification_mode: "visual",
+  },
+  last_checkpoint: "implement_changes_missing",
+  blocker: {
+    code: "implement_changes_missing",
+    checkpoint: "implement_changes_missing",
+    message: "No implementation detected on the after worktree.",
+  },
+  iterations: 3,
+  events: [
+    {
+      ts: "2026-04-23T00:01:00.000Z",
+      kind: "agent.implementation.started",
+      checkpoint: "implement_changes_missing",
+      stage: "implement",
+      summary: "Implementation agent started working in the after worktree.",
+      details: { worktree_path: "/tmp/example-after" },
+    },
+    {
+      ts: "2026-04-23T00:01:10.000Z",
+      kind: "agent.implementation.no_diff",
+      checkpoint: "implement_changes_missing",
+      stage: "implement",
+      summary: "Implementation adapter returned without leaving a detectable git diff.",
+      details: {
+        worktree_path: "/tmp/example-after",
+        changed_files: [],
+        tests_run: [],
+        implementation_notes: "No code paths looked relevant.",
+      },
+    },
+  ],
+}, null, 2));
+const blockedAfterAttemptStatus = readOpenClawRiddleProofStatus(blockedAfterAttemptWrapperStatePath);
+assert.equal(blockedAfterAttemptStatus.implementation_agent_attempt_count, 1);
+assert.equal(blockedAfterAttemptStatus.implementation_gap_origin, "after_agent_attempt");
+assert.equal(blockedAfterAttemptStatus.implementation_agent_last_outcome.kind, "agent.implementation.no_diff");
 
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
