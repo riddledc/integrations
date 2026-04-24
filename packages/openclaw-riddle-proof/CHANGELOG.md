@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.42
+
+### Patch Changes
+
+- b786722: Export explicit OpenClaw agent routing helpers for isolation-sensitive harnesses.
+
 ## 0.4.41
 
 ### Patch Changes
