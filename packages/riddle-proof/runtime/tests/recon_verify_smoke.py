@@ -14,6 +14,7 @@ UTIL_PATH = LIB / 'util.py'
 RECON_PATH = LIB / 'recon.py'
 VERIFY_PATH = LIB / 'verify.py'
 AUTHOR_PATH = LIB / 'author.py'
+IMPLEMENT_PATH = LIB / 'implement.py'
 SHIP_PATH = LIB / 'ship.py'
 
 BUILD_SCRIPT = "python3 -c \"from pathlib import Path; Path('build').mkdir(exist_ok=True); Path('build/index.html').write_text('<html>ok</html>')\""
@@ -244,6 +245,14 @@ def make_project(root: Path, route_snippet: str):
         'scripts': {'build': BUILD_SCRIPT},
         'dependencies': {'react': '18.0.0', 'react-router-dom': '6.0.0'},
     }, indent=2))
+
+
+def init_git_repo(root: Path):
+    sp.run(['git', 'init', '-b', 'main'], cwd=root, check=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    sp.run(['git', 'config', 'user.email', 'proof@example.com'], cwd=root, check=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    sp.run(['git', 'config', 'user.name', 'Proof Test'], cwd=root, check=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    sp.run(['git', 'add', '.'], cwd=root, check=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
+    sp.run(['git', 'commit', '-m', 'init'], cwd=root, check=True, stdout=sp.DEVNULL, stderr=sp.DEVNULL)
 
 
 def write_state(path: Path, payload: dict):
@@ -538,6 +547,59 @@ def run_project_build_retries_after_clean_failure():
     finally:
         util.sp.run = original_run
         shutil.rmtree(tempdir)
+
+
+def run_implement_records_detection_when_changes_missing():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-implement-missing-'))
+    state_path = tempdir / 'state.json'
+    previous_state_file = os.environ.get('RIDDLE_PROOF_STATE_FILE')
+    try:
+        state = base_state(tempdir, reference='before')
+        after_dir = Path(state['after_worktree'])
+        init_git_repo(after_dir)
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'proof_plan': 'Capture the pricing CTA after the implementation is applied.',
+            'capture_script': "await page.waitForSelector('[data-testid=pricing-cta]'); await saveScreenshot('after-proof');",
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        try:
+            load_module('implement_changes_missing_state', IMPLEMENT_PATH)
+        except SystemExit as exc:
+            assert 'No implementation detected on the after worktree.' in str(exc), exc
+        else:
+            raise AssertionError('implement stage should have halted when no diff exists')
+
+        after_state = json.loads(state_path.read_text())
+        assert after_state['implementation_status'] == 'changes_missing'
+        assert after_state['implementation_summary'] == 'No implementation detected on the after worktree.'
+        assert after_state['changed_files'] == []
+        assert after_state['stage'] == 'implement'
+        detection = after_state['implementation_detection']
+        assert detection['outcome'] == 'no_changes_detected'
+        assert detection['diff_detected'] is False
+        assert detection['dirty_path_count'] == 0
+        assert detection['committed_path_count'] == 0
+        assert detection['changed_path_count'] == 0
+        assert detection['authored_inputs_ready'] is True
+        assert detection['base_ref_requested'] == 'origin/main'
+        assert detection['diff_probes'][0]['label'] == 'requested_base'
+        assert after_state['implementation_detection_summary'].startswith('Implementation detection found no material code changes')
+        return {
+            'ok': True,
+            'outcome': detection['outcome'],
+            'summary': after_state['implementation_detection_summary'],
+        }
+    finally:
+        if previous_state_file is None:
+            os.environ.pop('RIDDLE_PROOF_STATE_FILE', None)
+        else:
+            os.environ['RIDDLE_PROOF_STATE_FILE'] = previous_state_file
+        shutil.rmtree(tempdir, ignore_errors=True)
 
 
 def run_recon_then_author_request():
@@ -1304,6 +1366,7 @@ if __name__ == '__main__':
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),
         'run_project_build_retries_after_clean_failure': run_project_build_retries_after_clean_failure(),
+        'implement_records_detection_when_changes_missing': run_implement_records_detection_when_changes_missing(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
         'recon_then_author_request': run_recon_then_author_request(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),

@@ -1086,6 +1086,27 @@ assert.equal(runningTerminalStatus.monitor_contract.report_mode, "terminal_only"
 assert.equal(runningTerminalStatus.monitor_contract.should_continue_monitoring, true);
 assert.equal(runningTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
 
+const blockedImplementEngineStatePath = path.join(reviewFixture, "riddle-state-blocked-implement.json");
+writeFileSync(blockedImplementEngineStatePath, JSON.stringify({
+  branch: "agent/tic-tac-toe-blocked",
+  implementation_status: "changes_missing",
+  implementation_summary: "No implementation detected on the after worktree.",
+  implementation_detection_summary:
+    "Implementation detection found no material code changes (dirty=0, committed=0, changed=0; probes=requested_base, branch_base).",
+  implementation_detection: {
+    outcome: "no_changes_detected",
+    diff_detected: false,
+    base_ref_requested: "origin/main",
+    dirty_path_count: 0,
+    committed_path_count: 0,
+    changed_path_count: 0,
+    diff_probes: [
+      { label: "requested_base", returncode: 128, path_count: 0 },
+      { label: "branch_base", returncode: 0, path_count: 0 },
+    ],
+    authored_inputs_ready: true,
+  },
+}, null, 2));
 const terminalOnlyBlockedWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-routable.json");
 writeFileSync(terminalOnlyBlockedWrapperStatePath, JSON.stringify({
   version: "riddle-proof.run-state.v1",
@@ -1096,7 +1117,7 @@ writeFileSync(terminalOnlyBlockedWrapperStatePath, JSON.stringify({
   request: {
     repo: "davisdiehl/lilarcade",
     change_request: "Polish Tic Tac Toe status",
-    engine_state_path: reviewStatePath,
+    engine_state_path: blockedImplementEngineStatePath,
     verification_mode: "visual",
     integration_context: {
       source: "openclaw",
@@ -1120,13 +1141,21 @@ assert.equal(blockedTerminalStatus.monitor_contract.report_mode, "terminal_only"
 assert.equal(blockedTerminalStatus.monitor_contract.should_continue_monitoring, true);
 assert.equal(blockedTerminalStatus.monitor_contract.response_gate, "hold_for_terminal");
 assert.equal(blockedTerminalStatus.checkpoint_classification, "routable");
-assert.equal(blockedTerminalStatus.recommended_poll_after_ms, 15000);
+assert.equal(blockedTerminalStatus.checkpoint_disposition, "retryable_implementation_gap");
+assert.equal(blockedTerminalStatus.recommended_poll_after_ms, 10000);
 assert.equal(blockedTerminalStatus.suggested_next_action, "continue_monitoring");
+assert.equal(blockedTerminalStatus.implementation_status, "changes_missing");
+assert.equal(blockedTerminalStatus.implementation_summary, "No implementation detected on the after worktree.");
+assert.equal(blockedTerminalStatus.implementation_detection_summary.includes("no material code changes"), true);
+assert.equal(blockedTerminalStatus.implementation_detection?.outcome, "no_changes_detected");
 
 const blockedInspectResult = inspectOpenClawRiddleProof({ state_path: terminalOnlyBlockedWrapperStatePath });
 assert.equal(blockedInspectResult.monitor_contract.report_mode, "terminal_only");
 assert.equal(blockedInspectResult.monitor_contract.should_continue_monitoring, true);
 assert.equal(blockedInspectResult.monitor_contract.response_gate, "hold_for_terminal");
+assert.equal(blockedInspectResult.implementation_status, "changes_missing");
+assert.equal(blockedInspectResult.implementation_detection?.diff_detected, false);
+assert.equal(blockedInspectResult.implementation_detection?.diff_probes?.[0]?.label, "requested_base");
 
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);

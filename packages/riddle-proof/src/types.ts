@@ -158,6 +158,8 @@ export interface RiddleProofRunState {
   notification?: Record<string, unknown>;
   proof_decision?: RiddleProofDecision;
   merge_recommendation?: string;
+  implementation_detection_summary?: string | null;
+  implementation_detection?: Record<string, unknown> | null;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
   events: RiddleProofEvent[];
@@ -219,6 +221,8 @@ export interface RiddleProofRunStatusSnapshot {
   merged_at?: string;
   proof_comment_url?: string;
   cleanup_report?: Record<string, unknown>;
+  implementation_detection_summary?: string | null;
+  implementation_detection?: Record<string, unknown> | null;
   iterations: number;
   last_checkpoint?: string | null;
   updated_at: string;
