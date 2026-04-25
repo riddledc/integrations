@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.43
+
+### Patch Changes
+
+- 1038a58: Record recon build and capture subphase timings and surface them in OpenClaw status and inspect timing summaries.
+- Updated dependencies [1038a58]
+  - @riddledc/riddle-proof@0.5.20
+
 ## 0.4.42
 
 ### Patch Changes
