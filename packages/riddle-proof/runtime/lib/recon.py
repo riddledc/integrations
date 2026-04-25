@@ -10,7 +10,7 @@ The calling agent owns the planner step between attempts by resuming the workflo
 with updated state inputs such as server_path or wait_for_selector.
 """
 
-import json, os, re, sys
+import json, os, re, sys, time
 from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +42,53 @@ after_dir = (s.get('after_worktree') or '').strip()
 before_dir = (s.get('before_worktree') or '').strip()
 if not after_dir or not os.path.exists(after_dir):
     raise SystemExit('after_worktree not found. Run setup first.')
+
+
+def record_recon_phase(phase, status='running', summary=''):
+    global s
+    ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    try:
+        current = load_state()
+    except Exception:
+        current = dict(s)
+    runtime_step = current.get('current_runtime_step') if isinstance(current.get('current_runtime_step'), dict) else {}
+    if not runtime_step:
+        runtime_step = {
+            'step': 'recon',
+            'action': 'run',
+            'status': 'running',
+            'started_at': ts,
+            'workflow_file': 'riddle-proof-recon.lobster',
+        }
+    runtime_step['step'] = 'recon'
+    runtime_step['action'] = 'run'
+    runtime_step['status'] = 'running'
+    runtime_step['workflow_file'] = 'riddle-proof-recon.lobster'
+    runtime_step['phase'] = phase
+    runtime_step['phase_status'] = status
+    if status == 'running':
+        runtime_step['phase_started_at'] = ts
+        runtime_step.pop('phase_finished_at', None)
+    else:
+        runtime_step['phase_finished_at'] = ts
+    if summary:
+        runtime_step['summary'] = summary
+    current['current_runtime_step'] = runtime_step
+    events = current.get('runtime_events') if isinstance(current.get('runtime_events'), list) else []
+    events.append({
+        'ts': ts,
+        'kind': 'workflow.phase.' + ('started' if status == 'running' else 'finished'),
+        'step': 'recon',
+        'phase': phase,
+        'summary': summary or (phase + ' ' + status),
+        'details': {'status': status},
+    })
+    current['runtime_events'] = events[-100:]
+    current['runtime_updated_at'] = ts
+    save_state(current)
+    for key in ('current_runtime_step', 'runtime_events', 'runtime_updated_at'):
+        if key in current:
+            s[key] = current[key]
 
 
 def run(cmd, cwd, timeout=30):
@@ -549,10 +596,14 @@ def clean_next_cache(project_dir):
 
 def build_project(project_dir, label):
     build_cmd = s.get('build_command', 'npm run build')
+    phase = label + '_build'
+    record_recon_phase(phase, 'running', 'Building ' + label + ' workspace for recon capture.')
     print('Building ' + label + ' workspace...')
     result = sp.run(build_cmd, shell=True, cwd=project_dir, capture_output=True, text=True, timeout=600)
     if result.returncode != 0:
+        record_recon_phase(phase, 'failed', label.capitalize() + ' build failed during recon.')
         raise SystemExit(label.capitalize() + ' build failed during recon: ' + result.stderr[:500])
+    record_recon_phase(phase, 'completed', label.capitalize() + ' workspace build completed for recon.')
     return {
         'stdout': result.stdout[-500:],
         'stderr': result.stderr[-500:],
@@ -589,8 +640,11 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
             server_args['wait_for_selector'] = wait_for_selector
         apply_auth_context(s, server_args)
 
+        capture_phase = label + '_capture'
+        record_recon_phase(capture_phase, 'running', 'Capturing ' + label + ' recon baseline evidence.')
         shot = invoke_retry('riddle_server_preview', server_args, retries=2, timeout=420)
         append_capture_diagnostic(s, label, 'riddle_server_preview', server_args, shot)
+        record_recon_phase(capture_phase, 'completed', label.capitalize() + ' recon baseline capture completed.')
         return {
             'source': label + '_worktree',
             'mode': 'server',
@@ -606,6 +660,8 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
     state_for_capture['wait_for_selector'] = wait_for_selector
     if static_reason:
         print('Recon capture (' + label + ') using static preview fallback: ' + static_reason)
+    capture_phase = label + '_capture'
+    record_recon_phase(capture_phase, 'running', 'Capturing ' + label + ' recon baseline evidence.')
     capture = capture_static_preview(state_for_capture, project_dir, label, build_probe_capture_script(capture_script, label), timeout=300, target_path=target_path)
     raw = (capture.get('raw') or {}).get('capture') or {}
     append_capture_diagnostic(
@@ -615,6 +671,7 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
         {'target_path': target_path, 'static_fallback_reason': static_reason},
         raw,
     )
+    record_recon_phase(capture_phase, 'completed', label.capitalize() + ' recon baseline capture completed.')
     preview_id_key = label + '_preview_id'
     if capture.get('preview_id'):
         s[preview_id_key] = capture.get('preview_id', '')
@@ -639,8 +696,10 @@ def capture_prod_baseline(prod_url, plan, capture_script=''):
     args = {'script': script, 'timeout_sec': 60}
     apply_auth_context(s, args)
     print('Recon capture (prod) at ' + target_url)
+    record_recon_phase('prod_capture', 'running', 'Capturing production recon baseline evidence.')
     shot = invoke_retry('riddle_script', args, retries=3, timeout=180)
     append_capture_diagnostic(s, 'prod', 'riddle_script', args, shot)
+    record_recon_phase('prod_capture', 'completed', 'Production recon baseline capture completed.')
     return {
         'source': 'prod_url',
         'mode': 'remote',

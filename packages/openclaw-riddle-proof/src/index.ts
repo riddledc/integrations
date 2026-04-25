@@ -741,6 +741,7 @@ function buildTimingSummary(
     wrapper_stage_durations_ms: summarizeWrapperStageDurations(wrapperState, snapshot),
     workflow_step_durations_ms: summarizeRuntimeStepDurations(engineState),
     workflow_phase_durations_ms: summarizeRuntimePhaseDurations(engineState),
+    recon_subphase_durations_ms: summarizeStagePhaseDurations(engineState, "recon"),
     verify_subphase_durations_ms: summarizeStagePhaseDurations(engineState, "verify"),
     retry_counts: summarizeRetryCounts(engineState),
     active_runtime_step: currentRuntimeStep ? {
