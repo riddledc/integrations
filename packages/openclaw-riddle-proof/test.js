@@ -382,12 +382,27 @@ const backgroundResult = await runOpenClawRiddleProof(
             {
               ts: "2026-04-23T00:00:00.000Z",
               kind: "workflow.phase.started",
+              step: "recon",
+              phase: "before_capture",
+              summary: "Started recon before capture.",
+            },
+            {
+              ts: "2026-04-23T00:00:08.000Z",
+              kind: "workflow.phase.finished",
+              step: "recon",
+              phase: "before_capture",
+              summary: "Finished recon before capture.",
+              details: { status: "completed" },
+            },
+            {
+              ts: "2026-04-23T00:00:08.000Z",
+              kind: "workflow.phase.started",
               step: "verify",
               phase: "build",
               summary: "Started verify build.",
             },
             {
-              ts: "2026-04-23T00:00:12.000Z",
+              ts: "2026-04-23T00:00:20.000Z",
               kind: "workflow.phase.finished",
               step: "verify",
               phase: "build",
@@ -395,14 +410,14 @@ const backgroundResult = await runOpenClawRiddleProof(
               details: { status: "completed" },
             },
             {
-              ts: "2026-04-23T00:00:12.000Z",
+              ts: "2026-04-23T00:00:20.000Z",
               kind: "workflow.phase.started",
               step: "verify",
               phase: "capture",
               summary: "Started verify capture.",
             },
             {
-              ts: "2026-04-23T00:00:27.000Z",
+              ts: "2026-04-23T00:00:35.000Z",
               kind: "workflow.phase.finished",
               step: "verify",
               phase: "capture",
@@ -456,6 +471,7 @@ assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
   RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_SYNC_TOOL_NAME,
 ]);
+assert.equal(backgroundState.events.at(-1).details.timing_summary.recon_subphase_durations_ms.before_capture, 8000);
 assert.equal(backgroundState.events.at(-1).details.timing_summary.verify_subphase_durations_ms.capture, 15000);
 writeFileSync(backgroundEngineStatePath, JSON.stringify({
   branch: "agent/background-proof",
@@ -495,6 +511,7 @@ assert.equal(enrichedBackgroundStatus?.scratch_cleanup?.skipped, "enough_free_sp
 assert.equal(enrichedBackgroundStatus?.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(typeof enrichedBackgroundStatus?.substep_elapsed_ms, "number");
 assert.equal(typeof enrichedBackgroundStatus?.phase_elapsed_ms, "number");
+assert.equal(enrichedBackgroundStatus?.timing_summary?.recon_subphase_durations_ms?.before_capture, 8000);
 assert.equal(enrichedBackgroundStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 15000);
 assert.equal(enrichedBackgroundStatus?.recommended_poll_after_ms, null);
 assert.equal(enrichedBackgroundStatus?.is_terminal, true);
@@ -514,6 +531,7 @@ assert.equal(runningBackgroundStatus?.current_stage, "verify");
 assert.equal(runningBackgroundStatus?.wrapper_current_stage, "setup");
 assert.equal(runningBackgroundStatus?.engine_current_stage, "verify");
 assert.equal(runningBackgroundStatus?.recommended_poll_after_ms, 15000);
+assert.equal(runningBackgroundStatus?.timing_summary?.recon_subphase_durations_ms?.before_capture, 8000);
 assert.equal(runningBackgroundStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 15000);
 assert.equal(runningBackgroundStatus?.is_terminal, false);
 assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
@@ -601,6 +619,21 @@ writeFileSync(reviewStatePath, JSON.stringify({
       action: "run",
       summary: "Finished setup workflow step.",
       details: { duration_ms: 60000, status: "completed" },
+    },
+    {
+      ts: "2026-04-23T00:04:00.000Z",
+      kind: "workflow.phase.started",
+      step: "recon",
+      phase: "before_capture",
+      summary: "Started recon before capture.",
+    },
+    {
+      ts: "2026-04-23T00:04:12.000Z",
+      kind: "workflow.phase.finished",
+      step: "recon",
+      phase: "before_capture",
+      summary: "Finished recon before capture.",
+      details: { status: "completed" },
     },
     {
       ts: "2026-04-23T00:05:00.000Z",
@@ -829,6 +862,7 @@ assert.equal(inspectResult.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(inspectResult.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(inspectResult.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(inspectResult.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(inspectResult.timing_summary?.recon_subphase_durations_ms?.before_capture, 12000);
 assert.equal(inspectResult.timing_summary?.verify_subphase_durations_ms?.capture, 20000);
 assert.equal(inspectResult.timing_summary?.retry_counts?.recon, 1);
 assert.equal(inspectResult.timing_summary?.capture_hint?.saved_status, "saved");
@@ -840,6 +874,7 @@ const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { deb
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(reviewStatus?.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
+assert.equal(reviewStatus?.timing_summary?.recon_subphase_durations_ms?.before_capture, 12000);
 assert.equal(reviewStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 20000);
 assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
