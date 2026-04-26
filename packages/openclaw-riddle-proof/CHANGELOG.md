@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.55
+
+### Patch Changes
+
+- 15f93ed: Clamp low wrapper max_iterations values to the product floor so implementation-required runs can continue through verify.
+
 ## 0.4.54
 
 ### Patch Changes
