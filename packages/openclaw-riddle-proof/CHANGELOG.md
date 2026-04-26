@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.54
+
+### Patch Changes
+
+- 544f0ee: Allow non-visual ship_mode=none auto-review to rely on required structured proof evidence without requiring an after screenshot.
+
 ## 0.4.53
 
 ### Patch Changes
