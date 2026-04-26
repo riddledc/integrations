@@ -386,6 +386,9 @@ assert.equal(engineModeResult.worktree_path, engineWorkdir);
 assert.equal(engineModeResult.branch, "agent/openclaw-wrapper-test");
 assert.deepEqual(wrapperAgentCalls, [engineWorkdir]);
 assert.equal(engineCalls.length, 2);
+const engineModeState = JSON.parse(readFileSync(path.join(engineFixture, "wrapper-state.json"), "utf-8"));
+const engineModeStarted = engineModeState.events.find((event) => event.kind === "engine_harness.started");
+assert.equal(engineModeStarted.details.max_iterations, 12);
 
 const legacyMaxFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-legacy-max-"));
 const legacyMaxStatePath = path.join(legacyMaxFixture, "riddle-state.json");
