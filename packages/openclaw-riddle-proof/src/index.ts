@@ -489,6 +489,25 @@ function waitForTerminalFromRequest(request: RiddleProofRunParams) {
   return metadata.wait_for_terminal === true || metadata.report_mode === "terminal_only";
 }
 
+function requestMetadataFor(
+  request: RiddleProofRunParams | null | undefined,
+  engineState?: Record<string, unknown> | null,
+) {
+  const integrationMetadata = request ? readWrapperMetadata(request) : {};
+  const referenceInputIgnored = stringValue(integrationMetadata.reference_input_ignored);
+  const requestReference = stringValue(request?.reference);
+  const engineRequestedReference = stringValue(engineState?.requested_reference);
+  const engineReference = stringValue(engineState?.reference);
+  const effectiveReference = engineRequestedReference || engineReference || requestReference;
+  return compactRecordValue({
+    reference: requestReference || null,
+    effective_reference: effectiveReference || null,
+    requested_reference: engineRequestedReference || null,
+    reference_input_ignored: referenceInputIgnored || null,
+    integration_metadata: Object.keys(integrationMetadata).length ? integrationMetadata : null,
+  });
+}
+
 function monitorContractFor(
   status: string | null | undefined,
   request: RiddleProofRunParams,
@@ -619,6 +638,12 @@ function stringValue(value: unknown) {
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function compactRecordValue<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ""),
+  ) as Partial<T>;
 }
 
 function compactValue(value: unknown, limit = 1200) {
@@ -1207,6 +1232,7 @@ function buildProofInspection(
     branch: stringValue(fullState.branch) || wrapperState.branch || wrapperState.request.branch || null,
     change_request: wrapperState.request.change_request || fullState.change_request || "",
     verification_mode: wrapperState.request.verification_mode || fullState.verification_mode || "proof",
+    request_metadata: requestMetadataFor(wrapperState.request, fullState),
     monitor_contract: monitorContractFor(wrapperState.status, wrapperState.request, {
       checkpoint: checkpoint || wrapperState.last_checkpoint || null,
       blockerCode: wrapperState.blocker?.code || null,
@@ -1599,6 +1625,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     const baseStatus = {
       ...snapshot,
       package_metadata: riddleProofPackageMetadata(),
+      request_metadata: requestMetadataFor(wrapperState?.request, null),
       monitor_contract: monitorContract,
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
       recommended_poll_after_ms: recommendedPollMs,
@@ -1626,6 +1653,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const status = {
     ...snapshot,
     package_metadata: riddleProofPackageMetadata(),
+    request_metadata: requestMetadataFor(wrapperState?.request, engineState),
     monitor_contract: monitorContract,
     current_stage: effectiveStage,
     wrapper_current_stage: snapshot.current_stage ?? null,

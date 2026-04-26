@@ -653,6 +653,8 @@ const reviewStatePath = path.join(reviewFixture, "riddle-state.json");
 const reviewWrapperStatePath = path.join(reviewFixture, "wrapper-state.json");
 writeFileSync(reviewStatePath, JSON.stringify({
   branch: "agent/review-fixture",
+  reference: "before",
+  requested_reference: "before",
   before_cdn: "https://example.com/before.png",
   after_cdn: "https://example.com/after.png",
   current_runtime_step: {
@@ -884,6 +886,7 @@ const reviewBlocked = await runOpenClawRiddleProof(
     ship_mode: "none",
     report_mode: "terminal_only",
     wait_for_terminal: true,
+    reference: "use the public tic tac toe route",
     harness_state_path: reviewWrapperStatePath,
     state_path: reviewStatePath,
     change_request: "Make Tic Tac Toe board polish visibly stronger",
@@ -925,6 +928,8 @@ assert.equal(inspectResult.ok, true);
 assert.equal(inspectResult.route_matched, true);
 assert.equal(inspectResult.monitor_contract.report_mode, "terminal_only");
 assert.equal(inspectResult.monitor_contract.response_gate, "release_terminal");
+assert.equal(inspectResult.request_metadata.reference_input_ignored, "use the public tic tac toe route");
+assert.equal(inspectResult.request_metadata.effective_reference, "before");
 assert.equal(inspectResult.proof_profile_applied, true);
 assert.equal(inspectResult.proof_profile?.name, "Tic Tac Toe");
 assert.equal(inspectResult.ready_to_ship_candidate, true);
@@ -994,6 +999,8 @@ assert.equal(queryRouteInspect.route_matched, true);
 assert.equal(queryRouteInspect.ready_to_ship_candidate, true);
 
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
+assert.equal(reviewStatus?.request_metadata?.reference_input_ignored, "use the public tic tac toe route");
+assert.equal(reviewStatus?.request_metadata?.effective_reference, "before");
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(reviewStatus?.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
@@ -1323,6 +1330,8 @@ assert.equal(terminalStatus.package_metadata.plugin_package, "@riddledc/openclaw
 assert.equal(terminalStatus.package_metadata.plugin_version, openclawRiddleProofPackageJson.version);
 assert.equal(terminalStatus.package_metadata.dependency_package, "@riddledc/riddle-proof");
 assert.equal(terminalStatus.package_metadata.dependency_version, riddleProofPackageJson.version);
+assert.equal(terminalStatus.request_metadata.reference_input_ignored, "use the public tic tac toe route");
+assert.equal(terminalStatus.request_metadata.effective_reference, "before");
 assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");
 assert.equal(terminalStatus.monitor_contract.should_continue_monitoring, false);
 const immediateWait = await waitOpenClawRiddleProof({ state_path: reviewWrapperStatePath, timeout_ms: 1000 });
@@ -1568,6 +1577,8 @@ assert.equal(inspectParsed.package_metadata.plugin_package, "@riddledc/openclaw-
 assert.equal(inspectParsed.package_metadata.dependency_package, "@riddledc/riddle-proof");
 assert.equal(inspectParsed.route_matched, true);
 assert.equal(inspectParsed.proof_profile_applied, true);
+assert.equal(inspectParsed.request_metadata.reference_input_ignored, "use the public tic tac toe route");
+assert.equal(inspectParsed.request_metadata.effective_reference, "before");
 assert.equal(inspectParsed.structured_evidence.proof_evidence_present, true);
 assert.equal(inspectParsed.monitor_contract.response_gate, "release_terminal");
 
