@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.23
+
+### Patch Changes
+
+- 61022dd: Ignore `.codex` and `.oc-smoke` tool artifacts when deciding whether implementation produced a material git diff.
+
 ## 0.5.22
 
 ### Patch Changes
