@@ -375,6 +375,7 @@ def extract_page_state(payload):
 
 
 def extract_proof_evidence(payload):
+    payload = enrich_capture_payload(payload)
     evidence = []
     for text in iter_console_messages(payload.get('console') or []):
         raw_evidence = proof_evidence_console_payload(text)
