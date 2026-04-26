@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.21
+
+### Patch Changes
+
+- Preserve query strings when capturing and matching proof routes so query-driven SPA pages are not misclassified as wrong-route captures.
+
 ## 0.5.20
 
 ### Patch Changes

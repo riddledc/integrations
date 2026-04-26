@@ -182,12 +182,54 @@ class FakeRiddle:
                     'outputs': [{'name': 'prod.png', 'url': 'https://cdn.example.com/prod.png'}],
                     'console': ['RIDDLE_PROOF_STATE:{"bodyTextLength":180,"interactiveElements":4,"pathname":"/pricing","title":"Prod"}'],
                 }
+            if 'prod.example.com/games/drum-sequencer' in script:
+                page_state = {
+                    'bodyTextLength': 240,
+                    'visibleTextSample': 'Neon Step Sequencer Monkberry Moon Delight Mix Board Play All',
+                    'interactiveElements': 8,
+                    'visibleInteractiveElements': 8,
+                    'pathname': '/games/drum-sequencer',
+                    'search': '?song=monkberry-moon-delight-tab&mix=profile',
+                    'title': 'Neon Step Sequencer',
+                    'buttons': ['Play All', 'Shuffle'],
+                    'headings': ['Neon Step Sequencer'],
+                    'links': [],
+                    'canvasCount': 1,
+                    'largeVisibleElements': [{'tag': 'canvas', 'text': ''}],
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/sequencer-prod.png'}],
+                    'outputs': [{'name': 'prod.png', 'url': 'https://cdn.example.com/sequencer-prod.png'}],
+                    'console': ['RIDDLE_PROOF_STATE:' + json.dumps(page_state)],
+                }
             if 'preview.example.com' in script and '/pricing' in script:
                 return {
                     'ok': True,
                     'screenshots': [{'url': 'https://cdn.example.com/before.png'}],
                     'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/before.png'}],
                     'console': ['RIDDLE_PROOF_STATE:{"bodyTextLength":180,"interactiveElements":4,"pathname":"/pricing","title":"Before"}'],
+                }
+            if 'preview.example.com' in script and '/games/drum-sequencer' in script:
+                page_state = {
+                    'bodyTextLength': 240,
+                    'visibleTextSample': 'Neon Step Sequencer Monkberry Moon Delight Mix Board Play All',
+                    'interactiveElements': 8,
+                    'visibleInteractiveElements': 8,
+                    'pathname': '/s/pv-before/games/drum-sequencer',
+                    'search': '?song=monkberry-moon-delight-tab&mix=profile',
+                    'title': 'Neon Step Sequencer',
+                    'buttons': ['Play All', 'Shuffle'],
+                    'headings': ['Neon Step Sequencer'],
+                    'links': [],
+                    'canvasCount': 1,
+                    'largeVisibleElements': [{'tag': 'canvas', 'text': ''}],
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/sequencer-before.png'}],
+                    'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/sequencer-before.png'}],
+                    'console': state_console(page_state),
                 }
             if 'preview.example.com' in script and '/games/tic-tac-toe' in script:
                 return {
@@ -407,6 +449,35 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert runtime_error_quality['valid'] is False
     assert runtime_error_quality['details']['has_errors'] is True
     assert 'console/runtime errors' in runtime_error_quality['reason']
+
+    query_payload = dict(telemetry_payload)
+    query_payload.update({
+        'visibleTextSample': 'Neon Step Sequencer Monkberry Moon Delight Mix Board Play All',
+        'pathname': '/s/pv-after/games/drum-sequencer',
+        'search': '?song=monkberry-moon-delight-tab&mix=profile&utm_source=test',
+        'title': 'Neon Step Sequencer',
+        'headings': ['Neon Step Sequencer'],
+        'buttons': ['Play All'],
+        'canvasCount': 1,
+    })
+    query_quality = namespace['evaluate_capture_quality']({
+        'ok': True,
+        'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'console': ['RIDDLE_PROOF_STATE:' + json.dumps(query_payload)],
+    }, '/games/drum-sequencer?mix=profile&song=monkberry-moon-delight-tab', 'visual')
+    assert query_quality['valid'] is True, query_quality
+    assert query_quality['details']['observed_path'] == '/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&utm_source=test'
+    assert query_quality['details']['observed_path_raw'] == '/s/pv-after/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&utm_source=test'
+
+    missing_query_quality = namespace['evaluate_capture_quality']({
+        'ok': True,
+        'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'console': ['RIDDLE_PROOF_STATE:' + json.dumps({**query_payload, 'search': '?song=monkberry-moon-delight-tab'})],
+    }, '/games/drum-sequencer?mix=profile&song=monkberry-moon-delight-tab', 'visual')
+    assert missing_query_quality['valid'] is False
+    assert 'wrong route' in missing_query_quality['reason']
 
     strong_delta = namespace['extract_visual_delta']({
         'ok': True,
@@ -654,6 +725,49 @@ def run_recon_then_author_request():
             'recon_status': after_recon['recon_status'],
             'author_status': after_author['author_status'],
             'author_mode': after_author['author_mode'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_recon_preserves_query_route():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-query-route-'))
+    state_path = tempdir / 'state.json'
+    try:
+        query_route = '/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile'
+        state = base_state(
+            tempdir,
+            reference='both',
+            prod_url='https://prod.example.com' + query_route,
+        )
+        state.update({
+            'server_path': query_route,
+            'change_request': 'Make a tiny harmless visible sequencer helper-copy change.',
+            'success_criteria': 'The Monkberry profile sequencer route is loaded and visible.',
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('recon_query_route', RECON_PATH)
+        after_recon = json.loads(state_path.read_text())
+
+        latest_attempt = after_recon['recon_results']['attempt_history'][-1]
+        before = latest_attempt['captured_baselines']['before']
+        prod = latest_attempt['captured_baselines']['prod']
+        assert before['path'] == query_route
+        assert prod['path'] == query_route
+        assert before['observation']['valid'] is True, before['observation']
+        assert prod['observation']['valid'] is True, prod['observation']
+        assert before['observation']['details']['observed_path'] == query_route
+        assert prod['observation']['details']['observed_path'] == query_route
+        assert 'wrong route' not in before['observation']['reason']
+        assert 'wrong route' not in prod['observation']['reason']
+        return {
+            'ok': True,
+            'before_observed_path': before['observation']['details']['observed_path'],
+            'prod_observed_path': prod['observation']['details']['observed_path'],
         }
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
@@ -1369,6 +1483,7 @@ if __name__ == '__main__':
         'implement_records_detection_when_changes_missing': run_implement_records_detection_when_changes_missing(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
         'recon_then_author_request': run_recon_then_author_request(),
+        'recon_preserves_query_route': run_recon_preserves_query_route(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),
         'recon_hint_root_preference': run_recon_prefers_hint_root_over_single_route_literal(),
         'author_applies_supervisor_packet': run_author_applies_supervisor_packet(),

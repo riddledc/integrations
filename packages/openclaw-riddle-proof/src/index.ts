@@ -1035,12 +1035,48 @@ function routeMatches(route: Record<string, unknown> | null) {
   const expected = stringValue(route.expected_path);
   if (!expected) return false;
   const after = stringValue(route.after_observed_path);
-  if (after !== expected) return false;
+  if (!routeMatchesExpected(expected, after)) return false;
   const observed = [
     stringValue(route.before_observed_path),
     stringValue(route.prod_observed_path),
   ].filter(Boolean);
-  return observed.every((item) => item === expected);
+  return observed.every((item) => routeMatchesExpected(expected, item));
+}
+
+function normalizedRouteUrl(value: string) {
+  try {
+    const parsed = new URL(value, "http://riddle-proof.local");
+    let pathname = parsed.pathname || "/";
+    const parts = pathname.split("/");
+    if (parts.length >= 4 && parts[1] === "s") {
+      pathname = `/${parts.slice(3).join("/")}`;
+    }
+    pathname = pathname.replace(/\/+$/, "") || "/";
+    return {
+      pathname,
+      searchParams: Array.from(parsed.searchParams.entries()),
+    };
+  } catch {
+    return {
+      pathname: value.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/",
+      searchParams: [] as Array<[string, string]>,
+    };
+  }
+}
+
+function routeMatchesExpected(expected: string, observed: string) {
+  if (!expected || !observed) return false;
+  const expectedRoute = normalizedRouteUrl(expected);
+  const observedRoute = normalizedRouteUrl(observed);
+  if (expectedRoute.pathname !== observedRoute.pathname) return false;
+  if (expectedRoute.searchParams.length === 0) return true;
+  const remaining = [...observedRoute.searchParams];
+  for (const pair of expectedRoute.searchParams) {
+    const index = remaining.findIndex(([key, value]) => key === pair[0] && value === pair[1]);
+    if (index < 0) return false;
+    remaining.splice(index, 1);
+  }
+  return true;
 }
 
 function uniqueStrings(values: unknown[], limit: number) {
