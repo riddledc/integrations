@@ -12,7 +12,7 @@ export interface OpenClawProofedChangeParams {
   success_criteria?: string;
   assertions_json?: string;
   verification_mode?: string;
-  reference?: "prod" | "before" | "both";
+  reference?: "prod" | "before" | "both" | (string & {});
   base_branch?: string;
   before_ref?: string;
   allow_static_preview_fallback?: boolean;
@@ -58,6 +58,16 @@ export function parseOpenClawAssertions(value: unknown): JsonValue | undefined {
   }
 }
 
+function normalizeOpenClawReference(value: unknown): "prod" | "before" | "both" | undefined {
+  if (value !== "prod" && value !== "before" && value !== "both") return undefined;
+  return value;
+}
+
+function ignoredOpenClawReference(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return normalizeOpenClawReference(value) ? undefined : String(value);
+}
+
 export function openClawIntegrationContext(params: OpenClawProofedChangeParams): IntegrationContext {
   const hasDiscordContext = Boolean(params.discord_channel || params.discord_thread_id || params.discord_message_id || params.discord_source_url);
   return normalizeIntegrationContext({
@@ -69,6 +79,7 @@ export function openClawIntegrationContext(params: OpenClawProofedChangeParams):
     metadata: compactRecord({
       wrapper: "openclaw",
       tool: "riddle_proof_change",
+      reference_input_ignored: ignoredOpenClawReference(params.reference),
     }) as Record<string, unknown>,
   }, "openclaw") as IntegrationContext;
 }
@@ -84,7 +95,7 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     success_criteria: params.success_criteria,
     assertions: parseOpenClawAssertions(params.assertions_json),
     verification_mode: params.verification_mode,
-    reference: params.reference,
+    reference: normalizeOpenClawReference(params.reference),
     base_branch: params.base_branch,
     before_ref: params.before_ref,
     allow_static_preview_fallback: params.allow_static_preview_fallback,

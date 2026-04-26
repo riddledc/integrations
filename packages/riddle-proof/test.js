@@ -357,6 +357,22 @@ assert.equal(referenceParams.auth_localStorage_json, "{\"session\":\"local\"}");
 assert.equal(referenceParams.auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
 assert.equal(referenceParams.auth_headers_json, "{\"Authorization\":\"Bearer token\"}");
 assert.equal(parseOpenClawAssertions("plain text assertion"), "plain text assertion");
+
+const invalidReferenceParams = toRiddleProofRunParams({
+  repo: "davisdiehl/lilarcade",
+  change_request: "Change sequencer helper copy.",
+  reference: "use the public sequencer route",
+});
+assert.equal(invalidReferenceParams.reference, undefined);
+assert.equal(invalidReferenceParams.integration_context.metadata.reference_input_ignored, "use the public sequencer route");
+const validReferenceParams = toRiddleProofRunParams({
+  repo: "davisdiehl/lilarcade",
+  change_request: "Change sequencer helper copy.",
+  reference: "both",
+});
+assert.equal(validReferenceParams.reference, "both");
+assert.equal(validReferenceParams.integration_context.metadata.reference_input_ignored, undefined);
+
 assert.equal(toRiddleProofRunParams({
   repo: "riddledc/example",
   change_request: "Keep the PR in draft for a debug run.",
