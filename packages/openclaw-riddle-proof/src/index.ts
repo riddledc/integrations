@@ -73,6 +73,7 @@ function riddleProofPackageMetadata() {
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
 export type RiddleProofReportMode = "checkpoint" | "terminal_only";
+type OpenClawRiddleProofRunModeSource = "background_param" | "run_mode_param" | "config_default" | "wrapper_default";
 export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
   run_mode?: OpenClawRiddleProofRunMode;
   background?: boolean;
@@ -413,9 +414,21 @@ function runModeFrom(
   params: RiddleProofChangeParams,
   config: OpenClawRiddleProofRuntimeConfig,
 ): OpenClawRiddleProofRunMode {
-  if (params.background === true) return "background";
-  if (params.run_mode === "background" || params.run_mode === "blocking") return params.run_mode;
-  return config.defaultRunMode || "background";
+  return runModeDecisionFrom(params, config).mode;
+}
+
+function runModeDecisionFrom(
+  params: RiddleProofChangeParams,
+  config: OpenClawRiddleProofRuntimeConfig,
+): { mode: OpenClawRiddleProofRunMode; source: OpenClawRiddleProofRunModeSource } {
+  if (params.background === true) return { mode: "background", source: "background_param" };
+  if (params.run_mode === "background" || params.run_mode === "blocking") {
+    return { mode: params.run_mode, source: "run_mode_param" };
+  }
+  if (config.defaultRunMode === "background" || config.defaultRunMode === "blocking") {
+    return { mode: config.defaultRunMode, source: "config_default" };
+  }
+  return { mode: "background", source: "wrapper_default" };
 }
 
 function isTerminalStatusLike(status: string | null | undefined) {
@@ -514,6 +527,7 @@ function startOpenClawRiddleProofBackground(
   config: OpenClawRiddleProofRuntimeConfig,
 ): RiddleProofRunResult {
   const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
+  const runModeDecision = runModeDecisionFrom(params, config);
   const statePath = request.harness_state_path || createHarnessStatePath(config.stateDir);
   request.harness_state_path = statePath;
   const state = createRunState({
@@ -530,7 +544,9 @@ function startOpenClawRiddleProofBackground(
       `or poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} using monitor_should_continue.`,
     details: {
       state_path: statePath,
-      run_mode: "background",
+      run_mode: runModeDecision.mode,
+      run_mode_source: runModeDecision.source,
+      background_requested: params.background === true,
       monitor_contract: monitorContractFor("running", request),
       next_tools: [
         RIDDLE_PROOF_WAIT_TOOL_NAME,
@@ -565,7 +581,10 @@ function startOpenClawRiddleProofBackground(
       `or poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} until monitor_should_continue is false.`,
     raw: {
       background: true,
-      run_mode: "background",
+      background_requested: params.background === true,
+      run_mode: runModeDecision.mode,
+      run_mode_source: runModeDecision.source,
+      run_mode_defaulted: runModeDecision.source === "config_default" || runModeDecision.source === "wrapper_default",
       state_path: statePath,
       monitor_contract: monitorContractFor("running", request),
       next_actions: [
@@ -1973,11 +1992,7 @@ export const riddleProofChangeParameters = Type.Object({
   success_criteria: optionalString("Criteria the proof evidence must satisfy."),
   assertions_json: optionalString("Optional JSON assertions string. Non-JSON text is preserved as a string assertion."),
   verification_mode: optionalString("Proof type, such as visual, interaction, data, json, audio, logs, or metrics."),
-  reference: Type.Optional(Type.Union([
-    Type.Literal("prod"),
-    Type.Literal("before"),
-    Type.Literal("both"),
-  ], { description: "Baseline reference source." })),
+  reference: optionalString("Baseline reference source. Valid values are prod, before, or both; other text is ignored as a baseline selector and preserved as metadata."),
   base_branch: optionalString("Base branch for comparison or pull request targeting."),
   before_ref: optionalString("Explicit before ref for comparison."),
   allow_static_preview_fallback: optionalBoolean("Allow static preview fallback when the requested server path fails."),

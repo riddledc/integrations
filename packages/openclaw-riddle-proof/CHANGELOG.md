@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.47
+
+### Patch Changes
+
+- Make OpenClaw proof inputs more forgiving by preserving invalid freeform `reference` text as metadata while ignoring it as a baseline selector, and expose whether background mode was requested or defaulted.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.22
+
 ## 0.4.46
 
 ### Patch Changes

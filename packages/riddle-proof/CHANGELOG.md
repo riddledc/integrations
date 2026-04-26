@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.22
+
+### Patch Changes
+
+- Make OpenClaw proof inputs more forgiving by preserving invalid freeform `reference` text as metadata while ignoring it as a baseline selector.
+
 ## 0.5.21
 
 ### Patch Changes

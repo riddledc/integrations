@@ -75,6 +75,23 @@ assert.deepEqual(result.raw?.request?.assertions, { must_show_confirmation: true
 assert.equal(result.raw?.request?.integration_context?.source, "discord");
 assert.equal(result.event_count, 1);
 
+const invalidReferenceResult = createOpenClawRiddleProofResult({
+  ...params,
+  reference: "use the public sequencer route",
+});
+assert.equal(invalidReferenceResult.raw?.request?.reference, undefined);
+assert.equal(
+  invalidReferenceResult.raw?.request?.integration_context?.metadata?.reference_input_ignored,
+  "use the public sequencer route",
+);
+
+const validReferenceResult = createOpenClawRiddleProofResult({
+  ...params,
+  reference: "both",
+});
+assert.equal(validReferenceResult.raw?.request?.reference, "both");
+assert.equal(validReferenceResult.raw?.request?.integration_context?.metadata?.reference_input_ignored, undefined);
+
 const terminalOnlyResult = createOpenClawRiddleProofResult({
   ...params,
   report_mode: "terminal_only",
@@ -442,7 +459,11 @@ const backgroundResult = await runOpenClawRiddleProof(
 );
 assert.equal(backgroundResult.status, "running");
 assert.equal(backgroundResult.raw?.background, true);
+assert.equal(backgroundResult.raw?.background_requested, false);
 assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
+assert.equal(backgroundResult.raw?.run_mode, "background");
+assert.equal(backgroundResult.raw?.run_mode_source, "run_mode_param");
+assert.equal(backgroundResult.raw?.run_mode_defaulted, false);
 assert.equal(backgroundResult.raw?.monitor_contract?.report_mode, "checkpoint");
 assert.equal(backgroundResult.raw?.monitor_contract?.response_gate, "checkpoint_ok");
 assert.ok(backgroundResult.raw?.next_actions?.[0]?.includes(RIDDLE_PROOF_WAIT_TOOL_NAME));
@@ -576,6 +597,9 @@ const defaultBackgroundResult = await runOpenClawRiddleProof(
 );
 assert.equal(defaultBackgroundResult.status, "running");
 assert.equal(defaultBackgroundResult.raw?.run_mode, "background");
+assert.equal(defaultBackgroundResult.raw?.run_mode_source, "wrapper_default");
+assert.equal(defaultBackgroundResult.raw?.run_mode_defaulted, true);
+assert.equal(defaultBackgroundResult.raw?.background_requested, false);
 
 const reviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-review-"));
 const reviewStatePath = path.join(reviewFixture, "riddle-state.json");
