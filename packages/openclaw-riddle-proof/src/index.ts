@@ -273,7 +273,7 @@ function normalizeDefaultMaxIterations(value: unknown) {
 }
 
 function effectiveMaxIterations(request: RiddleProofRunParams, config: OpenClawRiddleProofRuntimeConfig) {
-  return request.max_iterations ?? normalizeDefaultMaxIterations(config.defaultMaxIterations);
+  return normalizeDefaultMaxIterations(request.max_iterations ?? config.defaultMaxIterations);
 }
 
 function effectiveHarnessConfig(config: OpenClawRiddleProofRuntimeConfig) {
