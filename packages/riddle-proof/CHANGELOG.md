@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.28
+
+### Patch Changes
+
+- Preserve literal proof request text when shipping PRs by invoking git and gh without shell interpolation.
+
 ## 0.5.27
 
 ### Patch Changes
