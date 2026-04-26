@@ -11,7 +11,7 @@ with updated state inputs such as server_path or wait_for_selector.
 """
 
 import json, os, re, sys, time
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import (  # noqa: E402
@@ -255,7 +255,7 @@ def route_candidates(route_hints, prod_url=''):
 
     parsed_prod = urlparse((prod_url or '').strip())
     if parsed_prod.path and parsed_prod.path.strip() and parsed_prod.path != '/':
-        add(parsed_prod.path, 'prod_url path')
+        add(parsed_prod.path + (('?' + parsed_prod.query) if parsed_prod.query else ''), 'prod_url path')
 
     for hint in route_hints:
         code_fragment = hint.split(':', 2)[-1]
@@ -424,17 +424,54 @@ def has_enriched_page_state(page_state):
 
 
 def normalize_observed_path(value):
-    path = (value or '').strip()
-    if not path:
+    raw = str(value or '').strip()
+    if not raw:
         return ''
-    path = path.split('?', 1)[0].split('#', 1)[0]
+    parsed = urlparse(raw.split('#', 1)[0])
+    path = parsed.path or ''
+    query = parsed.query or ''
     if not path.startswith('/'):
-        parsed = urlparse(path)
-        path = parsed.path or path
+        path = '/' + path.lstrip('/')
     parts = path.split('/')
     if len(parts) >= 4 and parts[1] == 's':
         path = '/' + '/'.join(parts[3:])
-    return path.rstrip('/') or '/'
+    path = path.rstrip('/') or '/'
+    return path + (('?' + query) if query else '')
+
+
+def observed_location_from_page_state(page_state):
+    if not isinstance(page_state, dict):
+        return ''
+    pathname = str(page_state.get('pathname') or '').strip()
+    search = str(page_state.get('search') or '').strip()
+    if search and not search.startswith('?'):
+        search = '?' + search
+    if pathname:
+        return pathname + search
+    return str(page_state.get('href') or '').strip()
+
+
+def route_matches_expected(expected_path, observed_path):
+    expected = normalize_observed_path(expected_path)
+    observed = normalize_observed_path(observed_path)
+    if not expected or not observed:
+        return False
+    expected_parsed = urlparse(expected)
+    observed_parsed = urlparse(observed)
+    expected_pathname = expected_parsed.path.rstrip('/') or '/'
+    observed_pathname = observed_parsed.path.rstrip('/') or '/'
+    if observed_pathname != expected_pathname:
+        return False
+    expected_query = parse_qsl(expected_parsed.query, keep_blank_values=True)
+    if not expected_query:
+        return True
+    observed_query = parse_qsl(observed_parsed.query, keep_blank_values=True)
+    remaining = list(observed_query)
+    for pair in expected_query:
+        if pair not in remaining:
+            return False
+        remaining.remove(pair)
+    return True
 
 
 def build_probe_capture_script(base_script='', screenshot_label=''):
@@ -471,6 +508,8 @@ def build_probe_capture_script(base_script='', screenshot_label=''):
         '    canvasCount: document.querySelectorAll("canvas").length,',
         '    largeVisibleElements,',
         '    pathname: window.location.pathname,',
+        '    search: window.location.search,',
+        '    href: window.location.href,',
         '    title: document.title,',
         '  };',
         '});',
@@ -517,7 +556,7 @@ def evaluate_capture_quality(payload, expected_path):
 
     page_state = extract_page_state(payload)
     if isinstance(page_state, dict):
-        raw_observed_path = page_state.get('pathname', '')
+        raw_observed_path = observed_location_from_page_state(page_state)
         details.update({
             'body_text_length': page_state.get('bodyTextLength', 0),
             'interactive_elements': page_state.get('interactiveElements', 0),
@@ -567,8 +606,7 @@ def evaluate_capture_quality(payload, expected_path):
         reasons.append('page has console/runtime errors')
 
     observed_path = normalize_observed_path(details.get('observed_path'))
-    normalized_expected = (expected_path or '').rstrip('/') or '/'
-    if expected_path and observed_path and observed_path != normalized_expected:
+    if expected_path and observed_path and not route_matches_expected(expected_path, observed_path):
         raw_observed = details.get('observed_path_raw') or details.get('observed_path') or observed_path
         reasons.append(f'wrong route: expected {expected_path}, got {raw_observed}')
 
@@ -703,7 +741,7 @@ def capture_prod_baseline(prod_url, plan, capture_script=''):
     return {
         'source': 'prod_url',
         'mode': 'remote',
-        'path': urlparse(target_url).path or (plan.get('target_path') or '/'),
+        'path': normalize_observed_path(target_url) or (plan.get('target_path') or '/'),
         'capture_url': target_url,
         'url': extract_screenshot_url(shot, 'prod'),
         'static_fallback_reason': '',

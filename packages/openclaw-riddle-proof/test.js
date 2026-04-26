@@ -873,6 +873,54 @@ assert.equal(inspectResult.artifact_contract?.required?.screenshot, true);
 assert.equal(inspectResult.artifact_production?.image_output_count, 1);
 assert.equal(inspectResult.artifact_usage?.supervisor_review_signals?.includes("semantic-context"), true);
 
+const queryRouteStatePath = path.join(reviewFixture, "riddle-state-query-route.json");
+const queryRouteWrapperStatePath = path.join(reviewFixture, "wrapper-state-query-route.json");
+writeFileSync(queryRouteStatePath, JSON.stringify({
+  branch: "agent/query-route-fixture",
+  before_cdn: "https://example.com/query-before.png",
+  prod_cdn: "https://example.com/query-prod.png",
+  after_cdn: "https://example.com/query-after.png",
+  proof_assessment_request: {
+    expected_path: "/games/drum-sequencer?mix=profile&song=monkberry-moon-delight-tab",
+    semantic_context: {
+      route: {
+        expected_path: "/games/drum-sequencer?mix=profile&song=monkberry-moon-delight-tab",
+        before_observed_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+        prod_observed_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&utm_source=test",
+        after_observed_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+      },
+      after: {
+        headings: ["Neon Step Sequencer"],
+        buttons: ["Play All"],
+        visible_text_sample: "Neon Step Sequencer Monkberry Moon Delight",
+        valid: true,
+      },
+    },
+  },
+  evidence_bundle: {
+    after: {
+      screenshot_url: "https://example.com/query-after.png",
+      visual_delta: { status: "unmeasured", passed: null },
+    },
+  },
+}, null, 2));
+writeFileSync(queryRouteWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_query_route_fixture",
+  status: "ready_to_ship",
+  state_path: queryRouteWrapperStatePath,
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Make a tiny sequencer helper-copy change.",
+    engine_state_path: queryRouteStatePath,
+    verification_mode: "visual",
+  },
+  events: [],
+}, null, 2));
+const queryRouteInspect = inspectOpenClawRiddleProof({ state_path: queryRouteWrapperStatePath });
+assert.equal(queryRouteInspect.route_matched, true);
+assert.equal(queryRouteInspect.ready_to_ship_candidate, true);
+
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
 assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
