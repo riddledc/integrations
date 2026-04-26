@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.24
+
+### Patch Changes
+
+- d30b632: Preserve finalized ready/shipped wrapper run state when an older background harness attempt finishes later.
+
 ## 0.5.23
 
 ### Patch Changes

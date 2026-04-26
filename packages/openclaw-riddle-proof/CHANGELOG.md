@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.51
+
+### Patch Changes
+
+- d30b632: Preserve finalized ready/shipped wrapper run state when an older background harness attempt finishes later.
+- Updated dependencies [d30b632]
+  - @riddledc/riddle-proof@0.5.24
+
 ## 0.4.50
 
 ### Patch Changes
