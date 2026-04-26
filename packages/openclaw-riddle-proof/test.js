@@ -446,7 +446,8 @@ assert.equal(backgroundResult.state_path, backgroundWrapperStatePath);
 assert.equal(backgroundResult.raw?.monitor_contract?.report_mode, "checkpoint");
 assert.equal(backgroundResult.raw?.monitor_contract?.response_gate, "checkpoint_ok");
 assert.ok(backgroundResult.raw?.next_actions?.[0]?.includes(RIDDLE_PROOF_WAIT_TOOL_NAME));
-assert.ok(backgroundResult.raw?.next_actions?.[1]?.includes("one-off debug snapshot"));
+assert.ok(backgroundResult.raw?.next_actions?.[1]?.includes("monitor_should_continue"));
+assert.ok(backgroundResult.raw?.next_actions?.[2]?.includes("final inspection snapshots"));
 assert.equal(existsSync(backgroundWrapperStatePath), true);
 
 for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
