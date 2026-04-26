@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.50
+
+### Patch Changes
+
+- ac23714: Expose ignored freeform `reference` input and effective reference metadata in status and inspect output.
+
 ## 0.4.49
 
 ### Patch Changes
