@@ -112,8 +112,12 @@ def select_capture_hint(state):
             if str(item).strip()
         ]
         matched_tokens = [token for token in current_tokens if token in hint_tokens]
+        mode_matches = bool(current_mode and hint_mode == current_mode)
+        root_hint = server_path == '/'
+        if not matched_tokens and mode_matches and not root_hint:
+            continue
         score = len(matched_tokens) * 3
-        if current_mode and hint_mode == current_mode:
+        if mode_matches:
             score += 2
         if score <= 0:
             continue
