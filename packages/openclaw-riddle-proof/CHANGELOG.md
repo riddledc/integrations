@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.52
+
+### Patch Changes
+
+- b494f15: Preserve structured proof evidence when a capture script throws after writing evidence, while still failing the capture.
+- Updated dependencies [b494f15]
+  - @riddledc/riddle-proof@0.5.25
+
 ## 0.4.51
 
 ### Patch Changes

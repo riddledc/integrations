@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.25
+
+### Patch Changes
+
+- b494f15: Preserve structured proof evidence when a capture script throws after writing evidence, while still failing the capture.
+
 ## 0.5.24
 
 ### Patch Changes
