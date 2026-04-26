@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.46
+
+### Patch Changes
+
+- Clarify detached monitor guidance so surfaces without `riddle_proof_wait` can poll `riddle_proof_status` using `monitor_should_continue`.
+
 ## 0.4.45
 
 ### Patch Changes
