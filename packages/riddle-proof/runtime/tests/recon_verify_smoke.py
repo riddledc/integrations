@@ -154,11 +154,19 @@ class FakeRiddle:
                     'ok': True,
                     'outputs': [{'name': 'proof.json', 'url': 'https://cdn.example.com/proof.json'}],
                     'result': {'pageState': page_state},
-                    'console': [
-                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
-                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
-                    ],
                     '_artifact_json': {
+                        'console.json': {
+                            'summary': {'total_entries': 3, 'log_count': 2, 'warn_count': 0, 'error_count': 1, 'info_count': 0},
+                            'entries': {
+                                'log': [
+                                    {'message': 'RIDDLE_PROOF_STATE:' + json.dumps(page_state)},
+                                    {'message': 'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence)},
+                                ],
+                                'warn': [],
+                                'error': [{'message': 'Uncaught exception: intentional capture script failure after evidence'}],
+                                'info': [],
+                            },
+                        },
                         'proof.json': {
                             'script_error': 'Error: intentional capture script failure after evidence',
                         },
@@ -1309,6 +1317,8 @@ def run_verify_preserves_proof_evidence_on_capture_script_error():
         assert supporting['has_structured_payload'] is True
         assert supporting['proof_evidence_present'] is True
         assert 'Captured structured audio evidence before the capture script threw' in supporting['proof_evidence_sample']
+        assert after_verify['evidence_bundle']['proof_evidence'] is not None
+        assert after_verify['evidence_bundle']['proof_evidence']['proof_evidence_present'] is False
         capture_quality = after_verify['verify_decision_request']['capture_quality']
         assert capture_quality['decision'] == 'failed_proof_evidence'
         assert capture_quality['recommended_stage'] == 'author'
