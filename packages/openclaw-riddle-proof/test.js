@@ -594,7 +594,10 @@ assert.equal(enrichedBackgroundStatus?.monitor_should_continue, false);
 assert.equal(enrichedBackgroundStatus?.is_routable_checkpoint, false);
 assert.equal(enrichedBackgroundStatus?.checkpoint_classification, "terminal");
 assert.equal(enrichedBackgroundStatus?.suggested_next_action, "report_terminal_status");
+assert.equal(enrichedBackgroundStatus?.monitor_plan?.preferred_tool, RIDDLE_PROOF_STATUS_TOOL_NAME);
+assert.equal(enrichedBackgroundStatus?.monitor_plan?.optional_wait_tool, RIDDLE_PROOF_WAIT_TOOL_NAME);
 assert.equal(enrichedBackgroundStatus?.wake_strategy?.signal, "run.wake.requested");
+assert.ok(enrichedBackgroundStatus?.wake_strategy?.recommendation?.includes("poll riddle_proof_status"));
 writeFileSync(backgroundWrapperStatePath, JSON.stringify({
   ...backgroundState,
   status: "running",
@@ -613,6 +616,8 @@ assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
 assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);
 assert.equal(runningBackgroundStatus?.checkpoint_classification, "routable");
 assert.equal(runningBackgroundStatus?.suggested_next_action, "continue_monitoring");
+assert.equal(runningBackgroundStatus?.monitor_plan?.preferred_tool, RIDDLE_PROOF_STATUS_TOOL_NAME);
+assert.equal(runningBackgroundStatus?.monitor_plan?.optional_wait_tool, RIDDLE_PROOF_WAIT_TOOL_NAME);
 const timeoutWait = await waitOpenClawRiddleProof({ state_path: backgroundWrapperStatePath, timeout_ms: 1000 });
 assert.equal(timeoutWait.wait_result, "timeout");
 assert.ok(timeoutWait.waited_ms >= 1000);

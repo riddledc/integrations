@@ -1041,6 +1041,18 @@ function waitStopCondition(
   }
   return "already_reportable";
 }
+
+function statusLoopMonitorPlan(statePath: string, pollAfterMs: number | null, stopWhen: string) {
+  return {
+    preferred_tool: RIDDLE_PROOF_STATUS_TOOL_NAME,
+    optional_wait_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
+    state_path: statePath,
+    continue_while: "monitor_should_continue",
+    stop_when: stopWhen,
+    poll_after_ms: pollAfterMs,
+  };
+}
+
 function collectImageArtifacts(value: unknown, output: Array<Record<string, unknown>> = [], seen = new Set<string>()) {
   if (output.length >= 16 || !value) return output;
   if (typeof value === "string") {
@@ -1736,13 +1748,11 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
       recommended_poll_after_ms: recommendedPollMs,
       ...checkpoint,
-      monitor_plan: {
-        preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
+      monitor_plan: statusLoopMonitorPlan(
         state_path,
-        continue_while: "monitor_should_continue",
-        stop_when: waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
-        poll_after_ms: recommendedPollMs,
-      },
+        recommendedPollMs,
+        waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
+      ),
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
     if (options.debug) baseStatus.debug = buildDebugPayload(wrapperState, null);
     return baseStatus;
@@ -1784,19 +1794,16 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
     recommended_poll_after_ms: recommendedPollMs,
     ...checkpoint,
-    monitor_plan: {
-      preferred_tool: RIDDLE_PROOF_WAIT_TOOL_NAME,
-      fallback_tool: RIDDLE_PROOF_STATUS_TOOL_NAME,
+    monitor_plan: statusLoopMonitorPlan(
       state_path,
-      continue_while: "monitor_should_continue",
-      stop_when: waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
-      poll_after_ms: recommendedPollMs,
-    },
+      recommendedPollMs,
+      waitStopCondition(monitorContract?.response_gate, checkpoint.suggested_next_action),
+    ),
     wake_strategy: {
       signal: "run.wake.requested",
       recommendation:
-        `For detached monitoring, prefer ${RIDDLE_PROOF_WAIT_TOOL_NAME} when available. ` +
-        `If it is not exposed, poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} at poll_after_ms and stop when monitor_should_continue is false.`,
+        `For detached status-loop monitoring, poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} at poll_after_ms and stop when monitor_should_continue is false. ` +
+        `If ${RIDDLE_PROOF_WAIT_TOOL_NAME} is exposed, it can replace the sleep between status checks.`,
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);

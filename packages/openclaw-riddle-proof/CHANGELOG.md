@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.57
+
+### Patch Changes
+
+- Make status snapshots present the status-loop monitor plan as primary, with riddle_proof_wait as an optional convenience when exposed.
+
 ## 0.4.56
 
 ### Patch Changes
