@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.58
+
+### Patch Changes
+
+- Clarify capture-hint status by separating selected hint values from applied and effective route fields.
+
 ## 0.4.57
 
 ### Patch Changes
