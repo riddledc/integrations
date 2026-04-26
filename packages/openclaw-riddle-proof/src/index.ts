@@ -290,6 +290,13 @@ function persistRunState(state: RiddleProofRunState) {
   writeFileSync(state.state_path, JSON.stringify(state, null, 2) + "\n");
 }
 
+function isProtectedFinalWrapperState(state: RiddleProofRunState | null | undefined) {
+  return Boolean(
+    state?.finalized === true &&
+    (state.status === "ready_to_ship" || state.status === "shipped" || state.status === "completed"),
+  );
+}
+
 function wakeNextToolsFor(result: RiddleProofRunResult) {
   if (result.blocker?.code === "main_agent_proof_review_required") {
     return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
@@ -354,6 +361,17 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
 function markBackgroundWorkerFailed(statePath: string, message: string) {
   const state = readRunState(statePath);
   if (!state) return;
+  if (isProtectedFinalWrapperState(state)) {
+    appendRunEvent(state, {
+      kind: "run.background.failure_ignored",
+      checkpoint: state.last_checkpoint || "background_worker",
+      stage: state.current_stage || "setup",
+      summary: "Ignored background worker failure because the run already has a finalized terminal status.",
+      details: { message },
+    });
+    persistRunState(state);
+    return;
+  }
   state.blocker = {
     code: "background_worker_failed",
     checkpoint: state.last_checkpoint || "background_worker",
@@ -388,7 +406,24 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
     config: effectiveHarnessConfig(config),
   });
   const state = readRunState(data.state_path);
-  if (state) appendWakeRequest(state, result);
+  if (state) {
+    if (isProtectedFinalWrapperState(state) && state.status !== result.status) {
+      appendRunEvent(state, {
+        kind: "run.background.result_ignored",
+        checkpoint: state.last_checkpoint || result.last_checkpoint || null,
+        stage: state.current_stage || null,
+        summary: "Ignored stale background worker result because the run already has a finalized terminal status.",
+        details: {
+          preserved_status: state.status,
+          ignored_status: result.status,
+          ignored_blocker: result.blocker || null,
+        },
+      });
+      persistRunState(state);
+    } else {
+      appendWakeRequest(state, result);
+    }
+  }
   return result;
 }
 
@@ -1908,6 +1943,7 @@ export async function submitOpenClawRiddleProofReview(
     state.current_stage = "verify";
     state.proof_decision = "ready_to_ship";
     state.merge_recommendation = "ready_to_ship (supervising-agent proof assessment)";
+    state.finalized = true;
     setRunStatus(state, "ready_to_ship");
     persistRunState(state);
     return createRunResult({

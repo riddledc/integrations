@@ -1052,6 +1052,48 @@ assert.equal(reconLoopResult.blocker.code, "stage_iteration_limit_reached");
 assert.equal(reconLoopResult.blocker.details.stage, "recon");
 assert.equal(reconLoopResult.blocker.details.stage_iteration_limit, 4);
 
+const finalizedGuardFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-finalized-guard-"));
+const finalizedGuardStatePath = path.join(finalizedGuardFixture, "harness-state.json");
+const finalizedGuardEngineStatePath = path.join(finalizedGuardFixture, "riddle-state.json");
+writeFileSync(finalizedGuardEngineStatePath, JSON.stringify({}, null, 2));
+const finalizedGuardState = createRunState({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Preserve a finalized ready decision.",
+    verification_mode: "visual",
+    harness_state_path: finalizedGuardStatePath,
+    engine_state_path: finalizedGuardEngineStatePath,
+  },
+  state_path: finalizedGuardStatePath,
+});
+setRunStatus(finalizedGuardState, "ready_to_ship", "2026-04-16T00:00:00.000Z");
+finalizedGuardState.finalized = true;
+finalizedGuardState.proof_decision = "ready_to_ship";
+writeFileSync(finalizedGuardStatePath, JSON.stringify(finalizedGuardState, null, 2));
+const staleWorkerResult = await runRiddleProofEngineHarness({
+  request: {
+    ...finalizedGuardState.request,
+    harness_state_path: finalizedGuardStatePath,
+    engine_state_path: finalizedGuardEngineStatePath,
+  },
+  max_iterations: 1,
+  engine: {
+    async execute() {
+      return {
+        ok: false,
+        state_path: finalizedGuardEngineStatePath,
+        checkpoint: "verify_capture_retry",
+        summary: "A stale worker still wants more proof.",
+      };
+    },
+  },
+});
+assert.equal(staleWorkerResult.status, "blocked");
+const preservedFinalizedGuardState = JSON.parse(readFileSync(finalizedGuardStatePath, "utf-8"));
+assert.equal(preservedFinalizedGuardState.status, "ready_to_ship");
+assert.equal(preservedFinalizedGuardState.finalized, true);
+assert.equal(preservedFinalizedGuardState.blocker, undefined);
+
 const missingWorktreeStatePath = path.join(engineFixture, "missing-worktree-riddle-state.json");
 writeFileSync(missingWorktreeStatePath, JSON.stringify({}, null, 2));
 const missingWorktreeResult = await runRiddleProofEngineHarness({
