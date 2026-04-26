@@ -196,8 +196,22 @@ function loadRunState(input: RunRiddleProofEngineHarnessInput): RiddleProofRunSt
   });
 }
 
+function isProtectedFinalStatus(status: unknown) {
+  return status === "ready_to_ship" || status === "shipped" || status === "completed";
+}
+
+function shouldPreserveFinalizedRunState(filePath: string, incoming: RiddleProofRunState) {
+  const existing = readJson(filePath) as (Partial<RiddleProofRunState> & Record<string, unknown>) | null;
+  if (!existing?.finalized || !isProtectedFinalStatus(existing.status)) return false;
+  if (!incoming.finalized) return true;
+  if (existing.status === incoming.status) return false;
+  return !(existing.status === "ready_to_ship" && incoming.status === "shipped");
+}
+
 function persist(state: RiddleProofRunState) {
-  if (state.state_path) writeJson(state.state_path, state);
+  if (!state.state_path) return;
+  if (shouldPreserveFinalizedRunState(state.state_path, state)) return;
+  writeJson(state.state_path, state);
 }
 
 function recordEvent(state: RiddleProofRunState, event: Parameters<typeof appendRunEvent>[1]) {
@@ -501,6 +515,7 @@ function terminalResult(
   raw: Record<string, unknown> = {},
 ): RiddleProofRunResult {
   setRunStatus(state, status);
+  if (isProtectedFinalStatus(status)) state.finalized = true;
   const metadata = normalizeTerminalMetadata({
     riddleState: result ? fullRiddleState(result, state) : null,
     engineResult: result,
