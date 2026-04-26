@@ -242,6 +242,25 @@ function workdirFromState(state: Record<string, unknown> | null) {
   return nonEmptyString(state?.after_worktree) || nonEmptyString(state?.worktree_path) || null;
 }
 
+function parseGitStatusPaths(status: string) {
+  return status.split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      let item = line.length > 3 ? line.slice(3) : line;
+      if (item.includes(" -> ")) item = item.split(" -> ").pop() || item;
+      return item.trim();
+    })
+    .filter(Boolean);
+}
+
+function isToolNoisePath(filePath: string) {
+  return filePath === ".codex" ||
+    filePath.startsWith(".codex/") ||
+    filePath === ".oc-smoke" ||
+    filePath.startsWith(".oc-smoke/");
+}
+
 function hasGitDiff(workdir?: string | null) {
   if (!workdir || !existsSync(workdir)) return false;
   try {
@@ -250,7 +269,7 @@ function hasGitDiff(workdir?: string | null) {
       encoding: "utf-8",
       timeout: 10_000,
     });
-    return status.trim().length > 0;
+    return parseGitStatusPaths(status).some((filePath) => !isToolNoisePath(filePath));
   } catch {
     return false;
   }

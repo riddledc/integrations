@@ -637,6 +637,7 @@ def run_implement_records_detection_when_changes_missing():
         })
         write_state(state_path, state)
         os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+        load_module('util', UTIL_PATH)
 
         try:
             load_module('implement_changes_missing_state', IMPLEMENT_PATH)
@@ -664,6 +665,56 @@ def run_implement_records_detection_when_changes_missing():
             'ok': True,
             'outcome': detection['outcome'],
             'summary': after_state['implementation_detection_summary'],
+        }
+    finally:
+        if previous_state_file is None:
+            os.environ.pop('RIDDLE_PROOF_STATE_FILE', None)
+        else:
+            os.environ['RIDDLE_PROOF_STATE_FILE'] = previous_state_file
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_implement_ignores_tool_noise_when_detecting_changes():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-implement-noise-'))
+    state_path = tempdir / 'state.json'
+    previous_state_file = os.environ.get('RIDDLE_PROOF_STATE_FILE')
+    try:
+        state = base_state(tempdir, reference='before')
+        after_dir = Path(state['after_worktree'])
+        init_git_repo(after_dir)
+        codex_dir = after_dir / '.codex'
+        codex_dir.mkdir(parents=True, exist_ok=True)
+        (codex_dir / 'session.json').write_text('{}\n')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'proof_plan': 'Capture the pricing CTA after the implementation is applied.',
+            'capture_script': "await page.waitForSelector('[data-testid=pricing-cta]'); await saveScreenshot('after-proof');",
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+        load_module('util', UTIL_PATH)
+
+        try:
+            load_module('implement_ignores_tool_noise', IMPLEMENT_PATH)
+        except SystemExit as exc:
+            assert 'No implementation detected on the after worktree.' in str(exc), exc
+        else:
+            raise AssertionError('implement stage should have halted when only tool noise changed')
+
+        after_state = json.loads(state_path.read_text())
+        detection = after_state['implementation_detection']
+        assert detection['outcome'] == 'no_changes_detected'
+        assert detection['diff_detected'] is False
+        assert detection['dirty_path_count'] == 0
+        assert detection['dirty_path_count_including_noise'] >= 1
+        assert any(str(path).startswith('.codex') for path in detection['ignored_dirty_paths'])
+        assert detection['changed_path_count'] == 0
+        assert after_state['changed_files'] == []
+        return {
+            'ok': True,
+            'ignored_dirty_paths': detection['ignored_dirty_paths'],
         }
     finally:
         if previous_state_file is None:
@@ -1481,6 +1532,7 @@ if __name__ == '__main__':
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),
         'run_project_build_retries_after_clean_failure': run_project_build_retries_after_clean_failure(),
         'implement_records_detection_when_changes_missing': run_implement_records_detection_when_changes_missing(),
+        'implement_ignores_tool_noise_when_detecting_changes': run_implement_ignores_tool_noise_when_detecting_changes(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
         'recon_then_author_request': run_recon_then_author_request(),
         'recon_preserves_query_route': run_recon_preserves_query_route(),

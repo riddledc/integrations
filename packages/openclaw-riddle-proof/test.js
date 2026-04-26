@@ -203,12 +203,14 @@ const retryCalls = [];
 const retryingAdapter = createCodexExecAgentAdapter({}, async (request) => {
   retryCalls.push(request);
   if (request.purpose === "implementation") {
+    mkdirSync(path.join(request.workdir, ".codex"), { recursive: true });
+    writeFileSync(path.join(request.workdir, ".codex", "session.json"), "{}\n");
     return {
       ok: true,
       json: {
         summary: "Thought through the change but did not leave a diff yet.",
-        implementation_notes: "",
-        changed_files: [],
+        implementation_notes: "Only tool metadata was written.",
+        changed_files: [".codex/session.json"],
         tests_run: [],
         blockers: [],
       },
