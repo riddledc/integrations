@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.26
+
+### Patch Changes
+
+- 0c9a5e6: Read proof evidence from enriched artifact JSON consistently across verify decisions and evidence bundles.
+
 ## 0.5.25
 
 ### Patch Changes

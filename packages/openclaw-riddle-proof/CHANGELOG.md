@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.53
+
+### Patch Changes
+
+- 0c9a5e6: Read proof evidence from enriched artifact JSON consistently across verify decisions and evidence bundles.
+- Updated dependencies [0c9a5e6]
+  - @riddledc/riddle-proof@0.5.26
+
 ## 0.4.52
 
 ### Patch Changes
