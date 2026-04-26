@@ -838,16 +838,29 @@ function summarizeCaptureHint(engineState: Record<string, unknown> | null) {
   if (!captureHint) return null;
   const selected = recordValue(captureHint.selected);
   const saved = recordValue(engineState?.capture_hint_saved);
+  const appliedFields = Array.isArray(captureHint.applied_fields) ? captureHint.applied_fields.map(String) : [];
+  const reconResults = recordValue(engineState?.recon_results);
+  const currentPlan = recordValue(reconResults?.current_plan);
+  const selectedServerPath = stringValue(selected?.server_path) || null;
+  const selectedWaitForSelector = stringValue(selected?.wait_for_selector) || null;
+  const fallbackChanges = recordValue(captureHint.fallback_changes);
   return {
     applied: Boolean(captureHint.applied),
-    applied_fields: Array.isArray(captureHint.applied_fields) ? captureHint.applied_fields : [],
+    applied_fields: appliedFields,
     matched_tokens: Array.isArray(captureHint.matched_tokens) ? captureHint.matched_tokens : [],
     selection_reason: stringValue(captureHint.selection_reason) || null,
     source: stringValue(captureHint.source) || null,
-    server_path: stringValue(selected?.server_path) || null,
-    wait_for_selector: stringValue(selected?.wait_for_selector) || null,
+    server_path: selectedServerPath,
+    selected_server_path: selectedServerPath,
+    server_path_applied: appliedFields.includes("server_path"),
+    effective_server_path: stringValue(engineState?.server_path) || stringValue(currentPlan?.target_path) || null,
+    wait_for_selector: selectedWaitForSelector,
+    selected_wait_for_selector: selectedWaitForSelector,
+    wait_for_selector_applied: appliedFields.includes("wait_for_selector"),
+    effective_wait_for_selector: stringValue(engineState?.wait_for_selector) || stringValue(currentPlan?.wait_for_selector) || null,
     fallback_triggered: captureHint.fallback_triggered === true,
     fallback_reason: stringValue(captureHint.fallback_reason) || null,
+    fallback_changes: fallbackChanges || null,
     saved_status: stringValue(saved?.status) || null,
   };
 }

@@ -663,6 +663,8 @@ writeFileSync(reviewStatePath, JSON.stringify({
   branch: "agent/review-fixture",
   reference: "before",
   requested_reference: "before",
+  server_path: "/games/tic-tac-toe",
+  wait_for_selector: "main#game-root, h1",
   before_cdn: "https://example.com/before.png",
   after_cdn: "https://example.com/after.png",
   current_runtime_step: {
@@ -948,6 +950,10 @@ assert.equal(inspectResult.structured_evidence?.proof_evidence_has_concerns, fal
 assert.equal(inspectResult.scratch_cleanup?.skipped, "enough_free_space");
 assert.equal(inspectResult.scratch_cleanup_status, "skipped_enough_free_space");
 assert.equal(inspectResult.capture_hint?.server_path, "/games/tic-tac-toe");
+assert.equal(inspectResult.capture_hint?.selected_server_path, "/games/tic-tac-toe");
+assert.equal(inspectResult.capture_hint?.server_path_applied, true);
+assert.equal(inspectResult.capture_hint?.effective_server_path, "/games/tic-tac-toe");
+assert.equal(inspectResult.capture_hint?.wait_for_selector_applied, true);
 assert.equal(inspectResult.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(inspectResult.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
 assert.equal(inspectResult.timing_summary?.recon_subphase_durations_ms?.before_capture, 12000);
@@ -1010,6 +1016,9 @@ const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { deb
 assert.equal(reviewStatus?.request_metadata?.reference_input_ignored, "use the public tic tac toe route");
 assert.equal(reviewStatus?.request_metadata?.effective_reference, "before");
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
+assert.equal(reviewStatus?.capture_hint?.selected_server_path, "/games/tic-tac-toe");
+assert.equal(reviewStatus?.capture_hint?.server_path_applied, true);
+assert.equal(reviewStatus?.capture_hint?.effective_server_path, "/games/tic-tac-toe");
 assert.equal(reviewStatus?.timing_summary?.workflow_step_durations_ms?.setup, 60000);
 assert.equal(reviewStatus?.timing_summary?.workflow_phase_durations_ms?.["setup:shared_deps"], 30000);
 assert.equal(reviewStatus?.timing_summary?.recon_subphase_durations_ms?.before_capture, 12000);
@@ -1018,6 +1027,54 @@ assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
+
+const staleHintStatePath = path.join(reviewFixture, "riddle-state-stale-hint.json");
+const staleHintWrapperStatePath = path.join(reviewFixture, "wrapper-state-stale-hint.json");
+writeFileSync(staleHintStatePath, JSON.stringify({
+  server_path: "/games/signal-sprint",
+  wait_for_selector: "h1",
+  recon_results: {
+    current_plan: {
+      target_path: "/games/signal-sprint",
+      wait_for_selector: "h1",
+    },
+  },
+  capture_hint: {
+    source: "hint_cache",
+    applied: true,
+    applied_fields: ["wait_for_selector"],
+    matched_tokens: ["target", "route", "games", "label"],
+    selection_reason: "token_overlap_and_mode",
+    selected: {
+      server_path: "/games/tic-tac-toe",
+      wait_for_selector: "h1",
+    },
+    fallback_triggered: true,
+    fallback_reason: "plan_refined",
+    fallback_changes: {
+      server_path: {
+        from: "/games/tic-tac-toe",
+        to: "/games/signal-sprint",
+      },
+    },
+  },
+}, null, 2));
+writeFileSync(staleHintWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  status: "ready_to_ship",
+  state_path: staleHintWrapperStatePath,
+  request: {
+    engine_state_path: staleHintStatePath,
+    verification_mode: "text",
+  },
+  events: [],
+}, null, 2));
+const staleHintStatus = readOpenClawRiddleProofStatus(staleHintWrapperStatePath);
+assert.equal(staleHintStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
+assert.equal(staleHintStatus?.capture_hint?.selected_server_path, "/games/tic-tac-toe");
+assert.equal(staleHintStatus?.capture_hint?.server_path_applied, false);
+assert.equal(staleHintStatus?.capture_hint?.effective_server_path, "/games/signal-sprint");
+assert.equal(staleHintStatus?.capture_hint?.fallback_changes?.server_path?.to, "/games/signal-sprint");
 
 const inspectDebugResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath, debug: true });
 assert.equal(Array.isArray(inspectDebugResult.debug?.engine_runtime_events_recent), true);
