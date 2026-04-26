@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/openclaw-riddle-proof",
-  "version": "0.4.43",
+  "version": "0.4.44",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",
@@ -37,7 +37,7 @@
     ]
   },
   "scripts": {
-    "build": "npm run sync:openclaw-plugin-version && tsup src/index.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "npm run sync:openclaw-plugin-version && tsup --config tsup.config.ts",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js",
