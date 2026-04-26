@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.44
+
+### Patch Changes
+
+- Report wrapper and dependency package metadata from status and inspect, and treat max-iteration blockers as terminal for monitor continuation.
+
 ## 0.4.43
 
 ### Patch Changes

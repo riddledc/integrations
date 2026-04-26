@@ -22,6 +22,9 @@ import register, {
   syncOpenClawRiddleProof,
 } from "./dist/index.js";
 
+const openclawRiddleProofPackageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const riddleProofPackageJson = JSON.parse(readFileSync(new URL("../riddle-proof/package.json", import.meta.url), "utf8"));
+
 const params = {
   repo: "riddledc/example",
   branch: "riddle-proof-demo",
@@ -1196,6 +1199,10 @@ assert.equal(engineOnlyStatusParsed.diagnostics.expected_state_path_type, "wrapp
 assert.equal(engineOnlyStatusParsed.diagnostics.looks_like_engine_state, true);
 
 const terminalStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+assert.equal(terminalStatus.package_metadata.plugin_package, "@riddledc/openclaw-riddle-proof");
+assert.equal(terminalStatus.package_metadata.plugin_version, openclawRiddleProofPackageJson.version);
+assert.equal(terminalStatus.package_metadata.dependency_package, "@riddledc/riddle-proof");
+assert.equal(terminalStatus.package_metadata.dependency_version, riddleProofPackageJson.version);
 assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");
 assert.equal(terminalStatus.monitor_contract.should_continue_monitoring, false);
 const immediateWait = await waitOpenClawRiddleProof({ state_path: reviewWrapperStatePath, timeout_ms: 1000 });
@@ -1295,6 +1302,8 @@ assert.equal(blockedTerminalStatus.implementation_agent_attempt_count, 0);
 assert.equal(blockedTerminalStatus.implementation_gap_origin, "before_agent_edit");
 
 const blockedInspectResult = inspectOpenClawRiddleProof({ state_path: terminalOnlyBlockedWrapperStatePath });
+assert.equal(blockedInspectResult.package_metadata.plugin_version, openclawRiddleProofPackageJson.version);
+assert.equal(blockedInspectResult.package_metadata.dependency_version, riddleProofPackageJson.version);
 assert.equal(blockedInspectResult.monitor_contract.report_mode, "terminal_only");
 assert.equal(blockedInspectResult.monitor_contract.should_continue_monitoring, true);
 assert.equal(blockedInspectResult.monitor_contract.response_gate, "hold_for_terminal");
@@ -1403,8 +1412,40 @@ assert.equal(blockedDuringAttemptInspect.implementation_gap_origin, "during_agen
 assert.equal(blockedDuringAttemptInspect.monitor_contract.response_gate, "hold_for_implementation_outcome");
 assert.equal(blockedDuringAttemptInspect.monitor_contract.should_continue_monitoring, true);
 
+const blockedMaxIterationsWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-max-iterations.json");
+writeFileSync(blockedMaxIterationsWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_blocked_max_iterations",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "riddledc/riddle-site",
+    change_request: "Make a tiny homepage punctuation change.",
+    engine_state_path: reviewStatePath,
+    verification_mode: "visual",
+  },
+  last_checkpoint: "recon_supervisor_judgment",
+  blocker: {
+    code: "max_iterations_reached",
+    checkpoint: "recon_supervisor_judgment",
+    message: "Harness reached max_iterations=1 before proof was ready or shipped.",
+  },
+  iterations: 1,
+  events: [],
+}, null, 2));
+const blockedMaxIterationsStatus = readOpenClawRiddleProofStatus(blockedMaxIterationsWrapperStatePath);
+assert.equal(blockedMaxIterationsStatus.is_terminal, true);
+assert.equal(blockedMaxIterationsStatus.is_routable_checkpoint, false);
+assert.equal(blockedMaxIterationsStatus.monitor_should_continue, false);
+assert.equal(blockedMaxIterationsStatus.suggested_next_action, "report_terminal_status");
+assert.equal(blockedMaxIterationsStatus.monitor_contract.response_gate, "release_terminal");
+assert.equal(blockedMaxIterationsStatus.monitor_contract.should_continue_monitoring, false);
+
 const inspectExecuted = await inspectTool.tool.execute("test-inspect", { state_path: reviewWrapperStatePath });
 const inspectParsed = JSON.parse(inspectExecuted.content[0].text);
+assert.equal(inspectParsed.package_metadata.plugin_package, "@riddledc/openclaw-riddle-proof");
+assert.equal(inspectParsed.package_metadata.dependency_package, "@riddledc/riddle-proof");
 assert.equal(inspectParsed.route_matched, true);
 assert.equal(inspectParsed.proof_profile_applied, true);
 assert.equal(inspectParsed.structured_evidence.proof_evidence_present, true);

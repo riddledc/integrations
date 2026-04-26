@@ -58,6 +58,19 @@ export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 const MIN_DEFAULT_MAX_ITERATIONS = 12;
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 
+export type OpenClawRiddleProofPackageMetadata = {
+  plugin_package: string | null;
+  plugin_version: string | null;
+  dependency_package: string;
+  dependency_version: string | null;
+};
+
+declare const __RIDDLE_PROOF_PACKAGE_METADATA__: OpenClawRiddleProofPackageMetadata;
+
+function riddleProofPackageMetadata() {
+  return __RIDDLE_PROOF_PACKAGE_METADATA__;
+}
+
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
 export type RiddleProofReportMode = "checkpoint" | "terminal_only";
 export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
@@ -422,6 +435,7 @@ function resumableCheckpointLike(
 ) {
   if (!checkpoint || !ROUTABLE_CHECKPOINTS.has(checkpoint)) return false;
   if (blockerCode === "main_agent_proof_review_required") return false;
+  if (blockerCode && !ROUTABLE_BLOCKER_CODES.has(blockerCode)) return false;
   if (REVIEW_CHECKPOINTS.has(checkpoint)) return false;
   return status === "running" || status === "blocked";
 }
@@ -1123,6 +1137,7 @@ function buildProofInspection(
   const implementationDetection = recordValue(fullState.implementation_detection);
   const inspection = {
     ok: true,
+    package_metadata: riddleProofPackageMetadata(),
     status: wrapperState.status,
     run_id: wrapperState.run_id || null,
     state_path: wrapperState.state_path || null,
@@ -1439,6 +1454,11 @@ const ROUTABLE_CHECKPOINTS = new Set([
   "verify_supervisor_judgment",
 ]);
 
+const ROUTABLE_BLOCKER_CODES = new Set([
+  "implement_changes_missing",
+  "implement_required",
+]);
+
 const REVIEW_CHECKPOINTS = new Set([
   "main_agent_proof_review_required",
   "verify_human_escalation",
@@ -1518,6 +1538,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     const recommendedPollMs = recommendedPollAfterMs(null, snapshot);
     const baseStatus = {
       ...snapshot,
+      package_metadata: riddleProofPackageMetadata(),
       monitor_contract: monitorContract,
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
       recommended_poll_after_ms: recommendedPollMs,
@@ -1544,6 +1565,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const recommendedPollMs = recommendedPollAfterMs(activeSubstep, snapshot);
   const status = {
     ...snapshot,
+    package_metadata: riddleProofPackageMetadata(),
     monitor_contract: monitorContract,
     current_stage: effectiveStage,
     wrapper_current_stage: snapshot.current_stage ?? null,
