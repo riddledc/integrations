@@ -218,8 +218,15 @@ def abort_capture_failure(state, results, expected_path, message, raw_payload):
 def build_probe_capture_script(base_script='', verification_mode='proof'):
     pieces = []
     script = (base_script or '').strip()
+    pieces.append('let __riddleProofCaptureScriptError = null;')
     if script:
-        pieces.append(script.rstrip(';') + ';')
+        pieces.extend([
+            'try {',
+            script.rstrip(';') + ';',
+            '} catch (err) {',
+            '  __riddleProofCaptureScriptError = err;',
+            '}',
+        ])
     pieces.extend([
         f'await page.waitForTimeout({HYDRATION_WAIT_MS});',
         'const pageState = await page.evaluate(() => {',
@@ -273,6 +280,7 @@ def build_probe_capture_script(base_script='', verification_mode='proof'):
     ])
     if auto_screenshot_for_mode(verification_mode) and not capture_script_saves_screenshot(script):
         pieces.append("await saveScreenshot('after-proof');")
+    pieces.append('if (__riddleProofCaptureScriptError) throw __riddleProofCaptureScriptError;')
     pieces.append('return { pageState, proofEvidence: __riddleProofEvidenceValue };')
     return ' '.join(pieces)
 
