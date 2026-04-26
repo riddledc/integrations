@@ -57,6 +57,18 @@ export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 const MIN_DEFAULT_MAX_ITERATIONS = 12;
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
+const STRUCTURED_FIRST_VERIFICATION_MODES = new Set([
+  "api",
+  "audio",
+  "data",
+  "json",
+  "log",
+  "logs",
+  "metric",
+  "metrics",
+  "telemetry",
+  "text",
+]);
 
 export type OpenClawRiddleProofPackageMetadata = {
   plugin_package: string | null;
@@ -675,6 +687,19 @@ function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function verificationModeRequiresScreenshot(mode: unknown) {
+  return !STRUCTURED_FIRST_VERIFICATION_MODES.has(stringValue(mode).toLowerCase());
+}
+
+function artifactContractRequiresScreenshot(
+  artifactContract: Record<string, unknown> | null,
+  verificationMode: unknown,
+) {
+  const required = recordValue(artifactContract?.required);
+  if (typeof required?.screenshot === "boolean") return required.screenshot;
+  return verificationModeRequiresScreenshot(verificationMode);
+}
+
 function compactRecordValue<T extends Record<string, unknown>>(value: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ""),
@@ -1246,10 +1271,20 @@ function buildProofInspection(
   collectImageArtifacts(evidenceBundle, imageArtifacts, new Set(imageArtifacts.map((item) => String(item.url || ""))));
   const profile = recordValue(fullState.proof_profile);
   const visibleChange = buildVisibleChangeSummary(semanticContext);
+  const verificationMode = fullState.verification_mode || wrapperState.request.verification_mode;
+  const screenshotRequired = artifactContractRequiresScreenshot(artifactContract, verificationMode);
+  const hasAfterScreenshot = imageArtifacts.some((item) => item.role === "after" || item.name === "after");
+  const missingRequiredSignals = listValue(recordValue(artifactUsage)?.missing_required_signals, 12)
+    .map((item) => stringValue(item))
+    .filter(Boolean);
+  const proofEvidenceRequired = recordValue(recordValue(artifactContract)?.required)?.proof_evidence === true;
+  const proofEvidencePresent = Boolean(proofEvidence !== null && proofEvidence !== undefined) || Boolean(supportingArtifacts.proof_evidence_present);
   const readyCandidate = Boolean(
     routeMatches(route) &&
     semanticRecord(semanticContext.after).valid !== false &&
-    imageArtifacts.some((item) => item.role === "after" || item.name === "after") &&
+    (!screenshotRequired || hasAfterScreenshot) &&
+    (!proofEvidenceRequired || proofEvidencePresent) &&
+    missingRequiredSignals.length === 0 &&
     (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
   );
   const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
@@ -1284,7 +1319,7 @@ function buildProofInspection(
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
     structured_evidence: {
-      proof_evidence_present: Boolean(proofEvidence !== null && proofEvidence !== undefined) || Boolean(supportingArtifacts.proof_evidence_present),
+      proof_evidence_present: proofEvidencePresent,
       proof_evidence_sample: proofEvidenceSample,
       proof_evidence_has_concerns: proofEvidenceConcernList.length > 0,
       proof_evidence_concerns: proofEvidenceConcernList,
@@ -1312,7 +1347,9 @@ function buildProofInspection(
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyToShipCandidate,
     next_action: readyToShipCandidate
-      ? `If the screenshots visually satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
+      ? screenshotRequired
+        ? `If the screenshots visually satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
+        : `If the required proof artifacts satisfy the request, resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} decision=ready_to_ship.`
       : "Use this inspection packet to choose needs_implementation, needs_richer_proof, revise_capture, or needs_recon.",
   };
   if (options.debug) {
@@ -1341,6 +1378,8 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
   const artifactContract = recordValue(evidenceBundle.artifact_contract) || recordValue(assessmentRequest.artifact_contract) || null;
   const artifactProduction = recordValue(evidenceBundle.artifact_production) || recordValue(assessmentRequest.artifact_production) || null;
   const artifactUsage = recordValue(evidenceBundle.artifact_usage) || recordValue(assessmentRequest.artifact_usage) || null;
+  const verificationMode = context.request.verification_mode || stringValue(fullState.verification_mode) || "proof";
+  const screenshotRequired = artifactContractRequiresScreenshot(artifactContract, verificationMode);
   const imageArtifacts: Array<Record<string, unknown>> = [];
   for (const [role, url] of [
     ["before", fullState.before_cdn],
@@ -1353,7 +1392,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
   collectImageArtifacts(evidenceBundle, imageArtifacts, new Set(imageArtifacts.map((item) => String(item.url || ""))));
 
   return {
-    mode: "main_agent_visual_review",
+    mode: screenshotRequired ? "main_agent_visual_review" : "main_agent_artifact_review",
     run_id: context.state.run_id || null,
     state_path: context.state.state_path || null,
     engine_state_path: context.engineResult.state_path || context.request.engine_state_path || null,
@@ -1362,7 +1401,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     branch: stringValue(fullState.branch) || context.state.branch || context.request.branch || null,
     change_request: context.request.change_request || "",
     context: context.request.context || "",
-    verification_mode: context.request.verification_mode || "proof",
+    verification_mode: verificationMode,
     success_criteria: context.request.success_criteria || "",
     expected_path: stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || null,
     artifact_contract: artifactContract,
@@ -1373,19 +1412,30 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     semantic_context: semanticContext,
     scratch_cleanup: recordValue(fullState.scratch_cleanup),
     proof_assessment_request: assessmentRequest,
-    review_prompt: [
-      "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
-      "Use semantic_context.route, headings, buttons, and text anchors to ground route/content judgment before calling the proof wrong-route.",
-      "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
-      "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
-      "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
-      "If visual_delta is unmeasured and the before/after images look nearly identical or require zooming/code inspection to believe, choose needs_implementation or needs_richer_proof.",
-      `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
-    ],
+    review_prompt: screenshotRequired
+      ? [
+          "Inspect the before/prod and after screenshots as images, not just as URLs or pixel counts.",
+          "Use semantic_context.route, headings, buttons, and text anchors to ground route/content judgment before calling the proof wrong-route.",
+          "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
+          "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
+          "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
+          "If visual_delta is unmeasured and the before/after images look nearly identical or require zooming/code inspection to believe, choose needs_implementation or needs_richer_proof.",
+          `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
+        ]
+      : [
+          "Review artifact_contract, artifact_usage, proof_evidence, semantic_context, and any image artifacts if present.",
+          "Use semantic_context.route and structured proof evidence to ground route/content judgment before calling the proof wrong-route.",
+          "Confirm whether the captured required artifacts satisfy the requested change and route/content still match the target.",
+          "Reject missing required signals, ambiguous evidence, wrong-route captures, or evidence that only proves implementation intent.",
+          "For structured modes, do not require screenshots when artifact_contract.required.screenshot is false, but do require the declared proof evidence signals.",
+          `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the required proof artifacts are convincing.`,
+        ],
     response_schema: {
       state_path: context.state.state_path || null,
       decision: "ready_to_ship | needs_richer_proof | revise_capture | needs_recon | needs_implementation",
-      summary: "Concrete visual judgment grounded in the screenshots.",
+      summary: screenshotRequired
+        ? "Concrete visual judgment grounded in the screenshots."
+        : "Concrete proof judgment grounded in the required artifacts.",
       recommended_stage: "ship | author | implement | recon | verify",
       continue_with_stage: "ship | author | implement | recon | verify",
       escalation_target: "agent | human",
@@ -1409,40 +1459,61 @@ function afterScreenshotArtifact(inspection: Record<string, unknown>) {
   });
 }
 
+function inspectionRequiresScreenshot(inspection: Record<string, unknown>) {
+  return artifactContractRequiresScreenshot(
+    recordValue(inspection.artifact_contract),
+    inspection.verification_mode,
+  );
+}
+
+function inspectionMissingRequiredSignals(inspection: Record<string, unknown>) {
+  return listValue(recordValue(inspection.artifact_usage)?.missing_required_signals, 12)
+    .map((item) => stringValue(item))
+    .filter(Boolean);
+}
+
 function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
   const visualDelta = recordValue(inspection.visual_delta);
   const structuredEvidence = recordValue(inspection.structured_evidence);
+  const screenshotRequired = inspectionRequiresScreenshot(inspection);
   return Boolean(
     inspection.ok === true &&
     inspection.ready_to_ship_candidate === true &&
     inspection.route_matched === true &&
-    afterScreenshotArtifact(inspection) &&
+    (!screenshotRequired || afterScreenshotArtifact(inspection)) &&
+    inspectionMissingRequiredSignals(inspection).length === 0 &&
     structuredEvidence?.proof_evidence_has_concerns !== true &&
     (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
   );
 }
 
 function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
+  const screenshotRequired = inspectionRequiresScreenshot(inspection);
+  const reasons = [
+    "ship_mode is none, so advancing can only reach the non-shipping ready_to_ship state.",
+    "The inspection packet marked the proof as a ready_to_ship_candidate.",
+    "The target route matched across available observations.",
+    "Required artifact signals are present for the verification mode.",
+    "No failed visual delta was reported.",
+    "No structured proof evidence concerns were reported.",
+  ];
+  if (screenshotRequired) {
+    reasons.splice(4, 0, "An after screenshot artifact was captured.");
+  }
   return {
     decision: "ready_to_ship",
     summary:
-      "Auto-reviewed proof for ship_mode=none. The inspection packet marks this as a ready-to-ship candidate, the target route matched, an after screenshot artifact exists, and this mode can only advance to a held ready state without shipping.",
+      "Auto-reviewed proof for ship_mode=none. The inspection packet marks this as a ready-to-ship candidate, the target route matched, required artifact signals are present, and this mode can only advance to a held ready state without shipping.",
     recommended_stage: "ship",
     continue_with_stage: "ship",
     escalation_target: "agent",
-    reasons: [
-      "ship_mode is none, so advancing can only reach the non-shipping ready_to_ship state.",
-      "The inspection packet marked the proof as a ready_to_ship_candidate.",
-      "The target route matched across available observations.",
-      "An after screenshot artifact was captured.",
-      "No failed visual delta was reported.",
-      "No structured proof evidence concerns were reported.",
-    ],
+    reasons,
     source: "openclaw_auto_ship_mode_none",
     inspection_summary: {
       expected_path: inspection.expected_path || null,
       route_matched: inspection.route_matched,
       visual_delta: inspection.visual_delta || null,
+      screenshot_required: screenshotRequired,
       image_artifact_count: Array.isArray(inspection.image_artifacts) ? inspection.image_artifacts.length : 0,
     },
   };
