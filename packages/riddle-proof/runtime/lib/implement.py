@@ -9,6 +9,8 @@ import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
 
+TOOL_NOISE_PATHS = ('.codex', '.oc-smoke')
+
 
 def unique_nonempty(items):
     seen = set()
@@ -37,6 +39,15 @@ def parse_status_paths(lines):
     return unique_nonempty(paths)
 
 
+def is_tool_noise_path(path):
+    text = str(path or '').strip()
+    return any(text == prefix or text.startswith(prefix + '/') for prefix in TOOL_NOISE_PATHS)
+
+
+def material_paths(paths):
+    return [path for path in unique_nonempty(paths) if not is_tool_noise_path(path)]
+
+
 s = load_state()
 after_dir = (s.get('after_worktree') or '').strip()
 if not after_dir or not os.path.exists(after_dir):
@@ -45,7 +56,9 @@ if not after_dir or not os.path.exists(after_dir):
 base_branch = s.get('base_branch', 'main')
 base_ref = (s.get('before_ref') or '').strip() or ('origin/' + base_branch)
 dirty = [ln for ln in git('git status --short', after_dir).stdout.splitlines() if ln.strip()]
-dirty_paths = parse_status_paths(dirty)
+dirty_paths_all = parse_status_paths(dirty)
+dirty_paths = material_paths(dirty_paths_all)
+ignored_dirty_paths = [path for path in dirty_paths_all if is_tool_noise_path(path)]
 
 diff_probes = []
 
@@ -70,7 +83,9 @@ if diff_result.returncode != 0:
 if diff_result.returncode != 0 and not committed:
     fallback, committed = run_diff_probe('head_parent', 'git diff --name-only HEAD~1 HEAD')
 
-changed = unique_nonempty(dirty_paths + committed)
+committed_material = material_paths(committed)
+ignored_committed_paths = [path for path in committed if is_tool_noise_path(path)]
+changed = unique_nonempty(dirty_paths + committed_material)
 authored = bool((s.get('capture_script') or '').strip()) and bool((s.get('proof_plan') or '').strip())
 
 detection = {
@@ -81,9 +96,13 @@ detection = {
     'base_ref_requested': base_ref,
     'dirty_status_lines': dirty[:20],
     'dirty_paths': dirty_paths[:20],
+    'ignored_dirty_paths': ignored_dirty_paths[:20],
     'dirty_path_count': len(dirty_paths),
-    'committed_paths': committed[:20],
-    'committed_path_count': len(committed),
+    'dirty_path_count_including_noise': len(dirty_paths_all),
+    'committed_paths': committed_material[:20],
+    'ignored_committed_paths': ignored_committed_paths[:20],
+    'committed_path_count': len(committed_material),
+    'committed_path_count_including_noise': len(committed),
     'changed_paths': changed[:20],
     'changed_path_count': len(changed),
     'diff_probes': diff_probes[:6],

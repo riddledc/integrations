@@ -462,9 +462,29 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function parseGitStatusPaths(status: string) {
+  return status.split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+    .map((line) => {
+      let item = line.length > 3 ? line.slice(3) : line;
+      if (item.includes(" -> ")) item = item.split(" -> ").pop() || item;
+      return item.trim();
+    })
+    .filter(Boolean);
+}
+
+function isToolNoisePath(filePath: string) {
+  return filePath === ".codex" ||
+    filePath.startsWith(".codex/") ||
+    filePath === ".oc-smoke" ||
+    filePath.startsWith(".oc-smoke/");
+}
+
 function hasGitDiff(workdir: string) {
   try {
-    return git(["status", "--porcelain"], workdir).trim().length > 0;
+    const status = git(["status", "--porcelain"], workdir);
+    return parseGitStatusPaths(status).some((filePath) => !isToolNoisePath(filePath));
   } catch {
     return false;
   }

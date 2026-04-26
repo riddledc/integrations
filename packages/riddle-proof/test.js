@@ -743,6 +743,93 @@ assert.equal(engineCalls[0].auth_headers_json, "{\"Authorization\":\"Bearer toke
 assert.equal(engineCalls.at(-1).ship_after_verify, true);
 assert.equal(engineCalls.at(-1).leave_draft, true);
 
+const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
+const noiseWorkdir = path.join(noiseFixture, "after");
+mkdirSync(noiseWorkdir, { recursive: true });
+execFileSync("git", ["init"], { cwd: noiseWorkdir, stdio: "ignore" });
+const noiseStatePath = path.join(noiseFixture, "riddle-state.json");
+writeFileSync(noiseStatePath, JSON.stringify({
+  after_worktree: noiseWorkdir,
+  branch: "agent/openclaw/noise-only",
+}, null, 2));
+
+const noiseEngineCalls = [];
+const noiseHarnessResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Make a real app change, not tool metadata.",
+    verification_mode: "visual",
+    harness_state_path: path.join(noiseFixture, "harness-state.json"),
+  },
+  max_iterations: 5,
+  engine: {
+    async execute(params) {
+      noiseEngineCalls.push(params);
+      if (params.advance_stage === "implement") {
+        throw new Error("noise-only worktree should not advance to engine implement");
+      }
+      if (params.author_packet_json) {
+        return {
+          ok: false,
+          state_path: noiseStatePath,
+          checkpoint: "implement_changes_missing",
+          summary: "Implementation changes are required.",
+        };
+      }
+      if (params.recon_assessment_json) {
+        return {
+          ok: false,
+          state_path: noiseStatePath,
+          checkpoint: "author_supervisor_judgment",
+          summary: "Author packet required.",
+        };
+      }
+      return {
+        ok: false,
+        state_path: noiseStatePath,
+        checkpoint: "recon_supervisor_judgment",
+        summary: "Recon assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() {
+      return {
+        ok: true,
+        payload: {
+          decision: "ready_for_author",
+          continue_with_stage: "author",
+          source: "supervising_agent",
+        },
+      };
+    },
+    async authorProofPacket() {
+      return {
+        ok: true,
+        payload: {
+          proof_plan: "Capture the changed page.",
+          capture_script: "await saveScreenshot('after-proof')",
+          summary: "Capture after proof.",
+        },
+      };
+    },
+    async implementChange() {
+      mkdirSync(path.join(noiseWorkdir, ".codex"), { recursive: true });
+      writeFileSync(path.join(noiseWorkdir, ".codex", "session.json"), "{}\n");
+      return {
+        ok: true,
+        summary: "Only tool metadata changed.",
+        diffDetected: false,
+        changedFiles: [".codex/session.json"],
+        implementationNotes: "No app source file changed.",
+      };
+    },
+  },
+});
+assert.equal(noiseHarnessResult.status, "blocked");
+assert.equal(noiseHarnessResult.blocker.code, "implementation_diff_missing");
+assert.equal(noiseEngineCalls.some((call) => call.advance_stage === "implement"), false);
+
 const runwayFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-iteration-runway-"));
 const runwayWorkdir = path.join(runwayFixture, "after");
 mkdirSync(runwayWorkdir);
