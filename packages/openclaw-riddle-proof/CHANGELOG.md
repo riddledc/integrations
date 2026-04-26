@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.48
+
+### Patch Changes
+
+- Tighten proof authoring guidance for structured audio/data captures, including the correct Playwright wait timeout signature and how to persist browser-page proof evidence.
+
 ## 0.4.47
 
 ### Patch Changes

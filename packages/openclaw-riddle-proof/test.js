@@ -264,6 +264,51 @@ const blockedAdapterResult = await blockedAdapter.implementChange({
 assert.equal(blockedAdapterResult.ok, false);
 assert.equal(blockedAdapterResult.blocker?.code, "codex_implementation_blocked");
 
+const authorPrompts = [];
+const authorAdapter = createCodexExecAgentAdapter({}, async (request) => {
+  authorPrompts.push(request);
+  assert.equal(request.purpose, "proof packet authoring");
+  assert.ok(request.prompt.includes("Do not call Playwright page.* APIs inside page.evaluate"));
+  assert.ok(request.prompt.includes("await page.waitForFunction(fn, undefined, { timeout: 60000 })"));
+  assert.ok(request.prompt.includes("window.__riddleProofEvidence"));
+  return {
+    ok: true,
+    json: {
+      proof_plan: "Collect structured audio metrics from the page proof API.",
+      capture_script: "const evidence = await page.evaluate(() => ({ ok: true }));",
+      baseline_understanding_used: {
+        reference: "before",
+        target_route: "/games/drum-sequencer",
+        before_evidence_url: "https://example.com/before.png",
+        visible_before_state: "Sequencer loaded.",
+        relevant_elements: ["Neon Step Sequencer"],
+        requested_change: "Adjust an EQ band.",
+        proof_focus: "Structured audio metrics.",
+        stop_condition: "Evidence contains the expected EQ value.",
+        quality_risks: [],
+      },
+      refined_inputs: {
+        server_path: null,
+        wait_for_selector: null,
+        reference: null,
+      },
+      rationale: ["Use structured evidence for audio proof."],
+      confidence: "medium",
+      summary: "Authored structured audio proof packet.",
+    },
+  };
+});
+const authorAdapterResult = await authorAdapter.authorProofPacket({
+  request: { repo: "riddledc/example", change_request: "Adjust an EQ band.", verification_mode: "audio" },
+  state: { run_id: "rp_author_prompt", events: [] },
+  engineResult: { state_path: "/tmp/riddle-engine-state.json", checkpoint: "author_required" },
+  fullRiddleState: { after_worktree: adapterWorkdir },
+  checkpoint: "author_required",
+  workdir: adapterWorkdir,
+});
+assert.equal(authorAdapterResult.ok, true);
+assert.equal(authorPrompts.length, 1);
+
 const engineFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-engine-"));
 const engineWorkdir = path.join(engineFixture, "after");
 mkdirSync(engineWorkdir, { recursive: true });
