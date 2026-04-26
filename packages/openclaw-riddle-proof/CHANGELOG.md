@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.59
+
+### Patch Changes
+
+- Preserve literal proof request text when shipping PRs by invoking git and gh without shell interpolation.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.28
+
 ## 0.4.58
 
 ### Patch Changes

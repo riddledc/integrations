@@ -1646,6 +1646,42 @@ def run_ship_filters_tool_noise_when_staging():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_ship_preserves_literal_backticks_in_args():
+    sys.modules.pop('util', None)
+    source = SHIP_PATH.read_text()
+    helpers_source = source.split('\ns = load_state()', 1)[0]
+    namespace = {'__file__': str(SHIP_PATH)}
+    exec(compile(helpers_source, str(SHIP_PATH), 'exec'), namespace)
+
+    title = 'Change button from `Start Run` to `Launch Run`'
+    body = 'Proof request keeps `Start Run` and `Launch Run` literal.'
+    args = namespace['gh_pr_create_args'](title, body, 'agent/test-backticks')
+    assert args[0:3] == ['gh', 'pr', 'create'], args
+    assert args[args.index('--title') + 1] == title, args
+    assert args[args.index('--body') + 1] == body, args
+
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-ship-backticks-'))
+    try:
+        sp.run(['git', 'init', '-b', 'main'], cwd=tempdir, check=True, capture_output=True, text=True)
+        sp.run(['git', 'config', 'user.email', 'test@example.com'], cwd=tempdir, check=True)
+        sp.run(['git', 'config', 'user.name', 'Test User'], cwd=tempdir, check=True)
+        (tempdir / 'tracked.txt').write_text('literal backticks\n')
+        sp.run(['git', 'add', 'tracked.txt'], cwd=tempdir, check=True)
+
+        namespace['git_checked'](['commit', '-m', title], str(tempdir))
+        subject = sp.run(
+            ['git', 'log', '-1', '--pretty=%s'],
+            cwd=tempdir,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        assert subject == title, subject
+        return {'ok': True, 'subject': subject}
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_ship_resolves_real_pr_branch():
     sys.modules.pop('util', None)
     source = SHIP_PATH.read_text()
@@ -1728,6 +1764,7 @@ if __name__ == '__main__':
         'ship_structured_after_evidence': run_ship_accepts_structured_after_evidence(),
         'ship_discord_thread_target': run_ship_discord_thread_target(),
         'ship_filters_tool_noise_when_staging': run_ship_filters_tool_noise_when_staging(),
+        'ship_preserves_literal_backticks_in_args': run_ship_preserves_literal_backticks_in_args(),
         'ship_resolves_real_pr_branch': run_ship_resolves_real_pr_branch(),
     }
     print(json.dumps(payload, indent=2))

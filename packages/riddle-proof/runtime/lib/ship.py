@@ -82,6 +82,24 @@ def git_stdout(args, repo_dir, timeout=30):
     return result.stdout.strip()
 
 
+def git_checked(args, repo_dir, timeout=120):
+    result = sp.run(['git'] + args, cwd=repo_dir, capture_output=True, text=True, timeout=timeout)
+    if result.returncode != 0:
+        raise SystemExit('git ' + ' '.join(args) + ' failed: ' + (result.stderr or result.stdout)[:300])
+    return result
+
+
+def gh_pr_create_args(title, body, branch):
+    return [
+        'gh', 'pr', 'create',
+        '--draft',
+        '--title', str(title or '').strip() or 'Riddle Proof change',
+        '--body', str(body or ''),
+        '--base', 'main',
+        '--head', str(branch or ''),
+    ]
+
+
 def remote_branch_head(repo_dir, branch):
     result = sp.run(['git', 'ls-remote', 'origin', 'refs/heads/' + branch], cwd=repo_dir, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
@@ -623,11 +641,11 @@ if lines:
         print('Only ship-noise paths changed; skipping commit.')
     if s.get('pr_url'):
         if staged_paths:
-            git('git commit --amend --no-edit', after_dir)
+            git_checked(['commit', '--amend', '--no-edit'], after_dir)
         push, push_info = push_existing_pr_branch(after_dir, branch, push_target)
     else:
         if staged_paths:
-            git('git commit -m ' + json.dumps(s['commit_message']), after_dir)
+            git_checked(['commit', '-m', s['commit_message']], after_dir)
         push = sp.run(
             ['git', 'push', 'origin', push_target],
             cwd=after_dir,
@@ -657,8 +675,8 @@ else:
 
 # Create PR if needed
 if not s.get('pr_url'):
-    q = sp.run('gh pr list --head "' + branch + '" --json url,number -q ".[0]"',
-               shell=True, cwd=repo_dir, capture_output=True, text=True)
+    q = sp.run(['gh', 'pr', 'list', '--head', branch, '--json', 'url,number', '-q', '.[0]'],
+               cwd=repo_dir, capture_output=True, text=True)
     pr_url = ''
     if q.stdout.strip():
         try:
@@ -667,10 +685,10 @@ if not s.get('pr_url'):
         except:
             pass
     if not pr_url:
-        c = sp.run('gh pr create --draft --title ' + json.dumps(s['commit_message']) +
-                    ' --body ' + json.dumps(s['change_request']) + ' --base main' +
-                    ' --head ' + branch,
-                    shell=True, cwd=repo_dir, capture_output=True, text=True)
+        c = sp.run(gh_pr_create_args(s.get('commit_message', ''), s.get('change_request', ''), branch),
+                    cwd=repo_dir, capture_output=True, text=True)
+        if c.returncode != 0:
+            raise SystemExit('Failed to create PR: ' + (c.stderr or c.stdout)[:500])
         pr_url = c.stdout.strip().splitlines()[-1].strip() if c.returncode == 0 else ''
     s['pr_url'] = pr_url
     s['pr_number'] = pr_url.rstrip('/').split('/')[-1] if pr_url else ''
