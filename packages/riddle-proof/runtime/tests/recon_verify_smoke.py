@@ -126,6 +126,44 @@ class FakeRiddle:
                         'RIDDLE_PROOF_EVIDENCE ' + json.dumps(proof_evidence),
                     ],
                 }
+            if 'throwAfterProofEvidence' in script:
+                assert '__riddleProofCaptureScriptError' in script
+                page_state = {
+                    'bodyTextLength': 96,
+                    'visibleTextSample': 'Neon step sequencer audio workbench',
+                    'interactiveElements': 0,
+                    'visibleInteractiveElements': 0,
+                    'pathname': '/s/pv-after/sequencer',
+                    'title': 'Sequencer',
+                    'buttons': [],
+                    'headings': ['Sequencer'],
+                    'links': [],
+                    'canvasCount': 1,
+                    'largeVisibleElements': [{'tag': 'canvas', 'text': ''}],
+                }
+                proof_evidence = {
+                    'proof_evidence_present': False,
+                    'evidence_summary': 'Captured structured audio evidence before the capture script threw.',
+                    'checks': {
+                        'route_ok': True,
+                        'ui_context_ok': True,
+                        'source_audio_ok': False,
+                    },
+                }
+                return {
+                    'ok': True,
+                    'outputs': [{'name': 'proof.json', 'url': 'https://cdn.example.com/proof.json'}],
+                    'result': {'pageState': page_state},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                    '_artifact_json': {
+                        'proof.json': {
+                            'script_error': 'Error: intentional capture script failure after evidence',
+                        },
+                    },
+                }
             if 'window.__riddleProofEvidence' in script or 'globalThis.__riddleProofEvidence' in script:
                 page_state = {
                     'bodyTextLength': 36,
@@ -1226,6 +1264,68 @@ def run_verify_audio_rejects_failed_nested_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_preserves_proof_evidence_on_capture_script_error():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-verify-script-error-evidence-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'before_cdn': 'https://cdn.example.com/before.png',
+            'verification_mode': 'audio',
+            'server_path': '/sequencer',
+            'proof_plan': 'Measure the rendered synth transient envelope and compare attack/energy metrics.',
+            'capture_script': (
+                "await page.evaluate(() => { "
+                "document.body.dataset.throwAfterProofEvidence = '1'; "
+                "window.__riddleProofEvidence = { "
+                "proof_evidence_present: false, "
+                "evidence_summary: 'Captured structured audio evidence before the capture script threw.', "
+                "checks: { route_ok: true, ui_context_ok: true, source_audio_ok: false } "
+                "}; }); "
+                "throw new Error('intentional capture script failure after evidence');"
+            ),
+            'recon_results': {
+                'baselines': {'before': {'path': '/sequencer', 'url': 'https://cdn.example.com/before.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_preserves_script_error_evidence', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        observation = after_verify['verify_results']['after']['observation']
+        assert observation['valid'] is False
+        artifact_summary = observation['details']['artifact_summary']
+        assert artifact_summary['proof_script_error'] is True
+        supporting = after_verify['verify_results']['after']['supporting_artifacts']
+        assert supporting['has_structured_payload'] is True
+        assert supporting['proof_evidence_present'] is True
+        assert 'Captured structured audio evidence before the capture script threw' in supporting['proof_evidence_sample']
+        capture_quality = after_verify['verify_decision_request']['capture_quality']
+        assert capture_quality['decision'] == 'failed_proof_evidence'
+        assert capture_quality['recommended_stage'] == 'author'
+        assert 'proof_evidence_present=false' in capture_quality['summary']
+        assert 'source_audio_ok' in capture_quality['summary']
+        assert 'Structured proof evidence gate' in after_verify['proof_summary']
+
+        return {
+            'ok': True,
+            'verify_status': after_verify['verify_status'],
+            'decision': capture_quality['decision'],
+            'proof_script_error': artifact_summary['proof_script_error'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_capture_retry():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-capture-retry-'))
     state_path = tempdir / 'state.json'
@@ -1543,6 +1643,7 @@ if __name__ == '__main__':
         'verify_structured_evidence_without_screenshot': run_verify_structured_evidence_without_screenshot(),
         'verify_audio_requires_proof_evidence': run_verify_audio_requires_proof_evidence(),
         'verify_audio_rejects_failed_nested_proof_evidence': run_verify_audio_rejects_failed_nested_proof_evidence(),
+        'verify_preserves_proof_evidence_on_capture_script_error': run_verify_preserves_proof_evidence_on_capture_script_error(),
         'verify_capture_retry': run_verify_capture_retry(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),
