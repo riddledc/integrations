@@ -167,13 +167,13 @@ const adapter = createCodexExecAgentAdapter({}, async (request) => {
   assert.ok(request.prompt.includes("git status --short"));
   assert.ok(request.prompt.includes("git diff --name-only"));
   assert.ok(JSON.stringify(request.schema).includes("changed_files"));
-  writeFileSync(path.join(request.workdir, "feature.txt"), "changed\n");
+  writeFileSync(path.join(request.workdir, "baseline.txt"), "changed\n");
   return {
     ok: true,
     json: {
       summary: "Changed the fixture.",
       implementation_notes: "Created a focused fixture diff.",
-      changed_files: ["feature.txt"],
+      changed_files: ["baseline.txt"],
       tests_run: ["fixture"],
       blockers: [],
     },
@@ -189,7 +189,7 @@ const adapterResult = await adapter.implementChange({
 });
 assert.equal(adapterResult.ok, true);
 assert.equal(adapterResult.summary, "Changed the fixture.");
-assert.deepEqual(adapterResult.changedFiles, ["feature.txt"]);
+assert.deepEqual(adapterResult.changedFiles, ["baseline.txt"]);
 assert.equal(codexCalls.length, 1);
 
 const retryWorkdir = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-adapter-retry-"));
@@ -1181,6 +1181,136 @@ const autoReviewState = JSON.parse(readFileSync(autoReviewWrapperStatePath, "utf
 const autoReviewEvent = autoReviewState.events.find((event) => event.kind === "agent.proof_assessment.completed");
 assert.equal(autoReviewEvent.details.payload.source, "openclaw_auto_ship_mode_none");
 assert.equal(autoReviewState.finalized, true);
+
+const audioAutoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-audio-auto-review-"));
+const audioAutoReviewStatePath = path.join(audioAutoReviewFixture, "riddle-state.json");
+const audioAutoReviewWrapperStatePath = path.join(audioAutoReviewFixture, "wrapper-state.json");
+writeFileSync(audioAutoReviewStatePath, JSON.stringify({
+  branch: "agent/audio-auto-review-fixture",
+  before_cdn: "https://example.com/audio-before.png",
+  after_cdn: "",
+  verification_mode: "audio",
+  evidence_bundle: {
+    expected_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+    artifact_contract: {
+      verification_mode: "audio",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: false,
+        proof_evidence: true,
+      },
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+    },
+    proof_evidence: {
+      activeMixName: "Monkberry humanized EQ mix",
+      rhythmSynth8kBand: -3.3,
+      audio: {
+        audioWindowName: "vocalEntry",
+        mixHealthOk: true,
+        noClipping: true,
+        notLowLevel: true,
+      },
+    },
+    proof_evidence_sample: "{\"activeMixName\":\"Monkberry humanized EQ mix\",\"rhythmSynth8kBand\":-3.3}",
+    semantic_context: {
+      route: {
+        expected_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+        before_observed_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+        after_observed_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+      },
+      after: {
+        valid: true,
+        headings: ["Neon Step Sequencer"],
+        buttons: ["Play All"],
+        visible_text_sample: "Neon Step Sequencer Monkberry Moon Delight rhythmSynth 8k -3.3",
+      },
+    },
+    after: {
+      supporting_artifacts: {
+        proof_evidence_present: true,
+        has_structured_payload: true,
+        data_outputs: [{ name: "proof.json", url: "https://example.com/audio-proof.json" }],
+      },
+      visual_delta: { status: "not_applicable", passed: null },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile",
+  },
+}, null, 2));
+const audioAutoReviewInspectState = {
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_audio_auto_review",
+  status: "blocked",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  state_path: audioAutoReviewWrapperStatePath,
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Soften the Monkberry rhythmSynth 8k EQ band by 0.5 dB.",
+    engine_state_path: audioAutoReviewStatePath,
+    verification_mode: "audio",
+    ship_mode: "none",
+  },
+  events: [],
+};
+writeFileSync(audioAutoReviewWrapperStatePath, JSON.stringify(audioAutoReviewInspectState, null, 2));
+const audioAutoReviewInspect = inspectOpenClawRiddleProof({ state_path: audioAutoReviewWrapperStatePath });
+assert.equal(audioAutoReviewInspect.ready_to_ship_candidate, true);
+assert.equal(audioAutoReviewInspect.artifact_contract?.required?.screenshot, false);
+assert.equal(audioAutoReviewInspect.structured_evidence?.proof_evidence_present, true);
+
+const audioAutoReviewEngineCalls = [];
+const audioAutoReviewResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    run_mode: "blocking",
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: audioAutoReviewWrapperStatePath,
+    state_path: audioAutoReviewStatePath,
+    verification_mode: "audio",
+    change_request: "Soften the Monkberry rhythmSynth 8k EQ band by 0.5 dB.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    engine: {
+      async execute(engineParams) {
+        audioAutoReviewEngineCalls.push(engineParams);
+        if (engineParams.proof_assessment_json) {
+          const proofAssessment = JSON.parse(engineParams.proof_assessment_json);
+          assert.equal(proofAssessment.decision, "ready_to_ship");
+          assert.equal(proofAssessment.source, "openclaw_auto_ship_mode_none");
+          assert.equal(proofAssessment.continue_with_stage, "ship");
+          assert.equal(proofAssessment.inspection_summary.screenshot_required, false);
+          return {
+            ok: true,
+            state_path: audioAutoReviewStatePath,
+            checkpoint: "verify_ship_ready",
+            summary: "Audio proof is ready but ship mode is held.",
+            shipGate: { ok: true },
+          };
+        }
+        return {
+          ok: false,
+          state_path: audioAutoReviewStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Audio proof evidence needs judgment.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(audioAutoReviewResult.status, "ready_to_ship");
+assert.equal(audioAutoReviewResult.ok, true);
+assert.ok(audioAutoReviewEngineCalls.length >= 1);
 
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(
