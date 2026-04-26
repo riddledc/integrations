@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.49
+
+### Patch Changes
+
+- 61022dd: Ignore `.codex` and `.oc-smoke` tool artifacts when deciding whether implementation produced a material git diff.
+- Updated dependencies [61022dd]
+  - @riddledc/riddle-proof@0.5.23
+
 ## 0.4.48
 
 ### Patch Changes
