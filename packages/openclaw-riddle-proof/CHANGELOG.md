@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.56
+
+### Patch Changes
+
+- Avoid reusing route-specific capture hints based only on verification mode, while preserving root-path hint reuse.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.27
+
 ## 0.4.55
 
 ### Patch Changes

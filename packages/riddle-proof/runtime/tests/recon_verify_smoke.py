@@ -957,6 +957,73 @@ def run_recon_prefers_hint_root_over_single_route_literal():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_capture_hint_rejects_route_specific_mode_only_match():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-hint-selection-'))
+    try:
+        util = load_module('util_hint_selection', UTIL_PATH)
+        repo_key = str(tempdir / 'repo')
+        state = {
+            'repo': repo_key,
+            'verification_mode': 'text',
+            'change_request': 'Change the Tic Tac Toe reset button label to Reset Board.',
+            'success_criteria': 'The Tic Tac Toe page shows Reset Board on /games/tic-tac-toe.',
+        }
+        _, cache_path = util.load_capture_hint_cache(state)
+        cache_file = Path(cache_path)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cache_file.write_text(json.dumps({
+            'version': util.CAPTURE_HINT_CACHE_VERSION,
+            'hints': [
+                {
+                    'saved_at': '2026-04-25T00:00:00Z',
+                    'verification_mode': 'text',
+                    'request_tokens': ['sequencer', 'monkberry', 'drum'],
+                    'server_path': '/games/drum-sequencer',
+                    'wait_for_selector': '.drum-sequencer h1',
+                    'observed_path': '/games/drum-sequencer',
+                }
+            ],
+        }))
+
+        selected = util.select_capture_hint(state)
+        applied = util.apply_capture_hint(state)
+
+        assert selected is None, selected
+        assert applied is None, applied
+        assert 'server_path' not in state, state
+
+        cache_file.write_text(json.dumps({
+            'version': util.CAPTURE_HINT_CACHE_VERSION,
+            'hints': [
+                {
+                    'saved_at': '2026-04-25T00:00:00Z',
+                    'verification_mode': 'text',
+                    'request_tokens': ['homepage', 'hero'],
+                    'server_path': '/',
+                    'wait_for_selector': '',
+                    'observed_path': '/',
+                }
+            ],
+        }))
+
+        root_state = {
+            'repo': repo_key,
+            'verification_mode': 'text',
+            'change_request': 'Make a tiny harmless copy tweak.',
+            'success_criteria': 'The changed copy is visible.',
+        }
+        root_applied = util.apply_capture_hint(root_state)
+        assert root_applied is not None, root_applied
+        assert root_state['server_path'] == '/', root_state
+        assert root_state['server_path_source'] == 'hint_cache', root_state
+
+        return {'ok': True, 'route_specific_selected': selected, 'root_server_path': root_state['server_path']}
+    finally:
+        if 'cache_file' in locals():
+            cache_file.unlink(missing_ok=True)
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_author_applies_supervisor_packet():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-supervisor-apply-'))
     state_path = tempdir / 'state.json'
@@ -1648,6 +1715,7 @@ if __name__ == '__main__':
         'recon_preserves_query_route': run_recon_preserves_query_route(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),
         'recon_hint_root_preference': run_recon_prefers_hint_root_over_single_route_literal(),
+        'capture_hint_rejects_route_specific_mode_only_match': run_capture_hint_rejects_route_specific_mode_only_match(),
         'author_applies_supervisor_packet': run_author_applies_supervisor_packet(),
         'verify_requests_supervisor_assessment': run_verify_requests_supervisor_assessment(),
         'verify_structured_evidence_without_screenshot': run_verify_structured_evidence_without_screenshot(),
