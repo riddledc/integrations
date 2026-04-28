@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.65
+
+### Patch Changes
+
+- 31334bc: Keep detached monitors polling through transient running checkpoints, and only expose `continue_checkpoint` as an actionable stop for blocked routable checkpoints.
+
 ## 0.4.64
 
 ### Patch Changes
