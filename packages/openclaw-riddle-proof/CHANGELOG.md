@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.63
+
+### Patch Changes
+
+- 35ee077: Clarify non-proof checkpoint continuation by adding `continue_checkpoint` to `riddle_proof_review`, reporting routable checkpoints as actionable in checkpoint mode, and preserving terminal-only monitoring behavior.
+
 ## 0.4.62
 
 ### Patch Changes
