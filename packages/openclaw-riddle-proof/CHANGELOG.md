@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.66
+
+### Patch Changes
+
+- 0cec0b5: Align monitor contract guidance with top-level status for running engine calls so plain in-flight work reports `hold_for_engine_substep` instead of a reportable checkpoint.
+
 ## 0.4.65
 
 ### Patch Changes
