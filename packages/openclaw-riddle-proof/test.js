@@ -1058,21 +1058,48 @@ writeFileSync(authorCheckpointWrapperStatePath, JSON.stringify({
   events: [],
 }, null, 2));
 const authorCheckpointStatus = readOpenClawRiddleProofStatus(authorCheckpointWrapperStatePath);
-assert.equal(authorCheckpointStatus.monitor_should_continue, false);
+assert.equal(authorCheckpointStatus.monitor_should_continue, true);
 assert.equal(authorCheckpointStatus.is_routable_checkpoint, true);
-assert.equal(authorCheckpointStatus.checkpoint_classification, "routable");
-assert.equal(authorCheckpointStatus.suggested_next_action, "resume_checkpoint");
-assert.equal(authorCheckpointStatus.checkpoint_action?.kind, "resume_checkpoint");
-assert.equal(authorCheckpointStatus.checkpoint_action?.tool, RIDDLE_PROOF_REVIEW_TOOL_NAME);
-assert.equal(authorCheckpointStatus.checkpoint_action?.decision, "continue_checkpoint");
-assert.match(authorCheckpointStatus.checkpoint_action?.note, /not a proof approval/);
-assert.equal(authorCheckpointStatus.monitor_contract.response_gate, "checkpoint_ok");
-assert.equal(authorCheckpointStatus.monitor_contract.should_continue_monitoring, false);
+assert.equal(authorCheckpointStatus.checkpoint_classification, "in_progress");
+assert.equal(authorCheckpointStatus.suggested_next_action, "continue_monitoring");
+assert.equal(authorCheckpointStatus.checkpoint_action, null);
+assert.equal(authorCheckpointStatus.monitor_contract.response_gate, "hold_for_engine_substep");
+assert.equal(authorCheckpointStatus.monitor_contract.should_continue_monitoring, true);
+
+const blockedAuthorCheckpointWrapperStatePath = path.join(reviewFixture, "wrapper-state-author-checkpoint-blocked.json");
+writeFileSync(blockedAuthorCheckpointWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_author_checkpoint_blocked",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "riddledc/riddle-site",
+    change_request: "Make a tiny homepage copy change.",
+    engine_state_path: authorCheckpointStatePath,
+    verification_mode: "visual",
+  },
+  current_stage: "author",
+  last_checkpoint: "author_supervisor_judgment",
+  iterations: 1,
+  events: [],
+}, null, 2));
+const blockedAuthorCheckpointStatus = readOpenClawRiddleProofStatus(blockedAuthorCheckpointWrapperStatePath);
+assert.equal(blockedAuthorCheckpointStatus.monitor_should_continue, false);
+assert.equal(blockedAuthorCheckpointStatus.is_routable_checkpoint, true);
+assert.equal(blockedAuthorCheckpointStatus.checkpoint_classification, "routable");
+assert.equal(blockedAuthorCheckpointStatus.suggested_next_action, "resume_checkpoint");
+assert.equal(blockedAuthorCheckpointStatus.checkpoint_action?.kind, "resume_checkpoint");
+assert.equal(blockedAuthorCheckpointStatus.checkpoint_action?.tool, RIDDLE_PROOF_REVIEW_TOOL_NAME);
+assert.equal(blockedAuthorCheckpointStatus.checkpoint_action?.decision, "continue_checkpoint");
+assert.match(blockedAuthorCheckpointStatus.checkpoint_action?.note, /not a proof approval/);
+assert.equal(blockedAuthorCheckpointStatus.monitor_contract.response_gate, "checkpoint_ok");
+assert.equal(blockedAuthorCheckpointStatus.monitor_contract.should_continue_monitoring, false);
 
 const continueCheckpointEngineCalls = [];
 const continueCheckpointResult = await submitOpenClawRiddleProofReview(
   {
-    state_path: authorCheckpointWrapperStatePath,
+    state_path: blockedAuthorCheckpointWrapperStatePath,
     decision: "continue_checkpoint",
     summary: "Continue the internal loop from the author checkpoint.",
   },

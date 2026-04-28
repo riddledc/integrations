@@ -582,6 +582,7 @@ function monitorContractFor(
     blockerCode?: string | null;
     implementationGapOrigin?: string | null;
     activeSubstepRunning?: boolean;
+    checkpointActionable?: boolean;
   } = {},
 ): OpenClawRiddleProofMonitorContract {
   const reportMode = reportModeFromRequest(request);
@@ -590,12 +591,13 @@ function monitorContractFor(
   const terminal = !resumable && isTerminalStatusLike(status);
   const implementationInFlight = options.implementationGapOrigin === "during_agent_attempt";
   const activeSubstepRunning = options.activeSubstepRunning === true;
+  const internalLoopInProgress = status === "running" && resumable && options.checkpointActionable === false;
   const responseGate =
     implementationInFlight
       ? "hold_for_implementation_outcome"
       : waitForTerminal && !terminal
       ? "hold_for_terminal"
-      : activeSubstepRunning
+      : activeSubstepRunning || internalLoopInProgress
       ? "hold_for_engine_substep"
       : terminal
         ? "release_terminal"
@@ -1369,7 +1371,7 @@ function buildProofInspection(
     checkpoint: inspectionCheckpoint,
     isTerminal: !inspectionResumable && isTerminalStatusLike(wrapperState.status),
     isReviewRequired: Boolean(wrapperState.blocker?.code === "main_agent_proof_review_required"),
-    isRoutable: inspectionResumable && !inspectionActiveSubstepRunning,
+    isRoutable: inspectionResumable && !inspectionActiveSubstepRunning && wrapperState.status !== "running",
     implementationInFlight: implementationGap === "during_agent_attempt",
   });
   const inspection = {
@@ -1390,6 +1392,7 @@ function buildProofInspection(
       blockerCode: wrapperState.blocker?.code || null,
       implementationGapOrigin: implementationGap,
       activeSubstepRunning: inspectionActiveSubstepRunning,
+      checkpointActionable: checkpointAction?.kind === "resume_checkpoint",
     }),
     proof_profile_applied: Boolean(profile),
     proof_profile: profile,
@@ -1801,6 +1804,7 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     ? snapshotRecord.is_terminal && !resumable
     : snapshot.status !== "running" && !resumable;
   const isRoutable = Boolean(resumable) && !implementationInFlight && !activeSubstepRunning;
+  const isActionableRoutable = isRoutable && snapshot.status !== "running";
   const isReviewRequired = Boolean(
     snapshot.blocker?.code === "main_agent_proof_review_required" ||
     (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
@@ -1808,14 +1812,14 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   const waitForTerminal = snapshotRecord.wait_for_terminal === true;
   const monitorShouldContinue = waitForTerminal && !isTerminal && !isReviewRequired
     ? true
-    : !isTerminal && !isReviewRequired && !isRoutable;
+    : !isTerminal && !isReviewRequired && !isActionableRoutable;
   const checkpointAction = waitForTerminal && !isReviewRequired
     ? null
     : checkpointActionFor({
         checkpoint,
         isTerminal,
         isReviewRequired,
-        isRoutable,
+        isRoutable: isActionableRoutable,
         implementationInFlight,
       });
   return {
@@ -1829,7 +1833,7 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
         isReviewRequired ? "review_required" :
           activeSubstepRunning ? "in_progress" :
           implementationInFlight ? "in_progress" :
-          isRoutable ? "routable" :
+          isActionableRoutable ? "routable" :
             snapshot.status === "running" ? "in_progress" :
             "blocked",
     checkpoint_disposition:
@@ -1838,13 +1842,13 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
           activeSubstepRunning ? "engine_substep_in_progress" :
           implementationInFlight ? "implementation_in_flight" :
           implementationGap ? "retryable_implementation_gap" :
-            isRoutable ? "routable" :
+            isActionableRoutable ? "routable" :
               snapshot.status === "running" ? "in_progress" :
                 "blocked",
     suggested_next_action:
       monitorShouldContinue ? "continue_monitoring" :
         isReviewRequired ? "inspect_or_review" :
-          isRoutable ? "resume_checkpoint" :
+          isActionableRoutable ? "resume_checkpoint" :
           isTerminal ? "report_terminal_status" :
             "inspect_blocker",
   };
@@ -1871,6 +1875,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
           checkpoint: baseCheckpoint.checkpoint,
           blockerCode: snapshot.blocker?.code || null,
           implementationGapOrigin: implementationGap,
+          checkpointActionable: baseCheckpoint.suggested_next_action === "resume_checkpoint",
         })
       : undefined;
     const baseStatus = {
@@ -1912,6 +1917,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
         blockerCode: snapshot.blocker?.code || null,
         implementationGapOrigin: implementationGap,
         activeSubstepRunning,
+        checkpointActionable: checkpoint.suggested_next_action === "resume_checkpoint",
       })
     : undefined;
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
