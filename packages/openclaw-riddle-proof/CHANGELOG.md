@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.62
+
+### Patch Changes
+
+- ac2852f: Prefer reference-resolution metadata when reporting effective reference values in status and inspect output.
+
 ## 0.4.61
 
 ### Patch Changes
