@@ -67,6 +67,47 @@ def request_shape_tokens(state, limit=8):
     return tokens
 
 
+def normalize_browser_path(value):
+    value = str(value or '').strip()
+    if not value.startswith('/'):
+        return ''
+    value = value.split('#', 1)[0].split('?', 1)[0]
+    value = value.rstrip('.,;:)]}')
+    if not value.startswith('/'):
+        return ''
+    value = re.sub(r'/+', '/', value)
+    if len(value) > 1:
+        value = value.rstrip('/')
+    return value.lower() or '/'
+
+
+def extract_browser_paths(text):
+    paths = []
+    for match in re.findall(r'/(?:[A-Za-z0-9._~%!$&\'()*+,;=:@-]+/?)+(?:\?[A-Za-z0-9._~%!$&\'()*+,;=:@/?-]*)?', str(text or '')):
+        normalized = normalize_browser_path(match)
+        if normalized and normalized not in paths:
+            paths.append(normalized)
+    return paths
+
+
+def explicit_request_paths(state):
+    source_groups = [
+        [state.get('server_path'), state.get('expected_path'), state.get('target_path')],
+        [state.get('change_request')],
+        [state.get('context')],
+        [state.get('success_criteria')],
+    ]
+    for group in source_groups:
+        paths = []
+        for value in group:
+            for path in extract_browser_paths(value):
+                if path not in paths:
+                    paths.append(path)
+        if paths:
+            return paths
+    return []
+
+
 def capture_hint_cache_path(state):
     repo_key = str(state.get('repo') or state.get('repo_dir') or '').strip()
     if not repo_key:
@@ -96,6 +137,7 @@ def select_capture_hint(state):
     payload, cache_path = load_capture_hint_cache(state)
     hints = payload.get('hints') or []
     current_tokens = request_shape_tokens(state)
+    requested_paths = explicit_request_paths(state)
     current_mode = str(state.get('verification_mode') or '').strip().lower()
     scored = []
     for hint in hints:
@@ -104,6 +146,9 @@ def select_capture_hint(state):
         server_path = str(hint.get('server_path') or '').strip()
         wait_for_selector = str(hint.get('wait_for_selector') or '').strip()
         if not server_path and not wait_for_selector:
+            continue
+        hint_path = normalize_browser_path(server_path)
+        if requested_paths and hint_path and hint_path not in requested_paths:
             continue
         hint_mode = str(hint.get('verification_mode') or '').strip().lower()
         hint_tokens = [

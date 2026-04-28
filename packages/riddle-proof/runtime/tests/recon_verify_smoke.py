@@ -1042,6 +1042,29 @@ def run_capture_hint_rejects_route_specific_mode_only_match():
                 {
                     'saved_at': '2026-04-25T00:00:00Z',
                     'verification_mode': 'text',
+                    'request_tokens': ['games', 'reset', 'board'],
+                    'server_path': '/games/drum-sequencer',
+                    'wait_for_selector': '.drum-sequencer h1',
+                    'observed_path': '/games/drum-sequencer',
+                }
+            ],
+        }))
+
+        weak_token_state = dict(state)
+        weak_token_state['success_criteria'] = 'Stale profile text says Neon Step Sequencer on /games/drum-sequencer.'
+        weak_token_selected = util.select_capture_hint(weak_token_state)
+        weak_token_applied = util.apply_capture_hint(weak_token_state)
+
+        assert weak_token_selected is None, weak_token_selected
+        assert weak_token_applied is None, weak_token_applied
+        assert 'server_path' not in weak_token_state, weak_token_state
+
+        cache_file.write_text(json.dumps({
+            'version': util.CAPTURE_HINT_CACHE_VERSION,
+            'hints': [
+                {
+                    'saved_at': '2026-04-25T00:00:00Z',
+                    'verification_mode': 'text',
                     'request_tokens': ['homepage', 'hero'],
                     'server_path': '/',
                     'wait_for_selector': '',
