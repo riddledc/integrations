@@ -1083,6 +1083,8 @@ const continueCheckpointResult = await submitOpenClawRiddleProofReview(
       async execute(engineParams) {
         continueCheckpointEngineCalls.push(engineParams);
         assert.equal(engineParams.proof_assessment_json, undefined);
+        assert.equal(engineParams.continue_from_checkpoint, undefined);
+        assert.equal(engineParams.advance_stage, "author");
         return {
           ok: true,
           state_path: authorCheckpointStatePath,

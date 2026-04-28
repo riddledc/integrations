@@ -2089,6 +2089,16 @@ function stageForReviewDecision(decision: RiddleProofReviewDecision) {
   return "author";
 }
 
+function defaultAdvanceStageForCheckpoint(checkpoint: string | null | undefined) {
+  if (checkpoint === "recon_supervisor_judgment") return "recon";
+  if (checkpoint === "author_supervisor_judgment") return "author";
+  if (checkpoint === "verify_capture_retry") return "author";
+  if (checkpoint === "implement_changes_missing" || checkpoint === "implement_required") return "implement";
+  if (checkpoint === "implement_review") return "verify";
+  if (checkpoint === "verify_supervisor_judgment" || checkpoint === "verify_supervisor_judgment_required") return "verify";
+  return null;
+}
+
 function proofAssessmentAppliesToCheckpoint(
   checkpoint: string | null | undefined,
   blockerCode: string | null | undefined,
@@ -2209,9 +2219,9 @@ export async function submitOpenClawRiddleProofReview(
   const resumeParams: RiddleProofWorkflowParams = {
     action: "run",
     state_path: engineStatePath,
-    continue_from_checkpoint: true,
   };
   if (forwardProofAssessment) {
+    resumeParams.continue_from_checkpoint = true;
     resumeParams.proof_assessment_json = JSON.stringify(assessment);
   } else {
     appendRunEvent(state, {
@@ -2224,7 +2234,12 @@ export async function submitOpenClawRiddleProofReview(
         forwarded_as_proof_assessment: false,
       },
     });
-    if (explicitStage) resumeParams.advance_stage = explicitStage;
+    const resumeStage = explicitStage || stage || defaultAdvanceStageForCheckpoint(currentCheckpoint);
+    if (resumeStage) {
+      resumeParams.advance_stage = resumeStage;
+    } else {
+      resumeParams.continue_from_checkpoint = true;
+    }
     persistRunState(state);
   }
 
