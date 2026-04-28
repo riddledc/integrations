@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.29
+
+### Patch Changes
+
+- ad3516c: Record skipped production-reference reasons in proof state and surface them through the OpenClaw plugin while ignoring expected-absence false evidence.
+
 ## 0.5.28
 
 ### Patch Changes
