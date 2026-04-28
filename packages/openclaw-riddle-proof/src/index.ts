@@ -545,12 +545,15 @@ function requestMetadataFor(
   const requestReference = stringValue(request?.reference);
   const engineRequestedReference = stringValue(engineState?.requested_reference);
   const engineReference = stringValue(engineState?.reference);
-  const effectiveReference = engineReference || requestReference || engineRequestedReference;
   const referenceResolution = recordValue(engineState?.reference_resolution);
+  const resolutionEffectiveReference = stringValue(referenceResolution?.effective_reference);
+  const resolutionRequestedReference = stringValue(referenceResolution?.requested_reference);
+  const effectiveReference = resolutionEffectiveReference || engineReference || requestReference || engineRequestedReference;
+  const requestedReference = engineRequestedReference || resolutionRequestedReference;
   return compactRecordValue({
     reference: requestReference || null,
     effective_reference: effectiveReference || null,
-    requested_reference: engineRequestedReference || null,
+    requested_reference: requestedReference || null,
     reference_input_ignored: referenceInputIgnored || null,
     reference_resolution: referenceResolution,
     prod_reference_skipped: referenceResolution?.prod_reference_skipped === true ? true : null,

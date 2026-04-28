@@ -1224,7 +1224,7 @@ const referenceSkipStatePath = path.join(referenceSkipFixture, "riddle-state.jso
 const referenceSkipWrapperStatePath = path.join(referenceSkipFixture, "wrapper-state.json");
 writeFileSync(referenceSkipStatePath, JSON.stringify({
   branch: "agent/reference-skip-fixture",
-  reference: "before",
+  reference: "both",
   requested_reference: "both",
   reference_resolution: {
     requested_reference: "both",
