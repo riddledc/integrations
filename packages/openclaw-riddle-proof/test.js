@@ -933,6 +933,8 @@ assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.semantic_context?
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_contract?.required?.screenshot, true);
 assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.artifact_usage?.missing_required_signals, []);
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_production?.image_output_count, 1);
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.ready_to_ship_candidate, true);
+assert.equal(reviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_has_concerns, false);
 assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
 
 const inspectResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath });
@@ -1259,6 +1261,47 @@ assert.equal(concernInspectResult.route_matched, true);
 assert.equal(concernInspectResult.structured_evidence?.proof_evidence_has_concerns, true);
 assert.equal(concernInspectResult.structured_evidence?.proof_evidence_concerns?.[0]?.key, "newHeroCopyVisible");
 assert.equal(concernInspectResult.ready_to_ship_candidate, false);
+
+const concernReviewWrapperStatePath = path.join(concernFixture, "wrapper-review-state.json");
+const concernReviewBlocked = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    run_mode: "blocking",
+    ship_after_verify: false,
+    ship_mode: "none",
+    report_mode: "terminal_only",
+    wait_for_terminal: true,
+    harness_state_path: concernReviewWrapperStatePath,
+    state_path: concernStatePath,
+    change_request: "Clarify homepage proof copy",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    autoReviewShipModeNone: false,
+    engine: {
+      async execute() {
+        return {
+          ok: false,
+          state_path: concernStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof evidence needs judgment.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(concernReviewBlocked.status, "blocked");
+assert.equal(concernReviewBlocked.blocker?.code, "main_agent_proof_review_required");
+assert.equal(concernReviewBlocked.blocker?.details?.proof_review?.ready_to_ship_candidate, false);
+assert.equal(concernReviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_has_concerns, true);
+assert.equal(
+  concernReviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_concerns?.[0]?.key,
+  "newHeroCopyVisible",
+);
 
 const expectedAbsenceFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-evidence-expected-absence-"));
 const expectedAbsenceStatePath = path.join(expectedAbsenceFixture, "riddle-state.json");

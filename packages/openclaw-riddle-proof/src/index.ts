@@ -1453,6 +1453,7 @@ function buildProofInspection(
 
 function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
   const fullState = recordValue(context.fullRiddleState) || {};
+  const inspection = buildProofInspection(context.state, fullState, context.checkpoint);
   const assessmentRequest =
     recordValue(fullState.proof_assessment_request) ||
     recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
@@ -1499,6 +1500,8 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
     artifact_usage: artifactUsage,
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
+    ready_to_ship_candidate: inspection.ready_to_ship_candidate,
+    structured_evidence: inspection.structured_evidence,
     semantic_context: semanticContext,
     scratch_cleanup: recordValue(fullState.scratch_cleanup),
     proof_assessment_request: assessmentRequest,
@@ -1508,6 +1511,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "Use semantic_context.route, headings, buttons, and text anchors to ground route/content judgment before calling the proof wrong-route.",
           "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
           "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
+          "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
           "If visual_delta is unmeasured and the before/after images look nearly identical or require zooming/code inspection to believe, choose needs_implementation or needs_richer_proof.",
           `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
@@ -1517,6 +1521,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "Use semantic_context.route and structured proof evidence to ground route/content judgment before calling the proof wrong-route.",
           "Confirm whether the captured required artifacts satisfy the requested change and route/content still match the target.",
           "Reject missing required signals, ambiguous evidence, wrong-route captures, or evidence that only proves implementation intent.",
+          "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For structured modes, do not require screenshots when artifact_contract.required.screenshot is false, but do require the declared proof evidence signals.",
           `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the required proof artifacts are convincing.`,
         ],
