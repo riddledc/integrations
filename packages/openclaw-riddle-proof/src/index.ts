@@ -545,12 +545,16 @@ function requestMetadataFor(
   const requestReference = stringValue(request?.reference);
   const engineRequestedReference = stringValue(engineState?.requested_reference);
   const engineReference = stringValue(engineState?.reference);
-  const effectiveReference = engineRequestedReference || engineReference || requestReference;
+  const effectiveReference = engineReference || requestReference || engineRequestedReference;
+  const referenceResolution = recordValue(engineState?.reference_resolution);
   return compactRecordValue({
     reference: requestReference || null,
     effective_reference: effectiveReference || null,
     requested_reference: engineRequestedReference || null,
     reference_input_ignored: referenceInputIgnored || null,
+    reference_resolution: referenceResolution,
+    prod_reference_skipped: referenceResolution?.prod_reference_skipped === true ? true : null,
+    prod_reference_skip_reason: stringValue(referenceResolution?.prod_reference_skip_reason) || null,
     integration_metadata: Object.keys(integrationMetadata).length ? integrationMetadata : null,
   });
 }
@@ -973,6 +977,16 @@ function evidenceKeyMeansKnownNonClaim(key: string) {
   return /(?:count|index|width|height|x|y|ms|duration|elapsed|sample|snippet|text|copy|path|route|url|href)$/i.test(key);
 }
 
+function evidenceFalseMeansExpectedAbsence(key: string) {
+  const lower = key.toLowerCase();
+  if (/(?:absent|removed|gone|cleared)/.test(lower)) return false;
+  if (/still(?:visible|present|found|detected|shown|exists?)/.test(lower)) return true;
+  return (
+    /(?:old|stale|previous|legacy|forbidden|unexpected).*(?:visible|present|exists?|found|detected|shown|contains|includes)/.test(lower) ||
+    /(?:visible|present|exists?|found|detected|shown|contains|includes).*(?:old|stale|previous|legacy|forbidden|unexpected)/.test(lower)
+  );
+}
+
 function proofEvidenceConcerns(proofEvidence: unknown, proofEvidenceSample: string) {
   const source = recordValue(proofEvidence) || parseJsonRecord(proofEvidenceSample);
   if (!source) return [];
@@ -980,7 +994,8 @@ function proofEvidenceConcerns(proofEvidence: unknown, proofEvidenceSample: stri
     .filter(([key, value]) => (
       value === false &&
       evidenceKeyMeansClaim(key) &&
-      !evidenceKeyMeansKnownNonClaim(key)
+      !evidenceKeyMeansKnownNonClaim(key) &&
+      !evidenceFalseMeansExpectedAbsence(key)
     ))
     .slice(0, 12)
     .map(([key, value]) => ({
