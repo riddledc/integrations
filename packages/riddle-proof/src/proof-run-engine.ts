@@ -1033,7 +1033,7 @@ export async function executeWorkflow(
 
     state = readState(config.statePath);
     const continuedStage = params.continue_from_checkpoint ? checkpointContinueStage(state) : null;
-    if (params.continue_from_checkpoint && !continuedStage) {
+    if (params.continue_from_checkpoint && !params.advance_stage && !continuedStage) {
       const recommended = recommendedAdvanceStage(state);
       return checkpoint(
         (state?.active_checkpoint_stage as WorkflowStage | null) || recommended || "recon",

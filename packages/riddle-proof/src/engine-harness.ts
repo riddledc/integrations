@@ -725,7 +725,8 @@ async function handleImplementation(
 
   return {
     next: compactRecord({
-      ...baseContinuation(result),
+      action: "run",
+      state_path: String(result.state_path || ""),
       advance_stage: "implement",
       implementation_notes: implementation.implementationNotes || implementation.summary,
     }) as RiddleProofWorkflowParams,
