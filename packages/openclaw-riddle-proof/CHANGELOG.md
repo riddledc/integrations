@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.69
+
+### Patch Changes
+
+- 5a045d2: Honor explicit proof-stage advancement when a stale checkpoint continuation flag is also present, and stop sending that stale flag after implementation handoff.
+- Updated dependencies [5a045d2]
+  - @riddledc/riddle-proof@0.5.32
+
 ## 0.4.68
 
 ### Patch Changes
