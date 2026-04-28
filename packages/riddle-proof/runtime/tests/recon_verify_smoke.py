@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / 'lib'
 UTIL_PATH = LIB / 'util.py'
+PREFLIGHT_PATH = LIB / 'preflight.py'
 RECON_PATH = LIB / 'recon.py'
 VERIFY_PATH = LIB / 'verify.py'
 AUTHOR_PATH = LIB / 'author.py'
@@ -591,6 +592,49 @@ def temporary_env(**updates):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+
+def run_preflight_records_prod_reference_skip_reason():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-preflight-reference-'))
+    args_path = tempdir / 'args.json'
+    state_path = tempdir / 'state.json'
+    repo_dir = tempdir / 'repo'
+    try:
+        make_project(repo_dir, "export const routes = [{ path: '/pricing', element: <Pricing /> }];\n")
+        args_path.write_text(json.dumps({
+            'repo': 'example/repo',
+            'repo_dir': str(repo_dir),
+            'mode': 'static',
+            'reference': 'both',
+            'prod_url': '',
+            'change_request': 'Make the pricing CTA clearer',
+            'commit_message': 'Make the pricing CTA clearer',
+            'success_criteria': 'Pricing CTA is visible.',
+            'verification_mode': 'text',
+            'build_command': BUILD_SCRIPT,
+            'build_output': 'build',
+            'allow_static_preview_fallback': True,
+            'server_path': '/pricing',
+        }, indent=2))
+        with temporary_env(
+            RIDDLE_PROOF_ARGS_FILE=str(args_path),
+            RIDDLE_PROOF_STATE_FILE=str(state_path),
+        ):
+            load_module('util_preflight_reference_skip', UTIL_PATH)
+            load_module('preflight_reference_skip', PREFLIGHT_PATH)
+        after_preflight = json.loads(state_path.read_text())
+        assert after_preflight['requested_reference'] == 'both'
+        assert after_preflight['reference'] == 'before'
+        assert after_preflight['reference_resolution']['requested_reference'] == 'both'
+        assert after_preflight['reference_resolution']['effective_reference'] == 'before'
+        assert after_preflight['reference_resolution']['prod_reference_skipped'] is True
+        assert after_preflight['reference_resolution']['prod_reference_skip_reason'] == 'prod_url_not_provided'
+        return {
+            'ok': True,
+            'reference_resolution': after_preflight['reference_resolution'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
 
 
 def base_state(tempdir: Path, *, reference='before', prod_url=''):
@@ -1740,6 +1784,7 @@ def run_ship_resolves_real_pr_branch():
 
 if __name__ == '__main__':
     payload = {
+        'preflight_reference_skip_reason': run_preflight_records_prod_reference_skip_reason(),
         'capture_artifact_enrichment': run_capture_artifact_enrichment(),
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),

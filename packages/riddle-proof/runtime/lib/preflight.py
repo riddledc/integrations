@@ -42,6 +42,7 @@ with open(args_file) as f:
 
 mode = (s.get('mode') or '').strip().lower()
 reference = s.get('reference', 'both')
+requested_reference = reference
 reference_note = ''
 verification_mode = (s.get('verification_mode') or 'proof').strip() or 'proof'
 s['verification_mode'] = verification_mode
@@ -68,6 +69,15 @@ if discord_url_match:
 if reference not in ('prod', 'before', 'both'):
     raise SystemExit('Invalid reference: ' + reference + '. Must be prod, before, or both.')
 s['reference'] = reference
+prod_url_present = bool((s.get('prod_url') or '').strip())
+s['reference_resolution'] = {
+    'requested_reference': requested_reference,
+    'effective_reference': reference,
+    'prod_reference_requested': requested_reference in ('prod', 'both'),
+    'prod_url_present': prod_url_present,
+    'prod_reference_skipped': False,
+    'prod_reference_skip_reason': '',
+}
 
 # Infer a reasonable commit title during setup instead of forcing the caller to
 # fill boilerplate that can be derived from the requested change.
@@ -77,11 +87,17 @@ if not (s.get('commit_message') or '').strip():
 # Setup should not block on a missing production URL. If prod comparison was
 # requested but prod_url is not known yet, continue with a before-only setup so
 # the repo homework can happen first.
-if reference in ('prod', 'both') and not (s.get('prod_url') or '').strip():
+if reference in ('prod', 'both') and not prod_url_present:
     s['requested_reference'] = reference
     reference = 'before'
     s['reference'] = reference
     reference_note = 'prod_url not provided; setup will continue with reference=before until prod is known.'
+    s['reference_resolution'].update({
+        'effective_reference': reference,
+        'prod_reference_skipped': True,
+        'prod_reference_skip_reason': 'prod_url_not_provided',
+        'note': reference_note,
+    })
 
 # Parse optional assertions JSON
 parsed_assertions = None

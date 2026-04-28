@@ -1160,6 +1160,125 @@ assert.equal(concernInspectResult.structured_evidence?.proof_evidence_has_concer
 assert.equal(concernInspectResult.structured_evidence?.proof_evidence_concerns?.[0]?.key, "newHeroCopyVisible");
 assert.equal(concernInspectResult.ready_to_ship_candidate, false);
 
+const expectedAbsenceFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-evidence-expected-absence-"));
+const expectedAbsenceStatePath = path.join(expectedAbsenceFixture, "riddle-state.json");
+const expectedAbsenceWrapperStatePath = path.join(expectedAbsenceFixture, "wrapper-state.json");
+writeFileSync(expectedAbsenceStatePath, JSON.stringify({
+  branch: "agent/evidence-expected-absence-fixture",
+  before_cdn: "https://example.com/absence-before.png",
+  after_cdn: "https://example.com/absence-after.png",
+  evidence_bundle: {
+    expected_path: "/",
+    proof_evidence: {
+      newCopyVisible: true,
+      oldCopyStillVisible: false,
+      oldCopyAbsent: true,
+      forbiddenTextFound: false,
+    },
+    after: {
+      screenshot_url: "https://example.com/absence-after.png",
+      visual_delta: { status: "measured", passed: true },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/",
+    visual_delta: { status: "measured", passed: true },
+    semantic_context: {
+      route: {
+        expected_path: "/",
+        before_observed_path: "/",
+        after_observed_path: "/",
+      },
+      after: {
+        valid: true,
+        headings: ["Dashboard"],
+        buttons: ["Export"],
+        visible_text_sample: "Dashboard Export reports with current filters applied.",
+      },
+    },
+  },
+}, null, 2));
+writeFileSync(expectedAbsenceWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_evidence_expected_absence",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  request: {
+    repo: "example/site",
+    change_request: "Change stale copy and prove the old copy is absent",
+    engine_state_path: expectedAbsenceStatePath,
+  },
+  iterations: 3,
+  events: [],
+}, null, 2));
+const expectedAbsenceInspectResult = inspectOpenClawRiddleProof({ state_path: expectedAbsenceWrapperStatePath });
+assert.equal(expectedAbsenceInspectResult.route_matched, true);
+assert.equal(expectedAbsenceInspectResult.structured_evidence?.proof_evidence_has_concerns, false);
+assert.equal(expectedAbsenceInspectResult.ready_to_ship_candidate, true);
+
+const referenceSkipFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-reference-skip-"));
+const referenceSkipStatePath = path.join(referenceSkipFixture, "riddle-state.json");
+const referenceSkipWrapperStatePath = path.join(referenceSkipFixture, "wrapper-state.json");
+writeFileSync(referenceSkipStatePath, JSON.stringify({
+  branch: "agent/reference-skip-fixture",
+  reference: "before",
+  requested_reference: "both",
+  reference_resolution: {
+    requested_reference: "both",
+    effective_reference: "before",
+    prod_reference_requested: true,
+    prod_url_present: false,
+    prod_reference_skipped: true,
+    prod_reference_skip_reason: "prod_url_not_provided",
+  },
+  before_cdn: "https://example.com/reference-before.png",
+  after_cdn: "https://example.com/reference-after.png",
+  evidence_bundle: {
+    expected_path: "/",
+    after: {
+      screenshot_url: "https://example.com/reference-after.png",
+      visual_delta: { status: "not_applicable" },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/",
+    semantic_context: {
+      route: {
+        expected_path: "/",
+        before_observed_path: "/",
+        after_observed_path: "/",
+      },
+      after: { valid: true },
+    },
+  },
+}, null, 2));
+writeFileSync(referenceSkipWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_reference_skip",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  request: {
+    repo: "example/site",
+    change_request: "Run both-reference proof without a prod URL",
+    reference: "both",
+    engine_state_path: referenceSkipStatePath,
+  },
+  iterations: 2,
+  events: [],
+}, null, 2));
+const referenceSkipInspectResult = inspectOpenClawRiddleProof({ state_path: referenceSkipWrapperStatePath });
+assert.equal(referenceSkipInspectResult.request_metadata.reference, "both");
+assert.equal(referenceSkipInspectResult.request_metadata.requested_reference, "both");
+assert.equal(referenceSkipInspectResult.request_metadata.effective_reference, "before");
+assert.equal(referenceSkipInspectResult.request_metadata.prod_reference_skipped, true);
+assert.equal(referenceSkipInspectResult.request_metadata.prod_reference_skip_reason, "prod_url_not_provided");
+
 const autoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-auto-review-"));
 const autoReviewStatePath = path.join(autoReviewFixture, "riddle-state.json");
 const autoReviewWrapperStatePath = path.join(autoReviewFixture, "wrapper-state.json");
