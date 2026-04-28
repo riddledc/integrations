@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.32
+
+### Patch Changes
+
+- 5a045d2: Honor explicit proof-stage advancement when a stale checkpoint continuation flag is also present, and stop sending that stale flag after implementation handoff.
+
 ## 0.5.31
 
 ### Patch Changes
