@@ -923,6 +923,24 @@ async function run() {
   assert(!afterReimplement.verify_results || Object.keys(afterReimplement.verify_results).length === 0, 'implement reruns should clear stale verify results');
   assert(!afterReimplement.proof_assessment || Object.keys(afterReimplement.proof_assessment).length === 0, 'implement reruns should clear stale proof assessments');
 
+  const explicitAdvanceStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-explicit-advance-')), 'state.json');
+  writeJson(explicitAdvanceStatePath, {
+    ...makeLoopState(),
+    stage: 'author',
+    stage_decision_request: {},
+    active_checkpoint: null,
+    active_checkpoint_stage: null,
+  });
+  const explicitAdvanceConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: explicitAdvanceStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: explicitAdvanceStatePath });
+  const explicitAdvance = await engineMod.executeWorkflow({
+    action: 'run',
+    state_path: explicitAdvanceStatePath,
+    continue_from_checkpoint: true,
+    advance_stage: 'implement',
+    implementation_notes: 'Implementation agent already changed the after worktree.',
+  }, { riddleProofDir: fakeSkillDir, statePath: explicitAdvanceStatePath, defaultReviewer: 'octocat' }, explicitAdvanceConfig);
+  assert(explicitAdvance.checkpoint === 'implement_review', `explicit advance_stage should take precedence over a stale continue_from_checkpoint flag (got ${explicitAdvance.checkpoint})`);
+
   const syncRepoDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-sync-repo-'));
   execFileSync('git', ['init'], { cwd: syncRepoDir, stdio: 'ignore' });
 
