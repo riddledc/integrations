@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.68
+
+### Patch Changes
+
+- 1d45185: Pass ready-candidate and structured-evidence concern summaries into main-agent proof review packets so failed proof claims are visible before a ready decision.
+
 ## 0.4.67
 
 ### Patch Changes
