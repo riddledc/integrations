@@ -592,12 +592,13 @@ function monitorContractFor(
   const implementationInFlight = options.implementationGapOrigin === "during_agent_attempt";
   const activeSubstepRunning = options.activeSubstepRunning === true;
   const internalLoopInProgress = status === "running" && resumable && options.checkpointActionable === false;
+  const engineCallInProgress = status === "running" && !resumable && !terminal;
   const responseGate =
     implementationInFlight
       ? "hold_for_implementation_outcome"
       : waitForTerminal && !terminal
       ? "hold_for_terminal"
-      : activeSubstepRunning || internalLoopInProgress
+      : activeSubstepRunning || internalLoopInProgress || engineCallInProgress
       ? "hold_for_engine_substep"
       : terminal
         ? "release_terminal"
