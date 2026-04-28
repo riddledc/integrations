@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.30
+
+### Patch Changes
+
+- 8a37890: Preserve requested no-production reference choices through setup so preflight can report semantic production-reference skip reasons in live proof runs.
+
 ## 0.5.29
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.61
+
+### Patch Changes
+
+- 8a37890: Preserve requested no-production reference choices through setup so preflight can report semantic production-reference skip reasons in live proof runs.
+- Updated dependencies [8a37890]
+  - @riddledc/riddle-proof@0.5.30
+
 ## 0.4.60
 
 ### Patch Changes
