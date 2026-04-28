@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.31
+
+### Patch Changes
+
+- 245ecea: Reject cached capture hints for a different browser route when the current request explicitly names a route, preventing stale last-good proof paths from leaking across unrelated runs.
+
 ## 0.5.30
 
 ### Patch Changes
