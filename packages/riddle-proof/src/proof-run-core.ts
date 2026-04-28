@@ -169,7 +169,6 @@ export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof
   const commitMessage = (params.commit_message || params.change_request || "").trim();
   const captureScript = (params.capture_script || "").trim();
   const requestedReference = params.reference || (params.prod_url ? "both" : "before");
-  const reference = !params.prod_url && requestedReference !== "before" ? "before" : requestedReference;
   if (!commitMessage) throw new Error("commit_message is required for setup/run");
   return {
     repo: params.repo,
@@ -181,7 +180,7 @@ export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof
     success_criteria: params.success_criteria || "",
     assertions_json: params.assertions_json || "",
     verification_mode: params.verification_mode || "proof",
-    reference,
+    reference: requestedReference,
     base_branch: params.base_branch || "main",
     before_ref: params.before_ref || "",
     allow_static_preview_fallback: params.allow_static_preview_fallback ? "true" : "",

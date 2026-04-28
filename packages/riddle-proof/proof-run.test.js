@@ -422,7 +422,7 @@ async function run() {
   assert(args.repo === 'openclaw/openclaw-plugins', 'setup args should preserve repo');
   assert(args.commit_message === 'Confirm screenshots are captured', 'setup should infer commit message from change_request');
   assert(args.capture_script === '', 'setup should allow capture_script to be omitted');
-  assert(args.reference === 'before', 'setup should fall back to before when prod_url is not known');
+  assert(args.reference === 'both', 'setup args should preserve requested reference so preflight can record downgrade reason');
   assert(args.reviewer === 'octocat', 'default reviewer should flow into setup args');
   assert(args.server_path === '', 'setup should not force homepage as an explicit recon route');
   assert(args.server_path_source === '', 'setup should leave server_path source empty when caller omitted it');
