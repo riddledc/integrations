@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.67
+
+### Patch Changes
+
+- 245ecea: Reject cached capture hints for a different browser route when the current request explicitly names a route, preventing stale last-good proof paths from leaking across unrelated runs.
+- Updated dependencies [245ecea]
+  - @riddledc/riddle-proof@0.5.31
+
 ## 0.4.66
 
 ### Patch Changes
