@@ -613,8 +613,9 @@ assert.equal(runningBackgroundStatus?.timing_summary?.recon_subphase_durations_m
 assert.equal(runningBackgroundStatus?.timing_summary?.verify_subphase_durations_ms?.capture, 15000);
 assert.equal(runningBackgroundStatus?.is_terminal, false);
 assert.equal(runningBackgroundStatus?.monitor_should_continue, true);
-assert.equal(runningBackgroundStatus?.is_routable_checkpoint, true);
-assert.equal(runningBackgroundStatus?.checkpoint_classification, "routable");
+assert.equal(runningBackgroundStatus?.is_routable_checkpoint, false);
+assert.equal(runningBackgroundStatus?.checkpoint_classification, "in_progress");
+assert.equal(runningBackgroundStatus?.checkpoint_disposition, "engine_substep_in_progress");
 assert.equal(runningBackgroundStatus?.suggested_next_action, "continue_monitoring");
 assert.equal(runningBackgroundStatus?.monitor_plan?.preferred_tool, RIDDLE_PROOF_STATUS_TOOL_NAME);
 assert.equal(runningBackgroundStatus?.monitor_plan?.optional_wait_tool, RIDDLE_PROOF_WAIT_TOOL_NAME);
@@ -1027,6 +1028,75 @@ assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
+
+const authorCheckpointStatePath = path.join(reviewFixture, "riddle-state-author-checkpoint.json");
+const authorCheckpointWrapperStatePath = path.join(reviewFixture, "wrapper-state-author-checkpoint.json");
+writeFileSync(authorCheckpointStatePath, JSON.stringify({
+  branch: "agent/author-checkpoint",
+  runtime_events: [],
+  stage_decision_request: {
+    checkpoint: "author_supervisor_judgment",
+    continue_from_checkpoint: true,
+    continue_with_stage: "author",
+  },
+}, null, 2));
+writeFileSync(authorCheckpointWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_author_checkpoint",
+  status: "running",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "riddledc/riddle-site",
+    change_request: "Make a tiny homepage copy change.",
+    engine_state_path: authorCheckpointStatePath,
+    verification_mode: "visual",
+  },
+  current_stage: "author",
+  last_checkpoint: "author_supervisor_judgment",
+  iterations: 1,
+  events: [],
+}, null, 2));
+const authorCheckpointStatus = readOpenClawRiddleProofStatus(authorCheckpointWrapperStatePath);
+assert.equal(authorCheckpointStatus.monitor_should_continue, false);
+assert.equal(authorCheckpointStatus.is_routable_checkpoint, true);
+assert.equal(authorCheckpointStatus.checkpoint_classification, "routable");
+assert.equal(authorCheckpointStatus.suggested_next_action, "resume_checkpoint");
+assert.equal(authorCheckpointStatus.checkpoint_action?.kind, "resume_checkpoint");
+assert.equal(authorCheckpointStatus.checkpoint_action?.tool, RIDDLE_PROOF_REVIEW_TOOL_NAME);
+assert.equal(authorCheckpointStatus.checkpoint_action?.decision, "continue_checkpoint");
+assert.match(authorCheckpointStatus.checkpoint_action?.note, /not a proof approval/);
+assert.equal(authorCheckpointStatus.monitor_contract.response_gate, "checkpoint_ok");
+assert.equal(authorCheckpointStatus.monitor_contract.should_continue_monitoring, false);
+
+const continueCheckpointEngineCalls = [];
+const continueCheckpointResult = await submitOpenClawRiddleProofReview(
+  {
+    state_path: authorCheckpointWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Continue the internal loop from the author checkpoint.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute(engineParams) {
+        continueCheckpointEngineCalls.push(engineParams);
+        assert.equal(engineParams.proof_assessment_json, undefined);
+        return {
+          ok: true,
+          state_path: authorCheckpointStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Proof is ready after checkpoint continuation.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(continueCheckpointResult.status, "ready_to_ship");
+assert.equal(continueCheckpointEngineCalls.length, 1);
 
 const staleHintStatePath = path.join(reviewFixture, "riddle-state-stale-hint.json");
 const staleHintWrapperStatePath = path.join(reviewFixture, "wrapper-state-stale-hint.json");
