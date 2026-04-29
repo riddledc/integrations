@@ -2003,6 +2003,53 @@ assert.equal(factoryContextWakeEvent.details.dispatchable, true);
 assert.equal(factoryContextWakeEvent.details.wake_context.sessionKey, "agent:main:discord-thread-111111111111111111");
 assert.equal(factoryContextWakeEvent.details.wake_context.sessionKeySource, "tool_context");
 
+const factoryContextWithExecuteCtxFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-factory-exec-context-"));
+const factoryContextWithExecuteCtxEngineStatePath = path.join(factoryContextWithExecuteCtxFixture, "riddle-state.json");
+const factoryContextWithExecuteCtxWrapperStatePath = path.join(factoryContextWithExecuteCtxFixture, "wrapper-state.json");
+const factoryContextWithExecuteCtxRegistered = [];
+register({
+  pluginConfig: {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    defaultRunMode: "background",
+    engine: {
+      async execute() {
+        writeFileSync(factoryContextWithExecuteCtxEngineStatePath, JSON.stringify({ branch: "agent/factory-exec-context-proof" }, null, 2));
+        return {
+          ok: true,
+          state_path: factoryContextWithExecuteCtxEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Factory and execute context proof is ready.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+  },
+  registerTool(tool, options) {
+    factoryContextWithExecuteCtxRegistered.push({ tool, options });
+  },
+});
+const factoryContextWithExecuteCtxEntry = factoryContextWithExecuteCtxRegistered.find((entry) =>
+  entry.options?.names?.includes(RIDDLE_PROOF_CHANGE_TOOL_NAME)
+);
+assert.ok(factoryContextWithExecuteCtxEntry);
+const factoryContextWithExecuteCtxTool = factoryContextWithExecuteCtxEntry.tool(pluginFactoryContext);
+const factoryContextWithExecuteCtxExecuted = await factoryContextWithExecuteCtxTool.execute("test-factory-execute-context", {
+  ...params,
+  dry_run: false,
+  ship_after_verify: false,
+  ship_mode: "none",
+  harness_state_path: factoryContextWithExecuteCtxWrapperStatePath,
+  state_path: factoryContextWithExecuteCtxEngineStatePath,
+}, { deliveryContext: { channel: "discord" } });
+const factoryContextWithExecuteCtxParsed = JSON.parse(factoryContextWithExecuteCtxExecuted.content[0].text);
+assert.equal(factoryContextWithExecuteCtxParsed.status, "running");
+const factoryContextWithExecuteCtxState = JSON.parse(readFileSync(factoryContextWithExecuteCtxWrapperStatePath, "utf-8"));
+const factoryContextWithExecuteCtxWakeEvent = factoryContextWithExecuteCtxState.events.find((event) => event.kind === "run.oc_wake.monitor_registered");
+assert.equal(factoryContextWithExecuteCtxWakeEvent.details.dispatchable, true);
+assert.equal(factoryContextWithExecuteCtxWakeEvent.details.wake_context.sessionKey, "agent:main:discord-thread-111111111111111111");
+assert.equal(factoryContextWithExecuteCtxWakeEvent.details.wake_context.sessionKeySource, "tool_context");
+
 const statusExecuted = await statusTool.resolvedTool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);
 assert.equal(statusParsed.status, "not_found");

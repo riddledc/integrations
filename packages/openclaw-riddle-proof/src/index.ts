@@ -1037,6 +1037,21 @@ function wakeContextFrom(params: RiddleProofChangeParams, ctx: unknown): OpenCla
   }) as OpenClawRiddleProofWakeContext;
 }
 
+function mergedWakeToolContext(toolCtx: unknown, executeCtx: unknown): unknown {
+  const toolRecord = recordValue(toolCtx);
+  const executeRecord = recordValue(executeCtx);
+  if (!toolRecord) return executeRecord ?? toolCtx;
+  if (!executeRecord) return toolRecord;
+  return {
+    ...executeRecord,
+    ...toolRecord,
+    deliveryContext: {
+      ...recordValue(executeRecord.deliveryContext),
+      ...recordValue(toolRecord.deliveryContext),
+    },
+  };
+}
+
 function wakeRuntimeFromApi(api: any): OpenClawRiddleProofWakeRuntime {
   return {
     enqueueSystemEvent: api?.runtime?.system?.enqueueSystemEvent,
@@ -3096,7 +3111,8 @@ export default function register(api: any) {
         "By default this wrapper returns a blocked normalization result; engine mode is configured explicitly.",
       parameters: riddleProofChangeParameters,
       async execute(_id: string, params: RiddleProofChangeParams, executeCtx?: unknown) {
-        const wakeContext = runtimeConfig.enableWakeMonitor === false ? undefined : wakeContextFrom(params, executeCtx ?? toolCtx);
+        const wakeContext =
+          runtimeConfig.enableWakeMonitor === false ? undefined : wakeContextFrom(params, mergedWakeToolContext(toolCtx, executeCtx));
         const result = await runOpenClawRiddleProof(params, runtimeConfig, { wakeContext });
         if (result.raw?.background === true && runtimeConfig.enableWakeMonitor !== false) {
           startOpenClawRiddleProofWakeMonitor(result.state_path || undefined, wakeRuntime);
