@@ -247,6 +247,9 @@ export type OpenClawRiddleProofWakeClassification =
       suggested_next_action: string | null;
       summary: string;
       next_tools: string[];
+      failure_summary?: Record<string, unknown> | null;
+      proof_artifact_summary?: Record<string, unknown> | null;
+      pr_handoff_policy?: Record<string, unknown> | null;
     };
 
 export interface OpenClawRiddleProofRunOptions {
@@ -467,7 +470,9 @@ function wakeDispatchFailureCount(state: RiddleProofRunState | null | undefined,
 function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
   const engineStatePath = stringValue(state.request.engine_state_path);
   const engineState = engineStatePath ? readJsonRecord(engineStatePath) : null;
-  const timingSummary = buildTimingSummary(createRunStatusSnapshot(state), state, engineState);
+  const snapshot = createRunStatusSnapshot(state);
+  const timingSummary = buildTimingSummary(snapshot, state, engineState);
+  const reportingContext = buildProofReportingContext(snapshot, state, engineState);
   const monitorContract = monitorContractFor(result.status, state.request);
   appendRunEvent(state, {
     kind: "run.wake.requested",
@@ -483,6 +488,9 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
       run_id: state.run_id || result.run_id || null,
       blocker: result.blocker,
       timing_summary: timingSummary,
+      failure_summary: reportingContext.failure_summary,
+      proof_artifact_summary: reportingContext.proof_artifact_summary,
+      pr_handoff_policy: reportingContext.pr_handoff_policy,
       next_tools: wakeNextToolsFor(result),
       monitor_contract: monitorContract,
       note:
@@ -1258,6 +1266,253 @@ function mergeTimingSummary(
   return merged;
 }
 
+function timingCulprits(timingSummary: Record<string, unknown> | null) {
+  if (!timingSummary) return [];
+  const candidates: Array<Record<string, unknown>> = [];
+  const addDurations = (source: string, value: unknown) => {
+    const record = recordValue(value);
+    if (!record) return;
+    for (const [name, duration] of Object.entries(record)) {
+      const durationMs = numericValue(duration);
+      if (durationMs !== null && durationMs > 0) {
+        candidates.push({ source, name, duration_ms: durationMs });
+      }
+    }
+  };
+  const totalElapsed = numericValue(timingSummary.total_elapsed_ms);
+  const currentStageElapsed = numericValue(timingSummary.current_stage_elapsed_ms);
+  if (totalElapsed !== null) candidates.push({ source: "run", name: "total_elapsed", duration_ms: totalElapsed });
+  if (currentStageElapsed !== null) {
+    candidates.push({ source: "wrapper", name: "current_stage_elapsed", duration_ms: currentStageElapsed });
+  }
+  addDurations("wrapper_stage", timingSummary.wrapper_stage_durations_ms);
+  addDurations("workflow_step", timingSummary.workflow_step_durations_ms);
+  addDurations("workflow_phase", timingSummary.workflow_phase_durations_ms);
+  addDurations("recon_subphase", timingSummary.recon_subphase_durations_ms);
+  addDurations("verify_subphase", timingSummary.verify_subphase_durations_ms);
+  return candidates
+    .sort((left, right) => Number(right.duration_ms || 0) - Number(left.duration_ms || 0))
+    .slice(0, 8);
+}
+
+function parseEventTimeMs(value: unknown) {
+  const text = stringValue(value);
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function inferRuntimeFailureDuration(
+  runtimeEvents: unknown[],
+  failureEvent: Record<string, unknown>,
+) {
+  const details = recordValue(failureEvent.details);
+  const explicitDuration = numericValue(details?.duration_ms);
+  if (explicitDuration !== null) return explicitDuration;
+  const step = stringValue(failureEvent.step);
+  const phase = stringValue(failureEvent.phase);
+  const failureTs = parseEventTimeMs(failureEvent.ts);
+  if (failureTs === null) return null;
+  for (let index = runtimeEvents.indexOf(failureEvent); index >= 0; index -= 1) {
+    const event = recordValue(runtimeEvents[index]);
+    if (!event) continue;
+    const kind = stringValue(event.kind).toLowerCase();
+    if (!kind.includes("started")) continue;
+    if (step && stringValue(event.step) !== step) continue;
+    if (phase && stringValue(event.phase) !== phase) continue;
+    const startedTs = parseEventTimeMs(event.ts);
+    if (startedTs !== null && failureTs >= startedTs) return failureTs - startedTs;
+  }
+  return null;
+}
+
+function latestRuntimeFailure(engineState: Record<string, unknown> | null) {
+  const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  for (let index = runtimeEvents.length - 1; index >= 0; index -= 1) {
+    const event = recordValue(runtimeEvents[index]);
+    if (!event) continue;
+    const details = recordValue(event.details);
+    const kind = stringValue(event.kind).toLowerCase();
+    const status = stringValue(details?.status).toLowerCase();
+    const summary = stringValue(event.summary);
+    const failed =
+      kind.includes("failed") ||
+      kind.includes("timeout") ||
+      status === "failed" ||
+      status === "error" ||
+      status === "timeout" ||
+      /timeout|timed out|failed/i.test(summary);
+    if (!failed) continue;
+    return {
+      source: "engine_runtime",
+      kind: stringValue(event.kind) || null,
+      step: stringValue(event.step) || null,
+      phase: stringValue(event.phase) || null,
+      summary: summary || null,
+      status: status || null,
+      ts: stringValue(event.ts) || null,
+      duration_ms: inferRuntimeFailureDuration(runtimeEvents, event),
+    };
+  }
+  return null;
+}
+
+function latestWrapperImplementationOutcome(wrapperState: RiddleProofRunState | null) {
+  const events = Array.isArray(wrapperState?.events) ? wrapperState.events : [];
+  const outcome = [...events]
+    .reverse()
+    .map((event) => recordValue(event))
+    .find((event) => event && stringValue(event.kind).startsWith("agent.implementation.") && stringValue(event.kind) !== "agent.implementation.started");
+  if (!outcome) return null;
+  const details = recordValue(outcome.details);
+  return {
+    source: "wrapper_implementation_agent",
+    kind: stringValue(outcome.kind) || null,
+    summary: stringValue(outcome.summary) || null,
+    status: stringValue(details?.status) || null,
+    ts: stringValue(outcome.ts) || null,
+    details: details || null,
+  };
+}
+
+function buildFailureSummary(
+  snapshot: RiddleProofRunStatusSnapshot,
+  wrapperState: RiddleProofRunState | null,
+  engineState: Record<string, unknown> | null,
+  timingSummary: Record<string, unknown>,
+) {
+  const blocker = recordValue(snapshot.blocker) || recordValue(wrapperState?.blocker);
+  const runtimeFailure = latestRuntimeFailure(engineState);
+  const implementationOutcome = latestWrapperImplementationOutcome(wrapperState);
+  const blockerCode = stringValue(blocker?.code);
+  const blockerMessage = stringValue(blocker?.message);
+  const blockerCheckpoint = stringValue(blocker?.checkpoint) || stringValue(snapshot.last_checkpoint);
+  const primaryFailure = runtimeFailure || implementationOutcome || (blocker ? {
+    source: "wrapper_blocker",
+    code: blockerCode || null,
+    checkpoint: blockerCheckpoint || null,
+    summary: blockerMessage || null,
+  } : null);
+  const runtimeStep = stringValue(runtimeFailure?.step);
+  const wrapperPointsToImplementation =
+    /implement|codex|agent/i.test(blockerCode) ||
+    /implement|codex|agent/i.test(blockerMessage) ||
+    /implement/i.test(blockerCheckpoint);
+  const layerMismatch = Boolean(runtimeFailure && wrapperPointsToImplementation && runtimeStep && runtimeStep !== "implement");
+  return compactRecordValue({
+    status: snapshot.status || null,
+    checkpoint: blockerCheckpoint || null,
+    blocker_code: blockerCode || null,
+    blocker_message: blockerMessage || stringValue((snapshot as unknown as Record<string, unknown>).last_summary) || null,
+    primary_failure: primaryFailure,
+    implementation_agent_outcome: implementationOutcome,
+    engine_runtime_failure: runtimeFailure,
+    timing_culprits: timingCulprits(timingSummary),
+    layer_mismatch: layerMismatch,
+    note: layerMismatch
+      ? "Wrapper and engine failure signals point at different layers; treat the proof as blocked until the evidence and logs are reviewed."
+      : undefined,
+  });
+}
+
+function buildPrHandoffPolicy(
+  snapshot: RiddleProofRunStatusSnapshot,
+  wrapperState: RiddleProofRunState | null,
+  proofArtifacts: Record<string, unknown>,
+  failureSummary: Record<string, unknown>,
+) {
+  const status = stringValue(snapshot.status);
+  const blocked = status === "blocked" || status === "failed";
+  const complete = status === "ready_to_ship" || status === "shipped" || status === "completed";
+  const leftDraft = wrapperState?.left_draft === true;
+  const blockerCode = stringValue(recordValue(snapshot.blocker)?.code) || stringValue(wrapperState?.blocker?.code);
+  if (blocked && blockerCode === "main_agent_proof_review_required") {
+    return {
+      state: "proof_review_required",
+      proof_complete: false,
+      merge_ready: false,
+      normal_pr_allowed: false,
+      fallback_pr: {
+        allowed: false,
+        reason: "The proof is waiting for main-agent evidence review; inspect and resume instead of creating a PR.",
+      },
+      user_facing_summary:
+        "Riddle Proof is waiting for proof review. Inspect the evidence, then resume with a review decision before shipping.",
+      failure_summary: failureSummary,
+    };
+  }
+  if (blocked) {
+    return {
+      state: "proof_blocked",
+      proof_complete: false,
+      merge_ready: false,
+      normal_pr_allowed: false,
+      fallback_pr: {
+        allowed: true,
+        required_state: "draft",
+        recommended_label: "riddle-proof-blocked",
+        required_body_sections: [
+          "Proof status: blocked",
+          "Failure summary",
+          "Before/prod baseline artifacts",
+          "After or preview artifact if available",
+          "Riddle Proof state_path and run_id",
+        ],
+        prohibited_claims: [
+          "proof passed",
+          "ready to ship",
+          "merge-ready",
+        ],
+      },
+      user_facing_summary:
+        "Riddle Proof blocked. A useful diff may be preserved only as a draft/blocked PR, not a merge-ready PR.",
+      artifact_requirements: {
+        include_before: Boolean(recordValue(recordValue(proofArtifacts.baseline)?.before)),
+        include_prod: Boolean(recordValue(recordValue(proofArtifacts.baseline)?.prod)),
+        include_after_or_preview: Boolean(proofArtifacts.has_any_after_or_preview),
+      },
+      failure_summary: failureSummary,
+    };
+  }
+  if (complete) {
+    return {
+      state: leftDraft ? "proof_complete_draft_hold" : "proof_complete",
+      proof_complete: true,
+      merge_ready: !leftDraft && (status === "ready_to_ship" || status === "shipped" || status === "completed"),
+      normal_pr_allowed: true,
+      fallback_pr: {
+        allowed: false,
+        reason: "Proof completed; use the normal proof/ship path.",
+      },
+    };
+  }
+  return {
+    state: "proof_in_progress",
+    proof_complete: false,
+    merge_ready: false,
+    normal_pr_allowed: false,
+    fallback_pr: {
+      allowed: false,
+      reason: "Proof is still running; continue monitoring instead of creating a PR.",
+    },
+  };
+}
+
+function buildProofReportingContext(
+  snapshot: RiddleProofRunStatusSnapshot,
+  wrapperState: RiddleProofRunState | null,
+  engineState: Record<string, unknown> | null,
+) {
+  const timingSummary = buildTimingSummary(snapshot, wrapperState, engineState);
+  const proofArtifactSummary = buildProofArtifactSummary(engineState);
+  const failureSummary = buildFailureSummary(snapshot, wrapperState, engineState, timingSummary);
+  return {
+    proof_artifact_summary: proofArtifactSummary,
+    failure_summary: failureSummary,
+    pr_handoff_policy: buildPrHandoffPolicy(snapshot, wrapperState, proofArtifactSummary, failureSummary),
+  };
+}
+
 function compactDebugEvent(event: unknown) {
   const record = recordValue(event);
   if (!record) return null;
@@ -1451,6 +1706,111 @@ function collectImageArtifacts(value: unknown, output: Array<Record<string, unkn
   }
   for (const nested of Object.values(record)) collectImageArtifacts(nested, output, seen);
   return output;
+}
+
+function artifactRoleFromPath(pathLabel: string) {
+  const lower = pathLabel.toLowerCase();
+  if (lower.includes("preview")) return "preview";
+  if (lower.includes("result")) return "result";
+  if (lower.includes("before")) return "before";
+  if (lower.includes("prod")) return "prod";
+  if (lower.includes("after")) return "after";
+  if (lower.includes("console")) return "console";
+  if (lower.includes("network") || lower.includes("har")) return "network";
+  if (lower.includes("proof")) return "proof";
+  return "artifact";
+}
+
+function artifactKindFromUrl(url: string, pathLabel: string) {
+  const lowerUrl = url.toLowerCase();
+  const lowerPath = pathLabel.toLowerCase();
+  if (/\.(png|jpe?g|webp)(\?|#|$)/i.test(lowerUrl)) return "screenshot";
+  if (/\.har(\?|#|$)/i.test(lowerUrl) || lowerPath.includes("har") || lowerPath.includes("network")) return "network";
+  if (/\.json(\?|#|$)/i.test(lowerUrl) || lowerPath.includes("json") || lowerPath.includes("proof")) return "json";
+  if (/\.(mp3|wav|ogg|webm|mp4)(\?|#|$)/i.test(lowerUrl)) return "media";
+  return "url";
+}
+
+function pathLooksProofArtifact(pathLabel: string, url: string) {
+  return (
+    /\.(png|jpe?g|webp|json|har|mp3|wav|ogg|webm|mp4)(\?|#|$)/i.test(url) ||
+    /(artifact|cdn|capture|console|evidence|network|proof|result|screenshot|preview|before|after|prod|har)/i.test(pathLabel)
+  );
+}
+
+function collectArtifactUrls(
+  value: unknown,
+  output: Array<Record<string, unknown>> = [],
+  seen = new Set<string>(),
+  pathLabel = "",
+  depth = 0,
+) {
+  if (!value || output.length >= 32 || depth > 7) return output;
+  if (typeof value === "string") {
+    const url = stringValue(value);
+    if (/^https?:\/\//i.test(url) && !seen.has(url) && pathLooksProofArtifact(pathLabel, url)) {
+      seen.add(url);
+      output.push({
+        role: artifactRoleFromPath(pathLabel),
+        kind: artifactKindFromUrl(url, pathLabel),
+        path: pathLabel || undefined,
+        url,
+      });
+    }
+    return output;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectArtifactUrls(item, output, seen, `${pathLabel}[${index}]`, depth + 1));
+    return output;
+  }
+  const record = recordValue(value);
+  if (!record) return output;
+  for (const [key, item] of Object.entries(record)) {
+    collectArtifactUrls(item, output, seen, pathLabel ? `${pathLabel}.${key}` : key, depth + 1);
+  }
+  return output;
+}
+
+function firstArtifactByRole(artifacts: Array<Record<string, unknown>>, role: string) {
+  return artifacts.find((item) => stringValue(item.role) === role && stringValue(item.url)) || null;
+}
+
+function buildProofArtifactSummary(fullState: Record<string, unknown> | null) {
+  const source = fullState || {};
+  const imageArtifacts: Array<Record<string, unknown>> = [];
+  for (const [role, url] of [
+    ["before", source.before_cdn],
+    ["prod", source.prod_cdn],
+    ["after", source.after_cdn],
+  ] as const) {
+    const normalized = stringValue(url);
+    if (normalized) imageArtifacts.push({ role, kind: "screenshot", url: normalized });
+  }
+  const imageSeen = new Set(imageArtifacts.map((item) => String(item.url || "")));
+  collectImageArtifacts(source, imageArtifacts, imageSeen);
+  const artifactUrls = collectArtifactUrls(source);
+  const byRole = {
+    before: firstArtifactByRole(artifactUrls, "before") || firstArtifactByRole(imageArtifacts, "before"),
+    prod: firstArtifactByRole(artifactUrls, "prod") || firstArtifactByRole(imageArtifacts, "prod"),
+    after: firstArtifactByRole(artifactUrls, "after") || firstArtifactByRole(imageArtifacts, "after"),
+    preview: firstArtifactByRole(artifactUrls, "preview") || firstArtifactByRole(imageArtifacts, "preview"),
+    result: firstArtifactByRole(artifactUrls, "result") || firstArtifactByRole(imageArtifacts, "result"),
+  };
+  return {
+    baseline: {
+      before: byRole.before,
+      prod: byRole.prod,
+    },
+    after: byRole.after,
+    preview: byRole.preview,
+    result: byRole.result,
+    image_artifacts: imageArtifacts.slice(0, 16),
+    artifact_urls: artifactUrls.slice(0, 32),
+    has_before: Boolean(byRole.before),
+    has_prod: Boolean(byRole.prod),
+    has_after: Boolean(byRole.after),
+    has_any_after_or_preview: Boolean(byRole.after || byRole.preview || byRole.result),
+  };
 }
 
 function listValue(value: unknown, limit: number) {
@@ -1685,6 +2045,7 @@ function buildProofInspection(
     isRoutable: inspectionResumable && !inspectionActiveSubstepRunning && wrapperState.status !== "running",
     implementationInFlight: implementationGap === "during_agent_attempt",
   });
+  const reportingContext = buildProofReportingContext(createRunStatusSnapshot(wrapperState), wrapperState, fullState);
   const inspection = {
     ok: true,
     package_metadata: riddleProofPackageMetadata(),
@@ -1741,6 +2102,9 @@ function buildProofInspection(
       wrapperState,
       fullState,
     ),
+    proof_artifact_summary: reportingContext.proof_artifact_summary,
+    failure_summary: reportingContext.failure_summary,
+    pr_handoff_policy: reportingContext.pr_handoff_policy,
     visible_change: visibleChange,
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyToShipCandidate,
@@ -2187,6 +2551,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const engineStatePath = stringValue(wrapperState?.request.engine_state_path);
   if (!engineStatePath) {
     const recommendedPollMs = recommendedPollAfterMs(null, snapshot);
+    const reportingContext = buildProofReportingContext(snapshot, wrapperState, null);
     const monitorContract = wrapperState
       ? monitorContractFor(snapshot.status, wrapperState.request, {
           checkpoint: baseCheckpoint.checkpoint,
@@ -2201,6 +2566,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
       request_metadata: requestMetadataFor(wrapperState?.request, null),
       monitor_contract: monitorContract,
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
+      ...reportingContext,
       recommended_poll_after_ms: recommendedPollMs,
       ...baseCheckpoint,
       monitor_plan: statusLoopMonitorPlan(
@@ -2240,6 +2606,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const scratchCleanup = recordValue(engineState?.scratch_cleanup);
   const implementationDetection = recordValue(engineState?.implementation_detection);
   const recommendedPollMs = recommendedPollAfterMs(activeSubstep, snapshot);
+  const reportingContext = buildProofReportingContext(snapshot, wrapperState, engineState);
   const status = {
     ...snapshot,
     package_metadata: riddleProofPackageMetadata(),
@@ -2266,6 +2633,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     implementation_gap_origin: implementationGap,
     capture_hint: summarizeCaptureHint(engineState),
     timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, engineState), wakeTimingSummary),
+    ...reportingContext,
     recommended_poll_after_ms: recommendedPollMs,
     ...checkpoint,
     monitor_plan: statusLoopMonitorPlan(
@@ -2377,6 +2745,9 @@ export function classifyOpenClawRiddleProofWake(
     suggested_next_action: suggestedNextAction,
     summary,
     next_tools: nextTools,
+    failure_summary: recordValue(status.failure_summary),
+    proof_artifact_summary: recordValue(status.proof_artifact_summary),
+    pr_handoff_policy: recordValue(status.pr_handoff_policy),
   };
 }
 
@@ -2394,6 +2765,33 @@ export function formatOpenClawRiddleProofWakeEvent(
     `summary: ${classification.summary}`,
     `instruction: ${wakeInstructionForKind(classification.kind, statePath)}`,
   ];
+  const handoff = recordValue(classification.pr_handoff_policy);
+  const fallbackPr = recordValue(handoff?.fallback_pr);
+  if (handoff && handoff.state === "proof_blocked") {
+    lines.push(
+      "pr_policy: proof blocked; if preserving useful edits, create/update only a draft PR marked proof-blocked.",
+      `pr_required_state: ${stringValue(fallbackPr?.required_state) || "draft"}`,
+    );
+  }
+  const failure = recordValue(classification.failure_summary);
+  const primaryFailure = recordValue(failure?.primary_failure);
+  const primarySource = stringValue(primaryFailure?.source);
+  const primaryStep = stringValue(primaryFailure?.step) || stringValue(primaryFailure?.checkpoint);
+  const primarySummary = stringValue(primaryFailure?.summary);
+  if (primarySource || primaryStep || primarySummary) {
+    lines.push(`failure: ${[primarySource, primaryStep, primarySummary].filter(Boolean).join(" | ")}`);
+  }
+  const artifacts = recordValue(classification.proof_artifact_summary);
+  const baseline = recordValue(artifacts?.baseline);
+  const before = stringValue(recordValue(baseline?.before)?.url);
+  const prod = stringValue(recordValue(baseline?.prod)?.url);
+  const after = stringValue(recordValue(artifacts?.after)?.url);
+  const preview = stringValue(recordValue(artifacts?.preview)?.url) || stringValue(recordValue(artifacts?.result)?.url);
+  if (before || prod || after || preview) {
+    lines.push(
+      `artifacts: before=${before || "(none)"} prod=${prod || "(none)"} after=${after || "(none)"} preview=${preview || "(none)"}`,
+    );
+  }
   return lines.join("\n");
 }
 
