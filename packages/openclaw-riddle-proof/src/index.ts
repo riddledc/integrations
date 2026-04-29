@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import {
@@ -168,6 +168,7 @@ export interface OpenClawRiddleProofRuntimeConfig {
   defaultShipMode?: "none" | "ship";
   defaultRunMode?: OpenClawRiddleProofRunMode;
   autoReviewShipModeNone?: boolean;
+  enableWakeMonitor?: boolean;
   codexCommand?: CodexExecAgentConfig["codexCommand"];
   codexHome?: CodexExecAgentConfig["codexHome"];
   codexModel?: CodexExecAgentConfig["codexModel"];
@@ -181,6 +182,75 @@ interface BackgroundWorkerData {
   request: RiddleProofRunParams;
   state_path: string;
   config: OpenClawRiddleProofRuntimeConfig;
+  resume_params?: RiddleProofWorkflowParams;
+}
+
+export interface OpenClawRiddleProofWakeContext {
+  sessionKey?: string;
+  sessionKeySource?: "tool_context" | "discord_thread_param" | "discord_channel_param" | "missing";
+  agentId?: string;
+  deliveryContext?: Record<string, unknown>;
+  discordChannelId?: string;
+  discordThreadId?: string;
+  discordMessageId?: string;
+  discordSourceUrl?: string;
+}
+
+export interface OpenClawRiddleProofWakeRuntime {
+  enqueueSystemEvent?: (
+    text: string,
+    options: {
+      sessionKey: string;
+      contextKey?: string;
+      deliveryContext?: Record<string, unknown>;
+      trusted?: boolean;
+    },
+  ) => boolean | Promise<boolean>;
+  requestHeartbeatNow?: (options?: {
+    reason?: string;
+    coalesceMs?: number;
+    agentId?: string;
+    sessionKey?: string;
+    heartbeat?: { target?: string };
+  }) => void | Promise<void>;
+  logger?: {
+    debug?: (message: string, meta?: Record<string, unknown>) => void;
+    info?: (message: string, meta?: Record<string, unknown>) => void;
+    warn?: (message: string, meta?: Record<string, unknown>) => void;
+    error?: (message: string, meta?: Record<string, unknown>) => void;
+  };
+}
+
+export type OpenClawRiddleProofWakeKind =
+  | "proof_review_required"
+  | "resume_checkpoint"
+  | "ready_to_ship"
+  | "shipped"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "reportable_status";
+
+export type OpenClawRiddleProofWakeClassification =
+  | {
+      should_dispatch: false;
+      kind: "continue_monitoring";
+      reason: string;
+      poll_after_ms: number;
+    }
+  | {
+      should_dispatch: true;
+      kind: OpenClawRiddleProofWakeKind;
+      dedupe_key: string;
+      status: string | null;
+      checkpoint: string | null;
+      suggested_next_action: string | null;
+      summary: string;
+      next_tools: string[];
+    };
+
+export interface OpenClawRiddleProofRunOptions {
+  wakeContext?: OpenClawRiddleProofWakeContext;
 }
 
 export function createOpenClawRiddleProofResult(
@@ -252,6 +322,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
   const autoReviewShipModeNone = cfg.autoReviewShipModeNone === false ? false : true;
+  const enableWakeMonitor = cfg.enableWakeMonitor === false ? false : true;
   const codexSandbox =
     cfg.codexSandbox === "read-only" ||
     cfg.codexSandbox === "workspace-write" ||
@@ -270,6 +341,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     defaultShipMode,
     defaultRunMode,
     autoReviewShipModeNone,
+    enableWakeMonitor,
     codexCommand: typeof cfg.codexCommand === "string" ? cfg.codexCommand : undefined,
     codexHome: typeof cfg.codexHome === "string" ? cfg.codexHome : undefined,
     codexModel: typeof cfg.codexModel === "string" ? cfg.codexModel : undefined,
@@ -332,6 +404,66 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
   return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_INSPECT_TOOL_NAME];
 }
 
+function appendWakeMonitorRegistration(
+  state: RiddleProofRunState,
+  wakeContext: OpenClawRiddleProofWakeContext | undefined,
+) {
+  if (!wakeContext) return;
+  appendRunEvent(state, {
+    kind: "run.oc_wake.monitor_registered",
+    checkpoint: state.last_checkpoint || "background_started",
+    stage: state.current_stage || "setup",
+    summary: wakeContext.sessionKey
+      ? "OpenClaw wake monitor registered for this background Riddle Proof run."
+      : "OpenClaw wake monitor could not bind to a session key.",
+    details: {
+      monitor_version: "riddle_proof.oc_wake.v1",
+      dispatchable: Boolean(wakeContext.sessionKey),
+      wake_context: compactRecordValue(wakeContext as Record<string, unknown>),
+    },
+  });
+}
+
+function latestWakeContextFor(state: RiddleProofRunState | null | undefined): OpenClawRiddleProofWakeContext | null {
+  if (!state?.events) return null;
+  for (let index = state.events.length - 1; index >= 0; index -= 1) {
+    const event = state.events[index] as unknown as Record<string, unknown>;
+    if (event.kind !== "run.oc_wake.monitor_registered") continue;
+    const details = recordValue(event.details);
+    const wakeContext = recordValue(details?.wake_context);
+    if (!wakeContext) return null;
+    return compactRecordValue({
+      sessionKey: stringValue(wakeContext.sessionKey),
+      sessionKeySource: stringValue(wakeContext.sessionKeySource) as OpenClawRiddleProofWakeContext["sessionKeySource"],
+      agentId: stringValue(wakeContext.agentId),
+      deliveryContext: sanitizeRecord(wakeContext.deliveryContext),
+      discordChannelId: stringValue(wakeContext.discordChannelId),
+      discordThreadId: stringValue(wakeContext.discordThreadId),
+      discordMessageId: stringValue(wakeContext.discordMessageId),
+      discordSourceUrl: stringValue(wakeContext.discordSourceUrl),
+    }) as OpenClawRiddleProofWakeContext;
+  }
+  return null;
+}
+
+function wakeAlreadyDispatched(state: RiddleProofRunState | null | undefined, dedupeKey: string) {
+  return Boolean(state?.events?.some((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    if (record.kind !== "run.oc_wake.dispatched") return false;
+    const details = recordValue(record.details);
+    return stringValue(details?.dedupe_key) === dedupeKey;
+  }));
+}
+
+function wakeDispatchFailureCount(state: RiddleProofRunState | null | undefined, dedupeKey: string) {
+  return (state?.events || []).filter((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    if (record.kind !== "run.oc_wake.dispatch_failed") return false;
+    const details = recordValue(record.details);
+    return stringValue(details?.dedupe_key) === dedupeKey;
+  }).length;
+}
+
 function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
   const engineStatePath = stringValue(state.request.engine_state_path);
   const engineState = engineStatePath ? readJsonRecord(engineStatePath) : null;
@@ -373,6 +505,7 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
     defaultShipMode: config.defaultShipMode,
     defaultRunMode: config.defaultRunMode,
     autoReviewShipModeNone: config.autoReviewShipModeNone,
+    enableWakeMonitor: config.enableWakeMonitor,
     codexCommand: config.codexCommand,
     codexHome: config.codexHome,
     codexModel: config.codexModel,
@@ -422,6 +555,7 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
   const result = await runRiddleProofEngineHarness({
     request: data.request,
     state_path: data.state_path,
+    resume_params: data.resume_params,
     max_iterations: effectiveMaxIterations(data.request, config),
     dry_run: data.request.dry_run,
     auto_approve: data.request.auto_approve,
@@ -451,13 +585,19 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
   return result;
 }
 
-function startBackgroundWorker(request: RiddleProofRunParams, statePath: string, config: OpenClawRiddleProofRuntimeConfig) {
+function startBackgroundWorker(
+  request: RiddleProofRunParams,
+  statePath: string,
+  config: OpenClawRiddleProofRuntimeConfig,
+  resumeParams?: RiddleProofWorkflowParams,
+) {
   const worker = new Worker(new URL(import.meta.url), {
     workerData: {
       kind: "openclaw-riddle-proof-background",
       request,
       state_path: statePath,
       config: serializableBackgroundConfig(config),
+      resume_params: resumeParams,
     } satisfies BackgroundWorkerData,
   });
   worker.unref();
@@ -619,6 +759,7 @@ function monitorContractFor(
 function startOpenClawRiddleProofBackground(
   params: RiddleProofChangeParams,
   config: OpenClawRiddleProofRuntimeConfig,
+  options: OpenClawRiddleProofRunOptions = {},
 ): RiddleProofRunResult {
   const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
   const runModeDecision = runModeDecisionFrom(params, config);
@@ -649,6 +790,7 @@ function startOpenClawRiddleProofBackground(
       ],
     },
   });
+  appendWakeMonitorRegistration(state, options.wakeContext);
   setRunStatus(state, "running");
   persistRunState(state);
 
@@ -692,6 +834,82 @@ function startOpenClawRiddleProofBackground(
   });
 }
 
+function wasStartedAsBackgroundRun(state: RiddleProofRunState | null | undefined) {
+  return Boolean(state?.events?.some((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    return record.kind === "run.background.started" || record.kind === "run.background.resume_started";
+  }));
+}
+
+function startOpenClawRiddleProofResumeBackground(params: {
+  state: RiddleProofRunState;
+  statePath: string;
+  config: OpenClawRiddleProofRuntimeConfig;
+  resumeParams: RiddleProofWorkflowParams;
+  summary: string;
+}): RiddleProofRunResult {
+  params.state.blocker = undefined;
+  params.state.finalized = false;
+  setRunStatus(params.state, "running");
+  appendRunEvent(params.state, {
+    kind: "run.background.resume_started",
+    checkpoint: params.state.last_checkpoint || "resume_started",
+    stage: params.state.current_stage || null,
+    summary: params.summary,
+    details: {
+      state_path: params.statePath,
+      monitor_contract: monitorContractFor("running", params.state.request, {
+        checkpoint: params.state.last_checkpoint || null,
+      }),
+      next_tools: [
+        RIDDLE_PROOF_WAIT_TOOL_NAME,
+        RIDDLE_PROOF_STATUS_TOOL_NAME,
+        RIDDLE_PROOF_INSPECT_TOOL_NAME,
+        RIDDLE_PROOF_REVIEW_TOOL_NAME,
+      ],
+    },
+  });
+  persistRunState(params.state);
+
+  const workerRequest = {
+    ...params.state.request,
+    harness_state_path: params.statePath,
+  };
+  if (params.config.engine || params.config.agent) {
+    setImmediate(() => {
+      void runBackgroundWorkerJob({
+        kind: "openclaw-riddle-proof-background",
+        request: workerRequest,
+        state_path: params.statePath,
+        config: params.config,
+        resume_params: params.resumeParams,
+      }).catch((error) => {
+        markBackgroundWorkerFailed(params.statePath, error instanceof Error ? error.message : String(error));
+      });
+    });
+  } else {
+    startBackgroundWorker(workerRequest, params.statePath, params.config, params.resumeParams);
+  }
+
+  return createRunResult({
+    state: params.state,
+    status: "running",
+    last_summary: params.summary,
+    raw: {
+      background: true,
+      background_resume: true,
+      state_path: params.statePath,
+      monitor_contract: monitorContractFor("running", params.state.request, {
+        checkpoint: params.state.last_checkpoint || null,
+      }),
+      next_actions: [
+        `Call ${RIDDLE_PROOF_WAIT_TOOL_NAME} with state_path=${params.statePath} when available to wait for the next reportable state.`,
+        `If ${RIDDLE_PROOF_WAIT_TOOL_NAME} is not exposed, poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${params.statePath} and stop when monitor_should_continue is false.`,
+      ],
+    },
+  });
+}
+
 function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofAgentAdapter | undefined {
   const wrapForReview = (agent: RiddleProofAgentAdapter) =>
     config.proofReviewMode === "main_agent" ? createMainAgentProofReviewAdapter(agent, config) : agent;
@@ -713,6 +931,39 @@ function stringValue(value: unknown) {
 
 function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function findStringByKeys(
+  value: unknown,
+  keys: string[],
+  depth = 0,
+  seen = new Set<unknown>(),
+): string {
+  if (depth > 5) return "";
+  const record = recordValue(value);
+  if (!record || seen.has(record)) return "";
+  seen.add(record);
+
+  for (const key of keys) {
+    const found = stringValue(record[key]);
+    if (found) return found;
+  }
+
+  for (const child of Object.values(record)) {
+    const found = findStringByKeys(child, keys, depth + 1, seen);
+    if (found) return found;
+  }
+  return "";
+}
+
+function sanitizeRecord(value: unknown): Record<string, unknown> | undefined {
+  const record = recordValue(value);
+  if (!record) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(record)) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
 }
 
 function verificationModeRequiresScreenshot(mode: unknown) {
@@ -748,6 +999,50 @@ function compactValue(value: unknown, limit = 1200) {
 function numericValue(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   return null;
+}
+
+function deriveOpenClawSessionKeyFromParams(
+  params: RiddleProofChangeParams,
+  agentId: string,
+): { sessionKey?: string; source: OpenClawRiddleProofWakeContext["sessionKeySource"] } {
+  const raw = params as Record<string, unknown>;
+  const discordThreadId = stringValue(raw.discord_thread_id) || stringValue(raw.discordThreadId);
+  if (discordThreadId) {
+    return { sessionKey: `agent:${agentId}:discord-thread-${discordThreadId}`, source: "discord_thread_param" };
+  }
+  const discordChannelId = stringValue(raw.discord_channel) || stringValue(raw.discordChannel);
+  if (discordChannelId) {
+    return { sessionKey: `agent:${agentId}:discord:channel:${discordChannelId}`, source: "discord_channel_param" };
+  }
+  return { source: "missing" };
+}
+
+function wakeContextFrom(params: RiddleProofChangeParams, ctx: unknown): OpenClawRiddleProofWakeContext {
+  const ctxRecord = recordValue(ctx);
+  const raw = params as Record<string, unknown>;
+  const agentId = findStringByKeys(ctxRecord, ["agentId", "agent_id"]) || "main";
+  const contextSessionKey = findStringByKeys(ctxRecord, ["sessionKey", "session_key"]);
+  const fallbackSessionKey = contextSessionKey ? undefined : deriveOpenClawSessionKeyFromParams(params, agentId);
+  const discordThreadId = stringValue(raw.discord_thread_id) || stringValue(raw.discordThreadId);
+  const discordChannelId = stringValue(raw.discord_channel) || stringValue(raw.discordChannel);
+  return compactRecordValue({
+    sessionKey: contextSessionKey || fallbackSessionKey?.sessionKey,
+    sessionKeySource: contextSessionKey ? "tool_context" : fallbackSessionKey?.source,
+    agentId,
+    deliveryContext: sanitizeRecord(ctxRecord?.deliveryContext),
+    discordChannelId,
+    discordThreadId,
+    discordMessageId: stringValue(raw.discord_message_id) || stringValue(raw.discordMessageId),
+    discordSourceUrl: stringValue(raw.discord_source_url) || stringValue(raw.discordSourceUrl),
+  }) as OpenClawRiddleProofWakeContext;
+}
+
+function wakeRuntimeFromApi(api: any): OpenClawRiddleProofWakeRuntime {
+  return {
+    enqueueSystemEvent: api?.runtime?.system?.enqueueSystemEvent,
+    requestHeartbeatNow: api?.runtime?.system?.requestHeartbeatNow,
+    logger: api?.logger,
+  };
 }
 
 function isoToMs(value: unknown): number | null {
@@ -1657,6 +1952,7 @@ function createMainAgentProofReviewAdapter(
 export async function runOpenClawRiddleProof(
   params: RiddleProofChangeParams,
   config: OpenClawRiddleProofRuntimeConfig = {},
+  options: OpenClawRiddleProofRunOptions = {},
 ): Promise<RiddleProofRunResult> {
   if (config.executionMode !== "engine") {
     return createOpenClawRiddleProofResult(params);
@@ -1664,7 +1960,7 @@ export async function runOpenClawRiddleProof(
 
   const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
   if (runModeFrom(params, config) === "background") {
-    return startOpenClawRiddleProofBackground(params, config);
+    return startOpenClawRiddleProofBackground(params, config, options);
   }
 
   return runRiddleProofEngineHarness({
@@ -1973,6 +2269,320 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   return status;
 }
 
+function wakeKindForStatus(status: Record<string, unknown>): OpenClawRiddleProofWakeKind {
+  const suggestedNextAction = stringValue(status.suggested_next_action);
+  const checkpointClassification = stringValue(status.checkpoint_classification);
+  const statusValue = stringValue(status.status);
+  if (suggestedNextAction === "inspect_or_review" || checkpointClassification === "review_required") {
+    return "proof_review_required";
+  }
+  if (suggestedNextAction === "resume_checkpoint") return "resume_checkpoint";
+  if (statusValue === "ready_to_ship") return "ready_to_ship";
+  if (statusValue === "shipped") return "shipped";
+  if (statusValue === "completed") return "completed";
+  if (statusValue === "failed") return "failed";
+  if (statusValue === "blocked") return "blocked";
+  return "reportable_status";
+}
+
+function nextToolsForWakeKind(kind: OpenClawRiddleProofWakeKind) {
+  if (kind === "proof_review_required") {
+    return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
+  }
+  if (kind === "resume_checkpoint") {
+    return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME];
+  }
+  if (kind === "ready_to_ship" || kind === "shipped" || kind === "completed") {
+    return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_SYNC_TOOL_NAME];
+  }
+  return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_INSPECT_TOOL_NAME];
+}
+
+function wakeInstructionForKind(kind: OpenClawRiddleProofWakeKind, statePath: string) {
+  if (kind === "proof_review_required") {
+    return (
+      `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath}, judge the proof evidence directly, ` +
+      `then call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with the appropriate decision to resume.`
+    );
+  }
+  if (kind === "resume_checkpoint") {
+    return (
+      `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath}; if the checkpoint is still routable, ` +
+      `call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with decision=continue_checkpoint to resume the internal loop.`
+    );
+  }
+  if (kind === "ready_to_ship" || kind === "shipped" || kind === "completed") {
+    return (
+      `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath}, then report the terminal proof result, ` +
+      `PR state, and artifact URLs. Use ${RIDDLE_PROOF_SYNC_TOOL_NAME} after human PR review or merge.`
+    );
+  }
+  return (
+    `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath}; inspect details with ` +
+    `${RIDDLE_PROOF_INSPECT_TOOL_NAME} if the blocker or terminal state is ambiguous.`
+  );
+}
+
+export function classifyOpenClawRiddleProofWake(
+  status: RiddleProofRunStatusSnapshot & Record<string, unknown>,
+): OpenClawRiddleProofWakeClassification {
+  const pollAfterMs = Math.max(1_000, Math.trunc(numericValue(status.recommended_poll_after_ms) ?? 10_000));
+  if (status.monitor_should_continue === true || stringValue(status.suggested_next_action) === "continue_monitoring") {
+    return {
+      should_dispatch: false,
+      kind: "continue_monitoring",
+      reason: "monitor_should_continue",
+      poll_after_ms: pollAfterMs,
+    };
+  }
+  const statePath = stringValue(status.state_path);
+  const checkpoint = stringValue(status.checkpoint) || stringValue(status.last_checkpoint) || null;
+  const suggestedNextAction = stringValue(status.suggested_next_action) || null;
+  const statusValue = stringValue(status.status) || null;
+  const blocker = recordValue(status.blocker);
+  const blockerCode = stringValue(blocker?.code);
+  const kind = wakeKindForStatus(status);
+  const nextTools = nextToolsForWakeKind(kind);
+  const summary = stringValue(blocker?.message) || stringValue(status.last_summary) ||
+    `Riddle Proof reached ${statusValue || "a reportable state"}.`;
+  return {
+    should_dispatch: true,
+    kind,
+    dedupe_key: [
+      "riddle_proof_oc_wake_v1",
+      statePath,
+      stringValue(status.run_id),
+      statusValue,
+      checkpoint,
+      blockerCode,
+      suggestedNextAction,
+    ].join("|"),
+    status: statusValue,
+    checkpoint,
+    suggested_next_action: suggestedNextAction,
+    summary,
+    next_tools: nextTools,
+  };
+}
+
+export function formatOpenClawRiddleProofWakeEvent(
+  classification: Extract<OpenClawRiddleProofWakeClassification, { should_dispatch: true }>,
+  statePath: string,
+) {
+  const lines = [
+    "Riddle Proof background run needs action.",
+    `state_path: ${statePath}`,
+    `status: ${classification.status || "unknown"}`,
+    `checkpoint: ${classification.checkpoint || "unknown"}`,
+    `action: ${classification.suggested_next_action || classification.kind}`,
+    `next_tools: ${classification.next_tools.join(", ")}`,
+    `summary: ${classification.summary}`,
+    `instruction: ${wakeInstructionForKind(classification.kind, statePath)}`,
+  ];
+  return lines.join("\n");
+}
+
+async function dispatchOpenClawRiddleProofWake(params: {
+  statePath: string;
+  state: RiddleProofRunState;
+  context: OpenClawRiddleProofWakeContext;
+  classification: Extract<OpenClawRiddleProofWakeClassification, { should_dispatch: true }>;
+  runtime: OpenClawRiddleProofWakeRuntime;
+}) {
+  const sessionKey = stringValue(params.context.sessionKey);
+  if (!sessionKey) {
+    return { ok: false, retryable: false, reason: "missing_session_key" };
+  }
+  if (typeof params.runtime.enqueueSystemEvent !== "function" || typeof params.runtime.requestHeartbeatNow !== "function") {
+    return { ok: false, retryable: false, reason: "missing_openclaw_wake_runtime" };
+  }
+
+  try {
+    const text = formatOpenClawRiddleProofWakeEvent(params.classification, params.statePath);
+    const enqueued = await params.runtime.enqueueSystemEvent(text, {
+      sessionKey,
+      contextKey: params.classification.dedupe_key,
+      deliveryContext: params.context.deliveryContext,
+      trusted: true,
+    });
+    await params.runtime.requestHeartbeatNow({
+      reason: "hook:riddle-proof",
+      coalesceMs: 0,
+      sessionKey,
+      agentId: stringValue(params.context.agentId) || undefined,
+      heartbeat: { target: "last" },
+    });
+    return { ok: true, retryable: false, enqueued: Boolean(enqueued), reason: null };
+  } catch (error) {
+    return {
+      ok: false,
+      retryable: true,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+export async function processOpenClawRiddleProofWakeMonitorOnce(
+  statePath: string,
+  runtime: OpenClawRiddleProofWakeRuntime,
+) {
+  const state = readRunState(statePath);
+  if (!state) {
+    return { ok: false, action: "not_found", state_path: statePath };
+  }
+  const context = latestWakeContextFor(state);
+  if (!context) {
+    return { ok: false, action: "not_registered", state_path: statePath };
+  }
+  const status = readOpenClawRiddleProofStatus(statePath);
+  if (!status) {
+    return { ok: false, action: "not_found", state_path: statePath };
+  }
+  const classification = classifyOpenClawRiddleProofWake(status as RiddleProofRunStatusSnapshot & Record<string, unknown>);
+  if (!classification.should_dispatch) {
+    return {
+      ok: true,
+      action: "continue_monitoring",
+      state_path: statePath,
+      poll_after_ms: classification.poll_after_ms,
+    };
+  }
+  if (wakeAlreadyDispatched(state, classification.dedupe_key)) {
+    return {
+      ok: true,
+      action: "already_dispatched",
+      state_path: statePath,
+      dedupe_key: classification.dedupe_key,
+    };
+  }
+
+  const dispatch = await dispatchOpenClawRiddleProofWake({ statePath, state, context, classification, runtime });
+  const latestState = readRunState(statePath) || state;
+  if (dispatch.ok) {
+    appendRunEvent(latestState, {
+      kind: "run.oc_wake.dispatched",
+      checkpoint: classification.checkpoint || latestState.last_checkpoint || null,
+      stage: latestState.current_stage || null,
+      summary: "OpenClaw session wake dispatched for reportable Riddle Proof state.",
+      details: {
+        monitor_version: "riddle_proof.oc_wake.v1",
+        dedupe_key: classification.dedupe_key,
+        wake_kind: classification.kind,
+        status: classification.status,
+        suggested_next_action: classification.suggested_next_action,
+        next_tools: classification.next_tools,
+        session_key: context.sessionKey,
+        session_key_source: context.sessionKeySource,
+        enqueued: dispatch.enqueued,
+      },
+    });
+    persistRunState(latestState);
+    return {
+      ok: true,
+      action: "dispatched",
+      state_path: statePath,
+      dedupe_key: classification.dedupe_key,
+      wake_kind: classification.kind,
+    };
+  }
+
+  appendRunEvent(latestState, {
+    kind: "run.oc_wake.dispatch_failed",
+    checkpoint: classification.checkpoint || latestState.last_checkpoint || null,
+    stage: latestState.current_stage || null,
+    summary: `OpenClaw session wake was not dispatched: ${dispatch.reason}.`,
+    details: {
+      monitor_version: "riddle_proof.oc_wake.v1",
+      dedupe_key: classification.dedupe_key,
+      wake_kind: classification.kind,
+      status: classification.status,
+      reason: dispatch.reason,
+      retryable: dispatch.retryable,
+      session_key_source: context.sessionKeySource,
+    },
+  });
+  persistRunState(latestState);
+  return {
+    ok: false,
+    action: "dispatch_failed",
+    state_path: statePath,
+    dedupe_key: classification.dedupe_key,
+    reason: dispatch.reason,
+    retryable: dispatch.retryable,
+    failure_count: wakeDispatchFailureCount(latestState, classification.dedupe_key),
+  };
+}
+
+const activeWakeMonitorTimers = new Map<string, NodeJS.Timeout>();
+
+function scheduleOpenClawRiddleProofWakeMonitor(
+  statePath: string,
+  runtime: OpenClawRiddleProofWakeRuntime,
+  delayMs: number,
+) {
+  const previous = activeWakeMonitorTimers.get(statePath);
+  if (previous) clearTimeout(previous);
+  const timer = setTimeout(() => {
+    activeWakeMonitorTimers.delete(statePath);
+    void processOpenClawRiddleProofWakeMonitorOnce(statePath, runtime).then((result) => {
+      if (result.action === "continue_monitoring") {
+        scheduleOpenClawRiddleProofWakeMonitor(statePath, runtime, numericValue(result.poll_after_ms) ?? 10_000);
+      } else if (result.action === "dispatch_failed" && result.retryable === true && (numericValue(result.failure_count) ?? 0) < 3) {
+        scheduleOpenClawRiddleProofWakeMonitor(statePath, runtime, 30_000);
+      }
+    }).catch((error) => {
+      runtime.logger?.warn?.("Riddle Proof wake monitor poll failed.", {
+        state_path: statePath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      scheduleOpenClawRiddleProofWakeMonitor(statePath, runtime, 30_000);
+    });
+  }, Math.max(0, Math.trunc(delayMs)));
+  timer.unref?.();
+  activeWakeMonitorTimers.set(statePath, timer);
+}
+
+function startOpenClawRiddleProofWakeMonitor(statePath: string | undefined, runtime: OpenClawRiddleProofWakeRuntime) {
+  if (!statePath) return;
+  if (activeWakeMonitorTimers.has(statePath)) return;
+  const state = readRunState(statePath);
+  if (!latestWakeContextFor(state)) return;
+  scheduleOpenClawRiddleProofWakeMonitor(statePath, runtime, 0);
+}
+
+function discoverWakeMonitorStatePaths(stateDir = "/tmp") {
+  if (!existsSync(stateDir)) return [];
+  try {
+    return readdirSync(stateDir)
+      .filter((name) => /^riddle-proof-run-.*\.json$/.test(name))
+      .map((name) => path.join(stateDir, name))
+      .map((statePath) => ({ statePath, mtimeMs: statSync(statePath).mtimeMs }))
+      .sort((left, right) => right.mtimeMs - left.mtimeMs)
+      .slice(0, 50)
+      .map((entry) => entry.statePath);
+  } catch {
+    return [];
+  }
+}
+
+function recoverOpenClawRiddleProofWakeMonitors(
+  config: OpenClawRiddleProofRuntimeConfig,
+  runtime: OpenClawRiddleProofWakeRuntime,
+) {
+  if (config.enableWakeMonitor === false) return;
+  if (typeof runtime.enqueueSystemEvent !== "function" || typeof runtime.requestHeartbeatNow !== "function") return;
+  const stateDir = config.stateDir || "/tmp";
+  for (const statePath of discoverWakeMonitorStatePaths(stateDir)) {
+    const state = readRunState(statePath);
+    if (!latestWakeContextFor(state)) continue;
+    const status = readOpenClawRiddleProofStatus(statePath);
+    if (!status) continue;
+    const classification = classifyOpenClawRiddleProofWake(status as RiddleProofRunStatusSnapshot & Record<string, unknown>);
+    if (classification.should_dispatch && wakeAlreadyDispatched(state, classification.dedupe_key)) continue;
+    startOpenClawRiddleProofWakeMonitor(statePath, runtime);
+  }
+}
+
 export async function waitOpenClawRiddleProof(params: RiddleProofWaitParams) {
   const timeoutMs = Math.max(1_000, Math.min(15 * 60 * 1000, Math.trunc(params.timeout_ms ?? 5 * 60 * 1000)));
   const startedAt = Date.now();
@@ -2175,6 +2785,7 @@ export async function submitOpenClawRiddleProofReview(
     };
     return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
   }
+  if (!state.state_path) state.state_path = params.state_path;
 
   const engineStatePath = state.request.engine_state_path;
   if (!engineStatePath) {
@@ -2235,6 +2846,14 @@ export async function submitOpenClawRiddleProofReview(
   if (forwardProofAssessment) {
     resumeParams.continue_from_checkpoint = true;
     resumeParams.proof_assessment_json = JSON.stringify(assessment);
+    appendRunEvent(state, {
+      kind: "agent.proof_assessment.completed",
+      checkpoint: currentCheckpoint || "verify_supervisor_judgment",
+      stage: "verify",
+      summary: params.summary,
+      details: { payload: assessment },
+    });
+    persistRunState(state);
   } else {
     appendRunEvent(state, {
       kind: "agent.checkpoint_review.completed",
@@ -2253,6 +2872,16 @@ export async function submitOpenClawRiddleProofReview(
       resumeParams.continue_from_checkpoint = true;
     }
     persistRunState(state);
+  }
+
+  if (wasStartedAsBackgroundRun(state)) {
+    return startOpenClawRiddleProofResumeBackground({
+      state,
+      statePath: params.state_path,
+      config,
+      resumeParams,
+      summary: "Riddle Proof review accepted; resuming the background proof workflow.",
+    });
   }
 
   return runRiddleProofEngineHarness({
@@ -2456,6 +3085,8 @@ export const riddleProofReviewParameters = Type.Object({
 
 export default function register(api: any) {
   const runtimeConfig = runtimeConfigFrom(api);
+  const wakeRuntime = wakeRuntimeFromApi(api);
+  recoverOpenClawRiddleProofWakeMonitors(runtimeConfig, wakeRuntime);
 
   api.registerTool(
     {
@@ -2464,8 +3095,12 @@ export default function register(api: any) {
         "Run or normalize an OpenClaw proofed-change request through the Riddle Proof run contract. " +
         "By default this wrapper returns a blocked normalization result; engine mode is configured explicitly.",
       parameters: riddleProofChangeParameters,
-      async execute(_id: string, params: RiddleProofChangeParams) {
-        const result = await runOpenClawRiddleProof(params, runtimeConfig);
+      async execute(_id: string, params: RiddleProofChangeParams, ctx: unknown) {
+        const wakeContext = runtimeConfig.enableWakeMonitor === false ? undefined : wakeContextFrom(params, ctx);
+        const result = await runOpenClawRiddleProof(params, runtimeConfig, { wakeContext });
+        if (result.raw?.background === true && runtimeConfig.enableWakeMonitor !== false) {
+          startOpenClawRiddleProofWakeMonitor(result.state_path || undefined, wakeRuntime);
+        }
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },
@@ -2545,6 +3180,9 @@ export default function register(api: any) {
       parameters: riddleProofReviewParameters,
       async execute(_id: string, params: RiddleProofReviewParams) {
         const result = await submitOpenClawRiddleProofReview(params, runtimeConfig);
+        if (result.raw?.background === true && runtimeConfig.enableWakeMonitor !== false) {
+          startOpenClawRiddleProofWakeMonitor(result.state_path || undefined, wakeRuntime);
+        }
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
     },
