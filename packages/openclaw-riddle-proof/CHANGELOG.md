@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.70
+
+### Patch Changes
+
+- Add an OpenClaw wake monitor for background Riddle Proof runs so reportable proof states and detached review resumes can re-enter the originating session through system events and heartbeat wakeups.
+
 ## 0.4.69
 
 ### Patch Changes

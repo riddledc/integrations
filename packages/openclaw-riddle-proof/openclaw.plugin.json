@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.4.69",
+  "version": "0.4.70",
   "type": "plugin",
   "bundledSkills": [
     "riddle-proof"
@@ -34,6 +34,7 @@
       "provides": [
         "riddle_proof_change",
         "riddle_proof_status",
+        "riddle_proof_wait",
         "riddle_proof_inspect",
         "riddle_proof_sync",
         "riddle_proof_review"
@@ -114,6 +115,11 @@
         "type": "boolean",
         "default": true,
         "description": "When proofReviewMode=main_agent and ship_mode resolves to none, automatically advance proof review only when inspection already marks the evidence as a ready-to-ship candidate. This never ships or marks a PR ready."
+      },
+      "enableWakeMonitor": {
+        "type": "boolean",
+        "default": true,
+        "description": "When true, background proof runs register a trusted OpenClaw session wake monitor so reportable proof states can re-enter the originating session instead of relying on manual polling."
       },
       "codexCommand": {
         "type": "string"

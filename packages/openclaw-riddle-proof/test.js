@@ -14,6 +14,8 @@ import register, {
   RIDDLE_PROOF_WAIT_TOOL_NAME,
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
+  classifyOpenClawRiddleProofWake,
+  processOpenClawRiddleProofWakeMonitorOnce,
   runOpenClawRiddleProof,
   inspectOpenClawRiddleProof,
   readOpenClawRiddleProofStatus,
@@ -24,6 +26,9 @@ import register, {
 
 const openclawRiddleProofPackageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const riddleProofPackageJson = JSON.parse(readFileSync(new URL("../riddle-proof/package.json", import.meta.url), "utf8"));
+const openclawPluginManifest = JSON.parse(readFileSync(new URL("./openclaw.plugin.json", import.meta.url), "utf8"));
+assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_PROOF_WAIT_TOOL_NAME), true);
+assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
 
 const params = {
   repo: "riddledc/example",
@@ -506,6 +511,17 @@ const backgroundResult = await runOpenClawRiddleProof(
       },
     },
   },
+  {
+    wakeContext: {
+      sessionKey: "agent:main:discord-thread-111111111111111111",
+      sessionKeySource: "tool_context",
+      agentId: "main",
+      deliveryContext: {
+        channel: "discord",
+        to: "channel:111111111111111111",
+      },
+    },
+  },
 );
 assert.equal(backgroundResult.status, "running");
 assert.equal(backgroundResult.raw?.background, true);
@@ -536,6 +552,9 @@ assert.equal(backgroundStatus?.monitor_contract?.report_mode, "checkpoint");
 assert.equal(backgroundStatus?.monitor_contract?.response_gate, "release_terminal");
 const backgroundState = JSON.parse(readFileSync(backgroundWrapperStatePath, "utf-8"));
 assert.equal(backgroundState.events[0].kind, "run.background.started");
+const monitorRegisteredEvent = backgroundState.events.find((event) => event.kind === "run.oc_wake.monitor_registered");
+assert.equal(monitorRegisteredEvent.details.dispatchable, true);
+assert.equal(monitorRegisteredEvent.details.wake_context.sessionKey, "agent:main:discord-thread-111111111111111111");
 assert.equal(backgroundState.events.some((event) => event.checkpoint === "verify_ship_ready"), true);
 assert.equal(backgroundState.events.at(-1).kind, "run.wake.requested");
 assert.deepEqual(backgroundState.events[0].details.next_tools, [
@@ -549,6 +568,49 @@ assert.deepEqual(backgroundState.events.at(-1).details.next_tools, [
 ]);
 assert.equal(backgroundState.events.at(-1).details.timing_summary.recon_subphase_durations_ms.before_capture, 8000);
 assert.equal(backgroundState.events.at(-1).details.timing_summary.verify_subphase_durations_ms.capture, 15000);
+const backgroundWakeClassification = classifyOpenClawRiddleProofWake(backgroundStatus);
+assert.equal(backgroundWakeClassification.should_dispatch, true);
+assert.equal(backgroundWakeClassification.kind, "ready_to_ship");
+const failedWakeDispatchResult = await processOpenClawRiddleProofWakeMonitorOnce(backgroundWrapperStatePath, {
+  enqueueSystemEvent() {
+    throw new Error("synthetic wake runtime outage");
+  },
+  requestHeartbeatNow() {
+    throw new Error("heartbeat should not be requested after enqueue failure");
+  },
+});
+assert.equal(failedWakeDispatchResult.action, "dispatch_failed");
+assert.equal(failedWakeDispatchResult.retryable, true);
+assert.equal(failedWakeDispatchResult.failure_count, 1);
+assert.match(failedWakeDispatchResult.reason, /synthetic wake runtime outage/);
+const wakeDispatches = [];
+const wakeHeartbeats = [];
+const wakeDispatchResult = await processOpenClawRiddleProofWakeMonitorOnce(backgroundWrapperStatePath, {
+  enqueueSystemEvent(text, options) {
+    wakeDispatches.push({ text, options });
+    return true;
+  },
+  requestHeartbeatNow(options) {
+    wakeHeartbeats.push(options);
+  },
+});
+assert.equal(wakeDispatchResult.action, "dispatched");
+assert.equal(wakeDispatchResult.wake_kind, "ready_to_ship");
+assert.equal(wakeDispatches.length, 1);
+assert.match(wakeDispatches[0].text, /Riddle Proof background run needs action/);
+assert.match(wakeDispatches[0].text, new RegExp(backgroundWrapperStatePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+assert.equal(wakeDispatches[0].options.sessionKey, "agent:main:discord-thread-111111111111111111");
+assert.equal(wakeHeartbeats[0].sessionKey, "agent:main:discord-thread-111111111111111111");
+assert.equal(wakeHeartbeats[0].reason, "hook:riddle-proof");
+const duplicateWakeDispatch = await processOpenClawRiddleProofWakeMonitorOnce(backgroundWrapperStatePath, {
+  enqueueSystemEvent() {
+    throw new Error("duplicate wake should not enqueue");
+  },
+  requestHeartbeatNow() {
+    throw new Error("duplicate wake should not request heartbeat");
+  },
+});
+assert.equal(duplicateWakeDispatch.action, "already_dispatched");
 writeFileSync(backgroundEngineStatePath, JSON.stringify({
   branch: "agent/background-proof",
   scratch_cleanup: {
@@ -1017,6 +1079,13 @@ assert.equal(queryRouteInspect.route_matched, true);
 assert.equal(queryRouteInspect.ready_to_ship_candidate, true);
 
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
+const reviewWakeClassification = classifyOpenClawRiddleProofWake(reviewStatus);
+assert.equal(reviewWakeClassification.should_dispatch, true);
+assert.equal(reviewWakeClassification.kind, "proof_review_required");
+assert.deepEqual(reviewWakeClassification.next_tools.slice(0, 2), [
+  RIDDLE_PROOF_INSPECT_TOOL_NAME,
+  RIDDLE_PROOF_REVIEW_TOOL_NAME,
+]);
 assert.equal(reviewStatus?.request_metadata?.reference_input_ignored, "use the public tic tac toe route");
 assert.equal(reviewStatus?.request_metadata?.effective_reference, "before");
 assert.equal(reviewStatus?.capture_hint?.server_path, "/games/tic-tac-toe");
@@ -1098,6 +1167,10 @@ assert.equal(blockedAuthorCheckpointStatus.checkpoint_action?.decision, "continu
 assert.match(blockedAuthorCheckpointStatus.checkpoint_action?.note, /not a proof approval/);
 assert.equal(blockedAuthorCheckpointStatus.monitor_contract.response_gate, "checkpoint_ok");
 assert.equal(blockedAuthorCheckpointStatus.monitor_contract.should_continue_monitoring, false);
+const blockedAuthorWakeClassification = classifyOpenClawRiddleProofWake(blockedAuthorCheckpointStatus);
+assert.equal(blockedAuthorWakeClassification.should_dispatch, true);
+assert.equal(blockedAuthorWakeClassification.kind, "resume_checkpoint");
+assert.ok(blockedAuthorWakeClassification.next_tools.includes(RIDDLE_PROOF_REVIEW_TOOL_NAME));
 
 const continueCheckpointEngineCalls = [];
 const continueCheckpointResult = await submitOpenClawRiddleProofReview(
@@ -1129,6 +1202,108 @@ const continueCheckpointResult = await submitOpenClawRiddleProofReview(
 );
 assert.equal(continueCheckpointResult.status, "ready_to_ship");
 assert.equal(continueCheckpointEngineCalls.length, 1);
+
+const backgroundResumeEngineStatePath = path.join(reviewFixture, "riddle-state-author-checkpoint-background-resume.json");
+const backgroundResumeWrapperStatePath = path.join(reviewFixture, "wrapper-state-author-checkpoint-background-resume.json");
+writeFileSync(backgroundResumeEngineStatePath, JSON.stringify({
+  branch: "agent/background-resume",
+  runtime_events: [],
+  stage_decision_request: {
+    checkpoint: "author_supervisor_judgment",
+    continue_from_checkpoint: true,
+    continue_with_stage: "author",
+  },
+}, null, 2));
+writeFileSync(backgroundResumeWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_author_checkpoint_background_resume",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "riddledc/riddle-site",
+    change_request: "Make a tiny homepage copy change.",
+    engine_state_path: backgroundResumeEngineStatePath,
+    verification_mode: "visual",
+  },
+  current_stage: "author",
+  last_checkpoint: "author_supervisor_judgment",
+  iterations: 1,
+  events: [
+    {
+      kind: "run.background.started",
+      checkpoint: "background_started",
+      stage: "setup",
+      summary: "Background run accepted.",
+      details: {},
+    },
+    {
+      kind: "run.oc_wake.monitor_registered",
+      checkpoint: "background_started",
+      stage: "setup",
+      summary: "OpenClaw wake monitor registered.",
+      details: {
+        monitor_version: "riddle_proof.oc_wake.v1",
+        dispatchable: true,
+        wake_context: {
+          sessionKey: "agent:main:discord-thread-222222222222222222",
+          sessionKeySource: "tool_context",
+          agentId: "main",
+        },
+      },
+    },
+  ],
+}, null, 2));
+const backgroundResumeEngineCalls = [];
+const backgroundResumeResult = await submitOpenClawRiddleProofReview(
+  {
+    state_path: backgroundResumeWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Continue the detached proof from the author checkpoint.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute(engineParams) {
+        backgroundResumeEngineCalls.push(engineParams);
+        assert.equal(engineParams.advance_stage, "author");
+        return {
+          ok: true,
+          state_path: backgroundResumeEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Detached proof is ready after checkpoint continuation.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(backgroundResumeResult.status, "running");
+assert.equal(backgroundResumeResult.raw?.background, true);
+assert.equal(backgroundResumeResult.raw?.background_resume, true);
+for (let attempt = 0; attempt < 50 && backgroundResumeEngineCalls.length === 0; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+assert.equal(backgroundResumeEngineCalls.length, 1);
+let backgroundResumeStatus = readOpenClawRiddleProofStatus(backgroundResumeWrapperStatePath);
+for (let attempt = 0; attempt < 50 && backgroundResumeStatus?.status === "running"; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backgroundResumeStatus = readOpenClawRiddleProofStatus(backgroundResumeWrapperStatePath);
+}
+assert.equal(backgroundResumeStatus?.status, "ready_to_ship");
+const backgroundResumeWakeDispatches = [];
+const backgroundResumeWakeResult = await processOpenClawRiddleProofWakeMonitorOnce(backgroundResumeWrapperStatePath, {
+  enqueueSystemEvent(text, options) {
+    backgroundResumeWakeDispatches.push({ text, options });
+    return true;
+  },
+  requestHeartbeatNow() {},
+});
+assert.equal(backgroundResumeWakeResult.action, "dispatched");
+assert.equal(backgroundResumeWakeResult.wake_kind, "ready_to_ship");
+assert.equal(backgroundResumeWakeDispatches[0].options.sessionKey, "agent:main:discord-thread-222222222222222222");
 
 const staleHintStatePath = path.join(reviewFixture, "riddle-state-stale-hint.json");
 const staleHintWrapperStatePath = path.join(reviewFixture, "wrapper-state-stale-hint.json");
