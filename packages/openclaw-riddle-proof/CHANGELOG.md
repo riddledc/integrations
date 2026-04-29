@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.72
+
+### Patch Changes
+
+- Merge plugin factory and execute contexts when binding Riddle Proof wake monitors so empty execute context cannot mask the active OpenClaw session.
+
 ## 0.4.71
 
 ### Patch Changes
