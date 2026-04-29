@@ -15,6 +15,7 @@ import register, {
   createCodexExecAgentAdapter,
   createOpenClawRiddleProofResult,
   classifyOpenClawRiddleProofWake,
+  formatOpenClawRiddleProofWakeEvent,
   processOpenClawRiddleProofWakeMonitorOnce,
   runOpenClawRiddleProof,
   inspectOpenClawRiddleProof,
@@ -1100,6 +1101,115 @@ assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
+assert.equal(reviewStatus?.pr_handoff_policy?.state, "proof_review_required");
+assert.equal(reviewStatus?.pr_handoff_policy?.fallback_pr?.allowed, false);
+assert.equal(reviewStatus?.proof_artifact_summary?.baseline?.before?.url, "https://example.com/before.png");
+assert.equal(reviewStatus?.proof_artifact_summary?.after?.url, "https://example.com/after.png");
+
+const blockedSalvageStatePath = path.join(reviewFixture, "riddle-state-blocked-salvage.json");
+const blockedSalvageWrapperStatePath = path.join(reviewFixture, "wrapper-state-blocked-salvage.json");
+writeFileSync(blockedSalvageStatePath, JSON.stringify({
+  branch: "agent/blocked-salvage",
+  before_cdn: "https://example.com/blocked-before.png",
+  prod_cdn: "https://example.com/blocked-prod.png",
+  current_runtime_step: {
+    step: "verify",
+    action: "run",
+    status: "failed",
+    started_at: "2026-04-29T11:47:09.000Z",
+    phase: "build",
+    phase_status: "failed",
+    phase_started_at: "2026-04-29T11:47:27.000Z",
+  },
+  runtime_events: [
+    {
+      ts: "2026-04-29T11:47:27.000Z",
+      kind: "workflow.phase.started",
+      step: "verify",
+      phase: "build",
+      summary: "Started verify build phase.",
+    },
+    {
+      ts: "2026-04-29T11:57:31.000Z",
+      kind: "workflow.step.failed",
+      step: "verify",
+      phase: "build",
+      summary: "Verify build timed out.",
+      details: { status: "failed", duration_ms: 622133 },
+    },
+  ],
+  evidence_bundle: {
+    baseline: {
+      before: {
+        screenshots: [{ url: "https://example.com/blocked-before.png" }],
+      },
+      prod: {
+        screenshots: [{ url: "https://example.com/blocked-prod.png" }],
+      },
+    },
+    after: {
+      supporting_artifacts: {
+        preview_url: "https://example.com/blocked-preview.png",
+        proof_json: "https://example.com/blocked-proof.json",
+      },
+    },
+  },
+}, null, 2));
+writeFileSync(blockedSalvageWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_blocked_salvage",
+  status: "blocked",
+  current_stage: "implement",
+  last_checkpoint: "implement_changes_missing",
+  state_path: blockedSalvageWrapperStatePath,
+  request: {
+    repo: "davisdiehl/lilarcade",
+    branch: "blocked-salvage",
+    change_request: "Improve a game sprite.",
+    engine_state_path: blockedSalvageStatePath,
+    verification_mode: "visual",
+    ship_mode: "ship",
+  },
+  blocker: {
+    code: "codex_timeout",
+    checkpoint: "implement_changes_missing",
+    message: "Codex timed out during implementation.",
+  },
+  events: [
+    {
+      ts: "2026-04-29T11:44:42.000Z",
+      kind: "agent.implementation.started",
+      checkpoint: "implement_changes_missing",
+      stage: "implement",
+      summary: "Implementation agent started.",
+    },
+    {
+      ts: "2026-04-29T11:59:55.000Z",
+      kind: "agent.implementation.blocked",
+      checkpoint: "implement_changes_missing",
+      stage: "implement",
+      summary: "Codex timed out during implementation.",
+      details: { changed_files: ["src/Games/LugeRun.jsx"] },
+    },
+  ],
+}, null, 2));
+const blockedSalvageStatus = readOpenClawRiddleProofStatus(blockedSalvageWrapperStatePath);
+assert.equal(blockedSalvageStatus?.pr_handoff_policy?.state, "proof_blocked");
+assert.equal(blockedSalvageStatus?.pr_handoff_policy?.normal_pr_allowed, false);
+assert.equal(blockedSalvageStatus?.pr_handoff_policy?.fallback_pr?.allowed, true);
+assert.equal(blockedSalvageStatus?.pr_handoff_policy?.fallback_pr?.required_state, "draft");
+assert.equal(blockedSalvageStatus?.failure_summary?.primary_failure?.source, "engine_runtime");
+assert.equal(blockedSalvageStatus?.failure_summary?.primary_failure?.step, "verify");
+assert.equal(blockedSalvageStatus?.failure_summary?.layer_mismatch, true);
+assert.equal(blockedSalvageStatus?.proof_artifact_summary?.baseline?.before?.url, "https://example.com/blocked-before.png");
+assert.equal(blockedSalvageStatus?.proof_artifact_summary?.preview?.url, "https://example.com/blocked-preview.png");
+const blockedSalvageWake = classifyOpenClawRiddleProofWake(blockedSalvageStatus);
+assert.equal(blockedSalvageWake.should_dispatch, true);
+assert.equal(blockedSalvageWake.kind, "blocked");
+const blockedSalvageWakeText = formatOpenClawRiddleProofWakeEvent(blockedSalvageWake, blockedSalvageWrapperStatePath);
+assert.match(blockedSalvageWakeText, /draft PR marked proof-blocked/);
+assert.match(blockedSalvageWakeText, /failure: engine_runtime \| verify \| Verify build timed out/);
+assert.match(blockedSalvageWakeText, /before=https:\/\/example.com\/blocked-before.png/);
 
 const authorCheckpointStatePath = path.join(reviewFixture, "riddle-state-author-checkpoint.json");
 const authorCheckpointWrapperStatePath = path.join(reviewFixture, "wrapper-state-author-checkpoint.json");

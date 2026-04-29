@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.73
+
+### Patch Changes
+
+- Add blocked-proof PR handoff policy, artifact carryover, failure summary, and wake text so salvaged diffs stay draft/blocked instead of looking merge-ready.
+
 ## 0.4.72
 
 ### Patch Changes
