@@ -16,8 +16,8 @@
     "release": "changeset publish --access public"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.1",
+    "@changesets/cli": "^2.31.0",
     "tsup": "^8.0.1",
-    "typescript": "^5.4.5"
+    "typescript": "^6.0.3"
   }
 }
