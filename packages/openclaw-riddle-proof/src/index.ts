@@ -1021,7 +1021,7 @@ function wakeContextFrom(params: RiddleProofChangeParams, ctx: unknown): OpenCla
   const ctxRecord = recordValue(ctx);
   const raw = params as Record<string, unknown>;
   const agentId = findStringByKeys(ctxRecord, ["agentId", "agent_id"]) || "main";
-  const contextSessionKey = findStringByKeys(ctxRecord, ["sessionKey", "session_key"]);
+  const contextSessionKey = findStringByKeys(ctxRecord, ["sessionKey", "session_key", "agentSessionKey"]);
   const fallbackSessionKey = contextSessionKey ? undefined : deriveOpenClawSessionKeyFromParams(params, agentId);
   const discordThreadId = stringValue(raw.discord_thread_id) || stringValue(raw.discordThreadId);
   const discordChannelId = stringValue(raw.discord_channel) || stringValue(raw.discordChannel);
@@ -3089,22 +3089,22 @@ export default function register(api: any) {
   recoverOpenClawRiddleProofWakeMonitors(runtimeConfig, wakeRuntime);
 
   api.registerTool(
-    {
+    (toolCtx: unknown) => ({
       name: RIDDLE_PROOF_CHANGE_TOOL_NAME,
       description:
         "Run or normalize an OpenClaw proofed-change request through the Riddle Proof run contract. " +
         "By default this wrapper returns a blocked normalization result; engine mode is configured explicitly.",
       parameters: riddleProofChangeParameters,
-      async execute(_id: string, params: RiddleProofChangeParams, ctx: unknown) {
-        const wakeContext = runtimeConfig.enableWakeMonitor === false ? undefined : wakeContextFrom(params, ctx);
+      async execute(_id: string, params: RiddleProofChangeParams, executeCtx?: unknown) {
+        const wakeContext = runtimeConfig.enableWakeMonitor === false ? undefined : wakeContextFrom(params, executeCtx ?? toolCtx);
         const result = await runOpenClawRiddleProof(params, runtimeConfig, { wakeContext });
         if (result.raw?.background === true && runtimeConfig.enableWakeMonitor !== false) {
           startOpenClawRiddleProofWakeMonitor(result.state_path || undefined, wakeRuntime);
         }
         return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       },
-    },
-    { optional: true },
+    }),
+    { optional: true, names: [RIDDLE_PROOF_CHANGE_TOOL_NAME] },
   );
 
   api.registerTool(

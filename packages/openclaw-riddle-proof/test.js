@@ -1918,18 +1918,33 @@ register({
 });
 
 assert.equal(registered.length, 6);
-const changeTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
-const statusTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
-const waitTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_WAIT_TOOL_NAME);
-const inspectTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_INSPECT_TOOL_NAME);
-const reviewTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
-const syncTool = registered.find((entry) => entry.tool.name === RIDDLE_PROOF_SYNC_TOOL_NAME);
+const pluginFactoryContext = {
+  agentId: "main",
+  sessionKey: "agent:main:discord-thread-111111111111111111",
+  deliveryContext: {
+    channel: "discord",
+    to: "channel:111111111111111111",
+    threadId: "111111111111111111",
+  },
+};
+const resolvedRegistered = registered.map((entry) => ({
+  ...entry,
+  resolvedTool: typeof entry.tool === "function" ? entry.tool(pluginFactoryContext) : entry.tool,
+}));
+const changeTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_CHANGE_TOOL_NAME);
+const statusTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_STATUS_TOOL_NAME);
+const waitTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_WAIT_TOOL_NAME);
+const inspectTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_INSPECT_TOOL_NAME);
+const reviewTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_REVIEW_TOOL_NAME);
+const syncTool = resolvedRegistered.find((entry) => entry.resolvedTool.name === RIDDLE_PROOF_SYNC_TOOL_NAME);
 assert.ok(changeTool);
 assert.ok(statusTool);
 assert.ok(waitTool);
 assert.ok(inspectTool);
 assert.ok(reviewTool);
 assert.ok(syncTool);
+assert.equal(typeof changeTool.tool, "function");
+assert.deepEqual(changeTool.options.names, [RIDDLE_PROOF_CHANGE_TOOL_NAME]);
 assert.equal(changeTool.options.optional, true);
 assert.equal(statusTool.options.optional, true);
 assert.equal(waitTool.options.optional, true);
@@ -1937,22 +1952,67 @@ assert.equal(inspectTool.options.optional, true);
 assert.equal(reviewTool.options.optional, true);
 assert.equal(syncTool.options.optional, true);
 
-const executed = await changeTool.tool.execute("test-call", params);
+const executed = await changeTool.resolvedTool.execute("test-call", params);
 assert.equal(executed.content[0].type, "text");
 const parsed = JSON.parse(executed.content[0].text);
 assert.equal(parsed.status, "blocked");
 assert.equal(parsed.raw.request.integration_context.metadata.tool, result.raw.request.integration_context.metadata.tool);
 
-const statusExecuted = await statusTool.tool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
+const factoryContextFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-factory-context-"));
+const factoryContextEngineStatePath = path.join(factoryContextFixture, "riddle-state.json");
+const factoryContextWrapperStatePath = path.join(factoryContextFixture, "wrapper-state.json");
+const factoryRegistered = [];
+register({
+  pluginConfig: {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    defaultRunMode: "background",
+    engine: {
+      async execute() {
+        writeFileSync(factoryContextEngineStatePath, JSON.stringify({ branch: "agent/factory-context-proof" }, null, 2));
+        return {
+          ok: true,
+          state_path: factoryContextEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Factory context proof is ready.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+  },
+  registerTool(tool, options) {
+    factoryRegistered.push({ tool, options });
+  },
+});
+const factoryChangeToolEntry = factoryRegistered.find((entry) => entry.options?.names?.includes(RIDDLE_PROOF_CHANGE_TOOL_NAME));
+assert.ok(factoryChangeToolEntry);
+const factoryChangeTool = factoryChangeToolEntry.tool(pluginFactoryContext);
+const factoryContextExecuted = await factoryChangeTool.execute("test-factory-context", {
+  ...params,
+  dry_run: false,
+  ship_after_verify: false,
+  ship_mode: "none",
+  harness_state_path: factoryContextWrapperStatePath,
+  state_path: factoryContextEngineStatePath,
+});
+const factoryContextParsed = JSON.parse(factoryContextExecuted.content[0].text);
+assert.equal(factoryContextParsed.status, "running");
+const factoryContextState = JSON.parse(readFileSync(factoryContextWrapperStatePath, "utf-8"));
+const factoryContextWakeEvent = factoryContextState.events.find((event) => event.kind === "run.oc_wake.monitor_registered");
+assert.equal(factoryContextWakeEvent.details.dispatchable, true);
+assert.equal(factoryContextWakeEvent.details.wake_context.sessionKey, "agent:main:discord-thread-111111111111111111");
+assert.equal(factoryContextWakeEvent.details.wake_context.sessionKeySource, "tool_context");
+
+const statusExecuted = await statusTool.resolvedTool.execute("test-status", { state_path: "/tmp/does-not-exist-riddle-proof-state.json" });
 const statusParsed = JSON.parse(statusExecuted.content[0].text);
 assert.equal(statusParsed.status, "not_found");
 assert.equal(statusParsed.diagnostics.path_exists, false);
 
-const waitExecuted = await waitTool.tool.execute("test-wait", { state_path: reviewWrapperStatePath, timeout_ms: 1000 });
+const waitExecuted = await waitTool.resolvedTool.execute("test-wait", { state_path: reviewWrapperStatePath, timeout_ms: 1000 });
 const waitParsed = JSON.parse(waitExecuted.content[0].text);
 assert.equal(waitParsed.wait_result, "already_reportable");
 
-const engineOnlyStatusExecuted = await statusTool.tool.execute("test-status-engine", { state_path: engineStatePath });
+const engineOnlyStatusExecuted = await statusTool.resolvedTool.execute("test-status-engine", { state_path: engineStatePath });
 const engineOnlyStatusParsed = JSON.parse(engineOnlyStatusExecuted.content[0].text);
 assert.equal(engineOnlyStatusParsed.status, "not_found");
 assert.equal(engineOnlyStatusParsed.diagnostics.path_exists, true);

@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.71
+
+### Patch Changes
+
+- Bind the Riddle Proof wake monitor to OpenClaw plugin factory context so background runs can re-enter the active session.
+
 ## 0.4.70
 
 ### Patch Changes
