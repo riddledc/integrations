@@ -2010,6 +2010,11 @@ function buildProofInspection(
   const visibleChange = buildVisibleChangeSummary(semanticContext);
   const verificationMode = fullState.verification_mode || wrapperState.request.verification_mode;
   const screenshotRequired = artifactContractRequiresScreenshot(artifactContract, verificationMode);
+  const visualDeltaRequired = recordValue(recordValue(artifactContract)?.required)?.visual_delta === true || screenshotRequired;
+  const visualDeltaReady = !visualDeltaRequired || (visualDelta?.status === "measured" && visualDelta?.passed === true);
+  const hardBlockers = visualDeltaReady
+    ? []
+    : [`visual_delta.status=${stringValue(visualDelta?.status) || "missing"} blocks ready_to_ship for visual/UI proof`];
   const hasAfterScreenshot = imageArtifacts.some((item) => item.role === "after" || item.name === "after");
   const missingRequiredSignals = listValue(recordValue(artifactUsage)?.missing_required_signals, 12)
     .map((item) => stringValue(item))
@@ -2022,7 +2027,7 @@ function buildProofInspection(
     (!screenshotRequired || hasAfterScreenshot) &&
     (!proofEvidenceRequired || proofEvidencePresent) &&
     missingRequiredSignals.length === 0 &&
-    (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
+    visualDeltaReady,
   );
   const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
   const scratchCleanup = recordValue(fullState.scratch_cleanup);
@@ -2074,8 +2079,11 @@ function buildProofInspection(
     artifact_contract: artifactContract,
     artifact_production: artifactProduction,
     artifact_usage: artifactUsage,
+    hard_blockers: hardBlockers,
     image_artifacts: imageArtifacts,
     visual_delta: visualDelta,
+    visual_delta_required: visualDeltaRequired,
+    visual_delta_ready: visualDeltaReady,
     structured_evidence: {
       proof_evidence_present: proofEvidencePresent,
       proof_evidence_sample: proofEvidenceSample,
@@ -2187,7 +2195,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
           "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
-          "If visual_delta is unmeasured and the before/after images look nearly identical or require zooming/code inspection to believe, choose needs_implementation or needs_richer_proof.",
+          "If visual_delta is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof.",
           `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
         ]
       : [
@@ -2241,8 +2249,20 @@ function inspectionMissingRequiredSignals(inspection: Record<string, unknown>) {
     .filter(Boolean);
 }
 
-function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
+function inspectionRequiresMeasuredVisualDelta(inspection: Record<string, unknown>) {
+  const required = recordValue(recordValue(inspection.artifact_contract)?.required);
+  return required?.visual_delta === true || inspectionRequiresScreenshot(inspection);
+}
+
+function inspectionVisualDeltaReady(inspection: Record<string, unknown>) {
   const visualDelta = recordValue(inspection.visual_delta);
+  if (!inspectionRequiresMeasuredVisualDelta(inspection)) {
+    return visualDelta?.status === "measured" ? visualDelta?.passed !== false : true;
+  }
+  return visualDelta?.status === "measured" && visualDelta?.passed === true;
+}
+
+function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
   const structuredEvidence = recordValue(inspection.structured_evidence);
   const screenshotRequired = inspectionRequiresScreenshot(inspection);
   return Boolean(
@@ -2252,7 +2272,7 @@ function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
     (!screenshotRequired || afterScreenshotArtifact(inspection)) &&
     inspectionMissingRequiredSignals(inspection).length === 0 &&
     structuredEvidence?.proof_evidence_has_concerns !== true &&
-    (visualDelta?.status === "measured" ? visualDelta?.passed !== false : true),
+    inspectionVisualDeltaReady(inspection),
   );
 }
 
@@ -2263,7 +2283,7 @@ function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
     "The inspection packet marked the proof as a ready_to_ship_candidate.",
     "The target route matched across available observations.",
     "Required artifact signals are present for the verification mode.",
-    "No failed visual delta was reported.",
+    "Measured visual delta passed when required by the verification mode.",
     "No structured proof evidence concerns were reported.",
   ];
   if (screenshotRequired) {

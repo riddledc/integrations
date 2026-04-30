@@ -34,6 +34,7 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
+import { visualDeltaShipGateReason } from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
 
@@ -449,6 +450,31 @@ function proofAssessmentContinuation(
 ): RiddleProofWorkflowParams {
   const proof_assessment_json = jsonParam(payload);
   return { ...baseContinuation(result), proof_assessment_json };
+}
+
+function proofAssessmentVisualBlocker(
+  state: Record<string, unknown> | null,
+  payload: Record<string, unknown>,
+) {
+  if (!proofAssessmentRequestsShip(payload)) return null;
+  const source = nonEmptyString(payload.source) || "supervising_agent";
+  return visualDeltaShipGateReason({
+    ...(state || {}),
+    proof_assessment: { ...payload, source },
+    proof_assessment_source: source,
+  });
+}
+
+function blockedProofAssessmentPayload(payload: Record<string, unknown>, blocker: string) {
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item) => typeof item === "string") : [];
+  return {
+    ...payload,
+    blocked_decision: payload.decision || "ready_to_ship",
+    decision: "needs_richer_proof",
+    recommended_stage: payload.recommended_stage === "ship" ? "verify" : payload.recommended_stage || "verify",
+    continue_with_stage: payload.continue_with_stage === "ship" ? "verify" : payload.continue_with_stage || "verify",
+    blockers: [...blockers, blocker],
+  };
 }
 
 function contextFor(
@@ -892,6 +918,20 @@ async function routeCheckpoint(
       summary: assessment.summary,
       details: { payload },
     });
+    const visualBlocker = proofAssessmentVisualBlocker({
+      ...(context.fullRiddleState || {}),
+      verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
+    }, payload);
+    if (visualBlocker) {
+      recordEvent(state, {
+        kind: "agent.proof_assessment.blocked",
+        checkpoint,
+        stage: "verify",
+        summary: visualBlocker,
+        details: { payload },
+      });
+      return { next: proofAssessmentContinuation(result, blockedProofAssessmentPayload(payload, visualBlocker)) };
+    }
     if (effectiveShipMode(request, input.config) !== "ship" && proofAssessmentRequestsShip(payload)) {
       return {
         terminal: terminalResult(

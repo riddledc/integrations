@@ -95,6 +95,7 @@ export interface ShipGateValidation {
   required_baselines: string[];
   evidence: {
     reference: string;
+    verification_mode: string | null;
     prod_url: string | null;
     before_cdn: string | null;
     prod_cdn: string | null;
@@ -102,6 +103,9 @@ export interface ShipGateValidation {
     verify_status: string | null;
     proof_assessment_decision: string | null;
     proof_assessment_source: string | null;
+    visual_delta_required: boolean;
+    visual_delta_status: string | null;
+    visual_delta_passed: boolean | null;
   };
 }
 
@@ -479,6 +483,60 @@ function normalizedProofAssessment(state: any = {}) {
   };
 }
 
+const VISUAL_FIRST_MODES = new Set([
+  "visual",
+  "render",
+  "interaction",
+  "ui",
+  "layout",
+  "screenshot",
+  "canvas",
+  "animation",
+]);
+
+function objectValue(value: unknown): Record<string, any> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
+}
+
+function normalizedVerificationMode(state: any = {}) {
+  const bundle = objectValue(state?.evidence_bundle);
+  const bundleMode = String(bundle.verification_mode || "").trim().toLowerCase();
+  if (bundleMode) return bundleMode;
+  return String(state?.verification_mode || "proof").trim().toLowerCase() || "proof";
+}
+
+export function visualDeltaRequiredForState(state: any = {}) {
+  const bundle = objectValue(state?.evidence_bundle);
+  const contract = objectValue(bundle.artifact_contract);
+  const required = objectValue(contract.required);
+  return required.visual_delta === true || VISUAL_FIRST_MODES.has(normalizedVerificationMode(state));
+}
+
+export function visualDeltaForState(state: any = {}) {
+  const bundle = objectValue(state?.evidence_bundle);
+  const after = objectValue(bundle.after);
+  const afterDelta = objectValue(after.visual_delta);
+  if (Object.keys(afterDelta).length) return afterDelta;
+  const request = objectValue(state?.proof_assessment_request);
+  return objectValue(request.visual_delta);
+}
+
+export function visualDeltaShipGateReason(state: any = {}) {
+  if (!visualDeltaRequiredForState(state)) return null;
+  const visualDelta = visualDeltaForState(state);
+  if (visualDelta.status === "measured" && visualDelta.passed === true) return null;
+  const status = String(visualDelta.status || "missing");
+  if (status === "unmeasured") {
+    return "visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof";
+  }
+  if (status === "measured" && visualDelta.passed === false) {
+    return "visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof";
+  }
+  const reason = String(visualDelta.reason || "").trim();
+  if (reason) return `visual_delta.status=${status} blocks ready_to_ship for visual/UI proof: ${reason}`;
+  return `visual_delta.status=${status} blocks ready_to_ship for visual/UI proof`;
+}
+
 export function requiredBaselineLabelsForState(state: any = {}) {
   const reference = normalizedReference(state);
   const labels: string[] = [];
@@ -495,6 +553,10 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
   const afterCdn = String(state?.after_cdn || "").trim();
   const verifyStatus = String(state?.verify_status || "").trim();
   const proofAssessment = normalizedProofAssessment(state);
+  const verificationMode = normalizedVerificationMode(state);
+  const visualDelta = visualDeltaForState(state);
+  const visualDeltaRequired = visualDeltaRequiredForState(state);
+  const visualDeltaBlocker = visualDeltaShipGateReason(state);
   const reasons: string[] = [];
 
   if (!["before", "prod", "both"].includes(reference)) {
@@ -525,6 +587,9 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
   if (proofAssessment.decision !== "ready_to_ship") {
     reasons.push("proof_assessment.decision must be ready_to_ship before ship");
   }
+  if (visualDeltaBlocker) {
+    reasons.push(visualDeltaBlocker);
+  }
 
   return {
     ok: reasons.length === 0,
@@ -532,6 +597,7 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
     required_baselines: requiredBaselines,
     evidence: {
       reference,
+      verification_mode: verificationMode || null,
       prod_url: prodUrl || null,
       before_cdn: beforeCdn || null,
       prod_cdn: prodCdn || null,
@@ -539,6 +605,9 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
       verify_status: verifyStatus || null,
       proof_assessment_decision: proofAssessment.decision,
       proof_assessment_source: proofAssessment.source,
+      visual_delta_required: visualDeltaRequired,
+      visual_delta_status: typeof visualDelta.status === "string" ? visualDelta.status : null,
+      visual_delta_passed: typeof visualDelta.passed === "boolean" ? visualDelta.passed : null,
     },
   };
 }
@@ -882,23 +951,38 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       state.proof_assessment_source = null;
     } else {
       const parsed = JSON.parse(raw);
-      state.proof_assessment = {
+      const assessment = {
         ...parsed,
         source: (parsed?.source || "supervising_agent").toString(),
       };
+      const readyBlocker = assessment?.decision === "ready_to_ship"
+        ? visualDeltaShipGateReason({ ...state, proof_assessment: assessment, proof_assessment_source: assessment.source })
+        : null;
+      if (readyBlocker) {
+        assessment.blocked_decision = assessment.decision;
+        assessment.decision = "needs_richer_proof";
+        if (assessment.recommended_stage === "ship") assessment.recommended_stage = "verify";
+        if (assessment.continue_with_stage === "ship") assessment.continue_with_stage = "verify";
+        const blockers = Array.isArray(assessment.blockers) ? assessment.blockers : [];
+        assessment.blockers = [...blockers, readyBlocker];
+      }
+      state.proof_assessment = assessment;
       state.proof_assessment_source = state.proof_assessment.source;
-      if (typeof parsed?.decision === "string") {
-        state.proof_decision = parsed.decision;
+      if (typeof state.proof_assessment?.decision === "string") {
+        state.proof_decision = state.proof_assessment.decision;
       }
       if (typeof parsed?.summary === "string") {
         state.proof_assessment_summary = normalizeOptionalString(parsed.summary) || null;
       }
-      if (parsed?.decision === "ready_to_ship") {
+      if (state.proof_assessment?.decision === "ready_to_ship") {
         state.merge_recommendation = "ready-to-ship";
-      } else if (typeof parsed?.decision === "string" && parsed.decision.trim()) {
+      } else if (typeof state.proof_assessment?.decision === "string" && state.proof_assessment.decision.trim()) {
         state.merge_recommendation = "do-not-merge";
       }
       appendProofSummaryLine(state, `Supervising proof assessment: ${state.proof_assessment.decision || "unknown"}`);
+      if (readyBlocker) {
+        appendProofSummaryLine(state, `Ready-to-ship assessment blocked: ${readyBlocker}`);
+      }
       if (state.proof_assessment_summary) {
         appendProofSummaryLine(state, `Assessment summary: ${state.proof_assessment_summary}`);
       }

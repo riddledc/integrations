@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.33
+
+### Patch Changes
+
+- Block ready-to-ship visual proofs unless the proof evidence includes a measured, passing visual delta.
+
 ## 0.5.32
 
 ### Patch Changes

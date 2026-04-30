@@ -1200,17 +1200,19 @@ def run_verify_requests_supervisor_assessment():
         artifact_contract = after_verify['proof_assessment_request']['artifact_contract']
         assert artifact_contract['required']['baseline_context'] is True
         assert artifact_contract['required']['screenshot'] is True
+        assert artifact_contract['required']['visual_delta'] is True
         artifact_production = after_verify['proof_assessment_request']['artifact_production']
         assert artifact_production['image_output_count'] >= 1
         assert artifact_production['proof_evidence_present'] is False
         artifact_usage = after_verify['proof_assessment_request']['artifact_usage']
-        assert artifact_usage['missing_required_signals'] == []
+        assert artifact_usage['missing_required_signals'] == ['visual_delta']
         assert 'after-capture' in artifact_usage['supervisor_review_signals']
         assert 'baseline_context' in artifact_usage['required_signals']
         assert 'route_semantics' in artifact_usage['available_signals']
+        assert 'visual_delta.status=unmeasured' in after_verify['proof_assessment_request']['hard_blockers'][0]
         assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_contract']['required']['screenshot'] is True
         assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_production']['image_output_count'] >= 1
-        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_usage']['missing_required_signals'] == []
+        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_usage']['missing_required_signals'] == ['visual_delta']
         assert 'capture success is not proof' in '\n'.join(after_verify['proof_assessment_request']['instructions'])
         assert after_verify['verify_decision_request']['continue_with_stage'] is None
         assert after_verify['verify_results']['baseline']['before']['source'] == 'recon'
@@ -1573,6 +1575,62 @@ def run_ship_missing_supervisor_gate():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_ship_blocks_unmeasured_visual_delta():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-ship-visual-delta-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'visual',
+            'verify_status': 'evidence_captured',
+            'before_cdn': 'https://cdn.example.com/before.png',
+            'after_cdn': 'https://cdn.example.com/after.png',
+            'proof_assessment': {
+                'decision': 'ready_to_ship',
+                'summary': 'The screenshots look good.',
+                'source': 'supervising_agent',
+            },
+            'proof_assessment_source': 'supervising_agent',
+            'evidence_bundle': {
+                'verification_mode': 'visual',
+                'artifact_contract': {
+                    'required': {
+                        'baseline_context': True,
+                        'route_semantics': True,
+                        'screenshot': True,
+                        'visual_delta': True,
+                    },
+                },
+                'after': {
+                    'screenshot_url': 'https://cdn.example.com/after.png',
+                    'observation': {'valid': True, 'reason': 'ok'},
+                    'visual_delta': {
+                        'status': 'unmeasured',
+                        'passed': None,
+                        'reason': 'No measured before/after visual delta was found in proof evidence.',
+                    },
+                },
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        try:
+            load_module('ship_blocks_unmeasured_visual_delta', SHIP_PATH)
+        except SystemExit as exc:
+            message = str(exc)
+            assert 'visual_delta.status=unmeasured' in message, message
+            assert 'blocks ready_to_ship' in message, message
+            return {'ok': True, 'error': message}
+        raise AssertionError('ship should have failed when visual delta was unmeasured')
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_ship_accepts_structured_after_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-ship-structured-'))
     state_path = tempdir / 'state.json'
@@ -1829,6 +1887,7 @@ if __name__ == '__main__':
         'verify_capture_retry': run_verify_capture_retry(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),
+        'ship_blocks_unmeasured_visual_delta': run_ship_blocks_unmeasured_visual_delta(),
         'ship_structured_after_evidence': run_ship_accepts_structured_after_evidence(),
         'ship_discord_thread_target': run_ship_discord_thread_target(),
         'ship_filters_tool_noise_when_staging': run_ship_filters_tool_noise_when_staging(),

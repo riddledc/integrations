@@ -559,6 +559,34 @@ def visual_delta_applies(verification_mode):
     return screenshot_required_for_mode(verification_mode)
 
 
+def visual_delta_passes_ship_gate(visual_delta):
+    return (
+        isinstance(visual_delta, dict)
+        and visual_delta.get('status') == 'measured'
+        and visual_delta.get('passed') is True
+    )
+
+
+def visual_delta_blocker_for_mode(verification_mode, visual_delta):
+    if not visual_delta_applies(verification_mode):
+        return ''
+    if visual_delta_passes_ship_gate(visual_delta):
+        return ''
+    if not isinstance(visual_delta, dict):
+        status = 'missing'
+        reason = 'No visual_delta object was found in proof evidence.'
+    else:
+        status = str(visual_delta.get('status') or 'missing')
+        reason = str(visual_delta.get('reason') or '').strip()
+    if status == 'unmeasured':
+        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof; capture a measured before/after visual delta or choose needs_richer_proof.'
+    if status == 'measured' and isinstance(visual_delta, dict) and visual_delta.get('passed') is False:
+        return 'visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof; the measured change did not clear the threshold.'
+    if reason:
+        return f'visual_delta.status={status} blocks ready_to_ship for visual/UI proof: {reason}'
+    return f'visual_delta.status={status} blocks ready_to_ship for visual/UI proof.'
+
+
 def list_value(value):
     return value if isinstance(value, list) else []
 
@@ -684,11 +712,11 @@ def artifact_contract_for_mode(verification_mode):
             'route_semantics': True,
             'screenshot': screenshot_required_for_mode(mode),
             'proof_evidence': proof_evidence_required_for_mode(mode),
+            'visual_delta': visual_delta_applies(mode),
         },
         'preferred': {
             'page_state': True,
             'structured_payload': mode in STRUCTURED_FIRST_MODES or proof_evidence_required_for_mode(mode),
-            'visual_delta': visual_delta_applies(mode),
         },
         'optional': {
             'console_summary': True,
@@ -731,7 +759,7 @@ def artifact_signal_availability(state, after_observation, supporting, visual_de
         ),
         'structured_payload': bool(supporting.get('has_structured_payload')),
         'proof_evidence': bool(supporting.get('proof_evidence_present')),
-        'visual_delta': bool((visual_delta or {}).get('status') not in ('', None, 'not_applicable')),
+        'visual_delta': visual_delta_passes_ship_gate(visual_delta),
         'console_summary': bool(supporting.get('console_entries')),
         'json_artifacts': bool(supporting.get('data_outputs')),
         'image_outputs': bool(supporting.get('image_outputs')),
@@ -1097,6 +1125,8 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_bundle['artifact_contract'] = artifact_contract
         evidence_bundle['artifact_production'] = artifact_production
         evidence_bundle['artifact_usage'] = artifact_usage
+    visual_delta_blocker = visual_delta_blocker_for_mode(verification_mode, visual_delta)
+    hard_blockers = [visual_delta_blocker] if visual_delta_blocker else []
 
     return {
         'status': 'needs_supervising_agent_assessment',
@@ -1112,14 +1142,15 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'artifact_contract': artifact_contract,
         'artifact_production': artifact_production,
         'artifact_usage': artifact_usage,
+        'hard_blockers': hard_blockers,
         'instructions': [
             'The supervising agent owns proof assessment. Inspect the recon baseline(s), after evidence, and any structured artifacts together.',
             'Decide whether the evidence is ready_to_ship or should continue internally through author, implement, or recon.',
+            'Hard blockers cannot be overridden by supervisor judgment; if hard_blockers is non-empty, do not choose ready_to_ship.',
             'Do not mark ready_to_ship if the before/prod baseline is blank, shell-only, generic, or not visibly tied to the requested feature.',
             'Use semantic_context.route plus headings/buttons/text anchors to ground route and content judgment before treating a screenshot as wrong-route.',
             'For visual/UI modes, use screenshots plus after_observation.details.visible_text_sample, headings, buttons, links, canvas_count, and large_visible_elements to explain what the proof actually shows.',
-            'For visual/UI polish, capture success is not proof. If visual_delta.status=measured and visual_delta.passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.',
-            'If visual_delta.status=unmeasured for visual/UI proof, only choose ready_to_ship when the screenshots and page-state details let you name a clearly legible before/after change; otherwise request richer proof or another implementation pass.',
+            'For visual/UI polish, capture success is not proof. If visual_delta.status is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.',
             'For data/audio/log/metrics/custom modes, judge the structured evidence bundle and proof_evidence_sample directly; screenshots are optional supporting context.',
             'The summary must name the concrete change, the target route/UI, what changed in after evidence, and why the stop condition is satisfied.',
             'Only set escalation_target=human when you conclude the workflow has hit a real wall or is not converging.',
@@ -1374,6 +1405,9 @@ s['evidence_bundle'] = evidence_bundle
 visual_delta = ((evidence_bundle.get('after') or {}).get('visual_delta') or {})
 if visual_delta.get('status') != 'not_applicable':
     summary_lines.append('Visual delta gate: ' + compact_value(visual_delta, limit=700))
+visual_delta_blocker = visual_delta_blocker_for_mode(s.get('verification_mode'), visual_delta)
+if visual_delta_blocker:
+    summary_lines.append('Visual delta hard gate: ' + visual_delta_blocker)
 
 proof_evidence_blocker = ''
 if proof_evidence_required_for_mode(s.get('verification_mode')):
