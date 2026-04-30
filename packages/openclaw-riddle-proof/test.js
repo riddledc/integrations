@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import register, {
@@ -13,6 +13,7 @@ import register, {
   RIDDLE_PROOF_SYNC_TOOL_NAME,
   RIDDLE_PROOF_WAIT_TOOL_NAME,
   createCodexExecAgentAdapter,
+  createCodexExecJsonRunner,
   createOpenClawRiddleProofResult,
   classifyOpenClawRiddleProofWake,
   formatOpenClawRiddleProofWakeEvent,
@@ -316,6 +317,51 @@ const authorAdapterResult = await authorAdapter.authorProofPacket({
 });
 assert.equal(authorAdapterResult.ok, true);
 assert.equal(authorPrompts.length, 1);
+
+const jsonlCodexFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-jsonl-codex-"));
+const jsonlCodexCommand = path.join(jsonlCodexFixture, "fake-codex.mjs");
+writeFileSync(jsonlCodexCommand, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+
+const outputIndex = process.argv.indexOf("--output-last-message");
+if (outputIndex < 0 || !process.argv[outputIndex + 1]) {
+  process.exit(2);
+}
+
+const payload = {
+  proof_plan: "Check the generated page against the requested visual target.",
+  capture_script: "await saveScreenshot('after-proof');",
+  summary: "Authored visual proof packet."
+};
+
+writeFileSync(process.argv[outputIndex + 1], [
+  JSON.stringify({ type: "thread.started", thread_id: "thread_123" }),
+  JSON.stringify({ type: "turn.started" }),
+  JSON.stringify(payload)
+].join("\\n"));
+`);
+chmodSync(jsonlCodexCommand, 0o755);
+const jsonlCodexRunner = createCodexExecJsonRunner({
+  codexCommand: jsonlCodexCommand,
+  codexFullAuto: false,
+});
+const jsonlCodexResult = await jsonlCodexRunner({
+  purpose: "proof packet authoring",
+  workdir: adapterWorkdir,
+  prompt: "Return a proof packet.",
+  schema: {
+    type: "object",
+    required: ["proof_plan", "capture_script", "summary"],
+    properties: {
+      proof_plan: { type: "string" },
+      capture_script: { type: "string" },
+      summary: { type: "string" },
+    },
+  },
+});
+assert.equal(jsonlCodexResult.ok, true);
+assert.equal(jsonlCodexResult.json?.proof_plan, "Check the generated page against the requested visual target.");
+assert.equal(jsonlCodexResult.json?.summary, "Authored visual proof packet.");
 
 const engineFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-engine-"));
 const engineWorkdir = path.join(engineFixture, "after");

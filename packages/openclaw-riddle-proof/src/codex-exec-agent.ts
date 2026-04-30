@@ -299,22 +299,91 @@ function basePrompt(context: RiddleProofEngineHarnessContext, role: string) {
   ].join("\n");
 }
 
-function parseJsonObject(raw: string): Record<string, unknown> | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
+function schemaRequiredKeys(schema?: Record<string, unknown>): string[] {
+  const required = schema?.required;
+  return Array.isArray(required)
+    ? required.filter((key): key is string => typeof key === "string" && key.length > 0)
+    : [];
+}
+
+function isSchemaShapedObject(value: unknown, schema?: Record<string, unknown>): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const required = schemaRequiredKeys(schema);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+}
+
+function parseJsonCandidate(raw: string, schema?: Record<string, unknown>): Record<string, unknown> | null {
   try {
-    const parsed = JSON.parse(trimmed);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    const parsed = JSON.parse(raw);
+    return isSchemaShapedObject(parsed, schema) ? parsed : null;
   } catch {
-    const match = trimmed.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      const parsed = JSON.parse(match[0]);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
+    return null;
+  }
+}
+
+function extractJsonObjectCandidates(raw: string): string[] {
+  const candidates: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        candidates.push(raw.slice(start, index + 1));
+        start = -1;
+      }
     }
   }
+
+  return candidates;
+}
+
+function parseJsonObject(raw: string, schema?: Record<string, unknown>): Record<string, unknown> | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const whole = parseJsonCandidate(trimmed, schema);
+  if (whole) return whole;
+
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const parsed = parseJsonCandidate(lines[index], schema);
+    if (parsed) return parsed;
+  }
+
+  const candidates = extractJsonObjectCandidates(trimmed);
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const parsed = parseJsonCandidate(candidates[index], schema);
+    if (parsed) return parsed;
+  }
+
+  return null;
 }
 
 function isHarnessVerificationOnlyBlocker(blocker: string) {
@@ -406,7 +475,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
       const finalText = existsSync(lastMessagePath)
         ? readFileSync(lastMessagePath, "utf-8")
         : String(proc.stdout || "");
-      const parsed = parseJsonObject(finalText);
+      const parsed = parseJsonObject(finalText, request.schema);
       if (!parsed) {
         return {
           ok: false,
