@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.74
+
+### Patch Changes
+
+- Parse schema-shaped JSON objects from Codex JSONL output so proof packet authoring can ignore stream event lines when a final structured payload is present.
+
 ## 0.4.73
 
 ### Patch Changes
