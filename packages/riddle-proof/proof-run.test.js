@@ -538,6 +538,81 @@ async function run() {
   assert(missingAfterGate.ok === false, 'ship gate should reject missing after evidence');
   assert(missingAfterGate.reasons.includes('after_cdn is required before ship'), 'ship gate should explain missing after evidence');
 
+  const visualUnmeasuredGate = core.validateShipGate({
+    ...makeLoopState(),
+    verification_mode: 'visual',
+    implementation_status: 'changes_detected',
+    verify_status: 'evidence_captured',
+    after_cdn: 'https://cdn.example.com/after.png',
+    proof_assessment: { decision: 'ready_to_ship', source: 'supervising_agent' },
+    proof_assessment_source: 'supervising_agent',
+    evidence_bundle: {
+      verification_mode: 'visual',
+      artifact_contract: { required: { visual_delta: true } },
+      after: {
+        visual_delta: {
+          status: 'unmeasured',
+          passed: null,
+          reason: 'No measured before/after visual delta was found in proof evidence.',
+        },
+      },
+    },
+  });
+  assert(visualUnmeasuredGate.ok === false, 'ship gate should reject unmeasured visual delta for visual proof');
+  assert(
+    visualUnmeasuredGate.reasons.some((reason) => reason.includes('visual_delta.status=unmeasured')),
+    'ship gate should explain unmeasured visual delta',
+  );
+
+  const visualMeasuredGate = core.validateShipGate({
+    ...makeLoopState(),
+    verification_mode: 'visual',
+    implementation_status: 'changes_detected',
+    verify_status: 'evidence_captured',
+    after_cdn: 'https://cdn.example.com/after.png',
+    proof_assessment: { decision: 'ready_to_ship', source: 'supervising_agent' },
+    proof_assessment_source: 'supervising_agent',
+    evidence_bundle: {
+      verification_mode: 'visual',
+      artifact_contract: { required: { visual_delta: true } },
+      after: {
+        visual_delta: {
+          status: 'measured',
+          passed: true,
+          change_percent: 2.5,
+        },
+      },
+    },
+  });
+  assert(visualMeasuredGate.ok === true, 'ship gate should allow a measured passing visual delta');
+
+  const visualAssessmentStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-visual-assessment-')), 'state.json');
+  writeJson(visualAssessmentStatePath, {
+    ...makeLoopState(),
+    verification_mode: 'visual',
+    verify_status: 'evidence_captured',
+    after_cdn: 'https://cdn.example.com/after.png',
+    evidence_bundle: {
+      verification_mode: 'visual',
+      artifact_contract: { required: { visual_delta: true } },
+      after: { visual_delta: { status: 'unmeasured', passed: null } },
+    },
+  });
+  const blockedVisualAssessment = core.mergeStateFromParams(visualAssessmentStatePath, {
+    action: 'verify',
+    proof_assessment_json: JSON.stringify({
+      decision: 'ready_to_ship',
+      summary: 'Screenshots look acceptable.',
+      recommended_stage: 'ship',
+      continue_with_stage: 'ship',
+      source: 'supervising_agent',
+    }),
+  });
+  assert(blockedVisualAssessment.proof_assessment.decision === 'needs_richer_proof', 'unmeasured visual proof should downgrade ready_to_ship assessment');
+  assert(blockedVisualAssessment.proof_assessment.blocked_decision === 'ready_to_ship', 'blocked visual proof should retain attempted ready decision');
+  assert(blockedVisualAssessment.merge_recommendation === 'do-not-merge', 'blocked visual proof should not become merge-ready');
+  assert(blockedVisualAssessment.proof_summary.includes('Ready-to-ship assessment blocked'), 'blocked visual proof should be recorded in proof summary');
+
   const fakeLobsterRoot = installFakeLobster();
   const originalPath = process.env.PATH;
   const originalLobsterCommand = process.env.RIDDLE_PROOF_LOBSTER_COMMAND;

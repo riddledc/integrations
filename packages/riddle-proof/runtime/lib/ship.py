@@ -9,6 +9,10 @@ from util import load_state, save_state, invoke, git
 
 DISCORD_API = 'https://discord.com/api/v10'
 SHIP_NOISE_PATHS = ('.codex', '.oc-smoke')
+VISUAL_FIRST_MODES = {
+    'visual', 'render', 'interaction', 'ui', 'layout', 'screenshot',
+    'canvas', 'animation',
+}
 
 
 def read_json_file(path):
@@ -293,7 +297,11 @@ def record_ship_report(state, marked_ready=None):
 def proof_assessment_is_ready(state):
     assessment = state.get('proof_assessment') or {}
     source = str(assessment.get('source') or state.get('proof_assessment_source') or '').strip().lower()
-    return source in ('supervising_agent', 'supervisor') and assessment.get('decision') == 'ready_to_ship'
+    return (
+        source in ('supervising_agent', 'supervisor')
+        and assessment.get('decision') == 'ready_to_ship'
+        and not visual_delta_ship_blocker(state)
+    )
 
 
 def effective_merge_recommendation(state):
@@ -308,6 +316,49 @@ def after_evidence_bundle(state):
         return {}
     after = bundle.get('after') or {}
     return after if isinstance(after, dict) else {}
+
+
+def normalized_verification_mode(state):
+    bundle = state.get('evidence_bundle') or {}
+    if isinstance(bundle, dict) and str(bundle.get('verification_mode') or '').strip():
+        return str(bundle.get('verification_mode')).strip().lower()
+    return str(state.get('verification_mode') or 'proof').strip().lower() or 'proof'
+
+
+def visual_delta_required_for_ship(state):
+    bundle = state.get('evidence_bundle') or {}
+    contract = bundle.get('artifact_contract') if isinstance(bundle, dict) else {}
+    required = contract.get('required') if isinstance(contract, dict) else {}
+    if isinstance(required, dict) and required.get('visual_delta') is True:
+        return True
+    return normalized_verification_mode(state) in VISUAL_FIRST_MODES
+
+
+def visual_delta_for_state(state):
+    after = after_evidence_bundle(state)
+    visual_delta = after.get('visual_delta') if isinstance(after, dict) else None
+    if isinstance(visual_delta, dict):
+        return visual_delta
+    request = state.get('proof_assessment_request') or {}
+    visual_delta = request.get('visual_delta') if isinstance(request, dict) else None
+    return visual_delta if isinstance(visual_delta, dict) else {}
+
+
+def visual_delta_ship_blocker(state):
+    if not visual_delta_required_for_ship(state):
+        return ''
+    visual_delta = visual_delta_for_state(state)
+    if visual_delta.get('status') == 'measured' and visual_delta.get('passed') is True:
+        return ''
+    status = str(visual_delta.get('status') or 'missing')
+    if status == 'unmeasured':
+        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof'
+    if status == 'measured' and visual_delta.get('passed') is False:
+        return 'visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof'
+    reason = str(visual_delta.get('reason') or '').strip()
+    if reason:
+        return f'visual_delta.status={status} blocks ready_to_ship for visual/UI proof: {reason}'
+    return f'visual_delta.status={status} blocks ready_to_ship for visual/UI proof'
 
 
 def state_has_after_evidence(state):
@@ -581,6 +632,9 @@ if reference in ('prod', 'both'):
         raise SystemExit('prod_url is required when reference=' + reference + ' before ship.')
     if not prod_cdn:
         raise SystemExit('prod_cdn is required before ship. Run recon/verify again and preserve the approved prod baseline.')
+visual_delta_blocker = visual_delta_ship_blocker(s)
+if visual_delta_blocker:
+    raise SystemExit(visual_delta_blocker + '. Rerun verify with measured before/after visual delta or return a non-shipping proof assessment.')
 if proof_source not in ('supervising_agent', 'supervisor') or proof_assessment.get('decision') != 'ready_to_ship':
     raise SystemExit('Supervising-agent proof_assessment.decision=ready_to_ship is required before ship.')
 

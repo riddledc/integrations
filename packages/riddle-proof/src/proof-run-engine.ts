@@ -926,6 +926,9 @@ export async function executeWorkflow(
     if (reasons.some((reason) => reason.includes("proof_assessment"))) {
       return "resume with riddle_proof_review using decision=ready_to_ship only after the screenshots and semantic evidence visibly prove the request; otherwise choose needs_implementation or needs_richer_proof";
     }
+    if (reasons.some((reason) => reason.includes("visual_delta"))) {
+      return "rerun verify with a measured before/after visual delta, or choose needs_richer_proof instead of ready_to_ship for this visual proof";
+    }
     if (reasons.some((reason) => reason.includes("after_cdn") || reason.includes("verify_status"))) {
       return "rerun verify with stronger proof framing so after evidence is captured before shipping";
     }

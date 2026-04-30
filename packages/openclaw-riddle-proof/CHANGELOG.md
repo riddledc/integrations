@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.75
+
+### Patch Changes
+
+- Block ready-to-ship visual proofs unless the proof evidence includes a measured, passing visual delta.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.33
+
 ## 0.4.74
 
 ### Patch Changes

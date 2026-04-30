@@ -1123,7 +1123,9 @@ writeFileSync(queryRouteWrapperStatePath, JSON.stringify({
 }, null, 2));
 const queryRouteInspect = inspectOpenClawRiddleProof({ state_path: queryRouteWrapperStatePath });
 assert.equal(queryRouteInspect.route_matched, true);
-assert.equal(queryRouteInspect.ready_to_ship_candidate, true);
+assert.equal(queryRouteInspect.ready_to_ship_candidate, false);
+assert.equal(queryRouteInspect.visual_delta_ready, false);
+assert(queryRouteInspect.hard_blockers[0].includes("visual_delta.status=unmeasured"));
 
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
 const reviewWakeClassification = classifyOpenClawRiddleProofWake(reviewStatus);

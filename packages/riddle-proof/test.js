@@ -44,6 +44,35 @@ function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
 }
 
+function withMeasuredVisualEvidence(state = {}) {
+  return {
+    ...state,
+    verification_mode: "visual",
+    verify_status: "evidence_captured",
+    before_cdn: state.before_cdn || "https://cdn.example.com/before.png",
+    after_cdn: state.after_cdn || "https://cdn.example.com/after.png",
+    evidence_bundle: {
+      ...(state.evidence_bundle || {}),
+      verification_mode: "visual",
+      artifact_contract: {
+        ...((state.evidence_bundle || {}).artifact_contract || {}),
+        required: {
+          ...(((state.evidence_bundle || {}).artifact_contract || {}).required || {}),
+          visual_delta: true,
+        },
+      },
+      after: {
+        ...((state.evidence_bundle || {}).after || {}),
+        visual_delta: {
+          status: "measured",
+          passed: true,
+          change_percent: 2.4,
+        },
+      },
+    },
+  };
+}
+
 function baseState() {
   return {
     version: "riddle-proof.run-state.v1",
@@ -628,6 +657,10 @@ const engineHarnessResult = await runRiddleProofEngineHarness({
         };
       }
       if (params.advance_stage === "verify") {
+        writeFileSync(engineStatePath, JSON.stringify(withMeasuredVisualEvidence({
+          after_worktree: engineWorkdir,
+          branch: "agent/openclaw/riddle-proof-engine-harness",
+        }), null, 2));
         return {
           ok: false,
           state_path: engineStatePath,
@@ -865,6 +898,10 @@ const runwayResult = await runRiddleProofEngineHarness({
         };
       }
       if (params.author_packet_json && runwayAuthorPackets > 1) {
+        writeFileSync(runwayStatePath, JSON.stringify(withMeasuredVisualEvidence({
+          after_worktree: runwayWorkdir,
+          branch: "agent/openclaw/iteration-runway",
+        }), null, 2));
         return {
           ok: false,
           state_path: runwayStatePath,
