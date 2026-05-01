@@ -372,10 +372,14 @@ async function run() {
 
   const core = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-core.js')).href);
   const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-engine.js')).href);
+  const proofSessionMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-session.js')).href);
   const cjsCore = require(path.join(__dirname, 'dist', 'proof-run-core.cjs'));
   const cjsEngineMod = require(path.join(__dirname, 'dist', 'proof-run-engine.cjs'));
+  const cjsProofSessionMod = require(path.join(__dirname, 'dist', 'proof-session.cjs'));
   assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.js should expose createRiddleProofEngine');
   assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
+  assert(typeof proofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.js should expose buildVisualProofSession');
+  assert(typeof cjsProofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.cjs should expose buildVisualProofSession');
   assert(
     core.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
     'default riddle-proof lookup should prefer the bundled package runtime',
@@ -404,6 +408,39 @@ async function run() {
   assert(isolatedConfig.statePath.startsWith('/tmp/riddle-proof-state-'), 'new run should get an isolated state file');
   assert(isolatedConfig.argsPath.startsWith('/tmp/riddle-proof-args-'), 'new run should get a matching isolated args file');
 
+  const visualSessionInput = {
+    run_id: 'rp_test_visual',
+    repo: 'example/repo',
+    branch: 'agent/openclaw/visual-iteration',
+    route: '/games/luge-run',
+    observed_after_path: '/games/luge-run',
+    reference: 'before',
+    verification_mode: 'visual',
+    target_image_url: 'https://cdn.example.com/luge-spec.png',
+    target_image_hash: 'sha256:spec',
+    viewport_matrix: [{ name: 'mobile', width: 390, height: 844 }],
+    deterministic_setup: { seed: 'luge-v1' },
+    proof_plan: 'Compare the luge game against the generated visual spec.',
+    capture_script: "await page.waitForSelector('canvas'); await saveScreenshot('after-proof');",
+    wait_for_selector: 'canvas',
+    assertions: [{ kind: 'route', path: '/games/luge-run' }],
+    artifacts: { before: 'https://cdn.example.com/before.png', after: 'https://cdn.example.com/after.png' },
+    evidence: { visual_delta: { status: 'measured', passed: true } },
+    status: 'evidence_captured',
+  };
+  const visualSession = proofSessionMod.buildVisualProofSession(visualSessionInput);
+  const parsedVisualSession = proofSessionMod.parseVisualProofSession(JSON.stringify(visualSession));
+  assert(visualSession.version === proofSessionMod.RIDDLE_PROOF_VISUAL_SESSION_VERSION, 'visual proof session should use the v1 contract');
+  assert(parsedVisualSession.fingerprint === visualSession.fingerprint, 'visual proof session should round-trip through JSON');
+  assert(visualSession.parent_session_id === null, 'visual proof session should record missing parent explicitly');
+  assert(visualSession.fingerprint_basis.capture_script_hash, 'visual proof session fingerprint should include capture script hash');
+  assert(proofSessionMod.compareVisualProofSessionFingerprint(visualSession, visualSessionInput).length === 0, 'same visual proof inputs should match the session fingerprint');
+  const visualSessionRouteMismatch = proofSessionMod.compareVisualProofSessionFingerprint(visualSession, {
+    ...visualSessionInput,
+    route: '/games/circle-maze',
+  });
+  assert(visualSessionRouteMismatch.some((item) => item.key === 'route'), 'different proof route should report a session fingerprint mismatch');
+
   const args = core.buildSetupArgs({
     action: 'setup',
     repo: 'openclaw/openclaw-plugins',
@@ -417,6 +454,11 @@ async function run() {
     auth_cookies_json: '[{"name":"session","value":"cookie"}]',
     auth_headers_json: '{"Authorization":"Bearer token"}',
     leave_draft: true,
+    assertions: [{ kind: 'text', contains: 'Confirm screenshots' }],
+    target_image_url: 'https://cdn.example.com/spec.png',
+    target_image_hash: 'sha256:spec',
+    viewport_matrix: [{ name: 'mobile', width: 390, height: 844 }],
+    deterministic_setup: { seed: 'setup-v1' },
   }, config);
 
   assert(args.repo === 'openclaw/openclaw-plugins', 'setup args should preserve repo');
@@ -434,6 +476,11 @@ async function run() {
   assert(args.auth_cookies_json === '[{"name":"session","value":"cookie"}]', 'setup args should preserve auth cookies JSON');
   assert(args.auth_headers_json === '{"Authorization":"Bearer token"}', 'setup args should preserve auth headers JSON');
   assert(args.leave_draft === 'true', 'setup args should preserve explicit draft hold intent');
+  assert(args.assertions_json === '[{"kind":"text","contains":"Confirm screenshots"}]', 'setup args should stringify structured assertions');
+  assert(args.target_image_url === 'https://cdn.example.com/spec.png', 'setup args should preserve visual target image URL');
+  assert(args.target_image_hash === 'sha256:spec', 'setup args should preserve visual target image hash');
+  assert(args.viewport_matrix_json === '[{"name":"mobile","width":390,"height":844}]', 'setup args should stringify viewport matrix');
+  assert(args.deterministic_setup_json === '{"seed":"setup-v1"}', 'setup args should stringify deterministic setup');
 
   const patched = core.mergeStateFromParams(fakeStatePath, {
     action: 'author',

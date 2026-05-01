@@ -20,6 +20,8 @@ CAPTURE_DIAGNOSTIC_VERSION = 'riddle-proof.capture-diagnostic.v1'
 DEBUG_STRING_LIMIT = 2000
 CAPTURE_HINT_CACHE_VERSION = 'riddle-proof.capture-hints.v1'
 CAPTURE_HINT_CACHE_LIMIT = 12
+PROOF_SESSION_VERSION = 'riddle-proof.visual-session.v1'
+PROOF_SESSION_FINGERPRINT_VERSION = 'riddle-proof.visual-session.fingerprint.v1'
 SENSITIVE_KEY_FRAGMENTS = (
     'authorization',
     'apikey',
@@ -304,6 +306,241 @@ def compact_debug_value(value, limit=DEBUG_STRING_LIMIT):
     if isinstance(value, str) and len(value) > limit:
         return value[:limit] + '... [truncated]'
     return value
+
+
+def stable_json(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+
+
+def sha256_text(value):
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def parse_optional_json(value, field_name):
+    if value in (None, ''):
+        return None
+    if isinstance(value, (dict, list)):
+        return value
+    if not isinstance(value, str):
+        raise SystemExit(field_name + ' must be JSON.')
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception as exc:
+        raise SystemExit(field_name + ' is not valid JSON: ' + str(exc))
+
+
+def load_proof_session_source(value):
+    source = str(value or '').strip()
+    if not source:
+        return None
+    try:
+        if source.startswith('{'):
+            session = json.loads(source)
+        elif source.startswith(('http://', 'https://')):
+            with urlopen(source, timeout=20) as response:
+                session = json.loads(response.read(512 * 1024).decode('utf-8'))
+        else:
+            with open(os.path.abspath(os.path.expanduser(source))) as f:
+                session = json.load(f)
+    except Exception as exc:
+        raise SystemExit('resume_session could not be loaded: ' + str(exc))
+
+    if not isinstance(session, dict):
+        raise SystemExit('resume_session must be a JSON object.')
+    if session.get('version') != PROOF_SESSION_VERSION:
+        raise SystemExit('resume_session has unsupported version: ' + str(session.get('version') or ''))
+    if not session.get('session_id'):
+        raise SystemExit('resume_session is missing session_id.')
+    if not session.get('fingerprint'):
+        raise SystemExit('resume_session is missing fingerprint.')
+    return session
+
+
+def apply_proof_session_defaults(state, session):
+    if not isinstance(session, dict):
+        return []
+    applied = []
+    route = session.get('route') if isinstance(session.get('route'), dict) else {}
+    capture = session.get('capture') if isinstance(session.get('capture'), dict) else {}
+    target_image = session.get('target_image') if isinstance(session.get('target_image'), dict) else {}
+
+    defaults = [
+        ('server_path', route.get('path'), 'proof_session'),
+        ('wait_for_selector', capture.get('wait_for_selector'), 'proof_session'),
+        ('proof_plan', capture.get('proof_plan'), 'proof_session'),
+        ('capture_script', capture.get('capture_script'), 'proof_session'),
+        ('reference', session.get('reference'), 'proof_session'),
+        ('verification_mode', session.get('verification_mode'), 'proof_session'),
+        ('target_image_url', target_image.get('url'), 'proof_session'),
+        ('target_image_hash', target_image.get('hash'), 'proof_session'),
+    ]
+    for key, value, source in defaults:
+        text = str(value or '').strip()
+        if text and not str(state.get(key) or '').strip():
+            state[key] = text
+            applied.append(key)
+            if key == 'server_path':
+                state['server_path_source'] = source
+
+    if state.get('viewport_matrix_json') in (None, '') and session.get('viewport_matrix') is not None:
+        state['viewport_matrix_json'] = json.dumps(session.get('viewport_matrix'))
+        applied.append('viewport_matrix_json')
+    if state.get('deterministic_setup_json') in (None, '') and session.get('deterministic_setup') is not None:
+        state['deterministic_setup_json'] = json.dumps(session.get('deterministic_setup'))
+        applied.append('deterministic_setup_json')
+    if state.get('assertions_json') in (None, '') and session.get('assertions') is not None:
+        state['assertions_json'] = json.dumps(session.get('assertions'))
+        applied.append('assertions_json')
+    return applied
+
+
+def visual_session_fingerprint_basis(state, route=''):
+    route_value = str(route or state.get('server_path') or '').strip()
+    basis = {
+        'version': PROOF_SESSION_FINGERPRINT_VERSION,
+        'repo': str(state.get('repo') or '').strip() or None,
+        'route': route_value or None,
+        'wait_for_selector': str(state.get('wait_for_selector') or '').strip() or None,
+        'reference': str(state.get('requested_reference') or state.get('reference') or '').strip() or None,
+        'verification_mode': str(state.get('verification_mode') or '').strip().lower() or None,
+        'target_image_url': str(state.get('target_image_url') or '').strip() or None,
+        'target_image_hash': str(state.get('target_image_hash') or '').strip() or None,
+        'viewport_matrix': state.get('viewport_matrix'),
+        'deterministic_setup': state.get('deterministic_setup'),
+        'assertions': state.get('parsed_assertions'),
+        'capture_script_hash': sha256_text(state.get('capture_script')),
+    }
+    return {key: value for key, value in basis.items() if value is not None}
+
+
+def visual_session_fingerprint_from_basis(basis):
+    return hashlib.sha256(stable_json(basis).encode('utf-8')).hexdigest()
+
+
+def visual_session_fingerprint(state, route=''):
+    return visual_session_fingerprint_from_basis(visual_session_fingerprint_basis(state, route=route))
+
+
+def proof_session_mismatches(state, session, route=''):
+    if not isinstance(session, dict):
+        return []
+    expected = session.get('fingerprint_basis') if isinstance(session.get('fingerprint_basis'), dict) else {}
+    actual = visual_session_fingerprint_basis(state, route=route)
+    keys = sorted(set(expected.keys()) | set(actual.keys()))
+    mismatches = []
+    for key in keys:
+        if stable_json(expected.get(key)) != stable_json(actual.get(key)):
+            mismatches.append({
+                'key': key,
+                'expected': expected.get(key),
+                'actual': actual.get(key),
+            })
+    return mismatches
+
+
+def validate_proof_session_resume(state, route=''):
+    session = state.get('parent_proof_session')
+    if not isinstance(session, dict):
+        return {'status': 'not_requested'}
+    mismatches = proof_session_mismatches(state, session, route=route)
+    if mismatches:
+        state['proof_session_resume'] = {
+            'status': 'fingerprint_mismatch',
+            'parent_session_id': session.get('session_id'),
+            'parent_fingerprint': session.get('fingerprint'),
+            'mismatches': mismatches,
+        }
+        raise SystemExit(
+            'resume_session fingerprint mismatch: ' +
+            ', '.join(item['key'] for item in mismatches[:8])
+        )
+    state['proof_session_resume'] = {
+        'status': 'accepted',
+        'parent_session_id': session.get('session_id'),
+        'parent_fingerprint': session.get('fingerprint'),
+        'fingerprint': visual_session_fingerprint(state, route=route),
+    }
+    return state['proof_session_resume']
+
+
+def capture_proof_session_seed(state, route=''):
+    parent = state.get('parent_proof_session') if isinstance(state.get('parent_proof_session'), dict) else {}
+    basis = visual_session_fingerprint_basis(state, route=route)
+    return {
+        'version': PROOF_SESSION_VERSION,
+        'session_kind': 'capture-seed',
+        'run_id': str(state.get('run_id') or '').strip(),
+        'parent_session_id': parent.get('session_id') or None,
+        'parent_fingerprint': parent.get('fingerprint') or None,
+        'fingerprint': visual_session_fingerprint_from_basis(basis),
+        'fingerprint_basis': basis,
+        'repo': str(state.get('repo') or '').strip(),
+        'route': {'path': str(route or state.get('server_path') or '').strip()},
+        'reference': str(state.get('requested_reference') or state.get('reference') or '').strip(),
+        'verification_mode': str(state.get('verification_mode') or '').strip(),
+        'target_image': {
+            'url': str(state.get('target_image_url') or '').strip(),
+            'hash': str(state.get('target_image_hash') or '').strip(),
+        },
+        'viewport_matrix': state.get('viewport_matrix'),
+        'deterministic_setup': state.get('deterministic_setup'),
+        'capture': {
+            'proof_plan': str(state.get('proof_plan') or '').strip(),
+            'capture_script': str(state.get('capture_script') or '').strip(),
+            'wait_for_selector': str(state.get('wait_for_selector') or '').strip(),
+        },
+        'assertions': state.get('parsed_assertions'),
+    }
+
+
+def proof_session_output_url(payload):
+    item = capture_output_item(payload, 'proof-session.json') or capture_output_item(payload, 'proof-session')
+    return (item or {}).get('url', '') if item else ''
+
+
+def build_visual_proof_session(state, route='', observed_after_path='', artifacts=None, evidence=None, status=''):
+    parent = state.get('parent_proof_session') if isinstance(state.get('parent_proof_session'), dict) else {}
+    basis = visual_session_fingerprint_basis(state, route=route)
+    session_id = 'rps_' + time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '_' + hashlib.sha1(os.urandom(16)).hexdigest()[:8]
+    return {
+        'version': PROOF_SESSION_VERSION,
+        'session_id': session_id,
+        'run_id': str(state.get('run_id') or '').strip(),
+        'parent_session_id': parent.get('session_id') or None,
+        'parent_fingerprint': parent.get('fingerprint') or None,
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        'fingerprint': visual_session_fingerprint_from_basis(basis),
+        'fingerprint_basis': basis,
+        'repo': str(state.get('repo') or '').strip(),
+        'branch': str(state.get('branch') or state.get('target_branch') or '').strip(),
+        'route': {
+            'path': str(route or state.get('server_path') or '').strip(),
+            'observed_after_path': str(observed_after_path or '').strip(),
+        },
+        'reference': str(state.get('requested_reference') or state.get('reference') or '').strip(),
+        'verification_mode': str(state.get('verification_mode') or '').strip(),
+        'target_image': {
+            'url': str(state.get('target_image_url') or '').strip(),
+            'hash': str(state.get('target_image_hash') or '').strip(),
+        },
+        'viewport_matrix': state.get('viewport_matrix'),
+        'deterministic_setup': state.get('deterministic_setup'),
+        'capture': {
+            'proof_plan': str(state.get('proof_plan') or '').strip(),
+            'capture_script': str(state.get('capture_script') or '').strip(),
+            'wait_for_selector': str(state.get('wait_for_selector') or '').strip(),
+        },
+        'assertions': state.get('parsed_assertions'),
+        'artifacts': artifacts or {},
+        'evidence': evidence or {},
+        'status': status,
+    }
 
 
 def redact_for_diagnostics(value):

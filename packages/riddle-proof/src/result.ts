@@ -264,6 +264,7 @@ export function createRunResult(input: {
     merge_recommendation: state.merge_recommendation,
     finalized: state.finalized,
     blocker: state.blocker,
+    proof_session: state.proof_session,
     evidence_bundle: input.evidence_bundle,
     raw: input.raw,
   }) as RiddleProofRunResult;

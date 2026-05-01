@@ -8,7 +8,16 @@ capture_script: optional at setup and recon; required before verify.
 
 import json, os, re, time, uuid, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from util import STATE_FILE, ARGS_FILE, save_state, invoke, load_package_json
+from util import (
+    STATE_FILE,
+    ARGS_FILE,
+    apply_proof_session_defaults,
+    invoke,
+    load_package_json,
+    load_proof_session_source,
+    save_state,
+    validate_proof_session_resume,
+)
 
 def truthy(value):
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
@@ -39,6 +48,19 @@ if not os.path.exists(args_file):
 
 with open(args_file) as f:
     s = json.load(f)
+
+resume_session_source = (s.get('resume_session') or '').strip()
+if resume_session_source:
+    parent_proof_session = load_proof_session_source(resume_session_source)
+    s['parent_proof_session'] = parent_proof_session
+    s['parent_proof_session_id'] = parent_proof_session.get('session_id')
+    s['proof_session_resume'] = {
+        'status': 'loaded',
+        'source': 'inline_json' if resume_session_source.startswith('{') else resume_session_source,
+        'parent_session_id': parent_proof_session.get('session_id'),
+        'parent_fingerprint': parent_proof_session.get('fingerprint'),
+        'applied_fields': apply_proof_session_defaults(s, parent_proof_session),
+    }
 
 mode = (s.get('mode') or '').strip().lower()
 reference = s.get('reference', 'both')
@@ -107,6 +129,8 @@ if raw_assertions:
     except Exception as e:
         raise SystemExit('assertions_json is not valid JSON: ' + str(e))
 s['parsed_assertions'] = parsed_assertions
+s['viewport_matrix'] = parse_json_arg('viewport_matrix_json', (dict, list), None)
+s['deterministic_setup'] = parse_json_arg('deterministic_setup_json', (dict, list), None)
 
 # Generate branch if not provided. The riddle-proof/* namespace is reserved for
 # temporary proof worktrees, so never let a user-supplied branch use it as the
@@ -173,6 +197,16 @@ s['stage'] = 'preflight'
 s['status'] = 'ready' if not missing else 'needs_input'
 s['missing'] = missing
 
+if s.get('parent_proof_session') and not missing:
+    try:
+        s['proof_session_resume'] = {
+            **(s.get('proof_session_resume') or {}),
+            **validate_proof_session_resume(s, route=s.get('server_path') or ''),
+        }
+    except SystemExit:
+        save_state(s)
+        raise
+
 # Auth context can be supplied directly for public-plugin use, while use_auth
 # remains a private/configured Cognito helper for Riddle-owned environments.
 explicit_local_storage = parse_json_arg('auth_localStorage_json', (dict,), {})
@@ -231,7 +265,7 @@ print('RIDDLE PROOF — PREFLIGHT (' + mode.upper() + ' / ' + reference.upper() 
 print('=' * 50)
 display_keys = ['repo', 'branch', 'target_branch', 'ship_target_branch', 'base_branch', 'before_ref', 'change_request', 'commit_message',
                 'reference', 'verification_mode', 'success_criteria', 'prod_url', 'build_command',
-                'allow_static_preview_fallback']
+                'allow_static_preview_fallback', 'resume_session', 'target_image_url', 'target_image_hash']
 if mode == 'server':
     display_keys += ['server_image', 'server_command', 'server_port', 'server_path']
 if s.get('auth_localStorage'):
@@ -247,6 +281,12 @@ for k in display_keys:
     print(k + ': ' + v)
 if parsed_assertions is not None:
     print('assertions_json: parsed')
+if s.get('viewport_matrix') is not None:
+    print('viewport_matrix_json: parsed')
+if s.get('deterministic_setup') is not None:
+    print('deterministic_setup_json: parsed')
+if s.get('proof_session_resume'):
+    print('proof_session_resume: ' + str((s.get('proof_session_resume') or {}).get('status') or 'loaded'))
 if not (s.get('capture_script') or '').strip():
     print('NOTE: capture_script can be added later after recon and before verify.')
 if reference_note:

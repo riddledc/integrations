@@ -70,6 +70,11 @@ export interface RiddleProofRunParams {
   success_criteria?: string;
   assertions?: JsonValue;
   verification_mode?: RiddleProofVerificationMode;
+  resume_session?: string;
+  target_image_url?: string;
+  target_image_hash?: string;
+  viewport_matrix?: JsonValue;
+  deterministic_setup?: JsonValue;
   reference?: "prod" | "before" | "both";
   base_branch?: string;
   before_ref?: string;
@@ -160,6 +165,7 @@ export interface RiddleProofRunState {
   merge_recommendation?: string;
   implementation_detection_summary?: string | null;
   implementation_detection?: Record<string, unknown> | null;
+  proof_session?: RiddleProofVisualSession;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
   events: RiddleProofEvent[];
@@ -198,6 +204,7 @@ export interface RiddleProofRunResult {
   merge_recommendation?: string;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
+  proof_session?: RiddleProofVisualSession;
   evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
 }
@@ -237,6 +244,7 @@ export interface RiddleProofEvidenceBundle {
   baselines?: EvidenceReference[];
   after?: EvidenceReference;
   artifacts?: EvidenceArtifact[];
+  proof_session?: RiddleProofVisualSession;
   proof_evidence?: unknown;
   proof_evidence_sample?: unknown;
   assertions?: JsonValue;
@@ -408,4 +416,64 @@ export interface RiddleProofPrLifecycleState {
   source?: string;
   next_action?: string;
   cleanup?: Record<string, unknown>;
+}
+
+export interface RiddleProofVisualSession {
+  version: "riddle-proof.visual-session.v1";
+  session_id: string;
+  run_id?: string;
+  parent_session_id?: string | null;
+  parent_fingerprint?: string | null;
+  created_at: string;
+  fingerprint: string;
+  fingerprint_basis: RiddleProofVisualSessionFingerprintBasis;
+  repo?: string;
+  branch?: string;
+  route?: {
+    path?: string;
+    observed_after_path?: string;
+  };
+  reference?: string;
+  verification_mode?: string;
+  target_image?: {
+    url?: string;
+    hash?: string;
+  };
+  viewport_matrix?: JsonValue;
+  deterministic_setup?: JsonValue;
+  capture?: {
+    proof_plan?: string;
+    capture_script?: string;
+    wait_for_selector?: string;
+  };
+  assertions?: JsonValue;
+  artifacts?: {
+    before?: string;
+    prod?: string;
+    after?: string;
+    session?: string;
+    outputs?: EvidenceArtifact[];
+  };
+  evidence?: {
+    visual_delta?: JsonValue;
+    semantic_context?: JsonValue;
+    artifact_contract?: JsonValue;
+    artifact_usage?: JsonValue;
+  };
+  status?: string;
+}
+
+export interface RiddleProofVisualSessionFingerprintBasis {
+  version: "riddle-proof.visual-session.fingerprint.v1";
+  repo?: string;
+  route?: string;
+  wait_for_selector?: string;
+  reference?: string;
+  verification_mode?: string;
+  target_image_url?: string;
+  target_image_hash?: string;
+  viewport_matrix?: JsonValue;
+  deterministic_setup?: JsonValue;
+  assertions?: JsonValue;
+  capture_script_hash?: string;
 }

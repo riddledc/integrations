@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.34
+
+### Patch Changes
+
+- Add visual proof-session fingerprints and resume-session state support for iterative proof runs.
+
 ## 0.5.33
 
 ### Patch Changes
