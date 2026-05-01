@@ -204,10 +204,13 @@ class FakeRiddle:
                     ],
                 }
             if 'after-proof' in script:
+                outputs = [{'name': 'after.png', 'url': 'https://cdn.example.com/after.png'}]
+                if 'proof-session' in script:
+                    outputs.append({'name': 'proof-session.json', 'url': 'https://cdn.example.com/proof-session.json'})
                 return {
                     'ok': True,
                     'screenshots': [{'url': 'https://cdn.example.com/after.png'}],
-                    'outputs': [{'name': 'after.png', 'url': 'https://cdn.example.com/after.png'}],
+                    'outputs': outputs,
                     'console': state_console({
                         'bodyTextLength': 180,
                         'visibleTextSample': 'Pricing CTA Buy Now',
@@ -632,6 +635,105 @@ def run_preflight_records_prod_reference_skip_reason():
         return {
             'ok': True,
             'reference_resolution': after_preflight['reference_resolution'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_preflight_resumes_visual_proof_session():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-preflight-session-'))
+    args_path = tempdir / 'args.json'
+    state_path = tempdir / 'state.json'
+    repo_dir = tempdir / 'repo'
+    try:
+        make_project(repo_dir, "export const routes = [{ path: '/pricing', element: <Pricing /> }];\n")
+        util = load_module('util_proof_session_builder', UTIL_PATH)
+        parent_session = util.build_visual_proof_session({
+            'repo': 'example/repo',
+            'server_path': '/pricing',
+            'reference': 'before',
+            'verification_mode': 'visual',
+            'target_image_url': 'https://cdn.example.com/spec.png',
+            'target_image_hash': 'sha256:spec',
+            'viewport_matrix': [
+                {'name': 'mobile', 'width': 390, 'height': 844},
+                {'name': 'desktop', 'width': 1280, 'height': 900},
+            ],
+            'deterministic_setup': {'seed': 'pricing-visual-v1'},
+            'parsed_assertions': [{'kind': 'text', 'contains': 'Buy Now'}],
+            'proof_plan': 'Capture pricing route and compare CTA visual state.',
+            'capture_script': "await page.waitForSelector('[data-testid=pricing-cta]'); await saveScreenshot('after-proof');",
+            'wait_for_selector': '[data-testid=pricing-cta]',
+        }, route='/pricing', observed_after_path='/pricing', status='evidence_captured')
+
+        args_path.write_text(json.dumps({
+            'repo': 'example/repo',
+            'repo_dir': str(repo_dir),
+            'mode': 'static',
+            'change_request': 'Continue the pricing visual iteration',
+            'commit_message': 'Continue the pricing visual iteration',
+            'build_command': BUILD_SCRIPT,
+            'build_output': 'build',
+            'allow_static_preview_fallback': True,
+            'resume_session': json.dumps(parent_session),
+        }, indent=2))
+        with temporary_env(
+            RIDDLE_PROOF_ARGS_FILE=str(args_path),
+            RIDDLE_PROOF_STATE_FILE=str(state_path),
+        ):
+            sys.modules.pop('util', None)
+            load_module('preflight_resume_session', PREFLIGHT_PATH)
+        after_preflight = json.loads(state_path.read_text())
+        assert after_preflight['proof_session_resume']['status'] == 'accepted'
+        assert after_preflight['proof_session_resume']['applied_fields']
+        assert after_preflight['parent_proof_session']['session_id'] == parent_session['session_id']
+        assert after_preflight['server_path'] == '/pricing'
+        assert after_preflight['server_path_source'] == 'proof_session'
+        assert after_preflight['reference'] == 'before'
+        assert after_preflight['verification_mode'] == 'visual'
+        assert after_preflight['target_image_url'] == 'https://cdn.example.com/spec.png'
+        assert after_preflight['target_image_hash'] == 'sha256:spec'
+        assert after_preflight['viewport_matrix'][0]['name'] == 'mobile'
+        assert after_preflight['deterministic_setup']['seed'] == 'pricing-visual-v1'
+        assert after_preflight['parsed_assertions'][0]['contains'] == 'Buy Now'
+        assert after_preflight['proof_plan_status'] == 'ready'
+        assert after_preflight['author_status'] == 'ready'
+
+        mismatch_args_path = tempdir / 'mismatch-args.json'
+        mismatch_state_path = tempdir / 'mismatch-state.json'
+        mismatch_args_path.write_text(json.dumps({
+            'repo': 'example/repo',
+            'repo_dir': str(repo_dir),
+            'mode': 'static',
+            'reference': 'before',
+            'verification_mode': 'visual',
+            'change_request': 'Continue the pricing visual iteration',
+            'commit_message': 'Continue the pricing visual iteration',
+            'build_command': BUILD_SCRIPT,
+            'build_output': 'build',
+            'allow_static_preview_fallback': True,
+            'server_path': '/wrong',
+            'resume_session': json.dumps(parent_session),
+        }, indent=2))
+        with temporary_env(
+            RIDDLE_PROOF_ARGS_FILE=str(mismatch_args_path),
+            RIDDLE_PROOF_STATE_FILE=str(mismatch_state_path),
+        ):
+            try:
+                sys.modules.pop('util', None)
+                load_module('preflight_resume_session_mismatch', PREFLIGHT_PATH)
+            except SystemExit as exc:
+                assert 'fingerprint mismatch' in str(exc), exc
+            else:
+                raise AssertionError('route mismatch should reject resumed proof session')
+        mismatch_state = json.loads(mismatch_state_path.read_text())
+        assert mismatch_state['proof_session_resume']['status'] == 'fingerprint_mismatch'
+        assert any(item['key'] == 'route' for item in mismatch_state['proof_session_resume']['mismatches'])
+
+        return {
+            'ok': True,
+            'parent_session_id': parent_session['session_id'],
+            'fingerprint': after_preflight['proof_session_resume']['fingerprint'],
         }
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
@@ -1157,6 +1259,7 @@ def run_verify_requests_supervisor_assessment():
     try:
         state = base_state(tempdir, reference='both', prod_url='https://prod.example.com/pricing')
         state.update({
+            'repo': 'example/repo',
             'recon_status': 'ready_for_proof_plan',
             'author_status': 'ready',
             'proof_plan_status': 'ready',
@@ -1223,6 +1326,21 @@ def run_verify_requests_supervisor_assessment():
         assert after_details['observed_path_raw'] == '/s/pv-after/pricing', after_details
         assert 'Buy Now' in after_details['visible_text_sample'], after_details
         assert after_details['buttons'] == ['Buy Now'], after_details
+        proof_session = after_verify['proof_session']
+        assert proof_session['version'] == 'riddle-proof.visual-session.v1'
+        assert proof_session['repo'] == 'example/repo'
+        assert proof_session['route']['path'] == '/pricing'
+        assert proof_session['route']['observed_after_path'] == '/pricing'
+        assert proof_session['artifacts']['before'] == 'https://cdn.example.com/before.png'
+        assert proof_session['artifacts']['prod'] == 'https://cdn.example.com/prod.png'
+        assert proof_session['artifacts']['after'] == 'https://cdn.example.com/after.png'
+        assert proof_session['artifacts']['session'] == 'https://cdn.example.com/proof-session.json'
+        assert proof_session['capture']['wait_for_selector'] == '[data-testid=pricing-cta]'
+        assert proof_session['fingerprint_basis']['route'] == '/pricing'
+        assert after_verify['proof_session_fingerprint'] == proof_session['fingerprint']
+        assert after_verify['proof_session_artifact_url'] == 'https://cdn.example.com/proof-session.json'
+        assert after_verify['evidence_bundle']['proof_session']['fingerprint'] == proof_session['fingerprint']
+        assert after_verify['proof_assessment_request']['evidence_bundle']['proof_session']['fingerprint'] == proof_session['fingerprint']
         runtime_events = after_verify.get('runtime_events') or []
         assert any(event.get('kind') == 'workflow.phase.started' and event.get('step') == 'verify' and event.get('phase') == 'build' for event in runtime_events)
         assert any(event.get('kind') == 'workflow.phase.finished' and event.get('step') == 'verify' and event.get('phase') == 'build' for event in runtime_events)
@@ -1866,6 +1984,7 @@ def run_ship_resolves_real_pr_branch():
 if __name__ == '__main__':
     payload = {
         'preflight_reference_skip_reason': run_preflight_records_prod_reference_skip_reason(),
+        'preflight_resume_visual_proof_session': run_preflight_resumes_visual_proof_session(),
         'capture_artifact_enrichment': run_capture_artifact_enrichment(),
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),

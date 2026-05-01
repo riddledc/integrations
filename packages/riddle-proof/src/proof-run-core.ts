@@ -16,8 +16,16 @@ export interface WorkflowParams {
   prod_url?: string;
   capture_script?: string;
   success_criteria?: string;
+  assertions?: unknown;
   assertions_json?: string;
   verification_mode?: string;
+  resume_session?: string;
+  target_image_url?: string;
+  target_image_hash?: string;
+  viewport_matrix?: unknown;
+  viewport_matrix_json?: string;
+  deterministic_setup?: unknown;
+  deterministic_setup_json?: string;
   reference?: "prod" | "before" | "both";
   base_branch?: string;
   before_ref?: string;
@@ -167,6 +175,12 @@ export function workflowFile(riddleProofDir: string, action: WorkflowStage) {
   return path.join(riddleProofDir, "pipelines", `riddle-proof-${action}.lobster`);
 }
 
+function asJsonString(value: unknown) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
 export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof resolveConfig>) {
   if (!params.repo) throw new Error("repo is required for setup/run");
   if (!params.change_request) throw new Error("change_request is required for setup/run");
@@ -182,8 +196,13 @@ export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof
     prod_url: params.prod_url || "",
     capture_script: captureScript,
     success_criteria: params.success_criteria || "",
-    assertions_json: params.assertions_json || "",
+    assertions_json: params.assertions_json || asJsonString(params.assertions),
     verification_mode: params.verification_mode || "proof",
+    resume_session: params.resume_session || "",
+    target_image_url: params.target_image_url || "",
+    target_image_hash: params.target_image_hash || "",
+    viewport_matrix_json: params.viewport_matrix_json || asJsonString(params.viewport_matrix),
+    deterministic_setup_json: params.deterministic_setup_json || asJsonString(params.deterministic_setup),
     reference: requestedReference,
     base_branch: params.base_branch || "main",
     before_ref: params.before_ref || "",
@@ -845,6 +864,11 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
     "success_criteria",
     "assertions_json",
     "verification_mode",
+    "resume_session",
+    "target_image_url",
+    "target_image_hash",
+    "viewport_matrix_json",
+    "deterministic_setup_json",
     "base_branch",
     "before_ref",
     "context",
@@ -1091,6 +1115,9 @@ export function summarizeState(state: any) {
     last_requested_advance_stage: state.last_requested_advance_stage || null,
     recon_results: state.recon_results || null,
     verify_results: state.verify_results || null,
+    proof_session: state.proof_session || null,
+    parent_proof_session: state.parent_proof_session || null,
+    proof_session_artifact_url: state.proof_session_artifact_url || null,
   };
 
   const parts = [

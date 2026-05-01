@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import (
     append_capture_diagnostic,
     apply_auth_context,
+    build_visual_proof_session,
+    capture_proof_session_seed,
     capture_static_preview,
     enrich_capture_payload,
     has_auth_context,
@@ -24,6 +26,7 @@ from util import (
     run_project_build,
     save_state,
     should_use_static_preview,
+    proof_session_output_url,
     summarize_capture_artifacts,
 )
 import subprocess as sp
@@ -215,7 +218,7 @@ def abort_capture_failure(state, results, expected_path, message, raw_payload):
     raise SystemExit(summary)
 
 
-def build_probe_capture_script(base_script='', verification_mode='proof'):
+def build_probe_capture_script(base_script='', verification_mode='proof', proof_session_seed=None):
     pieces = []
     script = (base_script or '').strip()
     pieces.append('let __riddleProofCaptureScriptError = null;')
@@ -280,6 +283,12 @@ def build_probe_capture_script(base_script='', verification_mode='proof'):
     ])
     if auto_screenshot_for_mode(verification_mode) and not capture_script_saves_screenshot(script):
         pieces.append("await saveScreenshot('after-proof');")
+    if isinstance(proof_session_seed, dict):
+        pieces.append(
+            'try { if (typeof saveJson === "function") await saveJson("proof-session", ' +
+            json.dumps(proof_session_seed) +
+            '); } catch {}'
+        )
     pieces.append('if (__riddleProofCaptureScriptError) throw __riddleProofCaptureScriptError;')
     pieces.append('return { pageState, proofEvidence: __riddleProofEvidenceValue };')
     return ' '.join(pieces)
@@ -1056,6 +1065,36 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         semantic_context,
         [],
     )
+    observed_after_path = ((semantic_context.get('route') or {}).get('after_observed_path')) or ''
+    proof_session_artifact_url = proof_session_output_url(after_payload)
+    outputs = []
+    for item in after_payload.get('outputs') or []:
+        if not isinstance(item, dict):
+            continue
+        outputs.append({
+            'name': str(item.get('name') or ''),
+            'url': str(item.get('url') or ''),
+            'type': str(item.get('type') or item.get('kind') or ''),
+        })
+    proof_session = build_visual_proof_session(
+        state,
+        route=expected_path,
+        observed_after_path=observed_after_path,
+        artifacts={
+            'before': state.get('before_cdn') or '',
+            'prod': state.get('prod_cdn') or '',
+            'after': state.get('after_cdn') or '',
+            'session': proof_session_artifact_url,
+            'outputs': outputs,
+        },
+        evidence={
+            'visual_delta': visual_delta,
+            'semantic_context': semantic_context,
+            'artifact_contract': artifact_contract,
+            'artifact_usage': artifact_usage,
+        },
+        status='evidence_captured' if after_observation.get('valid') else 'capture_incomplete',
+    )
     return {
         'verification_mode': normalized_verification_mode(state.get('verification_mode')),
         'reference': state.get('requested_reference') or state.get('reference', 'both'),
@@ -1078,6 +1117,7 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         'proof_evidence_sample': compact_value(proof_evidence) if proof_evidence is not None else '',
         'success_criteria': (state.get('success_criteria') or '').strip(),
         'assertions': state.get('parsed_assertions') or None,
+        'proof_session': proof_session,
     }
 
 
@@ -1193,7 +1233,8 @@ expected_path = (
     or '/'
 )
 verification_mode = normalized_verification_mode(s.get('verification_mode'))
-probe_capture_script = build_probe_capture_script(capture_script, verification_mode)
+proof_session_seed = capture_proof_session_seed(s, expected_path)
+probe_capture_script = build_probe_capture_script(capture_script, verification_mode, proof_session_seed)
 results = {
     'baseline': {
         'reference': reference,
@@ -1402,6 +1443,18 @@ if reference in ('prod', 'both') and prod_url:
 
 evidence_bundle = build_evidence_bundle(s, results, after_payload, after_observation, required_baseline_present, expected_path)
 s['evidence_bundle'] = evidence_bundle
+s['proof_session'] = evidence_bundle.get('proof_session') or {}
+s['proof_session_fingerprint'] = (s.get('proof_session') or {}).get('fingerprint') or ''
+s['proof_session_artifact_url'] = ((s.get('proof_session') or {}).get('artifacts') or {}).get('session') or ''
+if s.get('proof_session'):
+    summary_lines.append(
+        'Proof session: ' +
+        str((s.get('proof_session') or {}).get('session_id') or '') +
+        ' ' +
+        str((s.get('proof_session') or {}).get('fingerprint') or '')[:12]
+    )
+if s.get('proof_session_artifact_url'):
+    summary_lines.append('Proof session artifact: ' + s['proof_session_artifact_url'])
 visual_delta = ((evidence_bundle.get('after') or {}).get('visual_delta') or {})
 if visual_delta.get('status') != 'not_applicable':
     summary_lines.append('Visual delta gate: ' + compact_value(visual_delta, limit=700))
