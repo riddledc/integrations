@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.36
+
+### Patch Changes
+
+- Add server/build preview status recovery helpers so interrupted `sp_...` and `bp_...` preview jobs can be checked later and screenshot artifacts can be downloaded into the workspace.
+
 ## 0.5.35
 
 ### Patch Changes

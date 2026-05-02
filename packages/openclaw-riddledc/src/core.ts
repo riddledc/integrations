@@ -217,6 +217,26 @@ function previewTimeoutResult(
   return result;
 }
 
+function isCompletedPreviewStatus(status: any): boolean {
+  const value = String(status ?? "").toLowerCase();
+  return value === "complete" || value === "completed";
+}
+
+function isTerminalPreviewStatus(status: any): boolean {
+  const value = String(status ?? "").toLowerCase();
+  return [
+    "complete",
+    "completed",
+    "failed",
+    "completed_error",
+    "completed_timeout",
+    "timeout",
+    "timed_out",
+    "cancelled",
+    "canceled",
+  ].includes(value);
+}
+
 async function writeArtifact(
   workspace: string,
   subdir: string,
@@ -636,6 +656,80 @@ async function saveImageOutputs(workspace: string, jobId: string, outputs: any[]
   }
 }
 
+async function previewResultFromStatusData(
+  config: ReturnType<typeof requireConfig>,
+  pathPrefix: string,
+  jobId: string,
+  statusData: any,
+  resultExtras: (statusData: any) => Record<string, any> = () => ({}),
+): Promise<PreviewResult> {
+  const status = statusData?.status ?? "unknown";
+  const terminal = isTerminalPreviewStatus(status);
+  const completed = isCompletedPreviewStatus(status);
+  const label = pathPrefix.slice(1);
+  const result: PreviewResult = {
+    ok: terminal ? completed : true,
+    terminal,
+    job_id: jobId,
+    status,
+    phase: statusData?.phase ?? status,
+    phase_updated_at: statusData?.phase_updated_at,
+    phase_details: statusData?.phase_details,
+    outputs: statusData?.outputs || [],
+    compute_seconds: statusData?.compute_seconds,
+    egress_bytes: statusData?.egress_bytes,
+    ...resultExtras(statusData ?? {}),
+  };
+
+  if (!terminal) {
+    result.message = `Job is still ${status}. Call the status tool again later to recover artifacts when it completes.`;
+  }
+  if (statusData?.error) result.error = statusData.error;
+  if (statusData?.script_error) result.script_error = statusData.script_error;
+  if (terminal && !completed && !result.error && !result.script_error) {
+    result.error = `Job ended with status ${status}`;
+  }
+
+  await saveImageOutputs(config.workspace, jobId, result.outputs, label);
+  result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
+  return result;
+}
+
+async function getPreviewJobStatus(
+  config: RiddleCoreConfig,
+  pathPrefix: string,
+  jobId: string,
+  resultExtras: (statusData: any) => Record<string, any> = () => ({}),
+): Promise<PreviewResult> {
+  let cfg: ReturnType<typeof requireConfig>;
+  try {
+    cfg = requireConfig(config);
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+
+  if (!jobId || typeof jobId !== "string") {
+    return { ok: false, error: "job_id must be a non-empty string" };
+  }
+
+  const endpoint = cfg.baseUrl.replace(/\/$/, "");
+  let statusRes: Response;
+  try {
+    statusRes = await fetchWithRetry(`${endpoint}${pathPrefix}/${jobId}`, {
+      headers: { Authorization: `Bearer ${cfg.apiKey}` },
+    }, PREVIEW_REQUEST_TIMEOUT_MS, `${pathPrefix.slice(1)} status`, { attempts: 2 });
+  } catch (e: any) {
+    return { ok: false, job_id: jobId, error: `Status failed: ${describeError(e)}` };
+  }
+  if (!statusRes.ok) {
+    const err = await statusRes.text().catch(() => "");
+    return { ok: false, job_id: jobId, error: `Status failed: HTTP ${statusRes.status}${err ? ` ${err}` : ""}` };
+  }
+
+  const statusData = await statusRes.json() as any;
+  return previewResultFromStatusData(cfg, pathPrefix, jobId, statusData, resultExtras);
+}
+
 async function pollPreviewJob(
   config: ReturnType<typeof requireConfig>,
   pathPrefix: string,
@@ -663,25 +757,8 @@ async function pollPreviewJob(
     const statusData = await statusRes.json() as any;
     lastStatusData = statusData;
 
-    if (statusData.status === "complete" || statusData.status === "completed" || statusData.status === "failed") {
-      const result: PreviewResult = {
-        ok: statusData.status === "complete" || statusData.status === "completed",
-        job_id: jobId,
-        status: statusData.status,
-        phase: statusData.phase ?? statusData.status,
-        phase_updated_at: statusData.phase_updated_at,
-        phase_details: statusData.phase_details,
-        outputs: statusData.outputs || [],
-        compute_seconds: statusData.compute_seconds,
-        egress_bytes: statusData.egress_bytes,
-        ...resultExtras(statusData),
-      };
-      if (statusData.error) result.error = statusData.error;
-      if (statusData.script_error) result.script_error = statusData.script_error;
-
-      await saveImageOutputs(config.workspace, jobId, result.outputs, pathPrefix.slice(1));
-      result.screenshots = result.outputs.filter((o: any) => /\.(png|jpg|jpeg)$/i.test(o.name));
-      return result;
+    if (isTerminalPreviewStatus(statusData.status)) {
+      return previewResultFromStatusData(config, pathPrefix, jobId, statusData, resultExtras);
     }
 
     await sleep(pollIntervalMs);
@@ -923,6 +1000,13 @@ export async function createServerPreview(
   return pollPreviewJob(cfg, "/v1/server-preview", created.job_id, ((params.timeout || 120) + 60) * 1000, () => ({}));
 }
 
+export async function getServerPreviewStatus(
+  config: RiddleCoreConfig,
+  jobId: string,
+): Promise<PreviewResult> {
+  return getPreviewJobStatus(config, "/v1/server-preview", jobId, () => ({}));
+}
+
 export async function createBuildPreview(
   config: RiddleCoreConfig,
   params: Record<string, any>
@@ -1027,6 +1111,18 @@ export async function createBuildPreview(
   }
 
   return pollPreviewJob(cfg, "/v1/build-preview", created.job_id, ((params.timeout || 180) + 120) * 1000, (statusData) => ({
+    build_duration_ms: statusData.build_duration_ms,
+    ...(statusData.build_log ? { build_log: statusData.build_log } : {}),
+    ...(statusData.container_log ? { container_log: statusData.container_log } : {}),
+    ...(statusData.audit ? { audit: statusData.audit } : {}),
+  }));
+}
+
+export async function getBuildPreviewStatus(
+  config: RiddleCoreConfig,
+  jobId: string,
+): Promise<PreviewResult> {
+  return getPreviewJobStatus(config, "/v1/build-preview", jobId, (statusData) => ({
     build_duration_ms: statusData.build_duration_ms,
     ...(statusData.build_log ? { build_log: statusData.build_log } : {}),
     ...(statusData.container_log ? { container_log: statusData.container_log } : {}),

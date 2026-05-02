@@ -94,6 +94,10 @@ function normalizeBuildArgs(args) {
   };
 }
 
+function normalizeJobId(args) {
+  return args.job_id ?? args.jobId ?? args.id;
+}
+
 async function run(tool, args) {
   const core = await loadCore();
   const config = buildConfig();
@@ -113,8 +117,16 @@ async function run(tool, args) {
     return core.createServerPreview(config, normalizeServerArgs(args));
   }
 
+  if (tool === "riddle_server_preview_status") {
+    return core.getServerPreviewStatus(config, normalizeJobId(args));
+  }
+
   if (tool === "riddle_build_preview") {
     return core.createBuildPreview(config, normalizeBuildArgs(args));
+  }
+
+  if (tool === "riddle_build_preview_status") {
+    return core.getBuildPreviewStatus(config, normalizeJobId(args));
   }
 
   if (tool === "riddle_script") {

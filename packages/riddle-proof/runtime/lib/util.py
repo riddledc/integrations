@@ -10,7 +10,9 @@ RIDDLE_DIRECT_TOOLS = {
     'riddle_preview',
     'riddle_preview_delete',
     'riddle_server_preview',
+    'riddle_server_preview_status',
     'riddle_build_preview',
+    'riddle_build_preview_status',
     'riddle_script',
     'riddle_run',
 }

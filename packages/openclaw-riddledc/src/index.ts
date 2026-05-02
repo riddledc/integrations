@@ -7,6 +7,8 @@ import {
   configFromOpenClawApi,
   createStaticPreview,
   deleteStaticPreview,
+  getBuildPreviewStatus,
+  getServerPreviewStatus,
 } from "./core";
 
 const execFile = promisify(execFileCb);
@@ -1312,6 +1314,21 @@ export default function register(api: PluginApi) {
     { optional: true }
   );
 
+  api.registerTool(
+    {
+      name: "riddle_server_preview_status",
+      description: "Check/recover a server-preview job by ID (sp_...). Use when riddle_server_preview printed a job_id but the local watcher was interrupted or timed out before artifacts were returned. Downloads screenshot outputs into the workspace when available.",
+      parameters: Type.Object({
+        job_id: Type.String({ description: "Server-preview job ID, for example sp_abc123" }),
+      }),
+      async execute(_id: string, params: any) {
+        const result = await getServerPreviewStatus(configFromOpenClawApi(api), params.job_id);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
   // ── riddle_build_preview ──────────────────────────────────────
   api.registerTool(
     {
@@ -1541,6 +1558,21 @@ export default function register(api: PluginApi) {
           ...(lastStatusData?.container_log ? { container_log: lastStatusData.container_log } : {}),
           ...(lastStatusData?.audit ? { audit: lastStatusData.audit } : {}),
         }), null, 2) }] };
+      }
+    },
+    { optional: true }
+  );
+
+  api.registerTool(
+    {
+      name: "riddle_build_preview_status",
+      description: "Check/recover a build-preview job by ID (bp_...). Use when riddle_build_preview printed a job_id but the local watcher was interrupted or timed out before artifacts were returned. Downloads screenshot outputs and returns build/container logs when available.",
+      parameters: Type.Object({
+        job_id: Type.String({ description: "Build-preview job ID, for example bp_abc123" }),
+      }),
+      async execute(_id: string, params: any) {
+        const result = await getBuildPreviewStatus(configFromOpenClawApi(api), params.job_id);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
       }
     },
     { optional: true }
