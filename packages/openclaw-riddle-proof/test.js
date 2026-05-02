@@ -1087,6 +1087,101 @@ assert.equal(inspectResult.artifact_contract?.required?.screenshot, true);
 assert.equal(inspectResult.artifact_production?.image_output_count, 1);
 assert.equal(inspectResult.artifact_usage?.supervisor_review_signals?.includes("semantic-context"), true);
 
+const playableReviewStatePath = path.join(reviewFixture, "riddle-state-playable-static.json");
+const playableWrapperStatePath = path.join(reviewFixture, "wrapper-state-playable-static.json");
+const staticPlayabilityEvidence = {
+  playability: {
+    version: "riddle-proof.playability.v1",
+    input_events: [{ type: "keyboard", key: "ArrowRight" }],
+    state_delta: { changed: true, changed_keys: ["started"], time_delta_ms: 1200 },
+    playfield_delta: { changed_percent: 0.01, changed_pixels: 20, average_delta: 0.02 },
+  },
+};
+writeFileSync(playableReviewStatePath, JSON.stringify({
+  branch: "agent/playable-static-fixture",
+  after_cdn: "https://example.com/after-playable.png",
+  verification_mode: "playable",
+  evidence_bundle: {
+    expected_path: "/games/luge-run",
+    artifact_contract: {
+      verification_mode: "playable",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: true,
+        playability: true,
+        visual_delta: true,
+      },
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+    },
+    after: {
+      screenshot_url: "https://example.com/after-playable.png",
+      supporting_artifacts: {
+        proof_evidence_present: true,
+      },
+      proof_evidence: staticPlayabilityEvidence,
+      visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    },
+    proof_evidence: staticPlayabilityEvidence,
+  },
+  proof_assessment_request: {
+    expected_path: "/games/luge-run",
+    artifact_contract: {
+      verification_mode: "playable",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: true,
+        playability: true,
+        visual_delta: true,
+      },
+    },
+    artifact_usage: { missing_required_signals: [] },
+    visual_delta: { status: "measured", passed: true, changed_pixels: 24000, change_percent: 2.4 },
+    semantic_context: {
+      route: {
+        expected_path: "/games/luge-run",
+        after_observed_path: "/games/luge-run",
+      },
+      after: {
+        headings: ["Luge Run"],
+        buttons: ["Start"],
+        visible_text_sample: "Luge Run Start",
+      },
+    },
+  },
+}, null, 2));
+writeFileSync(playableWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_playable_static",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Make Luge Run feel playable.",
+    engine_state_path: playableReviewStatePath,
+    verification_mode: "playable",
+  },
+  last_checkpoint: "verify_supervisor_judgment",
+  blocker: {
+    code: "main_agent_proof_review_required",
+    checkpoint: "verify_supervisor_judgment",
+    message: "Proof evidence needs judgment.",
+  },
+  iterations: 1,
+  events: [],
+}, null, 2));
+const playableInspect = inspectOpenClawRiddleProof({ state_path: playableWrapperStatePath });
+assert.equal(playableInspect.structured_evidence?.playability_required, true);
+assert.equal(playableInspect.structured_evidence?.playability_ready, false);
+assert.equal(playableInspect.ready_to_ship_candidate, false);
+assert.match(playableInspect.hard_blockers?.join("\n") || "", /playability_assessment/);
+
 const queryRouteStatePath = path.join(reviewFixture, "riddle-state-query-route.json");
 const queryRouteWrapperStatePath = path.join(reviewFixture, "wrapper-state-query-route.json");
 writeFileSync(queryRouteStatePath, JSON.stringify({

@@ -7,6 +7,7 @@ import path from "node:path";
 import {
   appendStageHeartbeat,
   appendRunEvent,
+  assessPlayabilityEvidence,
   applyTerminalMetadata,
   applyPrLifecycleState,
   appendCaptureDiagnostic,
@@ -19,6 +20,7 @@ import {
   isTerminalStatus,
   normalizeTerminalMetadata,
   redactForProofDiagnostics,
+  extractPlayabilityEvidence,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   runRiddleProof,
@@ -34,12 +36,46 @@ import {
 const require = createRequire(import.meta.url);
 const cjs = require("./dist/index.cjs");
 const cjsDiagnostics = require("./dist/diagnostics.cjs");
+const cjsPlayability = require("./dist/playability.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
 assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
+assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
+assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
+
+const playableEvidence = {
+  version: "riddle-proof.playability.v1",
+  input_events: [{ type: "keyboard", key: "ArrowRight" }],
+  state_delta: { changed: true, changed_keys: ["distance", "lean"], time_delta_ms: 900 },
+  playfield_delta: { changed_percent: 8.2, changed_pixels: 18200, average_delta: 4.8 },
+  assertions: {
+    inputAccepted: true,
+    stateChanged: true,
+    playfieldMoved: true,
+  },
+};
+const playableAssessment = assessPlayabilityEvidence({ proof_evidence: { playability: playableEvidence } });
+assert.equal(playableAssessment.passed, true);
+assert.equal(playableAssessment.input_observed, true);
+assert.equal(playableAssessment.state_changed, true);
+assert.equal(playableAssessment.motion_observed, true);
+assert.equal(playableAssessment.time_progressed, true);
+assert.equal(extractPlayabilityEvidence({ proof_evidence: { playability: playableEvidence } })?.version, "riddle-proof.playability.v1");
+
+const staticAssessment = assessPlayabilityEvidence({
+  playability_evidence: {
+    version: "riddle-proof.playability.v1",
+    input_events: [{ type: "pointer" }],
+    state_delta: { changed: true, changed_keys: ["started"], time_delta_ms: 1200 },
+    playfield_delta: { changed_percent: 0.01, changed_pixels: 20, average_delta: 0.02 },
+  },
+});
+assert.equal(staticAssessment.passed, false);
+assert.equal(staticAssessment.motion_observed, false);
+assert.ok(staticAssessment.concerns.includes("playfield/canvas pixels did not measurably change"));
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));

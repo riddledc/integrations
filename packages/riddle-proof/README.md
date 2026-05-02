@@ -158,6 +158,22 @@ transport state, current playhead time, instrument lane readiness, measured
 frame drift, console errors, and screenshots of the intended view. The reviewer
 still decides whether it sounds good.
 
+### Playable / Game Proof
+
+For games, canvas scenes, and interactive toys, use `verification_mode:
+"playable"` or `"gameplay"` when a static screenshot is not enough. The capture
+must prove the experience responds over time:
+
+- accepted keyboard, pointer, or touch input
+- game state or HUD values changed after input
+- elapsed play/animation time progressed
+- non-HUD playfield/canvas pixels changed by a measured threshold
+
+Expose that as `window.__riddleProofEvidence.playability` or
+`playability_evidence` with `version: "riddle-proof.playability.v1"`. A nice
+still frame, including a generated image plate, is supporting evidence only and
+does not satisfy playable proof by itself.
+
 ### Server Preview Usage
 
 Server preview proof is most useful when the request, capture, and PR comment

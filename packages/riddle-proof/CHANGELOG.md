@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.37
+
+### Patch Changes
+
+- Add a reusable playable/gameplay proof contract that requires accepted input, state/time progression, and measured playfield/canvas motion before interactive game proof can pass.
+
 ## 0.5.36
 
 ### Patch Changes

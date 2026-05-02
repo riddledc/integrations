@@ -47,6 +47,7 @@ VISUAL_FIRST_MODES = {
     'visual', 'render', 'interaction', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
 }
+PLAYABILITY_MODES = {'playable', 'gameplay', 'game'}
 PROOF_EVIDENCE_REQUIRED_MODES = {'audio'}
 MIN_VISUAL_DELTA_PERCENT = 0.5
 MIN_VISUAL_CHANGED_PIXELS = 5000
@@ -77,11 +78,13 @@ def normalized_verification_mode(value):
 
 
 def proof_evidence_required_for_mode(verification_mode):
-    return normalized_verification_mode(verification_mode) in PROOF_EVIDENCE_REQUIRED_MODES
+    mode = normalized_verification_mode(verification_mode)
+    return mode in PROOF_EVIDENCE_REQUIRED_MODES or mode in PLAYABILITY_MODES
 
 
 def screenshot_required_for_mode(verification_mode):
-    return normalized_verification_mode(verification_mode) in VISUAL_FIRST_MODES
+    mode = normalized_verification_mode(verification_mode)
+    return mode in VISUAL_FIRST_MODES or mode in PLAYABILITY_MODES
 
 
 def auto_screenshot_for_mode(verification_mode):
@@ -408,6 +411,306 @@ def extract_proof_evidence(payload):
     return evidence
 
 
+PLAYABILITY_EVIDENCE_VERSION = 'riddle-proof.playability.v1'
+PLAYABILITY_ASSESSMENT_VERSION = 'riddle-proof.playability.assessment.v1'
+PLAYABILITY_CONTAINER_KEYS = (
+    'playability', 'playability_evidence', 'playabilityEvidence',
+    'playable', 'gameplay', 'gameplay_evidence', 'gameplayEvidence',
+)
+PLAYABILITY_INPUT_KEYS = (
+    'inputAccepted', 'inputObserved', 'inputReceived', 'controlsWorked',
+    'keyboardWorked', 'pointerWorked', 'touchWorked', 'steeringInputAccepted',
+    'userInputObserved',
+)
+PLAYABILITY_STATE_KEYS = (
+    'stateChanged', 'gameStateChanged', 'playStarted', 'simulationAdvanced',
+    'distanceAdvanced', 'scoreChanged', 'hudChanged', 'positionChanged',
+    'speedChanged',
+)
+PLAYABILITY_MOTION_KEYS = (
+    'motionObserved', 'visualMotion', 'canvasChanged', 'pixelChanged',
+    'playfieldMoved', 'playfieldPixelsChanged', 'nonHudPixelsChanged',
+    'animationAdvanced', 'frameChanged', 'framesChanged',
+)
+PLAYABILITY_TIME_KEYS = (
+    'timeProgressed', 'clockAdvanced', 'animationAdvanced',
+    'simulationAdvanced', 'playStarted',
+)
+PLAYABILITY_PERCENT_KEYS = (
+    'changed_percent', 'change_percent', 'percent_changed', 'diff_percent',
+    'motion_percent', 'pixel_change_percent',
+)
+PLAYABILITY_RATIO_KEYS = (
+    'changed_ratio', 'change_ratio', 'diff_ratio', 'motion_ratio',
+    'pixel_change_ratio',
+)
+PLAYABILITY_PIXEL_KEYS = (
+    'changed_pixels', 'changed_pixel_count', 'diff_pixels', 'motion_pixels',
+    'pixel_delta', 'changedPixels',
+)
+PLAYABILITY_AVG_DELTA_KEYS = (
+    'average_delta', 'avg_delta', 'mean_delta', 'avg_abs_delta',
+    'mean_abs_delta',
+)
+PLAYABILITY_TIME_DELTA_KEYS = (
+    'time_delta_ms', 'elapsed_ms', 'duration_ms', 'sample_duration_ms',
+    'animation_delta_ms',
+)
+PLAYABILITY_THRESHOLDS = {
+    'min_changed_percent': 0.5,
+    'min_changed_pixels': 1000,
+    'min_average_delta': 1,
+    'min_time_delta_ms': 250,
+}
+
+
+def _numeric(value):
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value)
+        except Exception:
+            return None
+    return None
+
+
+def _numeric_from_keys(record, keys):
+    if not isinstance(record, dict):
+        return None
+    for key in keys:
+        value = _numeric(record.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _true_for_any_key(record, keys):
+    return isinstance(record, dict) and any(record.get(key) is True for key in keys)
+
+
+def _percent_from(record):
+    percent = _numeric_from_keys(record, PLAYABILITY_PERCENT_KEYS)
+    if percent is not None:
+        return percent
+    ratio = _numeric_from_keys(record, PLAYABILITY_RATIO_KEYS)
+    if ratio is not None:
+        return ratio * 100 if ratio <= 1 else ratio
+    return None
+
+
+def _parse_json_if_possible(value):
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or text[0] not in '[{':
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+def _has_playability_shape(record):
+    if not isinstance(record, dict):
+        return False
+    if record.get('version') == PLAYABILITY_EVIDENCE_VERSION:
+        return True
+    shape_keys = (
+        'input_events', 'state_delta', 'pixel_delta', 'canvas_delta',
+        'motion_delta', 'playfield_delta', 'time_delta_ms',
+    )
+    if any(key in record for key in shape_keys):
+        return True
+    assertions = record.get('assertions') if isinstance(record.get('assertions'), dict) else record
+    return any(
+        key in assertions
+        for key in (
+            PLAYABILITY_INPUT_KEYS
+            + PLAYABILITY_STATE_KEYS
+            + PLAYABILITY_MOTION_KEYS
+            + PLAYABILITY_TIME_KEYS
+        )
+    )
+
+
+def extract_playability_evidence(value, seen=None, depth=0):
+    if depth > 6 or value is None:
+        return None
+    if seen is None:
+        seen = set()
+    parsed = _parse_json_if_possible(value)
+    if parsed is not None:
+        return extract_playability_evidence(parsed, seen, depth + 1)
+    if isinstance(value, list):
+        ident = id(value)
+        if ident in seen:
+            return None
+        seen.add(ident)
+        for item in value:
+            found = extract_playability_evidence(item, seen, depth + 1)
+            if found is not None:
+                return found
+        return None
+    if not isinstance(value, dict):
+        return None
+    ident = id(value)
+    if ident in seen:
+        return None
+    seen.add(ident)
+    if _has_playability_shape(value):
+        return value
+    for key in PLAYABILITY_CONTAINER_KEYS:
+        if key in value:
+            found = extract_playability_evidence(value.get(key), seen, depth + 1)
+            if found is not None:
+                return found
+            if isinstance(value.get(key), bool):
+                return {'assertions': {key: value.get(key)}}
+    for item in value.values():
+        found = extract_playability_evidence(item, seen, depth + 1)
+        if found is not None:
+            return found
+    return None
+
+
+def assess_playability_evidence(value):
+    evidence = extract_playability_evidence(value)
+    metrics = {}
+    required = {
+        'input': True,
+        'state_change': True,
+        'motion': True,
+        'time_progression': True,
+    }
+    if not isinstance(evidence, dict):
+        return {
+            'version': PLAYABILITY_ASSESSMENT_VERSION,
+            'evidence_present': False,
+            'passed': False,
+            'input_observed': False,
+            'state_changed': False,
+            'motion_observed': False,
+            'time_progressed': False,
+            'concerns': ['playability evidence is missing'],
+            'metrics': metrics,
+            'thresholds': dict(PLAYABILITY_THRESHOLDS),
+            'required': required,
+            'evidence_keys': [],
+        }
+
+    assertions = evidence.get('assertions') if isinstance(evidence.get('assertions'), dict) else evidence
+    input_events = []
+    for key in ('input_events', 'inputs', 'interactions'):
+        if isinstance(evidence.get(key), list):
+            input_events.extend(evidence.get(key))
+    input_count = _numeric_from_keys(evidence, ('input_event_count', 'input_count', 'interaction_count'))
+    input_observed = bool(
+        _true_for_any_key(assertions, PLAYABILITY_INPUT_KEYS)
+        or input_events
+        or (input_count is not None and input_count > 0)
+    )
+
+    state_delta = evidence.get('state_delta') if isinstance(evidence.get('state_delta'), dict) else evidence.get('stateDelta')
+    changed_keys = []
+    if isinstance(state_delta, dict):
+        raw_keys = state_delta.get('changed_keys') or state_delta.get('changedKeys') or []
+        if isinstance(raw_keys, list):
+            changed_keys = raw_keys
+    state_numeric_delta = _numeric_from_keys(evidence, (
+        'distance_delta', 'score_delta', 'position_delta', 'speed_delta', 'hud_delta',
+    ))
+    if changed_keys:
+        metrics['state_changed_keys'] = changed_keys
+    if state_numeric_delta is not None:
+        metrics['state_numeric_delta'] = state_numeric_delta
+    state_changed = bool(
+        _true_for_any_key(assertions, PLAYABILITY_STATE_KEYS)
+        or (isinstance(state_delta, dict) and state_delta.get('changed') is True)
+        or changed_keys
+        or (state_numeric_delta is not None and abs(state_numeric_delta) > 0)
+    )
+
+    motion_observed = _true_for_any_key(assertions, PLAYABILITY_MOTION_KEYS)
+    if not motion_observed:
+        for source in (
+            evidence.get('playfield_delta'), evidence.get('playfieldDelta'),
+            evidence.get('non_hud_delta'), evidence.get('nonHudDelta'),
+            evidence.get('pixel_delta'), evidence.get('pixelDelta'),
+            evidence.get('canvas_delta'), evidence.get('canvasDelta'),
+            evidence.get('motion_delta'), evidence.get('motionDelta'),
+            evidence.get('visual_delta'), evidence.get('visualDelta'),
+            evidence,
+        ):
+            if not isinstance(source, dict):
+                continue
+            percent = _percent_from(source)
+            pixels = _numeric_from_keys(source, PLAYABILITY_PIXEL_KEYS)
+            average_delta = _numeric_from_keys(source, PLAYABILITY_AVG_DELTA_KEYS)
+            if percent is not None:
+                metrics['changed_percent'] = percent
+            if pixels is not None:
+                metrics['changed_pixels'] = pixels
+            if average_delta is not None:
+                metrics['average_delta'] = average_delta
+            motion_observed = bool(
+                (percent is not None and percent >= PLAYABILITY_THRESHOLDS['min_changed_percent'])
+                or (pixels is not None and pixels >= PLAYABILITY_THRESHOLDS['min_changed_pixels'])
+                or (average_delta is not None and average_delta >= PLAYABILITY_THRESHOLDS['min_average_delta'])
+            )
+            if motion_observed:
+                break
+
+    time_delta = _numeric_from_keys(evidence, PLAYABILITY_TIME_DELTA_KEYS)
+    if time_delta is None and isinstance(state_delta, dict):
+        time_delta = _numeric_from_keys(state_delta, PLAYABILITY_TIME_DELTA_KEYS)
+    if time_delta is not None:
+        metrics['time_delta_ms'] = time_delta
+    time_progressed = bool(
+        _true_for_any_key(assertions, PLAYABILITY_TIME_KEYS)
+        or (time_delta is not None and time_delta >= PLAYABILITY_THRESHOLDS['min_time_delta_ms'])
+    )
+
+    explicit_failure = bool(
+        evidence.get('passed') is False
+        or evidence.get('playable') is False
+        or assertions.get('playabilityPassed') is False
+        or any(assertions.get(key) is False for key in (
+            PLAYABILITY_INPUT_KEYS
+            + PLAYABILITY_STATE_KEYS
+            + PLAYABILITY_MOTION_KEYS
+            + PLAYABILITY_TIME_KEYS
+        ))
+    )
+
+    concerns = []
+    if not input_observed:
+        concerns.append('no accepted player input was observed')
+    if not state_changed:
+        concerns.append('game state did not measurably change')
+    if not motion_observed:
+        concerns.append('playfield/canvas pixels did not measurably change')
+    if not time_progressed:
+        concerns.append('play time or animation time did not measurably progress')
+    if explicit_failure:
+        concerns.append('playability evidence includes an explicit failed assertion')
+
+    return {
+        'version': PLAYABILITY_ASSESSMENT_VERSION,
+        'evidence_present': True,
+        'passed': bool(input_observed and state_changed and motion_observed and time_progressed and not explicit_failure),
+        'input_observed': input_observed,
+        'state_changed': state_changed,
+        'motion_observed': motion_observed,
+        'time_progressed': time_progressed,
+        'concerns': concerns,
+        'metrics': metrics,
+        'thresholds': dict(PLAYABILITY_THRESHOLDS),
+        'required': required,
+        'evidence_keys': list(evidence.keys()),
+    }
+
+
 def first_failed_proof_evidence(value):
     if isinstance(value, dict):
         if value.get('proof_evidence_present') is False:
@@ -698,6 +1001,7 @@ def collect_supporting_artifacts(payload):
     structured_result_keys = [k for k in result_keys if k not in ('pageState', 'page_state')]
     console_entries = payload.get('console') or []
     proof_evidence = extract_proof_evidence(payload)
+    playability_assessment = assess_playability_evidence(proof_evidence)
 
     return {
         'image_outputs': image_outputs,
@@ -708,6 +1012,9 @@ def collect_supporting_artifacts(payload):
         'console_entries': len(console_entries),
         'proof_evidence_present': proof_evidence is not None,
         'proof_evidence_sample': compact_value(proof_evidence) if proof_evidence is not None else '',
+        'playability_evidence_present': bool(playability_assessment.get('evidence_present')),
+        'playability_ready': bool(playability_assessment.get('passed')),
+        'playability_assessment': playability_assessment,
         'has_structured_payload': bool(data_outputs or structured_result_keys or proof_evidence is not None),
     }
 
@@ -721,6 +1028,7 @@ def artifact_contract_for_mode(verification_mode):
             'route_semantics': True,
             'screenshot': screenshot_required_for_mode(mode),
             'proof_evidence': proof_evidence_required_for_mode(mode),
+            'playability': mode in PLAYABILITY_MODES,
             'visual_delta': visual_delta_applies(mode),
         },
         'preferred': {
@@ -748,6 +1056,8 @@ def artifact_production_summary(payload, supporting):
         'console_entries': int(supporting.get('console_entries') or 0),
         'structured_result_keys': list(supporting.get('structured_result_keys') or []),
         'proof_evidence_present': bool(supporting.get('proof_evidence_present')),
+        'playability_evidence_present': bool(supporting.get('playability_evidence_present')),
+        'playability_ready': bool(supporting.get('playability_ready')),
         'has_structured_payload': bool(supporting.get('has_structured_payload')),
     }
 
@@ -768,6 +1078,7 @@ def artifact_signal_availability(state, after_observation, supporting, visual_de
         ),
         'structured_payload': bool(supporting.get('has_structured_payload')),
         'proof_evidence': bool(supporting.get('proof_evidence_present')),
+        'playability': bool(supporting.get('playability_ready')),
         'visual_delta': visual_delta_passes_ship_gate(visual_delta),
         'console_summary': bool(supporting.get('console_entries')),
         'json_artifacts': bool(supporting.get('data_outputs')),
@@ -799,6 +1110,8 @@ def artifact_usage_summary(state, after_observation, supporting, visual_delta, r
         capture_quality.append('structured_payload')
     if available.get('proof_evidence'):
         capture_quality.append('proof_evidence')
+    if available.get('playability'):
+        capture_quality.append('playability')
     if available.get('visual_delta'):
         capture_quality.append('visual_delta')
 
@@ -1048,6 +1361,8 @@ def build_semantic_context(state, results, after_observation, expected_path):
 def build_evidence_bundle(state, results, after_payload, after_observation, required_baseline_present, expected_path):
     supporting = collect_supporting_artifacts(after_payload)
     proof_evidence = extract_proof_evidence(after_payload)
+    playability_assessment = assess_playability_evidence(proof_evidence)
+    playability_evidence = extract_playability_evidence(proof_evidence)
     visual_delta = (
         extract_visual_delta(after_payload)
         if visual_delta_applies(state.get('verification_mode'))
@@ -1089,6 +1404,7 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         },
         evidence={
             'visual_delta': visual_delta,
+            'playability_assessment': playability_assessment,
             'semantic_context': semantic_context,
             'artifact_contract': artifact_contract,
             'artifact_usage': artifact_usage,
@@ -1110,10 +1426,14 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
             'observation': after_observation,
             'supporting_artifacts': supporting,
             'proof_evidence': proof_evidence,
+            'playability_evidence': playability_evidence,
+            'playability_assessment': playability_assessment,
             'proof_evidence_sample': compact_value(proof_evidence) if proof_evidence is not None else '',
             'visual_delta': visual_delta,
         },
         'proof_evidence': proof_evidence,
+        'playability_evidence': playability_evidence,
+        'playability_assessment': playability_assessment,
         'proof_evidence_sample': compact_value(proof_evidence) if proof_evidence is not None else '',
         'success_criteria': (state.get('success_criteria') or '').strip(),
         'assertions': state.get('parsed_assertions') or None,
@@ -1135,6 +1455,8 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_basis.append('screenshots')
     if supporting['has_structured_payload']:
         evidence_basis.append('structured-artifacts')
+    if supporting.get('playability_ready'):
+        evidence_basis.append('playability')
     visual_delta = ((evidence_bundle or {}).get('after') or {}).get('visual_delta') or {}
     if visual_delta.get('status') == 'measured':
         evidence_basis.append('visual-delta')
@@ -1167,6 +1489,14 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_bundle['artifact_usage'] = artifact_usage
     visual_delta_blocker = visual_delta_blocker_for_mode(verification_mode, visual_delta)
     hard_blockers = [visual_delta_blocker] if visual_delta_blocker else []
+    if verification_mode in PLAYABILITY_MODES and not supporting.get('playability_ready'):
+        assessment = supporting.get('playability_assessment') or {}
+        concerns = assessment.get('concerns') if isinstance(assessment, dict) else []
+        detail = '; '.join(str(item) for item in concerns[:4]) if isinstance(concerns, list) else ''
+        hard_blockers.append(
+            'playability evidence blocks ready_to_ship for playable/gameplay proof'
+            + (f': {detail}' if detail else '.')
+        )
 
     return {
         'status': 'needs_supervising_agent_assessment',
@@ -1191,6 +1521,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
             'Use semantic_context.route plus headings/buttons/text anchors to ground route and content judgment before treating a screenshot as wrong-route.',
             'For visual/UI modes, use screenshots plus after_observation.details.visible_text_sample, headings, buttons, links, canvas_count, and large_visible_elements to explain what the proof actually shows.',
             'For visual/UI polish, capture success is not proof. If visual_delta.status is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.',
+            'For playable/gameplay proof, screenshots are supporting evidence only. Do not mark ready_to_ship unless playability_assessment.passed is true and the proof shows accepted input, state/time progression, and playfield/canvas pixel motion.',
             'For data/audio/log/metrics/custom modes, judge the structured evidence bundle and proof_evidence_sample directly; screenshots are optional supporting context.',
             'The summary must name the concrete change, the target route/UI, what changed in after evidence, and why the stop condition is satisfied.',
             'Only set escalation_target=human when you conclude the workflow has hit a real wall or is not converging.',

@@ -41,3 +41,7 @@ If `sessions_spawn` is unavailable, keep polling sparse. Dependency setup can le
 - Use `ready_to_ship` only when the captured evidence visibly satisfies the request.
 - If Riddle Proof blocks after producing useful edits, treat that as `proof blocked`, not proof passed. Preserve the diff only as a draft PR marked proof-blocked, include `failure_summary`, `proof_artifact_summary`, `state_path`, and `run_id`, and do not mark or describe the PR as merge-ready.
 - When reporting a blocked or salvaged run, copy the available before/prod baseline artifacts and any after/preview artifacts from `proof_artifact_summary`; if an after screenshot is missing, say that explicitly.
+
+## Playable Proof
+
+For games, canvas scenes, or interactive toys where "looks right" is not enough, request `verification_mode: "playable"` or `"gameplay"`. The proof must include structured playability evidence showing accepted input, state or HUD progression, elapsed play/animation time, and measured non-HUD playfield/canvas pixel motion. A static screenshot or generated scene plate can support visual review, but it is not enough to mark the run ready to ship.
