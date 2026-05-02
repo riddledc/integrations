@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.35
+
+### Patch Changes
+
+- Expose reusable visual proof-session inputs through the OpenClaw wrapper.
+
 ## 0.5.34
 
 ### Patch Changes

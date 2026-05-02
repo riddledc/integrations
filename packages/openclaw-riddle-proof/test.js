@@ -38,6 +38,11 @@ const params = {
   change_request: "Make the checkout confirmation easier to read",
   verification_mode: "visual",
   assertions_json: "{\"must_show_confirmation\":true}",
+  resume_session: "{\"version\":\"riddle-proof.visual-session.v1\",\"session_id\":\"visual-session-demo\",\"fingerprint\":\"abc123\"}",
+  target_image_url: "https://cdn.example.com/spec.png",
+  target_image_hash: "sha256:spec",
+  viewport_matrix_json: "[{\"name\":\"phone\",\"width\":390,\"height\":844}]",
+  deterministic_setup_json: "{\"seed\":\"checkout-visual-v1\"}",
   discord_channel: "000000000000000000",
   discord_thread_id: "111111111111111111",
   discord_message_id: "222222222222222222",
@@ -79,6 +84,11 @@ assert.equal(result.raw?.request?.auto_approve, true);
 assert.equal(result.raw?.request?.leave_draft, true);
 assert.equal(result.raw?.request?.dry_run, true);
 assert.deepEqual(result.raw?.request?.assertions, { must_show_confirmation: true });
+assert.equal(result.raw?.request?.resume_session, "{\"version\":\"riddle-proof.visual-session.v1\",\"session_id\":\"visual-session-demo\",\"fingerprint\":\"abc123\"}");
+assert.equal(result.raw?.request?.target_image_url, "https://cdn.example.com/spec.png");
+assert.equal(result.raw?.request?.target_image_hash, "sha256:spec");
+assert.deepEqual(result.raw?.request?.viewport_matrix, [{ name: "phone", width: 390, height: 844 }]);
+assert.deepEqual(result.raw?.request?.deterministic_setup, { seed: "checkout-visual-v1" });
 assert.equal(result.raw?.request?.integration_context?.source, "discord");
 assert.equal(result.event_count, 1);
 

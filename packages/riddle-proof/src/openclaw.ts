@@ -12,6 +12,11 @@ export interface OpenClawProofedChangeParams {
   success_criteria?: string;
   assertions_json?: string;
   verification_mode?: string;
+  resume_session?: string;
+  target_image_url?: string;
+  target_image_hash?: string;
+  viewport_matrix_json?: string;
+  deterministic_setup_json?: string;
   reference?: "prod" | "before" | "both" | (string & {});
   base_branch?: string;
   before_ref?: string;
@@ -58,6 +63,25 @@ export function parseOpenClawAssertions(value: unknown): JsonValue | undefined {
   }
 }
 
+export function parseOpenClawJsonObjectOrArray(value: unknown, name: string): JsonValue | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") return value as JsonValue;
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${name} is not valid JSON: ${message}`);
+  }
+  if (parsed === null || (typeof parsed !== "object" && !Array.isArray(parsed))) {
+    throw new Error(`${name} must decode to a JSON object or array.`);
+  }
+  return parsed as JsonValue;
+}
+
 function normalizeOpenClawReference(value: unknown): "prod" | "before" | "both" | undefined {
   if (value !== "prod" && value !== "before" && value !== "both") return undefined;
   return value;
@@ -95,6 +119,11 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     success_criteria: params.success_criteria,
     assertions: parseOpenClawAssertions(params.assertions_json),
     verification_mode: params.verification_mode,
+    resume_session: params.resume_session,
+    target_image_url: params.target_image_url,
+    target_image_hash: params.target_image_hash,
+    viewport_matrix: parseOpenClawJsonObjectOrArray(params.viewport_matrix_json, "viewport_matrix_json"),
+    deterministic_setup: parseOpenClawJsonObjectOrArray(params.deterministic_setup_json, "deterministic_setup_json"),
     reference: normalizeOpenClawReference(params.reference),
     base_branch: params.base_branch,
     before_ref: params.before_ref,
