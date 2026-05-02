@@ -46,7 +46,7 @@
   },
   "dependencies": {
     "@riddledc/riddle-proof": "workspace:^",
-    "@sinclair/typebox": "^0.32.0"
+    "@sinclair/typebox": "^0.34.49"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
