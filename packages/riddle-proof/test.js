@@ -27,6 +27,7 @@ import {
 } from "./dist/index.js";
 import {
   parseOpenClawAssertions,
+  parseOpenClawJsonObjectOrArray,
   toRiddleProofRunParams,
 } from "./dist/openclaw.js";
 
@@ -386,6 +387,9 @@ assert.equal(referenceParams.auth_localStorage_json, "{\"session\":\"local\"}");
 assert.equal(referenceParams.auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");
 assert.equal(referenceParams.auth_headers_json, "{\"Authorization\":\"Bearer token\"}");
 assert.equal(parseOpenClawAssertions("plain text assertion"), "plain text assertion");
+assert.deepEqual(parseOpenClawJsonObjectOrArray("[{\"name\":\"tablet\",\"width\":768,\"height\":1024}]", "viewport_matrix_json"), [
+  { name: "tablet", width: 768, height: 1024 },
+]);
 
 const invalidReferenceParams = toRiddleProofRunParams({
   repo: "davisdiehl/lilarcade",
@@ -408,6 +412,25 @@ assert.equal(toRiddleProofRunParams({
   ship_after_verify: true,
   leave_draft: true,
 }).leave_draft, true);
+
+const visualSessionParams = toRiddleProofRunParams({
+  repo: "davisdiehl/lilarcade",
+  change_request: "Iterate Luge Run against the reusable visual spec.",
+  verification_mode: "visual",
+  resume_session: "{\"version\":\"riddle-proof.visual-session.v1\",\"session_id\":\"luge-visual-v1\",\"fingerprint\":\"sha256:abc\"}",
+  target_image_url: "https://cdn.example.com/luge-spec.png",
+  target_image_hash: "sha256:luge-spec",
+  viewport_matrix_json: "[{\"name\":\"phone\",\"width\":390,\"height\":844},{\"name\":\"ipad-mini\",\"width\":768,\"height\":1024}]",
+  deterministic_setup_json: "{\"seed\":\"luge-visual-v1\"}",
+});
+assert.equal(visualSessionParams.resume_session, "{\"version\":\"riddle-proof.visual-session.v1\",\"session_id\":\"luge-visual-v1\",\"fingerprint\":\"sha256:abc\"}");
+assert.equal(visualSessionParams.target_image_url, "https://cdn.example.com/luge-spec.png");
+assert.equal(visualSessionParams.target_image_hash, "sha256:luge-spec");
+assert.deepEqual(visualSessionParams.viewport_matrix, [
+  { name: "phone", width: 390, height: 844 },
+  { name: "ipad-mini", width: 768, height: 1024 },
+]);
+assert.deepEqual(visualSessionParams.deterministic_setup, { seed: "luge-visual-v1" });
 
 const referenceState = createRunState({
   state_path: referenceRun.harness.riddle_state_path,

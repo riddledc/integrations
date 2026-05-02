@@ -272,6 +272,9 @@ export function createOpenClawRiddleProofResult(
       verification_mode: request.verification_mode,
       integration_source: request.integration_context?.source,
       has_assertions: request.assertions !== undefined,
+      has_resume_session: Boolean(request.resume_session),
+      has_target_image: Boolean(request.target_image_url || request.target_image_hash),
+      has_viewport_matrix: request.viewport_matrix !== undefined,
     },
   });
 
@@ -3409,6 +3412,11 @@ export const riddleProofChangeParameters = Type.Object({
   success_criteria: optionalString("Criteria the proof evidence must satisfy."),
   assertions_json: optionalString("Optional JSON assertions string. Non-JSON text is preserved as a string assertion."),
   verification_mode: optionalString("Proof type, such as visual, interaction, data, json, audio, logs, or metrics."),
+  resume_session: optionalString("Reusable visual proof-session seed to resume from. Accepts inline JSON, a local JSON path, or a URL."),
+  target_image_url: optionalString("Target/spec image URL for visual proof-session reuse."),
+  target_image_hash: optionalString("Optional target/spec image hash used to lock proof-session reuse."),
+  viewport_matrix_json: optionalString("JSON object or array describing the viewport/device matrix to reuse across proof rounds."),
+  deterministic_setup_json: optionalString("JSON object or array describing deterministic setup data to reuse across proof rounds."),
   reference: optionalString("Baseline reference source. Valid values are prod, before, or both; other text is ignored as a baseline selector and preserved as metadata."),
   base_branch: optionalString("Base branch for comparison or pull request targeting."),
   before_ref: optionalString("Explicit before ref for comparison."),
