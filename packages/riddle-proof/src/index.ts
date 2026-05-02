@@ -5,3 +5,4 @@ export * from "./runner";
 export * from "./engine-harness";
 export * from "./diagnostics";
 export * from "./proof-session";
+export * from "./playability";

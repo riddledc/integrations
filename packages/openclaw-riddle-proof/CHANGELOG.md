@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.78
+
+### Patch Changes
+
+- Add playable/gameplay proof review gates so OpenClaw cannot auto-advance a static screenshot or generated image plate without structured playability evidence.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.37
+
 ## 0.4.77
 
 ### Patch Changes

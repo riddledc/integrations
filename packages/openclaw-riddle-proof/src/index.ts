@@ -8,6 +8,9 @@ import {
   createRunResult,
   createRunState,
   createRunStatusSnapshot,
+  assessPlayabilityEvidence,
+  extractPlayabilityEvidence,
+  isRiddleProofPlayabilityMode,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   setRunStatus,
@@ -1997,6 +2000,7 @@ function buildProofInspection(
     stringValue(supportingArtifacts.proof_evidence_sample) ||
     compactValue(proofEvidence);
   const proofEvidenceConcernList = proofEvidenceConcerns(proofEvidence, proofEvidenceSample);
+  const requiredSignals = recordValue(recordValue(artifactContract)?.required);
   const semanticContext = buildSemanticContext(assessmentRequest, evidenceBundle, fullState);
   const route = recordValue(semanticContext.route);
   const imageArtifacts: Array<Record<string, unknown>> = [];
@@ -2013,16 +2017,42 @@ function buildProofInspection(
   const visibleChange = buildVisibleChangeSummary(semanticContext);
   const verificationMode = fullState.verification_mode || wrapperState.request.verification_mode;
   const screenshotRequired = artifactContractRequiresScreenshot(artifactContract, verificationMode);
-  const visualDeltaRequired = recordValue(recordValue(artifactContract)?.required)?.visual_delta === true || screenshotRequired;
+  const visualDeltaRequired = requiredSignals?.visual_delta === true || screenshotRequired;
   const visualDeltaReady = !visualDeltaRequired || (visualDelta?.status === "measured" && visualDelta?.passed === true);
   const hardBlockers = visualDeltaReady
     ? []
     : [`visual_delta.status=${stringValue(visualDelta?.status) || "missing"} blocks ready_to_ship for visual/UI proof`];
+  const playabilityRequired = requiredSignals?.playability === true || isRiddleProofPlayabilityMode(verificationMode);
+  const playabilityEvidence = extractPlayabilityEvidence(
+    evidenceBundle.playability_evidence,
+    after.playability_evidence,
+    proofEvidence,
+    supportingArtifacts.playability_evidence,
+  );
+  const computedPlayabilityAssessment = assessPlayabilityEvidence(playabilityEvidence);
+  const existingPlayabilityAssessment =
+    recordValue(evidenceBundle.playability_assessment) ||
+    recordValue(after.playability_assessment) ||
+    recordValue(supportingArtifacts.playability_assessment);
+  const playabilityAssessment = computedPlayabilityAssessment.evidence_present
+    ? computedPlayabilityAssessment
+    : (existingPlayabilityAssessment || computedPlayabilityAssessment);
+  const playabilityReady = !playabilityRequired || playabilityAssessment.passed === true;
+  if (playabilityRequired && !playabilityReady) {
+    const playabilityConcerns = listValue(playabilityAssessment.concerns, 4)
+      .map((item) => stringValue(item))
+      .filter(Boolean);
+    hardBlockers.push(
+      `playability_assessment.passed=false blocks ready_to_ship for playable/gameplay proof${
+        playabilityConcerns.length ? `: ${playabilityConcerns.join("; ")}` : ""
+      }`,
+    );
+  }
   const hasAfterScreenshot = imageArtifacts.some((item) => item.role === "after" || item.name === "after");
   const missingRequiredSignals = listValue(recordValue(artifactUsage)?.missing_required_signals, 12)
     .map((item) => stringValue(item))
     .filter(Boolean);
-  const proofEvidenceRequired = recordValue(recordValue(artifactContract)?.required)?.proof_evidence === true;
+  const proofEvidenceRequired = requiredSignals?.proof_evidence === true;
   const proofEvidencePresent = Boolean(proofEvidence !== null && proofEvidence !== undefined) || Boolean(supportingArtifacts.proof_evidence_present);
   const readyCandidate = Boolean(
     routeMatches(route) &&
@@ -2030,6 +2060,7 @@ function buildProofInspection(
     (!screenshotRequired || hasAfterScreenshot) &&
     (!proofEvidenceRequired || proofEvidencePresent) &&
     missingRequiredSignals.length === 0 &&
+    playabilityReady &&
     visualDeltaReady,
   );
   const readyToShipCandidate = readyCandidate && proofEvidenceConcernList.length === 0;
@@ -2092,6 +2123,9 @@ function buildProofInspection(
       proof_evidence_sample: proofEvidenceSample,
       proof_evidence_has_concerns: proofEvidenceConcernList.length > 0,
       proof_evidence_concerns: proofEvidenceConcernList,
+      playability_required: playabilityRequired,
+      playability_ready: playabilityReady,
+      playability_assessment: playabilityAssessment,
       data_outputs: listValue(supportingArtifacts.data_outputs, 12),
       result_keys: listValue(supportingArtifacts.result_keys, 12),
       structured_result_keys: listValue(supportingArtifacts.structured_result_keys, 12),
@@ -2197,6 +2231,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "Confirm whether the after screenshot visibly satisfies the requested change and route/content still match the target.",
           "Reject subtle, ambiguous, wrong-route, blank, loading-only, or incidental screenshot changes.",
           "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
+          "For playable/gameplay modes, do not choose ready_to_ship unless structured_evidence.playability_ready is true; a static screenshot or generated plate alone is not proof of playability.",
           "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
           "If visual_delta is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof.",
           `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
@@ -2208,6 +2243,7 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "Reject missing required signals, ambiguous evidence, wrong-route captures, or evidence that only proves implementation intent.",
           "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For structured modes, do not require screenshots when artifact_contract.required.screenshot is false, but do require the declared proof evidence signals.",
+          "For playable/gameplay modes, require structured playability evidence showing accepted input, state/time progression, and canvas/playfield pixel motion.",
           `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the required proof artifacts are convincing.`,
         ],
     response_schema: {
@@ -2265,6 +2301,13 @@ function inspectionVisualDeltaReady(inspection: Record<string, unknown>) {
   return visualDelta?.status === "measured" && visualDelta?.passed === true;
 }
 
+function inspectionPlayabilityReady(inspection: Record<string, unknown>) {
+  const structuredEvidence = recordValue(inspection.structured_evidence);
+  return structuredEvidence?.playability_required === true
+    ? structuredEvidence?.playability_ready === true
+    : true;
+}
+
 function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
   const structuredEvidence = recordValue(inspection.structured_evidence);
   const screenshotRequired = inspectionRequiresScreenshot(inspection);
@@ -2275,6 +2318,7 @@ function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
     (!screenshotRequired || afterScreenshotArtifact(inspection)) &&
     inspectionMissingRequiredSignals(inspection).length === 0 &&
     structuredEvidence?.proof_evidence_has_concerns !== true &&
+    inspectionPlayabilityReady(inspection) &&
     inspectionVisualDeltaReady(inspection),
   );
 }
@@ -2286,6 +2330,7 @@ function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
     "The inspection packet marked the proof as a ready_to_ship_candidate.",
     "The target route matched across available observations.",
     "Required artifact signals are present for the verification mode.",
+    "Playable/gameplay evidence passed when required by the verification mode.",
     "Measured visual delta passed when required by the verification mode.",
     "No structured proof evidence concerns were reported.",
   ];
@@ -2306,6 +2351,7 @@ function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
       route_matched: inspection.route_matched,
       visual_delta: inspection.visual_delta || null,
       screenshot_required: screenshotRequired,
+      playability: recordValue(inspection.structured_evidence)?.playability_assessment || null,
       image_artifact_count: Array.isArray(inspection.image_artifacts) ? inspection.image_artifacts.length : 0,
     },
   };

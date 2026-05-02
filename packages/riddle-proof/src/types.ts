@@ -23,6 +23,8 @@ export type RiddleProofVerificationMode =
   | "proof"
   | "visual"
   | "interaction"
+  | "playable"
+  | "gameplay"
   | "render"
   | "data"
   | "json"
@@ -246,6 +248,7 @@ export interface RiddleProofEvidenceBundle {
   artifacts?: EvidenceArtifact[];
   proof_session?: RiddleProofVisualSession;
   proof_evidence?: unknown;
+  playability_evidence?: unknown;
   proof_evidence_sample?: unknown;
   assertions?: JsonValue;
   semantic_context?: Record<string, unknown>;

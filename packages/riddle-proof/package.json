@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof",
-  "version": "0.5.36",
+  "version": "0.5.37",
   "description": "Reusable Riddle Proof contracts and helpers for evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",
@@ -54,6 +54,11 @@
       "import": "./dist/proof-session.js",
       "require": "./dist/proof-session.cjs"
     },
+    "./playability": {
+      "types": "./dist/playability.d.ts",
+      "import": "./dist/playability.js",
+      "require": "./dist/playability.cjs"
+    },
     "./openclaw": {
       "types": "./dist/openclaw.d.ts",
       "import": "./dist/openclaw.js",
@@ -82,7 +87,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/runner.ts src/engine-harness.ts src/diagnostics.ts src/proof-session.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/runner.ts src/engine-harness.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js && node proof-run.test.js"

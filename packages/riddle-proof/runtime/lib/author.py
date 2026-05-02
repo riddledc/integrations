@@ -105,7 +105,7 @@ def authored_proof_plan(state, reference, target_path, baselines, wait_for_selec
     if wait_for_selector:
         lines.append('Stabilize capture on selector: ' + wait_for_selector)
     lines.append('After evidence should load the recon-confirmed route and collect the evidence type required by verification_mode without rediscovering baseline context.')
-    lines.append('For visual modes this usually means a stable screenshot; for data, audio, log, metric, or custom modes it may mean structured proofEvidence, JSON artifacts, console observations, or assertions.')
+    lines.append('For visual modes this usually means a stable screenshot; for playable/gameplay modes it must also prove accepted input, state/time progression, and playfield/canvas pixel motion; for data, audio, log, metric, or custom modes it may mean structured proofEvidence, JSON artifacts, console observations, or assertions.')
     lines.append('Revise this draft only when the supervising agent concludes the proof needs richer interactions, better sense data, or tighter framing.')
     return '\n'.join(lines)
 
@@ -151,6 +151,7 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'Return the authored packet via author_packet_json when possible. You may also set proof_plan, capture_script, server_path, and wait_for_selector directly.',
             'Keep capture_script concise Playwright statements.',
             'For visual/UI proof, include saveScreenshot(\'after-proof\') exactly once.',
+            'For playable/gameplay proof, start the experience, send keyboard or pointer input, sample state before/after, measure non-HUD playfield/canvas pixel deltas across time, and set window.__riddleProofEvidence.playability or playability_evidence with version riddle-proof.playability.v1.',
             'For data/audio/log/metric/custom proof, screenshots are optional; set window.__riddleProofEvidence inside page.evaluate to a JSON-serializable object with the measured observations the verifier should judge.',
             'Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence outside page.evaluate; the Riddle worker context may not expose those globals safely.',
             'Do not begin capture_script with page.goto unless an in-app navigation is genuinely required after the preview opens the target route.',
