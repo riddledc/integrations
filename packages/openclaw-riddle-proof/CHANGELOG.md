@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.77
+
+### Patch Changes
+
+- Rebundle the Riddle Proof runtime so OpenClaw installs pick up preview status recovery direct-mode helpers.
+
 ## 0.4.76
 
 ### Patch Changes
