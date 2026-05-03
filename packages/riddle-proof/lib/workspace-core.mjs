@@ -15,6 +15,8 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const DEFAULT_RIDDLE_PROOF_SCRATCH_ROOT = "/var/tmp/riddle-proof";
+
 function commandEnv() {
   return { ...process.env, HOME: "/root" };
 }
@@ -56,6 +58,26 @@ export function sanitizeFragment(value, fallback = "item") {
 export function uniqueToken(now = new Date()) {
   const stamp = now.toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   return `${stamp}-${randomUUID().slice(0, 8)}`;
+}
+
+function envFlag(name, defaultValue = false) {
+  const raw = String(process.env[name] || "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return defaultValue;
+}
+
+export function riddleProofScratchRoot() {
+  const configured = (process.env.RIDDLE_PROOF_SCRATCH_ROOT || "").trim();
+  if (configured) return path.resolve(configured);
+  if (envFlag("RIDDLE_PROOF_USE_TMP_SCRATCH", false)) {
+    return path.join("/tmp", "riddle-proof");
+  }
+  return DEFAULT_RIDDLE_PROOF_SCRATCH_ROOT;
+}
+
+export function defaultRiddleProofWorktreeRoot() {
+  return path.join(riddleProofScratchRoot(), ".riddle-proof-worktrees");
 }
 
 export function workspaceRoots({ workspaceRoot = "", currentRepoDir = "" } = {}) {
@@ -332,7 +354,7 @@ function dependencyCacheRoot(projectDir) {
   if (worktreeIndex >= 0) {
     return path.join(resolved.slice(0, worktreeIndex), ".riddle-proof-deps-cache");
   }
-  return path.join(path.dirname(resolved), ".riddle-proof-deps-cache");
+  return path.join(riddleProofScratchRoot(), ".riddle-proof-deps-cache");
 }
 
 function dependencyCacheKey(fingerprint, installCmd) {
@@ -496,6 +518,15 @@ async function main() {
       return;
     case "dependency-fingerprint":
       ok({ fingerprint: computeDependencyFingerprint(payload.projectDir) });
+      return;
+    case "scratch-root":
+      ok({
+        scratchRoot: riddleProofScratchRoot(),
+        worktreeRoot: defaultRiddleProofWorktreeRoot(),
+      });
+      return;
+    case "dependency-cache-root":
+      ok({ cacheRoot: dependencyCacheRoot(payload.projectDir || process.cwd()) });
       return;
     default:
       throw new Error(`Unsupported command: ${command}`);

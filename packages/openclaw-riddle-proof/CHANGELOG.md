@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.79
+
+### Patch Changes
+
+- Move generated Riddle Proof worktrees and dependency caches to disk-backed scratch storage by default and record scratch disk snapshots during setup.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.38
+
 ## 0.4.78
 
 ### Patch Changes

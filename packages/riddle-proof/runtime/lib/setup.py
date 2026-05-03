@@ -1,9 +1,9 @@
 """Setup: create worktrees, install deps, validate args, write state.
 
-Idempotent — safe to re-run. Creates per-run worktrees under the active
-local temp storage by default:
-  /tmp/.riddle-proof-worktrees/riddle-proof-<run_id>-before
-  /tmp/.riddle-proof-worktrees/riddle-proof-<run_id>-after
+Idempotent — safe to re-run. Creates per-run worktrees under disk-backed
+scratch storage by default:
+  /var/tmp/riddle-proof/.riddle-proof-worktrees/riddle-proof-<run_id>-before
+  /var/tmp/riddle-proof/.riddle-proof-worktrees/riddle-proof-<run_id>-after
 """
 
 import json, subprocess as sp, os, sys, shutil, time, tempfile
@@ -24,6 +24,7 @@ SAFE_RUN_ID = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '-' for ch in 
 
 AFTER_WORKTREE_BRANCH = 'riddle-proof/' + SAFE_RUN_ID + '-after'
 LEGACY_WORKTREE_DIRS = ('/tmp/riddle-proof-before', '/tmp/riddle-proof-after')
+DEFAULT_SCRATCH_ROOT = '/var/tmp/riddle-proof'
 
 if branch.startswith('riddle-proof/'):
     raise SystemExit(
@@ -158,17 +159,26 @@ def compatible_reuse_source(source_dir, target_dirs):
 
 
 def resolve_worktree_root(repo_dir):
-    configured = (s.get('worktree_root') or os.environ.get('RIDDLE_PROOF_WORKTREE_ROOT') or '').strip()
+    configured = (os.environ.get('RIDDLE_PROOF_WORKTREE_ROOT') or '').strip()
     if configured:
         return os.path.abspath(os.path.expanduser(configured))
+    state_worktree_root = (s.get('worktree_root') or '').strip()
+    legacy_tmp_root = os.path.abspath(os.path.join(tempfile.gettempdir(), '.riddle-proof-worktrees'))
+    if state_worktree_root and os.path.abspath(os.path.expanduser(state_worktree_root)) != legacy_tmp_root:
+        return os.path.abspath(os.path.expanduser(state_worktree_root))
     if os.environ.get('RIDDLE_PROOF_USE_WORKSPACE_WORKTREE_ROOT', '').strip().lower() in ('1', 'true', 'yes'):
         repo_parent = os.path.dirname(os.path.abspath(repo_dir))
         return os.path.join(repo_parent, '.riddle-proof-worktrees')
 
-    # Proof worktrees are scratch data. Keep them on local temp storage by
-    # default so dependency cache materialization does not crawl across EFS or
-    # other shared workspace filesystems.
-    return os.path.join(tempfile.gettempdir(), '.riddle-proof-worktrees')
+    # Proof worktrees and dependency caches are large generated data. Keep
+    # them on disk-backed scratch storage by default so tmpfs /tmp remains
+    # available for small state files and short-lived artifacts.
+    scratch_root = (s.get('scratch_root') or os.environ.get('RIDDLE_PROOF_SCRATCH_ROOT') or '').strip()
+    if scratch_root:
+        return os.path.join(os.path.abspath(os.path.expanduser(scratch_root)), '.riddle-proof-worktrees')
+    if os.environ.get('RIDDLE_PROOF_USE_TMP_SCRATCH', '').strip().lower() in ('1', 'true', 'yes'):
+        return os.path.join(tempfile.gettempdir(), 'riddle-proof', '.riddle-proof-worktrees')
+    return os.path.join(DEFAULT_SCRATCH_ROOT, '.riddle-proof-worktrees')
 
 
 def env_flag(name, default=False):
@@ -200,6 +210,33 @@ def disk_free_bytes(path):
         return shutil.disk_usage(probe or tempfile.gettempdir()).free
     except Exception:
         return 0
+
+
+def disk_snapshot(path):
+    probe = path
+    while probe and not os.path.exists(probe):
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            break
+        probe = parent
+    try:
+        usage = shutil.disk_usage(probe or tempfile.gettempdir())
+    except Exception as exc:
+        return {
+            'path': path,
+            'probe_path': probe or tempfile.gettempdir(),
+            'error': str(exc)[:200],
+        }
+    used = usage.total - usage.free
+    percent_used = round((used / usage.total) * 100, 1) if usage.total else 0
+    return {
+        'path': path,
+        'probe_path': probe or tempfile.gettempdir(),
+        'total_bytes': usage.total,
+        'used_bytes': used,
+        'free_bytes': usage.free,
+        'percent_used': percent_used,
+    }
 
 
 def prune_scratch_worktrees(worktree_root, keep_dirs, repo_dir):
@@ -475,16 +512,24 @@ s['branch'] = branch
 s['target_branch'] = target_branch
 s['ship_target_branch'] = target_branch
 s['worktree_root'] = WORKTREE_ROOT
+s['scratch_root'] = os.path.dirname(WORKTREE_ROOT)
+try:
+    cache_result = workspace_core('dependency-cache-root', {'projectDir': AFTER_DIR}, timeout=30)
+    s['dependency_cache_root'] = cache_result.get('cacheRoot') or ''
+except Exception as exc:
+    s['dependency_cache_root_error'] = str(exc)[:200]
 capture_hint = apply_capture_hint(s)
 if capture_hint and capture_hint.get('applied_fields'):
     print('Applied last-good capture hint: ' + ', '.join(capture_hint.get('applied_fields') or []))
 save_state(s)
 print('Prepared workspace via ' + setup.get('source', 'workspace_core') + ': ' + repo_dir)
 os.makedirs(WORKTREE_ROOT, exist_ok=True)
+s['scratch_disk_before_cleanup'] = disk_snapshot(WORKTREE_ROOT)
 scratch_cleanup = prune_scratch_worktrees(WORKTREE_ROOT, (BEFORE_DIR, AFTER_DIR), repo_dir)
 if scratch_cleanup.get('removed') or scratch_cleanup.get('errors'):
     print('Scratch cleanup: removed ' + str(len(scratch_cleanup.get('removed') or [])) + ' stale proof worktree(s)')
 s['scratch_cleanup'] = scratch_cleanup
+s['scratch_disk_after_cleanup'] = disk_snapshot(WORKTREE_ROOT)
 save_state(s)
 cleanup_legacy_branch_worktrees(repo_dir, base_branch)
 
@@ -605,6 +650,7 @@ s['dependency_install'] = {
     'before': before_dep_status,
     'after': after_dep_status,
 }
+s['scratch_disk_after_setup'] = disk_snapshot(WORKTREE_ROOT)
 if not (s.get('capture_script') or '').strip():
     s['proof_plan_status'] = 'pending_recon'
 save_state(s)

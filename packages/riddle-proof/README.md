@@ -82,21 +82,25 @@ updates Discord, OpenClaw, GitHub, or another integration.
 
 The packaged proof-run setup uses isolated git worktrees for before and after
 states. By default those worktrees now live under
-`/tmp/.riddle-proof-worktrees`, with dependency caches under the matching local
-temp root. This keeps repeated `node_modules` cache materialization on local
-scratch storage instead of walking large dependency trees on EFS or other shared
-workspace filesystems.
+`/var/tmp/riddle-proof/.riddle-proof-worktrees`, with dependency caches under
+the matching disk-backed scratch root. This keeps repeated `node_modules` cache
+materialization off tmpfs `/tmp` and away from EFS or other shared workspace
+filesystems.
 
 Set `RIDDLE_PROOF_WORKTREE_ROOT` to choose an explicit location. Set
 `RIDDLE_PROOF_USE_WORKSPACE_WORKTREE_ROOT=1` to keep the previous behavior of
-placing proof worktrees next to the active repository.
+placing proof worktrees next to the active repository. Set
+`RIDDLE_PROOF_SCRATCH_ROOT` to choose the scratch parent, or
+`RIDDLE_PROOF_USE_TMP_SCRATCH=1` to force tmp-backed scratch for a short-lived
+test.
 
 When local scratch storage is low, setup prunes stale
 `riddle-proof-*` worktrees from the scratch root before creating the next run.
 This preserves the dependency cache for speed while avoiding old failed runs
-filling `/tmp`. Set `RIDDLE_PROOF_KEEP_SCRATCH_WORKTREES=1` to disable that
-cleanup for debugging, or tune the low-space threshold with
-`RIDDLE_PROOF_MIN_SCRATCH_FREE_MB`.
+filling the scratch disk. Setup also records scratch disk snapshots in the run
+state so disk blockers are visible during proof inspection. Set
+`RIDDLE_PROOF_KEEP_SCRATCH_WORKTREES=1` to disable that cleanup for debugging,
+or tune the low-space threshold with `RIDDLE_PROOF_MIN_SCRATCH_FREE_MB`.
 
 ## Capture Diagnostics
 

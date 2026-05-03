@@ -1258,6 +1258,42 @@ assert.equal(fingerprintResult.ok, true);
 assert.equal(typeof fingerprintResult.fingerprint, "string");
 assert.ok(fingerprintResult.fingerprint.length > 10);
 
+const defaultScratchEnv = {
+  ...process.env,
+  RIDDLE_PROOF_SCRATCH_ROOT: "",
+  RIDDLE_PROOF_USE_TMP_SCRATCH: "",
+};
+const scratchRootResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "scratch-root",
+  "{}",
+], { encoding: "utf-8", env: defaultScratchEnv }));
+assert.equal(scratchRootResult.ok, true);
+assert.equal(scratchRootResult.scratchRoot, "/var/tmp/riddle-proof");
+assert.equal(scratchRootResult.worktreeRoot, "/var/tmp/riddle-proof/.riddle-proof-worktrees");
+
+const defaultCacheRootResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "dependency-cache-root",
+  JSON.stringify({ projectDir: "/var/tmp/riddle-proof/.riddle-proof-worktrees/example-after" }),
+], { encoding: "utf-8", env: defaultScratchEnv }));
+assert.equal(defaultCacheRootResult.ok, true);
+assert.equal(defaultCacheRootResult.cacheRoot, "/var/tmp/riddle-proof/.riddle-proof-deps-cache");
+
+const tmpScratchRootResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "scratch-root",
+  "{}",
+], {
+  encoding: "utf-8",
+  env: {
+    ...process.env,
+    RIDDLE_PROOF_SCRATCH_ROOT: "",
+    RIDDLE_PROOF_USE_TMP_SCRATCH: "1",
+  },
+}));
+assert.equal(tmpScratchRootResult.scratchRoot, "/tmp/riddle-proof");
+
 function writeEmptyNpmFixture(projectDir) {
   mkdirSync(projectDir, { recursive: true });
   writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
