@@ -7,6 +7,19 @@
   "bundledSkills": [
     "riddle-proof"
   ],
+  "activation": {
+    "onStartup": false
+  },
+  "contracts": {
+    "tools": [
+      "riddle_proof_change",
+      "riddle_proof_status",
+      "riddle_proof_wait",
+      "riddle_proof_inspect",
+      "riddle_proof_sync",
+      "riddle_proof_review"
+    ]
+  },
   "capabilities": {
     "network": {
       "egress": [],
