@@ -9,11 +9,13 @@ import {
   createRunState,
   createRunStatusSnapshot,
   assessPlayabilityEvidence,
+  checkpointSummaryFromState,
   extractPlayabilityEvidence,
   isRiddleProofPlayabilityMode,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   setRunStatus,
+  statePathsForRunState,
   type RiddleProofAgentAdapter,
   type RiddleProofCheckpointResponse,
   type RiddleProofCheckpointVisibility,
@@ -131,6 +133,8 @@ export interface RiddleProofSyncParams {
 export interface RiddleProofStatusParams {
   state_path: string;
   debug?: boolean;
+  include_packet?: boolean;
+  include_state_excerpt?: boolean;
 }
 
 export interface RiddleProofWaitParams {
@@ -400,6 +404,8 @@ function createHarnessStatePath(stateDir = "/tmp") {
 }
 
 function persistRunState(state: RiddleProofRunState) {
+  state.state_paths = statePathsForRunState(state);
+  state.checkpoint_summary = checkpointSummaryFromState(state);
   if (!state.state_path) return;
   mkdirSync(path.dirname(state.state_path), { recursive: true });
   writeFileSync(state.state_path, JSON.stringify(state, null, 2) + "\n");
@@ -1564,8 +1570,44 @@ function buildProofReportingContext(
     proof_artifact_summary: proofArtifactSummary,
     failure_summary: failureSummary,
     pr_handoff_policy: buildPrHandoffPolicy(snapshot, wrapperState, proofArtifactSummary, failureSummary),
-    checkpoint_packet: wrapperState?.checkpoint_packet || snapshot.checkpoint_packet || null,
   };
+}
+
+function compactCheckpointPacket(packet: unknown, includeStateExcerpt = false) {
+  const record = recordValue(packet);
+  if (!record) return null;
+  return compactRecordValue({
+    version: record.version,
+    run_id: record.run_id,
+    stage: record.stage,
+    checkpoint: record.checkpoint,
+    kind: record.kind,
+    summary: record.summary,
+    question: record.question,
+    change_request: record.change_request,
+    artifacts: Array.isArray(record.artifacts) ? record.artifacts.slice(0, 16) : undefined,
+    allowed_decisions: record.allowed_decisions,
+    routing_hint: record.routing_hint,
+    resume_token: record.resume_token,
+    response_schema: record.response_schema,
+    state_excerpt: includeStateExcerpt ? record.state_excerpt : undefined,
+    evidence_excerpt: includeStateExcerpt ? record.evidence_excerpt : undefined,
+    created_at: record.created_at,
+  });
+}
+
+function prepareStatusPayload(
+  status: RiddleProofRunStatusSnapshot & Record<string, unknown>,
+  options: { debug?: boolean; include_packet?: boolean; include_state_excerpt?: boolean } = {},
+) {
+  const payload: Record<string, unknown> = { ...status };
+  const packet = recordValue(payload.checkpoint_packet);
+  if (packet && options.include_packet === true) {
+    payload.checkpoint_packet = compactCheckpointPacket(packet, options.include_state_excerpt === true);
+  } else {
+    delete payload.checkpoint_packet;
+  }
+  return payload;
 }
 
 function compactDebugEvent(event: unknown) {
@@ -2208,6 +2250,10 @@ function buildProofInspection(
     proof_artifact_summary: reportingContext.proof_artifact_summary,
     failure_summary: reportingContext.failure_summary,
     pr_handoff_policy: reportingContext.pr_handoff_policy,
+    state_paths: statePathsForRunState(wrapperState, wrapperState.request.engine_state_path),
+    checkpoint_summary: checkpointSummaryFromState(wrapperState, wrapperState.request.engine_state_path),
+    checkpoint_packet: wrapperState.checkpoint_packet || null,
+    proof_contract: wrapperState.proof_contract || null,
     visible_change: visibleChange,
     semantic_context: semanticContext,
     ready_to_ship_candidate: readyToShipCandidate,
@@ -2665,10 +2711,19 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   };
 }
 
-export function readOpenClawRiddleProofStatus(state_path: string, options: { debug?: boolean } = {}): RiddleProofRunStatusSnapshot | null {
+export function readOpenClawRiddleProofStatus(
+  state_path: string,
+  options: { debug?: boolean; include_packet?: boolean; include_state_excerpt?: boolean } = {},
+): RiddleProofRunStatusSnapshot | null {
   const snapshot = readRiddleProofRunStatus(state_path);
   if (!snapshot) return null;
   const wrapperState = readRunState(state_path);
+  const statePaths = wrapperState
+    ? statePathsForRunState(wrapperState)
+    : { wrapper_state_path: state_path, engine_state_path: null, resume_state_path: null };
+  const checkpointSummary = wrapperState
+    ? checkpointSummaryFromState(wrapperState)
+    : snapshot.checkpoint_summary;
   const implementationAgent = summarizeImplementationAgent(wrapperState);
   const implementationGap = implementationGapOrigin(snapshot, implementationAgent);
   const baseCheckpoint = checkpointStatus({
@@ -2692,6 +2747,8 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
       : undefined;
     const baseStatus = {
       ...snapshot,
+      state_paths: statePaths,
+      checkpoint_summary: checkpointSummary,
       package_metadata: riddleProofPackageMetadata(),
       request_metadata: requestMetadataFor(wrapperState?.request, null),
       monitor_contract: monitorContract,
@@ -2706,7 +2763,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
       ),
     } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
     if (options.debug) baseStatus.debug = buildDebugPayload(wrapperState, null);
-    return baseStatus;
+    return prepareStatusPayload(baseStatus, options) as unknown as RiddleProofRunStatusSnapshot;
   }
 
   const engineState = readJsonRecord(engineStatePath);
@@ -2739,6 +2796,18 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
   const reportingContext = buildProofReportingContext(snapshot, wrapperState, engineState);
   const status = {
     ...snapshot,
+    state_paths: statePathsForRunState(wrapperState || ({
+      state_path,
+      request: { engine_state_path: engineStatePath },
+      status: snapshot.status,
+      created_at: snapshot.updated_at,
+      updated_at: snapshot.updated_at,
+      iterations: snapshot.iterations,
+      events: [],
+    } as unknown as RiddleProofRunState), engineStatePath),
+    checkpoint_summary: wrapperState
+      ? checkpointSummaryFromState(wrapperState, engineStatePath)
+      : checkpointSummary,
     package_metadata: riddleProofPackageMetadata(),
     request_metadata: requestMetadataFor(wrapperState?.request, engineState),
     monitor_contract: monitorContract,
@@ -2779,7 +2848,7 @@ export function readOpenClawRiddleProofStatus(state_path: string, options: { deb
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);
-  return status;
+  return prepareStatusPayload(status, options) as unknown as RiddleProofRunStatusSnapshot;
 }
 
 function wakeKindForStatus(status: Record<string, unknown>): OpenClawRiddleProofWakeKind {
@@ -2996,7 +3065,7 @@ export async function processOpenClawRiddleProofWakeMonitorOnce(
   if (!context) {
     return { ok: false, action: "not_registered", state_path: statePath };
   }
-  const status = readOpenClawRiddleProofStatus(statePath);
+  const status = readOpenClawRiddleProofStatus(statePath, { include_packet: true });
   if (!status) {
     return { ok: false, action: "not_found", state_path: statePath };
   }
@@ -3137,7 +3206,7 @@ function recoverOpenClawRiddleProofWakeMonitors(
   for (const statePath of discoverWakeMonitorStatePaths(stateDir)) {
     const state = readRunState(statePath);
     if (!latestWakeContextFor(state)) continue;
-    const status = readOpenClawRiddleProofStatus(statePath);
+    const status = readOpenClawRiddleProofStatus(statePath, { include_packet: true });
     if (!status) continue;
     const classification = classifyOpenClawRiddleProofWake(status as RiddleProofRunStatusSnapshot & Record<string, unknown>);
     if (classification.should_dispatch && wakeAlreadyDispatched(state, classification.dedupe_key)) continue;
@@ -3662,6 +3731,8 @@ export const riddleProofChangeParameters = Type.Object({
 export const riddleProofStatusParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
   debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics for debugging slow or stuck runs."),
+  include_packet: optionalBoolean("When true, include a compact checkpoint packet for resume/checkpoint authoring. Defaults to false for cheap status polling."),
+  include_state_excerpt: optionalBoolean("When true with include_packet, include packet state/evidence excerpts. Defaults to false."),
 });
 
 export const riddleProofWaitParameters = Type.Object({
@@ -3749,7 +3820,11 @@ export default function register(api: any) {
         `otherwise poll status and stop when monitor_should_continue is false.`,
       parameters: riddleProofStatusParameters,
       async execute(_id: string, params: RiddleProofStatusParams) {
-        const snapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
+        const snapshot = readOpenClawRiddleProofStatus(params.state_path, {
+          debug: params.debug === true,
+          include_packet: params.include_packet === true,
+          include_state_excerpt: params.include_state_excerpt === true,
+        });
         const result = snapshot || {
           ok: false,
           status: "not_found",

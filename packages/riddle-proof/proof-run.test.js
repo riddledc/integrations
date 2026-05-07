@@ -841,8 +841,28 @@ async function run() {
   const storedCheckpointState = readJson(checkpointHarnessStatePath);
   assert(storedCheckpointState.status === 'awaiting_checkpoint', 'wrapper state should persist awaiting_checkpoint');
   assert(storedCheckpointState.checkpoint_packet.resume_token === yieldedCheckpoint.checkpoint_packet.resume_token, 'wrapper state should persist the same resume token');
+  assert(storedCheckpointState.checkpoint_summary.pending === true, 'wrapper state should persist compact checkpoint summary');
+  assert(storedCheckpointState.checkpoint_summary.latest_resume_token === yieldedCheckpoint.checkpoint_packet.resume_token, 'checkpoint summary should expose latest resume token');
+  assert(storedCheckpointState.state_paths.wrapper_state_path === checkpointHarnessStatePath, 'wrapper state path should be labeled explicitly');
+  assert(storedCheckpointState.state_paths.engine_state_path === checkpointEngineStatePath, 'engine state path should be labeled explicitly');
   assert(storedCheckpointState.checkpoint_history.length === 1, 'wrapper state should record checkpoint packet history');
 
+  const authoredCheckpointResponse = {
+    version: 'riddle-proof.checkpoint_response.v1',
+    run_id: yieldedCheckpoint.run_id,
+    checkpoint: yieldedCheckpoint.checkpoint_packet.checkpoint,
+    resume_token: yieldedCheckpoint.checkpoint_packet.resume_token,
+    decision: 'author_packet',
+    summary: 'Authored a deterministic checkpoint packet.',
+    payload: {
+      proof_plan: 'Use the checkpoint packet proof plan.',
+      capture_script: "await saveScreenshot('after-proof');",
+      artifact_contract: { required: { screenshot: true, playability: true } },
+      stop_condition: 'The after screenshot and playability evidence satisfy the request.',
+      verdict_dimensions: { visual: 'match target', interaction: 'playable' },
+    },
+    created_at: '2026-05-07T00:00:00.000Z',
+  };
   const resumedCheckpoint = await harnessMod.runRiddleProofEngineHarness({
     request: {
       repo: 'riddledc/example',
@@ -853,19 +873,7 @@ async function run() {
     },
     state_path: checkpointHarnessStatePath,
     engine: checkpointEngine,
-    checkpoint_response: {
-      version: 'riddle-proof.checkpoint_response.v1',
-      run_id: yieldedCheckpoint.run_id,
-      checkpoint: yieldedCheckpoint.checkpoint_packet.checkpoint,
-      resume_token: yieldedCheckpoint.checkpoint_packet.resume_token,
-      decision: 'author_packet',
-      summary: 'Authored a deterministic checkpoint packet.',
-      payload: {
-        proof_plan: 'Use the checkpoint packet proof plan.',
-        capture_script: "await saveScreenshot('after-proof');",
-      },
-      created_at: '2026-05-07T00:00:00.000Z',
-    },
+    checkpoint_response: authoredCheckpointResponse,
     checkpoint_mode: 'yield',
     checkpoint_visibility: 'manual',
     config: { defaultShipMode: 'none' },
@@ -874,7 +882,30 @@ async function run() {
   assert(checkpointEngineCalls.some((call) => call.author_packet_json), 'engine should receive author_packet_json after checkpoint response');
   const resumedCheckpointState = readJson(checkpointHarnessStatePath);
   assert(!resumedCheckpointState.checkpoint_packet, 'checkpoint packet should clear after accepted response');
+  assert(resumedCheckpointState.checkpoint_summary.pending === false, 'checkpoint summary should clear pending after accepted response');
+  assert(resumedCheckpointState.checkpoint_summary.latest_decision === 'author_packet', 'checkpoint summary should expose accepted decision');
+  assert(resumedCheckpointState.checkpoint_summary.token_matches === true, 'checkpoint summary should report matching token');
+  assert(resumedCheckpointState.proof_contract.proof_plan === 'Use the checkpoint packet proof plan.', 'accepted author packet should persist proof plan');
+  assert(resumedCheckpointState.proof_contract.artifact_contract.required.playability === true, 'accepted author packet should persist artifact contract');
   assert(resumedCheckpointState.checkpoint_history.length === 2, 'wrapper state should record both packet and response');
+
+  const duplicateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise checkpoint protocol.',
+      engine_state_path: checkpointEngineStatePath,
+      harness_state_path: checkpointHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: checkpointHarnessStatePath,
+    engine: checkpointEngine,
+    checkpoint_response: authoredCheckpointResponse,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  assert(duplicateCheckpointResponse.status === 'blocked', 'duplicate checkpoint response should be deterministic, not silently rerun');
+  assert(duplicateCheckpointResponse.blocker.code === 'checkpoint_response_duplicate', 'duplicate checkpoint response should get a distinct blocker');
 
   const verifyAwaitingJudgment = await localEngine.execute({ action: 'run', state_path: reconLoopStatePath, continue_from_checkpoint: true });
   assert(verifyAwaitingJudgment.checkpoint === 'verify_supervisor_judgment', 'verify should stop for supervising-agent proof assessment after capturing evidence');

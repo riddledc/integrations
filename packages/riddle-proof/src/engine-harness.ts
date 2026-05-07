@@ -28,7 +28,11 @@ import {
 import {
   authorPacketPayloadFromCheckpointResponse,
   buildAuthorCheckpointPacket,
+  checkpointSummaryFromState,
+  isDuplicateCheckpointResponse,
   normalizeCheckpointResponse,
+  proofContractFromAuthorCheckpointResponse,
+  statePathsForRunState,
 } from "./checkpoint";
 import type {
   RiddleProofBlocker,
@@ -221,6 +225,8 @@ function shouldPreserveFinalizedRunState(filePath: string, incoming: RiddleProof
 }
 
 function persist(state: RiddleProofRunState) {
+  state.state_paths = statePathsForRunState(state);
+  state.checkpoint_summary = checkpointSummaryFromState(state);
   if (!state.state_path) return;
   if (shouldPreserveFinalizedRunState(state.state_path, state)) return;
   writeJson(state.state_path, state);
@@ -551,6 +557,10 @@ function terminalResult(
   summary: string,
   raw: Record<string, unknown> = {},
 ): RiddleProofRunResult {
+  if (result) {
+    const terminalStage = stageFromCheckpoint(result);
+    if (terminalStage !== "setup") state.current_stage = terminalStage;
+  }
   setRunStatus(state, status);
   if (isProtectedFinalStatus(status)) state.finalized = true;
   const metadata = normalizeTerminalMetadata({
@@ -578,10 +588,12 @@ function blockerResult(
   blocker: RiddleProofBlocker,
 ): RiddleProofRunResult {
   state.blocker = blocker;
+  const blockerStage = nonEmptyString(recordValue(blocker.details)?.stage) as RiddleProofStage | undefined;
+  const stage = blockerStage || stageFromCheckpoint(result || { checkpoint: blocker.checkpoint || undefined });
   recordEvent(state, {
     kind: "run.blocked",
     checkpoint: blocker.checkpoint || result?.checkpoint || null,
-    stage: stageFromCheckpoint(result || {}),
+    stage,
     summary: blocker.message,
     details: {
       code: blocker.code,
@@ -690,17 +702,30 @@ function checkpointResponseContinuation(
         code: "checkpoint_response_invalid",
         checkpoint: packet?.checkpoint || state.last_checkpoint || null,
         message: "Checkpoint response was not a valid riddle-proof.checkpoint_response.v1 object.",
-        details: { checkpoint_packet: packet || null },
+        details: { checkpoint_packet: packet || null, checkpoint_summary: checkpointSummaryFromState(state) },
       },
     };
   }
   if (!packet) {
+    if (isDuplicateCheckpointResponse(state, response)) {
+      return {
+        blocker: {
+          code: "checkpoint_response_duplicate",
+          checkpoint: response.checkpoint,
+          message: "Checkpoint response was already accepted and there is no pending checkpoint packet to resume.",
+          details: {
+            response,
+            checkpoint_summary: checkpointSummaryFromState(state),
+          },
+        },
+      };
+    }
     return {
       blocker: {
         code: "checkpoint_response_without_packet",
         checkpoint: response.checkpoint,
         message: "A checkpoint response was supplied, but the run state has no pending checkpoint packet.",
-        details: { response },
+        details: { response, checkpoint_summary: checkpointSummaryFromState(state) },
       },
     };
   }
@@ -711,6 +736,7 @@ function checkpointResponseContinuation(
         checkpoint: packet.checkpoint,
         message: "Checkpoint response does not match the pending checkpoint packet.",
         details: {
+          stage: packet.stage,
           expected: { run_id: packet.run_id, checkpoint: packet.checkpoint },
           actual: { run_id: response.run_id, checkpoint: response.checkpoint },
         },
@@ -723,7 +749,11 @@ function checkpointResponseContinuation(
         code: "checkpoint_response_resume_token_mismatch",
         checkpoint: packet.checkpoint,
         message: "Checkpoint response resume_token does not match the pending checkpoint packet.",
-        details: { expected_resume_token: packet.resume_token, actual_resume_token: response.resume_token || null },
+        details: {
+          stage: packet.stage,
+          expected_resume_token: packet.resume_token,
+          actual_resume_token: response.resume_token || null,
+        },
       },
     };
   }
@@ -741,10 +771,11 @@ function checkpointResponseContinuation(
           code: "checkpoint_author_packet_missing",
           checkpoint: packet.checkpoint,
           message: "Checkpoint response decision=author_packet did not include a proof_plan and capture_script payload.",
-          details: { response },
+          details: { stage: packet.stage, response },
         },
       };
     }
+    state.proof_contract = proofContractFromAuthorCheckpointResponse(response, packet, payload);
     appendCheckpointResponse(state, response);
     return { next: { ...base, author_packet_json: jsonParam(payload) } };
   }
@@ -760,7 +791,7 @@ function checkpointResponseContinuation(
       code: `checkpoint_response_${response.decision}`,
       checkpoint: packet.checkpoint,
       message: response.summary || `Checkpoint response stopped the run with decision=${response.decision}.`,
-      details: { response },
+      details: { stage: packet.stage, response },
     },
   };
 }

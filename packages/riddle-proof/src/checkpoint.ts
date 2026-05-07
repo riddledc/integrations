@@ -3,9 +3,12 @@ import type {
   RiddleProofCheckpointArtifact,
   RiddleProofCheckpointPacket,
   RiddleProofCheckpointResponse,
+  RiddleProofCheckpointSummary,
+  RiddleProofProofContract,
   RiddleProofRunParams,
   RiddleProofRunState,
   RiddleProofStage,
+  RiddleProofStatePaths,
 } from "./types";
 import { compactRecord, nonEmptyString, recordValue } from "./result";
 
@@ -26,10 +29,30 @@ function jsonCloneRecord(value: unknown): Record<string, unknown> | undefined {
   }
 }
 
+function jsonCloneValue(value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
 function compactText(value: unknown, limit = 1600): string | undefined {
   const text = nonEmptyString(value);
   if (!text) return undefined;
   return text.length <= limit ? text : `${text.slice(0, limit - 20).trimEnd()}...`;
+}
+
+export function statePathsForRunState(
+  state: RiddleProofRunState,
+  engineStatePath?: string | null,
+): RiddleProofStatePaths {
+  return compactRecord({
+    wrapper_state_path: state.state_path || state.request.harness_state_path || null,
+    engine_state_path: engineStatePath || state.request.engine_state_path || null,
+    resume_state_path: engineStatePath || state.request.engine_state_path || null,
+  }) as RiddleProofStatePaths;
 }
 
 function responseSchemaForAuthorPacket() {
@@ -210,6 +233,56 @@ export function normalizeCheckpointResponse(value: unknown): RiddleProofCheckpoi
   }) as RiddleProofCheckpointResponse;
 }
 
+export function checkpointSummaryFromState(
+  state: RiddleProofRunState,
+  engineStatePath?: string | null,
+): RiddleProofCheckpointSummary {
+  const history = state.checkpoint_history || [];
+  const packets = history.filter((entry) => entry.packet);
+  const responses = history.filter((entry) => entry.response);
+  const latestPacketEntry = [...history].reverse().find((entry) => entry.packet);
+  const latestResponseEntry = [...history].reverse().find((entry) => entry.response);
+  const latestPacket = state.checkpoint_packet || latestPacketEntry?.packet;
+  const latestResponse = latestResponseEntry?.response;
+  const latestResumeToken = latestPacket?.resume_token || null;
+  const latestResponseToken = latestResponse?.resume_token || null;
+  const tokenMatches =
+    latestResumeToken && latestResponseToken ? latestResumeToken === latestResponseToken :
+      latestResumeToken || latestResponseToken ? false :
+        null;
+  return compactRecord({
+    pending: Boolean(state.checkpoint_packet),
+    packet_count: packets.length,
+    response_count: responses.length,
+    latest_checkpoint: state.checkpoint_packet?.checkpoint || latestResponse?.checkpoint || state.last_checkpoint || null,
+    latest_stage: state.checkpoint_packet?.stage || latestResponse?.continue_with_stage || state.current_stage || null,
+    latest_kind: state.checkpoint_packet?.kind || latestPacket?.kind || null,
+    latest_decision: latestResponse?.decision || null,
+    latest_packet_summary: latestPacket?.summary || null,
+    latest_response_summary: latestResponse?.summary || null,
+    latest_resume_token: latestResumeToken,
+    latest_response_token: latestResponseToken,
+    token_matches: tokenMatches,
+    last_packet_at: latestPacketEntry?.ts || null,
+    last_response_at: latestResponseEntry?.ts || null,
+    state_paths: statePathsForRunState(state, engineStatePath),
+  }) as RiddleProofCheckpointSummary;
+}
+
+export function isDuplicateCheckpointResponse(
+  state: RiddleProofRunState,
+  response: RiddleProofCheckpointResponse,
+) {
+  const latestResponse = [...(state.checkpoint_history || [])].reverse().find((entry) => entry.response)?.response;
+  if (!latestResponse) return false;
+  return (
+    latestResponse.run_id === response.run_id &&
+    latestResponse.checkpoint === response.checkpoint &&
+    latestResponse.resume_token === response.resume_token &&
+    latestResponse.decision === response.decision
+  );
+}
+
 export function authorPacketPayloadFromCheckpointResponse(
   response: RiddleProofCheckpointResponse,
 ): Record<string, unknown> | null {
@@ -220,4 +293,49 @@ export function authorPacketPayloadFromCheckpointResponse(
   const candidate = nested || payload;
   if (!nonEmptyString(candidate.proof_plan) || !nonEmptyString(candidate.capture_script)) return null;
   return candidate;
+}
+
+export function proofContractFromAuthorCheckpointResponse(
+  response: RiddleProofCheckpointResponse,
+  packet: RiddleProofCheckpointPacket,
+  payload: Record<string, unknown>,
+): RiddleProofProofContract {
+  const refinedInputs = recordValue(payload.refined_inputs) || {};
+  return compactRecord({
+    version: "riddle-proof.proof-contract.v1",
+    checkpoint: packet.checkpoint,
+    source_response: compactRecord({
+      run_id: response.run_id,
+      checkpoint: response.checkpoint,
+      resume_token: response.resume_token,
+      decision: response.decision,
+      summary: response.summary,
+      created_at: response.created_at,
+    }),
+    proof_plan: nonEmptyString(payload.proof_plan),
+    capture_script: nonEmptyString(payload.capture_script),
+    artifact_contract: jsonCloneRecord(payload.artifact_contract),
+    assertions: jsonCloneValue(payload.assertions),
+    baseline_understanding:
+      jsonCloneRecord(payload.baseline_understanding) ||
+      jsonCloneRecord(payload.recon_baseline_understanding) ||
+      jsonCloneRecord(packet.state_excerpt?.recon_baseline_understanding),
+    route_assumptions: compactRecord({
+      server_path:
+        nonEmptyString(refinedInputs.server_path) ||
+        nonEmptyString(payload.server_path) ||
+        nonEmptyString(packet.state_excerpt?.server_path),
+      wait_for_selector:
+        nonEmptyString(refinedInputs.wait_for_selector) ||
+        nonEmptyString(payload.wait_for_selector) ||
+        nonEmptyString(packet.state_excerpt?.wait_for_selector),
+      reference: nonEmptyString(refinedInputs.reference) || nonEmptyString(payload.reference),
+      expected_path: nonEmptyString(payload.expected_path) || nonEmptyString(refinedInputs.expected_path),
+    }),
+    stop_condition: nonEmptyString(payload.stop_condition),
+    rationale: jsonCloneValue(payload.rationale),
+    verdict_dimensions: jsonCloneRecord(payload.verdict_dimensions),
+    payload: jsonCloneRecord(payload),
+    created_at: timestamp(),
+  }) as RiddleProofProofContract;
 }

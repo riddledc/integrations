@@ -201,6 +201,54 @@ export interface RiddleProofCheckpointResponse {
   created_at: string;
 }
 
+export interface RiddleProofStatePaths {
+  wrapper_state_path?: string | null;
+  engine_state_path?: string | null;
+  resume_state_path?: string | null;
+}
+
+export interface RiddleProofCheckpointSummary {
+  pending: boolean;
+  packet_count: number;
+  response_count: number;
+  latest_checkpoint?: string | null;
+  latest_stage?: RiddleProofStage | null;
+  latest_kind?: string | null;
+  latest_decision?: string | null;
+  latest_packet_summary?: string | null;
+  latest_response_summary?: string | null;
+  latest_resume_token?: string | null;
+  latest_response_token?: string | null;
+  token_matches?: boolean | null;
+  last_packet_at?: string | null;
+  last_response_at?: string | null;
+  state_paths?: RiddleProofStatePaths;
+}
+
+export interface RiddleProofProofContract {
+  version: "riddle-proof.proof-contract.v1";
+  checkpoint?: string | null;
+  source_response?: {
+    run_id?: string;
+    checkpoint?: string;
+    resume_token?: string;
+    decision?: string;
+    summary?: string;
+    created_at?: string;
+  };
+  proof_plan?: string;
+  capture_script?: string;
+  artifact_contract?: Record<string, unknown>;
+  assertions?: unknown;
+  baseline_understanding?: Record<string, unknown>;
+  route_assumptions?: Record<string, unknown>;
+  stop_condition?: string;
+  rationale?: unknown;
+  verdict_dimensions?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface IntegrationContext {
   source?: "openclaw" | "discord" | "github" | "cli" | "riddle" | (string & {});
   channel_id?: string;
@@ -266,6 +314,9 @@ export interface RiddleProofRunState {
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
   checkpoint_packet?: RiddleProofCheckpointPacket;
+  checkpoint_summary?: RiddleProofCheckpointSummary;
+  state_paths?: RiddleProofStatePaths;
+  proof_contract?: RiddleProofProofContract;
   checkpoint_history?: Array<{
     ts: string;
     packet?: RiddleProofCheckpointPacket;
@@ -308,6 +359,9 @@ export interface RiddleProofRunResult {
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
   checkpoint_packet?: RiddleProofCheckpointPacket;
+  checkpoint_summary?: RiddleProofCheckpointSummary;
+  state_paths?: RiddleProofStatePaths;
+  proof_contract?: RiddleProofProofContract;
   proof_session?: RiddleProofVisualSession;
   evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
@@ -341,6 +395,9 @@ export interface RiddleProofRunStatusSnapshot {
   stage_elapsed_ms?: number;
   blocker?: RiddleProofBlocker;
   checkpoint_packet?: RiddleProofCheckpointPacket;
+  checkpoint_summary?: RiddleProofCheckpointSummary;
+  state_paths?: RiddleProofStatePaths;
+  proof_contract?: RiddleProofProofContract;
   latest_event?: RiddleProofEvent;
 }
 
