@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.40
+
+### Patch Changes
+
+- a26a41e: Harden checkpoint status reporting with compact checkpoint summaries, explicit wrapper/engine/resume state paths, persisted proof-authoring contracts, deterministic duplicate response handling, and compact-by-default OpenClaw status output.
+
 ## 0.5.39
 
 ### Patch Changes
