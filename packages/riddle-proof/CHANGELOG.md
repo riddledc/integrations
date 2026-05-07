@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.41
+
+### Patch Changes
+
+- dc3e9b1: Make checkpoint response retries idempotent when blocking decisions retain the pending checkpoint packet, and expose duplicate response counts in compact checkpoint summaries.
+
 ## 0.5.40
 
 ### Patch Changes

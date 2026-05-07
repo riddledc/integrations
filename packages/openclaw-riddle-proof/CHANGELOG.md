@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.82
+
+### Patch Changes
+
+- dc3e9b1: Make checkpoint response retries idempotent when blocking decisions retain the pending checkpoint packet, and expose duplicate response counts in compact checkpoint summaries.
+- Updated dependencies [dc3e9b1]
+  - @riddledc/riddle-proof@0.5.41
+
 ## 0.4.81
 
 ### Patch Changes
