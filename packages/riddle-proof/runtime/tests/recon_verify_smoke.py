@@ -566,8 +566,106 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     })
     assert unmeasured_delta['status'] == 'unmeasured'
     assert unmeasured_delta['passed'] is None
+    assert unmeasured_delta['diagnostic']['after_screenshot_present'] is True
+    assert 'After screenshot artifact is present' in unmeasured_delta['reason']
 
-    return {'ok': True, 'telemetry_valid': quality['valid'], 'weak_delta_passed': weak_delta['passed']}
+    canvas_payload = {
+        'bodyTextLength': 7,
+        'visibleTextSample': 'Luge',
+        'interactiveElements': 1,
+        'visibleInteractiveElements': 1,
+        'pathname': '/games/luge-run',
+        'title': 'Luge Run',
+        'headings': [],
+        'buttons': [],
+        'links': [],
+        'canvasCount': 1,
+        'largeVisibleElements': [{'tag': 'canvas', 'text': '', 'area': 420000}],
+    }
+    canvas_quality = namespace['evaluate_capture_quality']({
+        'ok': True,
+        'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'console': ['RIDDLE_PROOF_STATE:' + json.dumps(canvas_payload)],
+    }, '/games/luge-run', 'visual')
+    assert canvas_quality['valid'] is True, canvas_quality
+    assert canvas_quality['details']['canvas_capture_ready'] is True
+    assert canvas_quality['details']['body_text_ready'] is True
+    assert 'blank/near-blank' not in canvas_quality['reason']
+
+    playability_payload = {
+        **canvas_payload,
+        'interactiveElements': 0,
+        'visibleInteractiveElements': 0,
+        'largeVisibleElements': [],
+    }
+    playability_evidence = {
+        'input_events': [{'type': 'pointerdown'}],
+        'state_delta': {'changed': True, 'changed_keys': ['distance']},
+        'canvas_delta': {'changed_pixels': 18000},
+        'time_delta_ms': 1300,
+    }
+    playable_quality = namespace['evaluate_capture_quality']({
+        'ok': True,
+        'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
+        'console': [
+            'RIDDLE_PROOF_STATE:' + json.dumps(playability_payload),
+            'RIDDLE_PROOF_EVIDENCE:' + json.dumps({'playability': playability_evidence}),
+        ],
+    }, '/games/luge-run', 'playable')
+    assert playable_quality['valid'] is True, playable_quality
+    assert playable_quality['details']['playability_ready'] is True
+    assert playable_quality['details']['interactive_ready'] is True
+
+    return {
+        'ok': True,
+        'telemetry_valid': quality['valid'],
+        'weak_delta_passed': weak_delta['passed'],
+        'canvas_valid': canvas_quality['valid'],
+        'playable_valid': playable_quality['valid'],
+    }
+
+
+def run_recon_quality_accepts_canvas_first_routes():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-recon-canvas-quality-'))
+    state_path = tempdir / 'state.json'
+    try:
+        write_state(state_path, {
+            'after_worktree': str(tempdir),
+            'before_worktree': str(tempdir),
+        })
+        with temporary_env(RIDDLE_PROOF_STATE_FILE=str(state_path)):
+            sys.modules.pop('util', None)
+            source = RECON_PATH.read_text()
+            helpers_source = source.split('\ndef clean_next_cache', 1)[0]
+            namespace = {'__file__': str(RECON_PATH)}
+            exec(compile(helpers_source, str(RECON_PATH), 'exec'), namespace)
+        canvas_payload = {
+            'bodyTextLength': 4,
+            'visibleTextSample': 'Game',
+            'interactiveElements': 1,
+            'visibleInteractiveElements': 1,
+            'pathname': '/games/luge-run',
+            'title': 'Luge Run',
+            'headings': [],
+            'buttons': [],
+            'links': [],
+            'canvasCount': 1,
+            'largeVisibleElements': [{'tag': 'canvas', 'text': '', 'area': 420000}],
+        }
+        quality = namespace['evaluate_capture_quality']({
+            'ok': True,
+            'screenshots': [{'name': 'before.png', 'url': 'https://cdn.example.com/before.png'}],
+            'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/before.png'}],
+            'console': ['RIDDLE_PROOF_STATE:' + json.dumps(canvas_payload)],
+        }, '/games/luge-run')
+        assert quality['valid'] is True, quality
+        assert quality['details']['canvas_capture_ready'] is True
+        assert 'blank/near-blank' not in quality['reason']
+        return {'ok': True, 'valid': quality['valid']}
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
 
 
 def load_util_with_fake(fake: FakeRiddle):
@@ -1992,6 +2090,7 @@ if __name__ == '__main__':
         'implement_records_detection_when_changes_missing': run_implement_records_detection_when_changes_missing(),
         'implement_ignores_tool_noise_when_detecting_changes': run_implement_ignores_tool_noise_when_detecting_changes(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
+        'recon_quality_accepts_canvas_first_routes': run_recon_quality_accepts_canvas_first_routes(),
         'recon_then_author_request': run_recon_then_author_request(),
         'recon_preserves_query_route': run_recon_preserves_query_route(),
         'recon_route_literal_preference': run_recon_prefers_route_literals_over_import_paths(),

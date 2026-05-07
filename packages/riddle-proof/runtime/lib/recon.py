@@ -33,6 +33,7 @@ import subprocess as sp
 MAX_RECON_ATTEMPTS = 4
 MIN_BODY_TEXT_LENGTH = 50
 MIN_INTERACTIVE_ELEMENTS = 1
+MIN_CANVAS_AREA = 50000
 HYDRATION_WAIT_MS = 1500
 PAGE_STATE_PREFIX = 'RIDDLE_PROOF_STATE:'
 PROOF_EVIDENCE_PREFIX = 'RIDDLE_PROOF_EVIDENCE:'
@@ -423,6 +424,45 @@ def has_enriched_page_state(page_state):
     )
 
 
+def numeric_value(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip().rstrip('%').replace(',', '')
+        if not text:
+            return None
+        try:
+            return float(text)
+        except Exception:
+            return None
+    return None
+
+
+def canvas_capture_signal(page_state):
+    if not isinstance(page_state, dict):
+        return {
+            'canvas_ready': False,
+            'canvas_count': 0,
+            'large_canvas_area': 0,
+        }
+    large_canvas_area = 0
+    for item in list_value(page_state.get('largeVisibleElements')):
+        if not isinstance(item, dict) or item.get('tag') != 'canvas':
+            continue
+        area = numeric_value(item.get('area')) or 0
+        if area > large_canvas_area:
+            large_canvas_area = area
+    canvas_count = int(numeric_value(page_state.get('canvasCount')) or 0)
+    return {
+        'canvas_ready': bool(canvas_count > 0 and large_canvas_area >= MIN_CANVAS_AREA),
+        'canvas_count': canvas_count,
+        'large_canvas_area': int(large_canvas_area),
+        'min_canvas_area': MIN_CANVAS_AREA,
+    }
+
+
 def normalize_observed_path(value):
     raw = str(value or '').strip()
     if not raw:
@@ -538,6 +578,9 @@ def evaluate_capture_quality(payload, expected_path):
         'buttons': [],
         'links': [],
         'canvas_count': 0,
+        'canvas_capture_ready': False,
+        'large_canvas_area': 0,
+        'min_canvas_area': MIN_CANVAS_AREA,
         'large_visible_elements': [],
         'semantic_anchor_count': 0,
         'capture_error_messages': [],
@@ -572,6 +615,12 @@ def evaluate_capture_quality(payload, expected_path):
             'large_visible_elements': list_value(page_state.get('largeVisibleElements'))[:10],
             'semantic_anchor_count': semantic_anchor_count(page_state),
         })
+        canvas_signal = canvas_capture_signal(page_state)
+        details.update({
+            'canvas_capture_ready': canvas_signal['canvas_ready'],
+            'large_canvas_area': canvas_signal['large_canvas_area'],
+            'min_canvas_area': canvas_signal['min_canvas_area'],
+        })
     else:
         details.update({
             'body_text_length': MIN_BODY_TEXT_LENGTH + 100,
@@ -596,11 +645,20 @@ def evaluate_capture_quality(payload, expected_path):
         details['capture_error_messages'].append(str(proof_json.get('script_error'))[:500])
 
     reasons = []
-    if details['body_text_length'] < MIN_BODY_TEXT_LENGTH:
+    canvas_ready = bool(details.get('canvas_capture_ready'))
+    body_text_ready = details['body_text_length'] >= MIN_BODY_TEXT_LENGTH or canvas_ready
+    interactive_ready = details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS or canvas_ready
+    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1 or canvas_ready
+    details['body_text_ready'] = body_text_ready
+    details['interactive_ready'] = interactive_ready
+    details['semantic_ready'] = semantic_ready
+    details['canvas_capture_override'] = canvas_ready
+
+    if not body_text_ready:
         reasons.append(f'blank/near-blank page (text length: {details["body_text_length"]})')
-    if details['interactive_elements'] < MIN_INTERACTIVE_ELEMENTS:
+    if not interactive_ready:
         reasons.append(f'not interactive enough ({details["interactive_elements"]} interactive elements)')
-    if has_enriched_page_state(page_state) and details['semantic_anchor_count'] < 1:
+    if has_enriched_page_state(page_state) and not semantic_ready:
         reasons.append('no visible semantic UI anchors in page capture')
     if details['has_errors']:
         reasons.append('page has console/runtime errors')
@@ -610,11 +668,10 @@ def evaluate_capture_quality(payload, expected_path):
         raw_observed = details.get('observed_path_raw') or details.get('observed_path') or observed_path
         reasons.append(f'wrong route: expected {expected_path}, got {raw_observed}')
 
-    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1
     telemetry_ready = (
         details['has_screenshot']
-        and details['body_text_length'] >= MIN_BODY_TEXT_LENGTH
-        and details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS
+        and body_text_ready
+        and interactive_ready
         and semantic_ready
         and not details['has_errors']
     )

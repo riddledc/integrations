@@ -352,7 +352,9 @@ def visual_delta_ship_blocker(state):
         return ''
     status = str(visual_delta.get('status') or 'missing')
     if status == 'unmeasured':
-        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof'
+        reason = str(visual_delta.get('reason') or '').strip()
+        detail = f': {reason}' if reason else ''
+        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof' + detail
     if status == 'measured' and visual_delta.get('passed') is False:
         return 'visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof'
     reason = str(visual_delta.get('reason') or '').strip()

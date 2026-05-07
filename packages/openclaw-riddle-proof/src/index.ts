@@ -160,6 +160,8 @@ export interface OpenClawRiddleProofMonitorContract {
     | "release_terminal";
   should_report_now: boolean;
   should_continue_monitoring: boolean;
+  progress_surface: "status_loop";
+  preemption_recovery: string;
 }
 
 export interface CreateOpenClawRiddleProofResultOptions {
@@ -818,6 +820,9 @@ function monitorContractFor(
       responseGate === "hold_for_terminal" ||
       responseGate === "hold_for_implementation_outcome" ||
       responseGate === "hold_for_engine_substep",
+    progress_surface: "status_loop",
+    preemption_recovery:
+      `If the host turn is interrupted or preempted, resume by polling ${RIDDLE_PROOF_STATUS_TOOL_NAME} with the same state_path until monitor_should_continue is false.`,
   };
 }
 
@@ -1571,6 +1576,46 @@ function buildProofReportingContext(
     failure_summary: failureSummary,
     pr_handoff_policy: buildPrHandoffPolicy(snapshot, wrapperState, proofArtifactSummary, failureSummary),
   };
+}
+
+function buildProgressUpdate(
+  snapshot: RiddleProofRunStatusSnapshot,
+  wrapperState: RiddleProofRunState | null,
+  engineState: Record<string, unknown> | null,
+  monitorContract: OpenClawRiddleProofMonitorContract | undefined,
+  checkpoint: Record<string, unknown>,
+  pollAfterMs: number | null,
+) {
+  const activeSubstep = recordValue(engineState?.current_runtime_step);
+  const phase = stringValue(activeSubstep?.phase);
+  const step = stringValue(activeSubstep?.step) || stringValue(snapshot.current_stage) || null;
+  const stage = stringValue(snapshot.current_stage) || step || null;
+  const latestEvent = latestRuntimeEvent(engineState);
+  const summary =
+    stringValue(activeSubstep?.summary) ||
+    stringValue(latestEvent?.summary) ||
+    stringValue((snapshot as unknown as Record<string, unknown>).summary) ||
+    stringValue(snapshot.blocker?.message) ||
+    stringValue(checkpoint.summary) ||
+    stringValue(snapshot.status) ||
+    "Riddle Proof status updated.";
+  const action = stringValue(checkpoint.suggested_next_action) || null;
+  return compactRecordValue({
+    state_path: stringValue(wrapperState?.state_path) || stringValue(snapshot.state_path) || null,
+    run_id: stringValue(snapshot.run_id) || stringValue(wrapperState?.run_id) || null,
+    status: stringValue(snapshot.status) || null,
+    stage,
+    step,
+    phase: phase || null,
+    checkpoint: stringValue(checkpoint.checkpoint) || stringValue(snapshot.last_checkpoint) || null,
+    checkpoint_classification: stringValue(checkpoint.checkpoint_classification) || null,
+    response_gate: monitorContract?.response_gate || null,
+    monitor_should_continue: monitorContract?.should_continue_monitoring === true,
+    suggested_next_action: action,
+    summary,
+    poll_after_ms: pollAfterMs,
+    recovery_hint: monitorContract?.preemption_recovery || null,
+  });
 }
 
 function compactCheckpointPacket(packet: unknown, includeStateExcerpt = false) {
@@ -2745,6 +2790,14 @@ export function readOpenClawRiddleProofStatus(
           checkpointActionable: baseCheckpoint.suggested_next_action === "resume_checkpoint",
         })
       : undefined;
+    const progressUpdate = buildProgressUpdate(
+      snapshot,
+      wrapperState,
+      null,
+      monitorContract,
+      baseCheckpoint as Record<string, unknown>,
+      recommendedPollMs,
+    );
     const baseStatus = {
       ...snapshot,
       state_paths: statePaths,
@@ -2752,6 +2805,7 @@ export function readOpenClawRiddleProofStatus(
       package_metadata: riddleProofPackageMetadata(),
       request_metadata: requestMetadataFor(wrapperState?.request, null),
       monitor_contract: monitorContract,
+      progress_update: progressUpdate,
       timing_summary: mergeTimingSummary(buildTimingSummary(snapshot, wrapperState, null), wakeTimingSummary),
       ...reportingContext,
       recommended_poll_after_ms: recommendedPollMs,
@@ -2794,6 +2848,17 @@ export function readOpenClawRiddleProofStatus(
   const implementationDetection = recordValue(engineState?.implementation_detection);
   const recommendedPollMs = recommendedPollAfterMs(activeSubstep, snapshot);
   const reportingContext = buildProofReportingContext(snapshot, wrapperState, engineState);
+  const progressUpdate = buildProgressUpdate(
+    {
+      ...snapshot,
+      current_stage: effectiveStage,
+    } as RiddleProofRunStatusSnapshot,
+    wrapperState,
+    engineState,
+    monitorContract,
+    checkpoint as Record<string, unknown>,
+    recommendedPollMs,
+  );
   const status = {
     ...snapshot,
     state_paths: statePathsForRunState(wrapperState || ({
@@ -2816,6 +2881,7 @@ export function readOpenClawRiddleProofStatus(
     engine_current_stage: engineCurrentStage || null,
     engine_state_path: engineStatePath,
     active_substep: activeSubstep,
+    progress_update: progressUpdate,
     substep_elapsed_ms: activeSubstep?.status === "running" ? elapsedMsSince(activeSubstep.started_at) : null,
     phase_elapsed_ms: activeSubstep?.phase_status === "running" ? elapsedMsSince(activeSubstep.phase_started_at) : null,
     engine_latest_event: latestRuntimeEvent(engineState),
@@ -2844,7 +2910,8 @@ export function readOpenClawRiddleProofStatus(
       signal: "run.wake.requested",
       recommendation:
         `For detached status-loop monitoring, poll ${RIDDLE_PROOF_STATUS_TOOL_NAME} at poll_after_ms and stop when monitor_should_continue is false. ` +
-        `If ${RIDDLE_PROOF_WAIT_TOOL_NAME} is exposed, it can replace the sleep between status checks.`,
+        `If ${RIDDLE_PROOF_WAIT_TOOL_NAME} is exposed, it can replace the sleep between status checks. ` +
+        `If the host turn is interrupted or a new Discord message preempts the tool call, resume with ${RIDDLE_PROOF_STATUS_TOOL_NAME} using the same state_path.`,
     },
   } as RiddleProofRunStatusSnapshot & Record<string, unknown>;
   if (options.debug) status.debug = buildDebugPayload(wrapperState, engineState);

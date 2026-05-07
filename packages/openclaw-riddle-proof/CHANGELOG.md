@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.83
+
+### Patch Changes
+
+- Harden canvas-first Riddle Proof runs by accepting large visible canvas captures and passing playability evidence even when DOM text is sparse, add actionable diagnostics for unmeasured visual deltas, and expose compact OpenClaw progress updates with preemption recovery guidance.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.42
+
 ## 0.4.82
 
 ### Patch Changes

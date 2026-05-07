@@ -546,7 +546,10 @@ export function visualDeltaShipGateReason(state: any = {}) {
   if (visualDelta.status === "measured" && visualDelta.passed === true) return null;
   const status = String(visualDelta.status || "missing");
   if (status === "unmeasured") {
-    return "visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof";
+    const reason = String(visualDelta.reason || "").trim();
+    return reason
+      ? `visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof: ${reason}`
+      : "visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof";
   }
   if (status === "measured" && visualDelta.passed === false) {
     return "visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof";

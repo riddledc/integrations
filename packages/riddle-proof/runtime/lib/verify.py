@@ -33,6 +33,7 @@ import subprocess as sp
 
 MIN_BODY_TEXT_LENGTH = 50
 MIN_INTERACTIVE_ELEMENTS = 1
+MIN_CANVAS_AREA = 50000
 HYDRATION_WAIT_MS = 1500
 PAGE_STATE_PREFIX = 'RIDDLE_PROOF_STATE:'
 PROOF_EVIDENCE_PREFIX = 'RIDDLE_PROOF_EVIDENCE:'
@@ -800,6 +801,8 @@ def extract_visual_delta(payload):
     result = payload.get('result') if isinstance(payload, dict) else {}
     proof_json = payload.get('_proof_json') if isinstance(payload, dict) else {}
     proof_evidence = extract_proof_evidence(payload)
+    screenshot_url = extract_screenshot_url(payload)
+    artifact_summary = summarize_capture_artifacts(payload)
     candidates = [
         payload if isinstance(payload, dict) else {},
         result if isinstance(result, dict) else {},
@@ -837,6 +840,23 @@ def extract_visual_delta(payload):
         percent = (changed_pixels / total_pixels) * 100
 
     if percent is None and changed_pixels is None:
+        has_artifacts = bool(
+            screenshot_url
+            or artifact_summary.get('outputs')
+            or artifact_summary.get('screenshots')
+            or artifact_summary.get('artifact_json')
+        )
+        reason = 'No measured before/after visual delta was found in proof evidence.'
+        if screenshot_url:
+            reason = (
+                'After screenshot artifact is present, but no measured before/after visual delta metrics were emitted; '
+                'the comparator did not run or did not publish change_percent/changed_pixels.'
+            )
+        elif has_artifacts:
+            reason = (
+                'Capture artifacts are present, but no measured before/after visual delta metrics were emitted; '
+                'the comparator did not run or did not publish change_percent/changed_pixels.'
+            )
         return {
             'status': 'unmeasured',
             'passed': None,
@@ -845,7 +865,19 @@ def extract_visual_delta(payload):
             'total_pixels': int(total_pixels) if total_pixels else None,
             'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
             'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
-            'reason': 'No measured before/after visual delta was found in proof evidence.',
+            'reason': reason,
+            'diagnostic': {
+                'after_screenshot_present': bool(screenshot_url),
+                'proof_evidence_present': proof_evidence is not None,
+                'artifact_output_count': len(artifact_summary.get('outputs') or []),
+                'artifact_screenshot_count': len(artifact_summary.get('screenshots') or []),
+                'artifact_json': list(artifact_summary.get('artifact_json') or []),
+                'expected_metric_keys': {
+                    'percent': sorted(VISUAL_DELTA_PERCENT_KEYS),
+                    'changed_pixels': sorted(VISUAL_CHANGED_PIXEL_KEYS),
+                    'total_pixels': sorted(VISUAL_TOTAL_PIXEL_KEYS),
+                },
+            },
         }
 
     percent_pass = percent is not None and percent >= MIN_VISUAL_DELTA_PERCENT
@@ -891,7 +923,8 @@ def visual_delta_blocker_for_mode(verification_mode, visual_delta):
         status = str(visual_delta.get('status') or 'missing')
         reason = str(visual_delta.get('reason') or '').strip()
     if status == 'unmeasured':
-        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof; capture a measured before/after visual delta or choose needs_richer_proof.'
+        detail = f' Reason: {reason}' if reason else ''
+        return 'visual_delta.status=unmeasured blocks ready_to_ship for visual/UI proof; capture a measured before/after visual delta or choose needs_richer_proof.' + detail
     if status == 'measured' and isinstance(visual_delta, dict) and visual_delta.get('passed') is False:
         return 'visual_delta.status=measured but visual_delta.passed=false blocks ready_to_ship for visual/UI proof; the measured change did not clear the threshold.'
     if reason:
@@ -924,6 +957,29 @@ def has_enriched_page_state(page_state):
         key in page_state
         for key in ('visibleTextSample', 'headings', 'buttons', 'links', 'canvasCount', 'largeVisibleElements')
     )
+
+
+def canvas_capture_signal(page_state):
+    if not isinstance(page_state, dict):
+        return {
+            'canvas_ready': False,
+            'canvas_count': 0,
+            'large_canvas_area': 0,
+        }
+    large_canvas_area = 0
+    for item in list_value(page_state.get('largeVisibleElements')):
+        if not isinstance(item, dict) or item.get('tag') != 'canvas':
+            continue
+        area = metric_number(item.get('area')) or 0
+        if area > large_canvas_area:
+            large_canvas_area = area
+    canvas_count = int(metric_number(page_state.get('canvasCount')) or 0)
+    return {
+        'canvas_ready': bool(canvas_count > 0 and large_canvas_area >= MIN_CANVAS_AREA),
+        'canvas_count': canvas_count,
+        'large_canvas_area': int(large_canvas_area),
+        'min_canvas_area': MIN_CANVAS_AREA,
+    }
 
 
 def normalize_observed_path(value):
@@ -1135,6 +1191,7 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     mode = normalized_verification_mode(verification_mode)
     supporting = collect_supporting_artifacts(payload)
     structured_ready = bool(supporting.get('has_structured_payload'))
+    playability_ready = mode in PLAYABILITY_MODES and bool(supporting.get('playability_ready'))
     screenshot_required = screenshot_required_for_mode(mode)
     details = {
         'verification_mode': mode,
@@ -1143,6 +1200,10 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
         'screenshot_required': screenshot_required,
         'structured_evidence_present': structured_ready,
         'proof_evidence_present': bool(supporting.get('proof_evidence_present')),
+        'playability_ready': playability_ready,
+        'canvas_capture_ready': False,
+        'large_canvas_area': 0,
+        'min_canvas_area': MIN_CANVAS_AREA,
         'proof_evidence_sample': supporting.get('proof_evidence_sample', ''),
         'body_text_length': 0,
         'interactive_elements': 0,
@@ -1183,6 +1244,12 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
             'large_visible_elements': list_value(page_state.get('largeVisibleElements'))[:10],
             'semantic_anchor_count': semantic_anchor_count(page_state),
         })
+        canvas_signal = canvas_capture_signal(page_state)
+        details.update({
+            'canvas_capture_ready': canvas_signal['canvas_ready'],
+            'large_canvas_area': canvas_signal['large_canvas_area'],
+            'min_canvas_area': canvas_signal['min_canvas_area'],
+        })
     elif screenshot_url:
         details.update({
             'body_text_length': MIN_BODY_TEXT_LENGTH + 100,
@@ -1220,11 +1287,20 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
         reasons.append('no screenshot or structured proof evidence in capture')
 
     should_enforce_visual_readiness = screenshot_required or (details['has_screenshot'] and not structured_ready)
-    if should_enforce_visual_readiness and details['body_text_length'] < MIN_BODY_TEXT_LENGTH:
+    canvas_ready = bool(details.get('canvas_capture_ready'))
+    body_text_ready = details['body_text_length'] >= MIN_BODY_TEXT_LENGTH or canvas_ready or playability_ready
+    interactive_ready = details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS or canvas_ready or playability_ready
+    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1 or canvas_ready or playability_ready
+    details['body_text_ready'] = body_text_ready
+    details['interactive_ready'] = interactive_ready
+    details['semantic_ready'] = semantic_ready
+    details['canvas_or_playability_override'] = bool(should_enforce_visual_readiness and (canvas_ready or playability_ready))
+
+    if should_enforce_visual_readiness and not body_text_ready:
         reasons.append(f'blank/near-blank page (text length: {details["body_text_length"]})')
-    if should_enforce_visual_readiness and details['interactive_elements'] < MIN_INTERACTIVE_ELEMENTS:
+    if should_enforce_visual_readiness and not interactive_ready:
         reasons.append(f'not interactive enough ({details["interactive_elements"]} interactive elements)')
-    if should_enforce_visual_readiness and has_enriched_page_state(page_state) and details['semantic_anchor_count'] < 1:
+    if should_enforce_visual_readiness and has_enriched_page_state(page_state) and not semantic_ready:
         reasons.append('no visible semantic UI anchors in page capture')
     if details['has_errors']:
         reasons.append('page has console/runtime errors')
@@ -1234,15 +1310,14 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
         raw_observed = details.get('observed_path_raw') or details.get('observed_path') or observed_path
         reasons.append(f'wrong route: expected {expected_path}, got {raw_observed}')
 
-    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1
     visual_ready = (
         details['has_screenshot']
-        and details['body_text_length'] >= MIN_BODY_TEXT_LENGTH
-        and details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS
+        and body_text_ready
+        and interactive_ready
         and semantic_ready
         and not details['has_errors']
     )
-    telemetry_ready = (visual_ready or structured_ready) and not details['has_errors']
+    telemetry_ready = (visual_ready or structured_ready or playability_ready) and not details['has_errors']
 
     return {
         'valid': len(reasons) == 0 and telemetry_ready,
