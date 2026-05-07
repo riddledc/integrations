@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.39
+
+### Patch Changes
+
+- 6e92d0c: Add Riddle Proof checkpoint packets/responses with author-checkpoint resume support, and wire OpenClaw checkpoint dispatch modes plus checkpoint-response review resume.
+
 ## 0.5.38
 
 ### Patch Changes
