@@ -136,6 +136,28 @@ async function run(tool, args) {
     });
   }
 
+  if (tool === "riddle_visual_diff") {
+    const {
+      async,
+      options,
+      stealth,
+      timeout_sec,
+      ...visualDiffOptions
+    } = args;
+    const script = `return await visualDiff(${JSON.stringify(visualDiffOptions)});`;
+    return core.runWithDefaults(config, {
+      url: args.url_before,
+      script,
+      options: { ...(options ?? {}), returnResult: true },
+      stealth,
+      timeout_sec: timeout_sec ?? 60,
+      async,
+    }, {
+      include: ["result", "console", "visual_diff"],
+      returnAsync: !!async,
+    });
+  }
+
   if (tool === "riddle_run") {
     return core.runWithDefaults(config, args.payload ?? args, {
       include: ["screenshot", "console", "result"],

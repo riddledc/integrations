@@ -154,6 +154,7 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'For playable/gameplay proof, start the experience, send keyboard or pointer input, sample state before/after, measure non-HUD playfield/canvas pixel deltas across time, and set window.__riddleProofEvidence.playability or playability_evidence with version riddle-proof.playability.v1.',
             'For data/audio/log/metric/custom proof, screenshots are optional; set window.__riddleProofEvidence inside page.evaluate to a JSON-serializable object with the measured observations the verifier should judge.',
             'Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence outside page.evaluate; the Riddle worker context may not expose those globals safely.',
+            'When page.evaluate needs data from the outer Playwright script, pass exactly one serializable argument object; do not pass multiple positional arguments.',
             'Do not begin capture_script with page.goto unless an in-app navigation is genuinely required after the preview opens the target route.',
             'Only escalate to the human after the supervising agent concludes the workflow is genuinely stuck or not converging.',
         ],

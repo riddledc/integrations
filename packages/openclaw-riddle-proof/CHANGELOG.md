@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.84
+
+### Patch Changes
+
+- Publish Riddle visual diff metrics through the proof pipeline and add a Playwright page.evaluate argument guardrail.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.43
+
 ## 0.4.83
 
 ### Patch Changes

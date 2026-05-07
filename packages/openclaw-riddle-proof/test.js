@@ -295,6 +295,7 @@ const authorAdapter = createCodexExecAgentAdapter({}, async (request) => {
   authorPrompts.push(request);
   assert.equal(request.purpose, "proof packet authoring");
   assert.ok(request.prompt.includes("Do not call Playwright page.* APIs inside page.evaluate"));
+  assert.ok(request.prompt.includes("pass exactly one serializable argument object"));
   assert.ok(request.prompt.includes("await page.waitForFunction(fn, undefined, { timeout: 60000 })"));
   assert.ok(request.prompt.includes("window.__riddleProofEvidence"));
   return {

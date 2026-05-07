@@ -14,6 +14,7 @@ RIDDLE_DIRECT_TOOLS = {
     'riddle_build_preview',
     'riddle_build_preview_status',
     'riddle_script',
+    'riddle_visual_diff',
     'riddle_run',
 }
 CAPTURE_ARTIFACT_JSON_LIMIT = 256 * 1024
@@ -767,7 +768,7 @@ def enrich_capture_payload(payload):
     artifact_json = dict(enriched.get('_artifact_json') or {})
     artifact_errors = dict(enriched.get('_artifact_errors') or {})
 
-    for name in ('console.json', 'proof.json'):
+    for name in ('console.json', 'proof.json', 'visual-diff.json'):
         if name in artifact_json or name in artifact_errors:
             continue
         item = capture_output_item(enriched, name)
@@ -797,6 +798,10 @@ def enrich_capture_payload(payload):
                 if isinstance(result, dict):
                     enriched['result'] = result
                     break
+
+    visual_diff_json = artifact_json.get('visual-diff.json')
+    if isinstance(visual_diff_json, dict) and not enriched.get('visual_diff'):
+        enriched['visual_diff'] = visual_diff_json
 
     return enriched
 

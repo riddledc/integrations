@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.43
+
+### Patch Changes
+
+- Publish Riddle visual diff metrics through the proof pipeline and add a Playwright page.evaluate argument guardrail.
+
 ## 0.5.42
 
 ### Patch Changes

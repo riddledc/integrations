@@ -569,6 +569,50 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert unmeasured_delta['diagnostic']['after_screenshot_present'] is True
     assert 'After screenshot artifact is present' in unmeasured_delta['reason']
 
+    visual_diff_delta = namespace['extract_visual_delta']({
+        'ok': True,
+        'outputs': [{'name': 'visual-diff.json', 'url': 'https://cdn.example.com/visual-diff.json'}],
+        '_artifact_json': {
+            'visual-diff.json': {
+                'changePercent': '1.45',
+                'diffPixelCount': 14094,
+                'totalPixels': 972000,
+            },
+        },
+    })
+    assert visual_diff_delta['status'] == 'measured'
+    assert visual_diff_delta['passed'] is True
+    assert visual_diff_delta['change_percent'] == 1.45
+    assert visual_diff_delta['changed_pixels'] == 14094
+
+    fallback_calls = []
+
+    def fake_invoke_retry(tool, args, retries=3, timeout=180):
+        fallback_calls.append({'tool': tool, 'args': args, 'retries': retries, 'timeout': timeout})
+        return {
+            'ok': True,
+            'visual_diff': {
+                'diffPercentage': 0.82,
+                'differentPixels': 7970,
+                'totalPixels': 972000,
+            },
+            'outputs': [{'name': 'visual-diff.png', 'url': 'https://cdn.example.com/visual-diff.png'}],
+        }
+
+    namespace['invoke_retry'] = fake_invoke_retry
+    namespace['append_capture_diagnostic'] = lambda *args, **kwargs: None
+    fallback_delta = namespace['measure_visual_delta_against_baseline'](
+        {'verification_mode': 'visual', 'requested_reference': 'before', 'before_cdn': 'https://cdn.example.com/before.png'},
+        {'baseline': {'before': {'url': 'https://cdn.example.com/before.png'}}},
+        {'ok': True, 'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after.png'}]},
+        unmeasured_delta,
+    )
+    assert fallback_delta['status'] == 'measured'
+    assert fallback_delta['source'] == 'riddle_visual_diff'
+    assert fallback_delta['comparison']['before_url'] == 'https://cdn.example.com/before.png'
+    assert fallback_delta['comparison']['after_url'] == 'https://cdn.example.com/after.png'
+    assert fallback_calls[0]['tool'] == 'riddle_visual_diff'
+
     canvas_payload = {
         'bodyTextLength': 7,
         'visibleTextSample': 'Luge',

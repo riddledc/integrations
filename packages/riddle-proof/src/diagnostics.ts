@@ -185,6 +185,13 @@ export function summarizeCaptureArtifacts(payload: unknown): RiddleProofCaptureA
     : isRecord(artifactJson["proof.json"])
       ? artifactJson["proof.json"]
       : {};
+  const visualDiffJson = isRecord(record.visual_diff)
+    ? record.visual_diff
+    : isRecord(record.visualDiff)
+      ? record.visualDiff
+      : isRecord(artifactJson["visual-diff.json"])
+        ? artifactJson["visual-diff.json"]
+        : {};
   const consoleJson = isRecord(record.console)
     ? record.console
     : isRecord(artifactJson["console.json"])
@@ -205,11 +212,13 @@ export function summarizeCaptureArtifacts(payload: unknown): RiddleProofCaptureA
     ? redactForProofDiagnostics(consoleJson.summary, { string_limit: 500 })
     : undefined;
 
+  const resultKeys = new Set([...sortedKeys(result), ...sortedKeys(visualDiffJson)]);
+
   return {
     outputs: artifactItems(record.outputs).slice(0, 20).map((item) => artifactSummary(item, "outputs")),
     screenshots: artifactItems(record.screenshots).slice(0, 10).map((item) => artifactSummary(item, "screenshots")),
     artifacts: artifactItems(record.artifacts).slice(0, 20).map((item) => artifactSummary(item, "artifacts")),
-    result_keys: sortedKeys(result),
+    result_keys: Array.from(resultKeys).sort(),
     artifact_json: sortedKeys(artifactJson),
     artifact_errors: artifactErrorMap(record._artifact_errors),
     proof_script_error: Boolean(proofJson.script_error),

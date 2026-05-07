@@ -383,6 +383,7 @@ export async function fetchArtifactsAndBuild(
   const data = await res.json();
   const artifacts: Array<{ name: string; url?: string }> = data.artifacts || [];
   const result: Record<string, any> = {};
+  result.outputs = artifacts;
 
   if (data.status) result._artifactsStatus = data.status;
   if (data.timeout) result._timeout = data.timeout;
@@ -435,6 +436,23 @@ export async function fetchArtifactsAndBuild(
     } catch {
       // Ignore.
     }
+  }
+
+  const visualDiffArtifact = artifacts.find((a) => a.name === "visual-diff.json");
+  if (include.includes("visual_diff") && visualDiffArtifact?.url) {
+    try {
+      const vRes = await fetch(visualDiffArtifact.url);
+      if (vRes.ok) {
+        result.visual_diff = await vRes.json();
+      }
+    } catch {
+      // Ignore.
+    }
+  }
+
+  const visualDiffImages = artifacts.filter((a) => /^visual-diff.*\.(png|jpg|jpeg)$/i.test(a.name || ""));
+  if (visualDiffImages.length > 0) {
+    result.visual_diff_images = visualDiffImages;
   }
 
   if (include.includes("har")) {

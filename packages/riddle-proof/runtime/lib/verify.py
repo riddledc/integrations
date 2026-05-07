@@ -55,13 +55,24 @@ MIN_VISUAL_CHANGED_PIXELS = 5000
 VISUAL_DELTA_PERCENT_KEYS = {
     'change_pct', 'change_percent', 'changed_percent', 'percent_changed',
     'diff_percent', 'visual_delta_percent', 'pixel_change_percent',
+    'changepercent', 'changedpercent', 'percentchanged', 'diffpercent',
+    'visualdeltapercent', 'pixelchangepercent', 'difference_percent',
+    'differencepercent', 'diff_percentage', 'diffpercentage',
+    'mismatch_percent', 'mismatchpercent', 'percentage', 'percent',
 }
 VISUAL_DELTA_RATIO_KEYS = {
     'change_ratio', 'changed_ratio', 'diff_ratio', 'visual_delta_ratio',
+    'changeratio', 'changedratio', 'diffratio', 'visualdeltaratio',
+    'difference_ratio', 'differenceratio', 'mismatch_ratio', 'mismatchratio',
 }
 VISUAL_CHANGED_PIXEL_KEYS = {
     'changed_pixels', 'changed_pixel_count', 'changedpixels',
     'diff_pixels', 'pixel_delta', 'visual_delta_pixels',
+    'diffpixels', 'pixeldelta', 'visualdeltapixels', 'different_pixels',
+    'differentpixels', 'mismatch_pixels', 'mismatchpixels', 'pixels_changed',
+    'pixelschanged', 'diff_pixel_count', 'diffpixelcount',
+    'pixel_diff_count', 'pixeldiffcount', 'different_pixel_count',
+    'differentpixelcount', 'num_different_pixels', 'numdifferentpixels',
 }
 VISUAL_TOTAL_PIXEL_KEYS = {
     'total_pixels', 'total_pixel_count', 'pixel_count', 'totalpixels',
@@ -800,6 +811,7 @@ def extract_visual_delta(payload):
     payload = enrich_capture_payload(payload)
     result = payload.get('result') if isinstance(payload, dict) else {}
     proof_json = payload.get('_proof_json') if isinstance(payload, dict) else {}
+    artifact_json = payload.get('_artifact_json') if isinstance(payload, dict) else {}
     proof_evidence = extract_proof_evidence(payload)
     screenshot_url = extract_screenshot_url(payload)
     artifact_summary = summarize_capture_artifacts(payload)
@@ -807,6 +819,11 @@ def extract_visual_delta(payload):
         payload if isinstance(payload, dict) else {},
         result if isinstance(result, dict) else {},
         proof_json if isinstance(proof_json, dict) else {},
+        payload.get('visual_diff') if isinstance(payload, dict) and isinstance(payload.get('visual_diff'), dict) else {},
+        payload.get('visualDiff') if isinstance(payload, dict) and isinstance(payload.get('visualDiff'), dict) else {},
+        result.get('visual_diff') if isinstance(result, dict) and isinstance(result.get('visual_diff'), dict) else {},
+        result.get('visualDiff') if isinstance(result, dict) and isinstance(result.get('visualDiff'), dict) else {},
+        artifact_json.get('visual-diff.json') if isinstance(artifact_json, dict) and isinstance(artifact_json.get('visual-diff.json'), dict) else {},
         proof_evidence,
     ]
 
@@ -897,6 +914,114 @@ def extract_visual_delta(payload):
             'Measured visual delta is below the legibility threshold; capture success alone is not proof.'
         ),
     }
+
+
+def visual_delta_baseline_candidate(state, results):
+    reference = str(state.get('requested_reference') or state.get('reference') or 'both').strip().lower()
+    baseline = (results.get('baseline') or {}) if isinstance(results, dict) else {}
+    candidates = []
+    if reference in ('before', 'both', ''):
+        candidates.append(('before', (baseline.get('before') or {}).get('url') if isinstance(baseline.get('before'), dict) else ''))
+    if reference in ('prod', 'production', 'both'):
+        candidates.append(('prod', (baseline.get('prod') or {}).get('url') if isinstance(baseline.get('prod'), dict) else ''))
+    candidates.extend([
+        ('before', state.get('before_cdn') or ''),
+        ('prod', state.get('prod_cdn') or ''),
+    ])
+    for label, url in candidates:
+        text = str(url or '').strip()
+        if text:
+            return {'label': label, 'url': text}
+    return {'label': '', 'url': ''}
+
+
+def add_visual_delta_diagnostic(visual_delta, key, value):
+    updated = dict(visual_delta or {})
+    diagnostic = dict(updated.get('diagnostic') or {})
+    diagnostic[key] = value
+    updated['diagnostic'] = diagnostic
+    return updated
+
+
+def measure_visual_delta_against_baseline(state, results, after_payload, current_visual_delta):
+    if not visual_delta_applies(state.get('verification_mode')):
+        return current_visual_delta
+    if isinstance(current_visual_delta, dict) and current_visual_delta.get('status') == 'measured':
+        return current_visual_delta
+
+    baseline = visual_delta_baseline_candidate(state, results)
+    before_url = baseline.get('url') or ''
+    after_url = extract_screenshot_url(after_payload, 'after-proof') or str(state.get('after_cdn') or '').strip()
+    if not before_url or not after_url:
+        missing = []
+        if not before_url:
+            missing.append('baseline screenshot')
+        if not after_url:
+            missing.append('after screenshot')
+        return add_visual_delta_diagnostic(
+            current_visual_delta,
+            'visual_diff_fallback',
+            {
+                'status': 'skipped',
+                'reason': 'missing ' + ' and '.join(missing),
+                'baseline_label': baseline.get('label') or '',
+                'before_url_present': bool(before_url),
+                'after_url_present': bool(after_url),
+            },
+        )
+
+    args = {
+        'url_before': before_url,
+        'url_after': after_url,
+        'delay_ms': 250,
+        'timeout_sec': 60,
+    }
+    try:
+        payload = invoke_retry('riddle_visual_diff', args, retries=2, timeout=180)
+        append_capture_diagnostic(state, 'visual_delta', 'riddle_visual_diff', args, payload)
+    except Exception as exc:
+        return add_visual_delta_diagnostic(
+            current_visual_delta,
+            'visual_diff_fallback',
+            {
+                'status': 'error',
+                'error': type(exc).__name__ + ': ' + str(exc)[:300],
+                'baseline_label': baseline.get('label') or '',
+            },
+        )
+
+    measured = extract_visual_delta(payload)
+    if isinstance(measured, dict) and measured.get('status') == 'measured':
+        measured['source'] = 'riddle_visual_diff'
+        measured['comparison'] = {
+            'baseline_label': baseline.get('label') or '',
+            'before_url': before_url,
+            'after_url': after_url,
+        }
+        if isinstance(payload, dict):
+            diff_url = extract_screenshot_url(payload, 'visual-diff') or extract_screenshot_url(payload, 'diff')
+            if diff_url:
+                measured['comparison']['diff_url'] = diff_url
+            measured['artifact_summary'] = summarize_capture_artifacts(payload)
+        return measured
+
+    updated = add_visual_delta_diagnostic(
+        current_visual_delta,
+        'visual_diff_fallback',
+        {
+            'status': 'unmeasured',
+            'baseline_label': baseline.get('label') or '',
+            'before_url': before_url,
+            'after_url': after_url,
+            'payload_ok': payload.get('ok') if isinstance(payload, dict) else None,
+            'payload_error': str(payload.get('error') or payload.get('stderr') or '')[:500] if isinstance(payload, dict) else '',
+            'artifact_summary': summarize_capture_artifacts(payload) if isinstance(payload, dict) else {},
+        },
+    )
+    reason = str(updated.get('reason') or '').strip()
+    suffix = ' Riddle visual_diff fallback ran but did not publish a recognizable numeric delta.'
+    updated['reason'] = (reason + suffix).strip() if reason else suffix.strip()
+    return updated
 
 
 def visual_delta_applies(verification_mode):
@@ -1443,6 +1568,7 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         if visual_delta_applies(state.get('verification_mode'))
         else {'status': 'not_applicable', 'passed': None, 'reason': 'Verification mode does not require visual delta gating.'}
     )
+    visual_delta = measure_visual_delta_against_baseline(state, results, after_payload, visual_delta)
     semantic_context = build_semantic_context(state, results, after_observation, expected_path)
     artifact_contract = artifact_contract_for_mode(state.get('verification_mode'))
     artifact_production = artifact_production_summary(after_payload, supporting)

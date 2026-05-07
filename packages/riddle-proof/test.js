@@ -292,6 +292,10 @@ const diagnosticPayload = {
         playhead_synced: true,
       },
     },
+    "visual-diff.json": {
+      changePercent: 1.42,
+      diffPixelCount: 14094,
+    },
   },
   _artifact_errors: {
     "missing.json": "404 not found",
@@ -301,8 +305,8 @@ const artifactSummary = summarizeCaptureArtifacts(diagnosticPayload);
 assert.equal(artifactSummary.outputs[0].name, "console.json");
 assert.equal(artifactSummary.screenshots[0].name, "after-proof.png");
 assert.equal(artifactSummary.artifacts[0].metadata_keys[0], "samples");
-assert.deepEqual(artifactSummary.result_keys, ["audio_ready", "playhead_synced"]);
-assert.deepEqual(artifactSummary.artifact_json, ["console.json", "proof.json"]);
+assert.deepEqual(artifactSummary.result_keys, ["audio_ready", "changePercent", "diffPixelCount", "playhead_synced"]);
+assert.deepEqual(artifactSummary.artifact_json, ["console.json", "proof.json", "visual-diff.json"]);
 assert.equal(artifactSummary.artifact_errors["missing.json"], "404 not found");
 assert.equal(artifactSummary.console_summary.warnings, 1);
 
