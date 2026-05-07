@@ -4,6 +4,7 @@ export type JsonObject = { [key: string]: JsonValue };
 
 export type RiddleProofStatus =
   | "running"
+  | "awaiting_checkpoint"
   | "blocked"
   | "failed"
   | "ready_to_ship"
@@ -106,6 +107,100 @@ export interface RiddleProofRunParams {
   integration_context?: IntegrationContext;
 }
 
+export type RiddleProofCheckpointVisibility =
+  | "liveblog"
+  | "quiet"
+  | "terminal_only"
+  | "manual"
+  | (string & {});
+
+export type RiddleProofCheckpointRole =
+  | "main_agent"
+  | "builder_agent"
+  | "proof_author"
+  | "proof_judge"
+  | "human"
+  | "mechanical"
+  | (string & {});
+
+export interface RiddleProofCheckpointArtifact {
+  role:
+    | "before"
+    | "prod"
+    | "after"
+    | "diff"
+    | "log"
+    | "json"
+    | "har"
+    | "video"
+    | (string & {});
+  url?: string;
+  path?: string;
+  name?: string;
+  mime_type?: string;
+  summary?: string;
+}
+
+export interface RiddleProofCheckpointRoutingHint {
+  suggested_role?: RiddleProofCheckpointRole;
+  visibility?: RiddleProofCheckpointVisibility;
+  urgency?: "low" | "normal" | "high" | (string & {});
+  can_auto_answer?: boolean;
+}
+
+export interface RiddleProofCheckpointPacket {
+  version: "riddle-proof.checkpoint.v1";
+  run_id: string;
+  state_path?: string;
+  stage: RiddleProofStage;
+  checkpoint: string;
+  kind:
+    | "assess_recon"
+    | "author_proof"
+    | "implement_change"
+    | "assess_proof"
+    | "human_review"
+    | "advance_decision"
+    | (string & {});
+  summary: string;
+  question: string;
+  change_request: string;
+  context?: string;
+  artifacts?: RiddleProofCheckpointArtifact[];
+  state_excerpt?: Record<string, unknown>;
+  evidence_excerpt?: Record<string, unknown>;
+  allowed_decisions: string[];
+  response_schema: Record<string, unknown>;
+  routing_hint?: RiddleProofCheckpointRoutingHint;
+  resume_token?: string;
+  created_at: string;
+}
+
+export interface RiddleProofCheckpointResponse {
+  version: "riddle-proof.checkpoint_response.v1";
+  run_id: string;
+  checkpoint: string;
+  resume_token?: string;
+  decision: string;
+  summary: string;
+  payload?: Record<string, unknown>;
+  reasons?: string[];
+  continue_with_stage?: RiddleProofStage;
+  source?: {
+    kind:
+      | "openclaw-main"
+      | "openclaw-subagent"
+      | "codex"
+      | "claude-code"
+      | "human"
+      | "ci"
+      | (string & {});
+    session_id?: string;
+    user_id?: string;
+  };
+  created_at: string;
+}
+
 export interface IntegrationContext {
   source?: "openclaw" | "discord" | "github" | "cli" | "riddle" | (string & {});
   channel_id?: string;
@@ -170,6 +265,12 @@ export interface RiddleProofRunState {
   proof_session?: RiddleProofVisualSession;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
+  checkpoint_packet?: RiddleProofCheckpointPacket;
+  checkpoint_history?: Array<{
+    ts: string;
+    packet?: RiddleProofCheckpointPacket;
+    response?: RiddleProofCheckpointResponse;
+  }>;
   events: RiddleProofEvent[];
 }
 
@@ -206,6 +307,7 @@ export interface RiddleProofRunResult {
   merge_recommendation?: string;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
+  checkpoint_packet?: RiddleProofCheckpointPacket;
   proof_session?: RiddleProofVisualSession;
   evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
@@ -238,6 +340,7 @@ export interface RiddleProofRunStatusSnapshot {
   elapsed_ms?: number;
   stage_elapsed_ms?: number;
   blocker?: RiddleProofBlocker;
+  checkpoint_packet?: RiddleProofCheckpointPacket;
   latest_event?: RiddleProofEvent;
 }
 

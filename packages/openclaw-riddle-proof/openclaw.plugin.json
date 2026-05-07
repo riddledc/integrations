@@ -126,6 +126,17 @@
         "default": "background",
         "description": "background returns an accepted run state immediately so channel surfaces can watch status without holding the chat turn; blocking waits for tool completion."
       },
+      "checkpointMode": {
+        "type": "string",
+        "enum": [
+          "liveblog",
+          "quiet",
+          "terminal_only",
+          "manual"
+        ],
+        "default": "quiet",
+        "description": "Default dispatcher for semantic Riddle Proof checkpoints. quiet keeps existing auto-dispatch behavior; liveblog/manual yield CheckpointPacket objects to the main agent."
+      },
       "autoReviewShipModeNone": {
         "type": "boolean",
         "default": true,

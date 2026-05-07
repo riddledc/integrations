@@ -15,6 +15,8 @@ import {
   runRiddleProofEngineHarness,
   setRunStatus,
   type RiddleProofAgentAdapter,
+  type RiddleProofCheckpointResponse,
+  type RiddleProofCheckpointVisibility,
   type RiddleProofEngine,
   type RiddleProofRunParams,
   type RiddleProofRunResult,
@@ -88,11 +90,13 @@ function riddleProofPackageMetadata() {
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
 export type RiddleProofReportMode = "checkpoint" | "terminal_only";
+export type OpenClawRiddleProofCheckpointMode = "liveblog" | "quiet" | "terminal_only" | "manual";
 type OpenClawRiddleProofRunModeSource = "background_param" | "run_mode_param" | "config_default" | "wrapper_default";
 export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
   run_mode?: OpenClawRiddleProofRunMode;
   background?: boolean;
   report_mode?: RiddleProofReportMode;
+  checkpoint_mode?: OpenClawRiddleProofCheckpointMode;
   wait_for_terminal?: boolean;
 };
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
@@ -114,6 +118,7 @@ export interface RiddleProofReviewParams {
   continue_with_stage?: "ship" | "author" | "implement" | "recon" | "verify";
   escalation_target?: "agent" | "human";
   reasons?: string[];
+  checkpoint_response_json?: string;
 }
 
 export interface RiddleProofSyncParams {
@@ -170,6 +175,7 @@ export interface OpenClawRiddleProofRuntimeConfig {
   defaultMaxIterations?: number;
   defaultShipMode?: "none" | "ship";
   defaultRunMode?: OpenClawRiddleProofRunMode;
+  checkpointMode?: OpenClawRiddleProofCheckpointMode;
   autoReviewShipModeNone?: boolean;
   enableWakeMonitor?: boolean;
   codexCommand?: CodexExecAgentConfig["codexCommand"];
@@ -186,6 +192,7 @@ interface BackgroundWorkerData {
   state_path: string;
   config: OpenClawRiddleProofRuntimeConfig;
   resume_params?: RiddleProofWorkflowParams;
+  checkpoint_response?: RiddleProofCheckpointResponse | Record<string, unknown>;
 }
 
 export interface OpenClawRiddleProofWakeContext {
@@ -253,6 +260,7 @@ export type OpenClawRiddleProofWakeClassification =
       failure_summary?: Record<string, unknown> | null;
       proof_artifact_summary?: Record<string, unknown> | null;
       pr_handoff_policy?: Record<string, unknown> | null;
+      checkpoint_packet?: Record<string, unknown> | null;
     };
 
 export interface OpenClawRiddleProofRunOptions {
@@ -330,6 +338,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const proofReviewMode = cfg.proofReviewMode === "main_agent" ? "main_agent" : "codex_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
+  const checkpointMode = normalizeCheckpointDispatchMode(cfg.checkpointMode);
   const autoReviewShipModeNone = cfg.autoReviewShipModeNone === false ? false : true;
   const enableWakeMonitor = cfg.enableWakeMonitor === false ? false : true;
   const codexSandbox =
@@ -349,6 +358,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     defaultMaxIterations: normalizeDefaultMaxIterations(cfg.defaultMaxIterations),
     defaultShipMode,
     defaultRunMode,
+    checkpointMode,
     autoReviewShipModeNone,
     enableWakeMonitor,
     codexCommand: typeof cfg.codexCommand === "string" ? cfg.codexCommand : undefined,
@@ -406,6 +416,7 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
   if (result.blocker?.code === "main_agent_proof_review_required") {
     return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
   }
+  if (result.status === "awaiting_checkpoint") return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME];
   if (result.status === "running") return [RIDDLE_PROOF_WAIT_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
   if (result.status === "ready_to_ship" || result.status === "shipped") {
     return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_SYNC_TOOL_NAME];
@@ -493,6 +504,7 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
       state_path: state.state_path || result.state_path || null,
       run_id: state.run_id || result.run_id || null,
       blocker: result.blocker,
+      checkpoint_packet: result.checkpoint_packet || state.checkpoint_packet || null,
       timing_summary: timingSummary,
       failure_summary: reportingContext.failure_summary,
       proof_artifact_summary: reportingContext.proof_artifact_summary,
@@ -518,6 +530,7 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
     defaultMaxIterations: normalizeDefaultMaxIterations(config.defaultMaxIterations),
     defaultShipMode: config.defaultShipMode,
     defaultRunMode: config.defaultRunMode,
+    checkpointMode: config.checkpointMode,
     autoReviewShipModeNone: config.autoReviewShipModeNone,
     enableWakeMonitor: config.enableWakeMonitor,
     codexCommand: config.codexCommand,
@@ -570,6 +583,9 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
     request: data.request,
     state_path: data.state_path,
     resume_params: data.resume_params,
+    checkpoint_response: data.checkpoint_response,
+    checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(data.request)),
+    checkpoint_visibility: checkpointModeFromRequest(data.request) as RiddleProofCheckpointVisibility,
     max_iterations: effectiveMaxIterations(data.request, config),
     dry_run: data.request.dry_run,
     auto_approve: data.request.auto_approve,
@@ -604,6 +620,7 @@ function startBackgroundWorker(
   statePath: string,
   config: OpenClawRiddleProofRuntimeConfig,
   resumeParams?: RiddleProofWorkflowParams,
+  checkpointResponse?: RiddleProofCheckpointResponse | Record<string, unknown>,
 ) {
   const worker = new Worker(new URL(import.meta.url), {
     workerData: {
@@ -612,6 +629,7 @@ function startBackgroundWorker(
       state_path: statePath,
       config: serializableBackgroundConfig(config),
       resume_params: resumeParams,
+      checkpoint_response: checkpointResponse,
     } satisfies BackgroundWorkerData,
   });
   worker.unref();
@@ -644,6 +662,25 @@ function runModeDecisionFrom(
   return { mode: "background", source: "wrapper_default" };
 }
 
+function normalizeCheckpointDispatchMode(value: unknown): OpenClawRiddleProofCheckpointMode | undefined {
+  if (value === "liveblog" || value === "quiet" || value === "terminal_only" || value === "manual") return value;
+  return undefined;
+}
+
+function checkpointModeFrom(
+  params: Pick<RiddleProofChangeParams, "checkpoint_mode" | "report_mode" | "wait_for_terminal">,
+  config: Pick<OpenClawRiddleProofRuntimeConfig, "checkpointMode"> = {},
+): OpenClawRiddleProofCheckpointMode {
+  const explicit = normalizeCheckpointDispatchMode(params.checkpoint_mode);
+  if (explicit) return explicit;
+  if (params.report_mode === "terminal_only" || params.wait_for_terminal === true) return "terminal_only";
+  return config.checkpointMode || "quiet";
+}
+
+function coreCheckpointModeFor(mode: OpenClawRiddleProofCheckpointMode): "auto" | "yield" {
+  return mode === "liveblog" || mode === "manual" ? "yield" : "auto";
+}
+
 function isTerminalStatusLike(status: string | null | undefined) {
   return (
     status === "blocked" ||
@@ -659,6 +696,7 @@ function resumableCheckpointLike(
   checkpoint: string | null | undefined,
   blockerCode?: string | null,
 ) {
+  if (status === "awaiting_checkpoint") return true;
   if (!checkpoint || !ROUTABLE_CHECKPOINTS.has(checkpoint)) return false;
   if (blockerCode === "main_agent_proof_review_required") return false;
   if (blockerCode && !ROUTABLE_BLOCKER_CODES.has(blockerCode)) return false;
@@ -678,13 +716,16 @@ function readWrapperMetadata(request: RiddleProofRunParams) {
 
 function applyWrapperMonitorSettings(
   request: RiddleProofRunParams,
-  params: Pick<RiddleProofChangeParams, "report_mode" | "wait_for_terminal">,
+  params: Pick<RiddleProofChangeParams, "checkpoint_mode" | "report_mode" | "wait_for_terminal">,
+  config: Pick<OpenClawRiddleProofRuntimeConfig, "checkpointMode"> = {},
 ) {
   const metadata = {
     ...readWrapperMetadata(request),
   };
   const reportMode = reportModeFromParams(params);
+  const checkpointMode = checkpointModeFrom(params, config);
   if (reportMode) metadata.report_mode = reportMode;
+  metadata.checkpoint_mode = checkpointMode;
   if (typeof params.wait_for_terminal === "boolean") metadata.wait_for_terminal = params.wait_for_terminal;
   request.integration_context = {
     ...(request.integration_context || {}),
@@ -695,6 +736,10 @@ function applyWrapperMonitorSettings(
 
 function reportModeFromRequest(request: RiddleProofRunParams): RiddleProofReportMode {
   return readWrapperMetadata(request).report_mode === "terminal_only" ? "terminal_only" : "checkpoint";
+}
+
+function checkpointModeFromRequest(request: RiddleProofRunParams): OpenClawRiddleProofCheckpointMode {
+  return normalizeCheckpointDispatchMode(readWrapperMetadata(request).checkpoint_mode) || "quiet";
 }
 
 function waitForTerminalFromRequest(request: RiddleProofRunParams) {
@@ -775,7 +820,7 @@ function startOpenClawRiddleProofBackground(
   config: OpenClawRiddleProofRuntimeConfig,
   options: OpenClawRiddleProofRunOptions = {},
 ): RiddleProofRunResult {
-  const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params);
+  const request = applyWrapperMonitorSettings(toRiddleProofRunParams(params), params, config);
   const runModeDecision = runModeDecisionFrom(params, config);
   const statePath = request.harness_state_path || createHarnessStatePath(config.stateDir);
   request.harness_state_path = statePath;
@@ -796,6 +841,7 @@ function startOpenClawRiddleProofBackground(
       run_mode: runModeDecision.mode,
       run_mode_source: runModeDecision.source,
       background_requested: params.background === true,
+      checkpoint_mode: checkpointModeFromRequest(request),
       monitor_contract: monitorContractFor("running", request),
       next_tools: [
         RIDDLE_PROOF_WAIT_TOOL_NAME,
@@ -859,7 +905,8 @@ function startOpenClawRiddleProofResumeBackground(params: {
   state: RiddleProofRunState;
   statePath: string;
   config: OpenClawRiddleProofRuntimeConfig;
-  resumeParams: RiddleProofWorkflowParams;
+  resumeParams?: RiddleProofWorkflowParams;
+  checkpointResponse?: RiddleProofCheckpointResponse | Record<string, unknown>;
   summary: string;
 }): RiddleProofRunResult {
   params.state.blocker = undefined;
@@ -897,12 +944,13 @@ function startOpenClawRiddleProofResumeBackground(params: {
         state_path: params.statePath,
         config: params.config,
         resume_params: params.resumeParams,
+        checkpoint_response: params.checkpointResponse,
       }).catch((error) => {
         markBackgroundWorkerFailed(params.statePath, error instanceof Error ? error.message : String(error));
       });
     });
   } else {
-    startBackgroundWorker(workerRequest, params.statePath, params.config, params.resumeParams);
+    startBackgroundWorker(workerRequest, params.statePath, params.config, params.resumeParams, params.checkpointResponse);
   }
 
   return createRunResult({
@@ -1516,6 +1564,7 @@ function buildProofReportingContext(
     proof_artifact_summary: proofArtifactSummary,
     failure_summary: failureSummary,
     pr_handoff_policy: buildPrHandoffPolicy(snapshot, wrapperState, proofArtifactSummary, failureSummary),
+    checkpoint_packet: wrapperState?.checkpoint_packet || snapshot.checkpoint_packet || null,
   };
 }
 
@@ -1551,6 +1600,15 @@ function buildDebugPayload(wrapperState: RiddleProofRunState | null, engineState
 }
 
 function parseJsonRecord(value: string) {
+  if (!value) return null;
+  try {
+    return recordValue(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
+function parseCheckpointResponseJson(value: string | undefined): RiddleProofCheckpointResponse | Record<string, unknown> | null {
   if (!value) return null;
   try {
     return recordValue(JSON.parse(value));
@@ -2414,6 +2472,8 @@ export async function runOpenClawRiddleProof(
   return runRiddleProofEngineHarness({
     request,
     state_path: request.harness_state_path,
+    checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(request)),
+    checkpoint_visibility: checkpointModeFromRequest(request) as RiddleProofCheckpointVisibility,
     max_iterations: effectiveMaxIterations(request, config),
     dry_run: request.dry_run,
     auto_approve: request.auto_approve,
@@ -2554,7 +2614,8 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     ? snapshotRecord.is_terminal && !resumable
     : snapshot.status !== "running" && !resumable;
   const isRoutable = Boolean(resumable) && !implementationInFlight && !activeSubstepRunning;
-  const isActionableRoutable = isRoutable && snapshot.status !== "running";
+  const hasCheckpointPacket = Boolean(recordValue(snapshotRecord.checkpoint_packet));
+  const isActionableRoutable = isRoutable && (snapshot.status !== "running" || hasCheckpointPacket);
   const isReviewRequired = Boolean(
     snapshot.blocker?.code === "main_agent_proof_review_required" ||
     (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
@@ -2817,6 +2878,7 @@ export function classifyOpenClawRiddleProofWake(
     failure_summary: recordValue(status.failure_summary),
     proof_artifact_summary: recordValue(status.proof_artifact_summary),
     pr_handoff_policy: recordValue(status.pr_handoff_policy),
+    checkpoint_packet: recordValue(status.checkpoint_packet),
   };
 }
 
@@ -2859,6 +2921,24 @@ export function formatOpenClawRiddleProofWakeEvent(
   if (before || prod || after || preview) {
     lines.push(
       `artifacts: before=${before || "(none)"} prod=${prod || "(none)"} after=${after || "(none)"} preview=${preview || "(none)"}`,
+    );
+  }
+  const packet = recordValue(classification.checkpoint_packet);
+  if (packet) {
+    const responseSchema = recordValue(packet.response_schema);
+    lines.push(
+      `checkpoint_packet: ${compactValue({
+        version: packet.version,
+        run_id: packet.run_id,
+        checkpoint: packet.checkpoint,
+        kind: packet.kind,
+        summary: packet.summary,
+        question: packet.question,
+        resume_token: packet.resume_token,
+        allowed_decisions: packet.allowed_decisions,
+        response_schema: responseSchema,
+      }, 4000)}`,
+      `checkpoint_response_instruction: Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with decision=continue_checkpoint and checkpoint_response_json set to a valid riddle-proof.checkpoint_response.v1 object matching the packet.`,
     );
   }
   return lines.join("\n");
@@ -3279,6 +3359,57 @@ export async function submitOpenClawRiddleProofReview(
     return createRunResult({ state, status: "blocked", last_summary: state.blocker.message });
   }
 
+  const checkpointResponse = parseCheckpointResponseJson(params.checkpoint_response_json);
+  if (params.checkpoint_response_json && !checkpointResponse) {
+    state.blocker = {
+      code: "checkpoint_response_json_invalid",
+      message: "checkpoint_response_json must be valid JSON object text.",
+      details: { state_path: params.state_path },
+    };
+    return createRunResult({ state, status: "blocked", last_summary: state.blocker.message });
+  }
+  if (checkpointResponse) {
+    appendRunEvent(state, {
+      kind: "agent.checkpoint_response.submitted",
+      checkpoint: state.last_checkpoint || state.checkpoint_packet?.checkpoint || "checkpoint_response",
+      stage: state.current_stage || "author",
+      summary: params.summary,
+      details: {
+        response: checkpointResponse,
+      },
+    });
+    persistRunState(state);
+
+    if (wasStartedAsBackgroundRun(state)) {
+      return startOpenClawRiddleProofResumeBackground({
+        state,
+        statePath: params.state_path,
+        config,
+        checkpointResponse,
+        summary: "Riddle Proof checkpoint response accepted; resuming the background proof workflow.",
+      });
+    }
+
+    return runRiddleProofEngineHarness({
+      request: {
+        ...state.request,
+        harness_state_path: params.state_path,
+        engine_state_path: engineStatePath,
+      },
+      state,
+      state_path: params.state_path,
+      checkpoint_response: checkpointResponse,
+      checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(state.request)),
+      checkpoint_visibility: checkpointModeFromRequest(state.request) as RiddleProofCheckpointVisibility,
+      max_iterations: effectiveMaxIterations(state.request, config),
+      dry_run: state.request.dry_run,
+      auto_approve: state.request.auto_approve,
+      engine: config.engine,
+      agent: agentFromConfig(config),
+      config: effectiveHarnessConfig(config),
+    });
+  }
+
   const currentCheckpoint = state.last_checkpoint || state.blocker?.checkpoint || null;
   const currentBlockerCode = state.blocker?.code || null;
   const explicitStage = params.continue_with_stage || params.recommended_stage || null;
@@ -3375,6 +3506,8 @@ export async function submitOpenClawRiddleProofReview(
     state,
     state_path: params.state_path,
     resume_params: resumeParams,
+    checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(state.request)),
+    checkpoint_visibility: checkpointModeFromRequest(state.request) as RiddleProofCheckpointVisibility,
     max_iterations: effectiveMaxIterations(state.request, config),
     dry_run: state.request.dry_run,
     auto_approve: state.request.auto_approve,
@@ -3436,6 +3569,8 @@ export async function syncOpenClawRiddleProof(
     state,
     state_path: params.state_path,
     resume_params: resumeParams,
+    checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(state.request)),
+    checkpoint_visibility: checkpointModeFromRequest(state.request) as RiddleProofCheckpointVisibility,
     max_iterations: 1,
     dry_run: state.request.dry_run,
     auto_approve: state.request.auto_approve,
@@ -3501,6 +3636,15 @@ export const riddleProofChangeParameters = Type.Object({
   ], {
     description:
       "checkpoint allows partial/progress reports at meaningful checkpoints; terminal_only tells wrappers and monitors to hold replies until terminal state.",
+  })),
+  checkpoint_mode: Type.Optional(Type.Union([
+    Type.Literal("liveblog"),
+    Type.Literal("quiet"),
+    Type.Literal("terminal_only"),
+    Type.Literal("manual"),
+  ], {
+    description:
+      "How OpenClaw should handle semantic Riddle Proof checkpoints. quiet/terminal_only auto-dispatch internally; liveblog/manual yield a CheckpointPacket for main-agent review.",
   })),
   wait_for_terminal: optionalBoolean("Compatibility shortcut for report_mode=terminal_only."),
   leave_draft: optionalBoolean("Opt-in escape hatch: keep the PR as draft after proof and CI instead of marking it ready."),
@@ -3568,6 +3712,7 @@ export const riddleProofReviewParameters = Type.Object({
     Type.Literal("human"),
   ])),
   reasons: Type.Optional(Type.Array(Type.String())),
+  checkpoint_response_json: optionalString("Valid riddle-proof.checkpoint_response.v1 JSON for decision=continue_checkpoint when status exposes checkpoint_packet."),
 });
 
 export default function register(api: any) {

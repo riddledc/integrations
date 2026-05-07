@@ -1,4 +1,6 @@
 import type {
+  RiddleProofCheckpointPacket,
+  RiddleProofCheckpointResponse,
   IntegrationContext,
   RiddleProofEvent,
   RiddleProofPrLifecycleState,
@@ -25,6 +27,12 @@ export interface CreateRunStateInput {
   updated_at?: string;
   iterations?: number;
   last_checkpoint?: string | null;
+  checkpoint_packet?: RiddleProofCheckpointPacket;
+  checkpoint_history?: Array<{
+    ts: string;
+    packet?: RiddleProofCheckpointPacket;
+    response?: RiddleProofCheckpointResponse;
+  }>;
   events?: RiddleProofEvent[];
 }
 
@@ -170,6 +178,8 @@ export function createRunState(input: CreateRunStateInput): RiddleProofRunState 
     request: normalizeRunParams(input.request),
     iterations: input.iterations ?? 0,
     last_checkpoint: input.last_checkpoint ?? null,
+    checkpoint_packet: input.checkpoint_packet,
+    checkpoint_history: input.checkpoint_history,
     events: input.events ? [...input.events] : [],
   }) as RiddleProofRunState;
 }
@@ -255,6 +265,7 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     elapsed_ms: elapsedMs(state.created_at, at),
     stage_elapsed_ms: elapsedMs(state.stage_started_at, at),
     blocker: state.blocker,
+    checkpoint_packet: state.checkpoint_packet,
     latest_event: latestEvent,
   }) as RiddleProofRunStatusSnapshot;
 }

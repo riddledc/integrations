@@ -373,11 +373,15 @@ async function run() {
   const core = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-core.js')).href);
   const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-engine.js')).href);
   const proofSessionMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-session.js')).href);
+  const harnessMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'engine-harness.js')).href);
   const cjsCore = require(path.join(__dirname, 'dist', 'proof-run-core.cjs'));
   const cjsEngineMod = require(path.join(__dirname, 'dist', 'proof-run-engine.cjs'));
   const cjsProofSessionMod = require(path.join(__dirname, 'dist', 'proof-session.cjs'));
+  const cjsHarnessMod = require(path.join(__dirname, 'dist', 'engine-harness.cjs'));
   assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.js should expose createRiddleProofEngine');
   assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
+  assert(typeof harnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.js should expose runRiddleProofEngineHarness');
+  assert(typeof cjsHarnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.cjs should expose runRiddleProofEngineHarness');
   assert(typeof proofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.js should expose buildVisualProofSession');
   assert(typeof cjsProofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.cjs should expose buildVisualProofSession');
   assert(
@@ -769,6 +773,108 @@ async function run() {
   const afterAuthored = readJson(reconLoopStatePath);
   assert(afterAuthored.stage_attempts.author.count === 2, 'author request plus author application should both be recorded');
   assert(afterAuthored.author_mode === 'supervising_agent', 'author mode should record supervising_agent ownership');
+
+  const checkpointHarnessDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-checkpoint-harness-'));
+  const checkpointHarnessStatePath = path.join(checkpointHarnessDir, 'wrapper-state.json');
+  const checkpointEngineStatePath = path.join(checkpointHarnessDir, 'engine-state.json');
+  writeJson(checkpointEngineStatePath, {
+    repo: 'riddledc/example',
+    branch: 'agent/checkpoint-protocol',
+    change_request: 'Exercise checkpoint protocol.',
+    verification_mode: 'visual',
+    author_request: {
+      status: 'needs_supervisor_judgment',
+      fallback_defaults: {
+        proof_plan: 'Capture the requested visual state.',
+        capture_script: "await saveScreenshot('after-proof');",
+      },
+    },
+    recon_results: {
+      baselines: {
+        before: { url: 'https://cdn.example.com/checkpoint-before.png', path: '/checkpoint' },
+      },
+    },
+    before_cdn: 'https://cdn.example.com/checkpoint-before.png',
+  });
+  const checkpointEngineCalls = [];
+  const checkpointEngine = {
+    async execute(params) {
+      checkpointEngineCalls.push(params);
+      if (params.author_packet_json) {
+        const packet = JSON.parse(params.author_packet_json);
+        assert(packet.proof_plan.includes('checkpoint packet'), 'resume should pass the authored proof packet into the engine');
+        return {
+          ok: true,
+          state_path: checkpointEngineStatePath,
+          checkpoint: 'verify_ship_ready',
+          summary: 'Checkpoint proof is ready.',
+          shipGate: { ok: true },
+        };
+      }
+      return {
+        ok: true,
+        state_path: checkpointEngineStatePath,
+        checkpoint: 'author_supervisor_judgment',
+        summary: 'Awaiting author packet.',
+      };
+    },
+  };
+  const yieldedCheckpoint = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise checkpoint protocol.',
+      engine_state_path: checkpointEngineStatePath,
+      harness_state_path: checkpointHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: checkpointHarnessStatePath,
+    engine: checkpointEngine,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yieldedCheckpoint.status === 'awaiting_checkpoint', 'yield mode should return awaiting_checkpoint for author checkpoints');
+  assert(yieldedCheckpoint.checkpoint_packet?.version === 'riddle-proof.checkpoint.v1', 'yielded result should include a checkpoint packet');
+  assert(yieldedCheckpoint.checkpoint_packet.kind === 'author_proof', 'yielded packet should identify author proof work');
+  assert(yieldedCheckpoint.checkpoint_packet.routing_hint.visibility === 'manual', 'checkpoint visibility should be preserved');
+  assert(yieldedCheckpoint.checkpoint_packet.allowed_decisions.includes('author_packet'), 'author packet should be an allowed decision');
+  const storedCheckpointState = readJson(checkpointHarnessStatePath);
+  assert(storedCheckpointState.status === 'awaiting_checkpoint', 'wrapper state should persist awaiting_checkpoint');
+  assert(storedCheckpointState.checkpoint_packet.resume_token === yieldedCheckpoint.checkpoint_packet.resume_token, 'wrapper state should persist the same resume token');
+  assert(storedCheckpointState.checkpoint_history.length === 1, 'wrapper state should record checkpoint packet history');
+
+  const resumedCheckpoint = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise checkpoint protocol.',
+      engine_state_path: checkpointEngineStatePath,
+      harness_state_path: checkpointHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: checkpointHarnessStatePath,
+    engine: checkpointEngine,
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: yieldedCheckpoint.run_id,
+      checkpoint: yieldedCheckpoint.checkpoint_packet.checkpoint,
+      resume_token: yieldedCheckpoint.checkpoint_packet.resume_token,
+      decision: 'author_packet',
+      summary: 'Authored a deterministic checkpoint packet.',
+      payload: {
+        proof_plan: 'Use the checkpoint packet proof plan.',
+        capture_script: "await saveScreenshot('after-proof');",
+      },
+      created_at: '2026-05-07T00:00:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  assert(resumedCheckpoint.status === 'ready_to_ship', 'checkpoint response should resume through verify_ship_ready');
+  assert(checkpointEngineCalls.some((call) => call.author_packet_json), 'engine should receive author_packet_json after checkpoint response');
+  const resumedCheckpointState = readJson(checkpointHarnessStatePath);
+  assert(!resumedCheckpointState.checkpoint_packet, 'checkpoint packet should clear after accepted response');
+  assert(resumedCheckpointState.checkpoint_history.length === 2, 'wrapper state should record both packet and response');
 
   const verifyAwaitingJudgment = await localEngine.execute({ action: 'run', state_path: reconLoopStatePath, continue_from_checkpoint: true });
   assert(verifyAwaitingJudgment.checkpoint === 'verify_supervisor_judgment', 'verify should stop for supervising-agent proof assessment after capturing evidence');
@@ -1173,6 +1279,7 @@ async function run() {
       shipGate: true,
       verifyCaptureRetryLoop: true,
       explicitHumanEscalation: true,
+      checkpointPacketProtocol: true,
       staleVerifyEvidenceInvalidation: true,
       prLifecycleSync: true,
     },

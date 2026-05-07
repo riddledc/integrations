@@ -31,6 +31,7 @@ const riddleProofPackageJson = JSON.parse(readFileSync(new URL("../riddle-proof/
 const openclawPluginManifest = JSON.parse(readFileSync(new URL("./openclaw.plugin.json", import.meta.url), "utf8"));
 assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_PROOF_WAIT_TOOL_NAME), true);
 assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
+assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
 
 const params = {
   repo: "riddledc/example",
@@ -116,6 +117,12 @@ const terminalOnlyResult = createOpenClawRiddleProofResult({
 });
 assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.report_mode, "terminal_only");
 assert.equal(terminalOnlyResult.raw?.request?.integration_context?.metadata?.wait_for_terminal, true);
+
+const manualCheckpointModeResult = createOpenClawRiddleProofResult({
+  ...params,
+  checkpoint_mode: "manual",
+});
+assert.equal(manualCheckpointModeResult.raw?.request?.integration_context?.metadata?.checkpoint_mode, "manual");
 
 assert.equal(buildOpenClawAgentSessionKey("main", "fresh-123"), "agent:main:fresh-123");
 const cliPlan = buildOpenClawAgentInvocationPlan({
@@ -1567,6 +1574,105 @@ const backgroundResumeWakeResult = await processOpenClawRiddleProofWakeMonitorOn
 assert.equal(backgroundResumeWakeResult.action, "dispatched");
 assert.equal(backgroundResumeWakeResult.wake_kind, "ready_to_ship");
 assert.equal(backgroundResumeWakeDispatches[0].options.sessionKey, "agent:main:discord-thread-222222222222222222");
+
+const checkpointProtocolFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-checkpoint-protocol-"));
+const checkpointProtocolEngineStatePath = path.join(checkpointProtocolFixture, "engine-state.json");
+const checkpointProtocolWrapperStatePath = path.join(checkpointProtocolFixture, "wrapper-state.json");
+writeFileSync(checkpointProtocolEngineStatePath, JSON.stringify({
+  branch: "agent/checkpoint-protocol",
+  change_request: "Use checkpoint packets in OpenClaw.",
+  verification_mode: "visual",
+  before_cdn: "https://example.com/checkpoint-before.png",
+  author_request: {
+    status: "needs_supervisor_judgment",
+    fallback_defaults: {
+      proof_plan: "Capture the checkpoint-controlled proof.",
+      capture_script: "await saveScreenshot('after-proof');",
+    },
+  },
+}, null, 2));
+const checkpointProtocolEngineCalls = [];
+const checkpointProtocolEngine = {
+  async execute(engineParams) {
+    checkpointProtocolEngineCalls.push(engineParams);
+    if (engineParams.author_packet_json) {
+      const authorPacket = JSON.parse(engineParams.author_packet_json);
+      assert.equal(authorPacket.proof_plan, "Use the OpenClaw checkpoint response proof plan.");
+      return {
+        ok: true,
+        state_path: checkpointProtocolEngineStatePath,
+        checkpoint: "verify_ship_ready",
+        summary: "Checkpoint packet proof is ready.",
+        shipGate: { ok: true },
+      };
+    }
+    return {
+      ok: true,
+      state_path: checkpointProtocolEngineStatePath,
+      checkpoint: "author_supervisor_judgment",
+      summary: "OpenClaw should yield a checkpoint packet.",
+    };
+  },
+};
+const checkpointProtocolResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    run_mode: "blocking",
+    checkpoint_mode: "manual",
+    harness_state_path: checkpointProtocolWrapperStatePath,
+    state_path: checkpointProtocolEngineStatePath,
+    ship_mode: "none",
+    dry_run: false,
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: checkpointProtocolEngine,
+  },
+);
+assert.equal(checkpointProtocolResult.status, "awaiting_checkpoint");
+assert.equal(checkpointProtocolResult.checkpoint_packet?.kind, "author_proof");
+assert.equal(checkpointProtocolResult.checkpoint_packet?.routing_hint?.visibility, "manual");
+const checkpointProtocolStatus = readOpenClawRiddleProofStatus(checkpointProtocolWrapperStatePath);
+assert.equal(checkpointProtocolStatus?.status, "awaiting_checkpoint");
+assert.equal(checkpointProtocolStatus?.suggested_next_action, "resume_checkpoint");
+assert.equal(checkpointProtocolStatus?.checkpoint_action?.kind, "resume_checkpoint");
+assert.equal(checkpointProtocolStatus?.monitor_contract.response_gate, "checkpoint_ok");
+const checkpointProtocolWake = classifyOpenClawRiddleProofWake(checkpointProtocolStatus);
+assert.equal(checkpointProtocolWake.should_dispatch, true);
+assert.equal(checkpointProtocolWake.kind, "resume_checkpoint");
+assert.ok(checkpointProtocolWake.checkpoint_packet);
+const checkpointProtocolWakeText = formatOpenClawRiddleProofWakeEvent(checkpointProtocolWake, checkpointProtocolWrapperStatePath);
+assert.match(checkpointProtocolWakeText, /checkpoint_packet:/);
+assert.match(checkpointProtocolWakeText, /checkpoint_response_json/);
+const checkpointProtocolResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: checkpointProtocolResult.run_id,
+  checkpoint: checkpointProtocolResult.checkpoint_packet.checkpoint,
+  resume_token: checkpointProtocolResult.checkpoint_packet.resume_token,
+  decision: "author_packet",
+  summary: "Main agent authored the checkpoint response.",
+  payload: {
+    proof_plan: "Use the OpenClaw checkpoint response proof plan.",
+    capture_script: "await saveScreenshot('after-proof');",
+  },
+  created_at: "2026-05-07T00:00:00.000Z",
+};
+const checkpointProtocolResumed = await submitOpenClawRiddleProofReview(
+  {
+    state_path: checkpointProtocolWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Submit the checkpoint response.",
+    checkpoint_response_json: JSON.stringify(checkpointProtocolResponse),
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: checkpointProtocolEngine,
+  },
+);
+assert.equal(checkpointProtocolResumed.status, "ready_to_ship");
+assert.ok(checkpointProtocolEngineCalls.some((call) => call.author_packet_json));
 
 const staleHintStatePath = path.join(reviewFixture, "riddle-state-stale-hint.json");
 const staleHintWrapperStatePath = path.join(reviewFixture, "wrapper-state-stale-hint.json");

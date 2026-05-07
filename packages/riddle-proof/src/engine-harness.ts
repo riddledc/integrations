@@ -25,8 +25,15 @@ import {
   normalizeRunParams,
   setRunStatus,
 } from "./state";
+import {
+  authorPacketPayloadFromCheckpointResponse,
+  buildAuthorCheckpointPacket,
+  normalizeCheckpointResponse,
+} from "./checkpoint";
 import type {
   RiddleProofBlocker,
+  RiddleProofCheckpointResponse,
+  RiddleProofCheckpointVisibility,
   RiddleProofRunParams,
   RiddleProofRunResult,
   RiddleProofRunState,
@@ -37,6 +44,7 @@ import type {
 import { visualDeltaShipGateReason } from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
+export type RiddleProofCheckpointMode = "auto" | "yield";
 
 export interface RiddleProofWorkflowParams extends Record<string, unknown> {
   action: string;
@@ -108,6 +116,9 @@ export interface RunRiddleProofEngineHarnessInput {
   state?: RiddleProofRunState;
   state_path?: string;
   resume_params?: RiddleProofWorkflowParams;
+  checkpoint_mode?: RiddleProofCheckpointMode;
+  checkpoint_visibility?: RiddleProofCheckpointVisibility;
+  checkpoint_response?: RiddleProofCheckpointResponse | Record<string, unknown>;
   max_iterations?: number;
   dry_run?: boolean;
   auto_approve?: boolean;
@@ -590,6 +601,170 @@ function blockerResult(
   });
 }
 
+function checkpointAwaitingResult(
+  state: RiddleProofRunState,
+  result: RiddleProofEngineResult,
+  visibility: RiddleProofCheckpointVisibility | undefined,
+): RiddleProofRunResult {
+  const packet = buildAuthorCheckpointPacket({
+    request: state.request,
+    runState: state,
+    engineResult: result,
+    fullRiddleState: fullRiddleState(result, state),
+    visibility,
+  });
+  const at = timestamp();
+  state.checkpoint_packet = packet;
+  state.checkpoint_history = [
+    ...(state.checkpoint_history || []),
+    { ts: at, packet },
+  ].slice(-25);
+  appendRunEvent(state, {
+    ts: at,
+    kind: "checkpoint.packet.created",
+    checkpoint: packet.checkpoint,
+    stage: packet.stage,
+    summary: packet.summary,
+    details: compactRecord({
+      kind: packet.kind,
+      routing_hint: packet.routing_hint,
+      resume_token: packet.resume_token,
+    }) as Record<string, unknown>,
+  });
+  setRunStatus(state, "awaiting_checkpoint", at);
+  persist(state);
+  return createRunResult({
+    state,
+    status: "awaiting_checkpoint",
+    last_summary: packet.summary,
+    raw: {
+      engine_state_path: result.state_path || state.request.engine_state_path || null,
+      last_result: result,
+      checkpoint_packet: packet,
+    },
+  });
+}
+
+function appendCheckpointResponse(
+  state: RiddleProofRunState,
+  response: RiddleProofCheckpointResponse,
+  input: {
+    clear_packet?: boolean;
+    summary?: string;
+  } = {},
+) {
+  const at = timestamp();
+  state.checkpoint_history = [
+    ...(state.checkpoint_history || []),
+    { ts: at, response },
+  ].slice(-25);
+  if (input.clear_packet !== false) {
+    state.checkpoint_packet = undefined;
+  }
+  appendRunEvent(state, {
+    ts: at,
+    kind: "checkpoint.response.accepted",
+    checkpoint: response.checkpoint,
+    stage: state.current_stage || "author",
+    summary: input.summary || response.summary,
+    details: compactRecord({
+      decision: response.decision,
+      resume_token: response.resume_token,
+      source: response.source,
+    }) as Record<string, unknown>,
+  });
+  setRunStatus(state, "running", at);
+  persist(state);
+}
+
+function checkpointResponseContinuation(
+  state: RiddleProofRunState,
+  value?: RiddleProofCheckpointResponse | Record<string, unknown>,
+): { next?: RiddleProofWorkflowParams; blocker?: RiddleProofBlocker } {
+  if (!value) return {};
+  const packet = state.checkpoint_packet;
+  const response = normalizeCheckpointResponse(value);
+  if (!response) {
+    return {
+      blocker: {
+        code: "checkpoint_response_invalid",
+        checkpoint: packet?.checkpoint || state.last_checkpoint || null,
+        message: "Checkpoint response was not a valid riddle-proof.checkpoint_response.v1 object.",
+        details: { checkpoint_packet: packet || null },
+      },
+    };
+  }
+  if (!packet) {
+    return {
+      blocker: {
+        code: "checkpoint_response_without_packet",
+        checkpoint: response.checkpoint,
+        message: "A checkpoint response was supplied, but the run state has no pending checkpoint packet.",
+        details: { response },
+      },
+    };
+  }
+  if (response.run_id !== packet.run_id || response.checkpoint !== packet.checkpoint) {
+    return {
+      blocker: {
+        code: "checkpoint_response_mismatch",
+        checkpoint: packet.checkpoint,
+        message: "Checkpoint response does not match the pending checkpoint packet.",
+        details: {
+          expected: { run_id: packet.run_id, checkpoint: packet.checkpoint },
+          actual: { run_id: response.run_id, checkpoint: response.checkpoint },
+        },
+      },
+    };
+  }
+  if (packet.resume_token && response.resume_token !== packet.resume_token) {
+    return {
+      blocker: {
+        code: "checkpoint_response_resume_token_mismatch",
+        checkpoint: packet.checkpoint,
+        message: "Checkpoint response resume_token does not match the pending checkpoint packet.",
+        details: { expected_resume_token: packet.resume_token, actual_resume_token: response.resume_token || null },
+      },
+    };
+  }
+
+  const base = {
+    action: "run",
+    state_path: state.request.engine_state_path || packet.state_path || "",
+    continue_from_checkpoint: true,
+  };
+  if (response.decision === "author_packet") {
+    const payload = authorPacketPayloadFromCheckpointResponse(response);
+    if (!payload) {
+      return {
+        blocker: {
+          code: "checkpoint_author_packet_missing",
+          checkpoint: packet.checkpoint,
+          message: "Checkpoint response decision=author_packet did not include a proof_plan and capture_script payload.",
+          details: { response },
+        },
+      };
+    }
+    appendCheckpointResponse(state, response);
+    return { next: { ...base, author_packet_json: jsonParam(payload) } };
+  }
+
+  if (response.decision === "needs_recon") {
+    appendCheckpointResponse(state, response);
+    return { next: { ...base, advance_stage: "recon" } };
+  }
+
+  appendCheckpointResponse(state, response, { clear_packet: false });
+  return {
+    blocker: {
+      code: `checkpoint_response_${response.decision}`,
+      checkpoint: packet.checkpoint,
+      message: response.summary || `Checkpoint response stopped the run with decision=${response.decision}.`,
+      details: { response },
+    },
+  };
+}
+
 function disabledAdapterPayload(action: string, context: RiddleProofEngineHarnessContext): RiddleProofAgentPayload {
   return {
     ok: false,
@@ -879,6 +1054,9 @@ async function routeCheckpoint(
     checkpoint === "verify_capture_retry" ||
     (checkpoint === "verify_agent_retry" && checkpointContinuesToAuthor)
   ) {
+    if (input.checkpoint_mode === "yield") {
+      return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+    }
     const packet = await agent.authorProofPacket(context);
     const blocker = requirePayload("author_packet", packet, state, result);
     if (blocker) return { blocker };
@@ -998,6 +1176,10 @@ export async function runRiddleProofEngineHarness(
     nonEmptyString(input.resume_params?.state_path) ||
     nonEmptyString(state.request.engine_state_path) ||
     createEngineStatePath(state, input.config);
+  const checkpointContinuation = checkpointResponseContinuation(state, input.checkpoint_response);
+  if (checkpointContinuation.blocker) {
+    return blockerResult(state, null, checkpointContinuation.blocker);
+  }
   const request = state.request;
   const agent = input.agent || createDisabledRiddleProofAgentAdapter();
   const maxIterations = Math.max(
@@ -1021,6 +1203,8 @@ export async function runRiddleProofEngineHarness(
       engine_state_path: request.engine_state_path || null,
       max_iterations: maxIterations,
       ship_mode: effectiveShipMode(request, input.config),
+      checkpoint_mode: input.checkpoint_mode || "auto",
+      checkpoint_visibility: input.checkpoint_visibility || null,
       leave_draft: request.leave_draft || false,
     },
   });
@@ -1037,7 +1221,7 @@ export async function runRiddleProofEngineHarness(
     });
   }
 
-  let nextParams = input.resume_params || initialRunParams(request, input, state);
+  let nextParams = input.resume_params || checkpointContinuation.next || initialRunParams(request, input, state);
   let lastResult: RiddleProofEngineResult | null = null;
   const stageIterations: Partial<Record<RiddleProofStage, number>> = {};
 

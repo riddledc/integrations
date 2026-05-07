@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./result";
 export * from "./state";
+export * from "./checkpoint";
 export * from "./runner";
 export * from "./engine-harness";
 export * from "./diagnostics";
