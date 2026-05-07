@@ -211,6 +211,7 @@ export interface RiddleProofCheckpointSummary {
   pending: boolean;
   packet_count: number;
   response_count: number;
+  duplicate_response_count?: number;
   latest_checkpoint?: string | null;
   latest_stage?: RiddleProofStage | null;
   latest_kind?: string | null;

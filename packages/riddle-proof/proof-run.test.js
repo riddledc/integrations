@@ -907,6 +907,96 @@ async function run() {
   assert(duplicateCheckpointResponse.status === 'blocked', 'duplicate checkpoint response should be deterministic, not silently rerun');
   assert(duplicateCheckpointResponse.blocker.code === 'checkpoint_response_duplicate', 'duplicate checkpoint response should get a distinct blocker');
 
+  const blockedDuplicateHarnessStatePath = path.join(checkpointHarnessDir, 'wrapper-state-blocked-duplicate.json');
+  const blockedDuplicateEngineStatePath = path.join(checkpointHarnessDir, 'engine-state-blocked-duplicate.json');
+  writeJson(blockedDuplicateEngineStatePath, {
+    repo: 'riddledc/example',
+    branch: 'agent/checkpoint-blocked-duplicate',
+    change_request: 'Exercise blocked checkpoint duplicate handling.',
+    author_request: {
+      status: 'needs_supervisor_judgment',
+      fallback_defaults: {
+        proof_plan: 'Use a blocked duplicate fixture proof plan.',
+        capture_script: "await saveScreenshot('after-proof');",
+      },
+    },
+  });
+  const blockedDuplicateEngine = {
+    execute: async () => ({
+      ok: true,
+      state_path: blockedDuplicateEngineStatePath,
+      checkpoint: 'author_supervisor_judgment',
+      summary: 'Yield a blocked-response duplicate checkpoint packet.',
+    }),
+  };
+  const blockedDuplicateYield = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise blocked checkpoint duplicate handling.',
+      engine_state_path: blockedDuplicateEngineStatePath,
+      harness_state_path: blockedDuplicateHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: blockedDuplicateHarnessStatePath,
+    engine: blockedDuplicateEngine,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  const blockedDuplicateResponse = {
+    version: 'riddle-proof.checkpoint_response.v1',
+    run_id: blockedDuplicateYield.run_id,
+    checkpoint: blockedDuplicateYield.checkpoint_packet.checkpoint,
+    resume_token: blockedDuplicateYield.checkpoint_packet.resume_token,
+    decision: 'blocked',
+    summary: 'Stop at the author checkpoint for duplicate testing.',
+    reasons: ['intentional smoke stop'],
+    created_at: '2026-05-07T00:10:00.000Z',
+  };
+  const firstBlockedDuplicateResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise blocked checkpoint duplicate handling.',
+      engine_state_path: blockedDuplicateEngineStatePath,
+      harness_state_path: blockedDuplicateHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: blockedDuplicateHarnessStatePath,
+    engine: blockedDuplicateEngine,
+    checkpoint_response: blockedDuplicateResponse,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  assert(firstBlockedDuplicateResponse.blocker.code === 'checkpoint_response_blocked', 'first blocked response should retain the blocking checkpoint result');
+  const afterFirstBlockedDuplicate = readJson(blockedDuplicateHarnessStatePath);
+  assert(afterFirstBlockedDuplicate.checkpoint_packet, 'blocked checkpoint responses should retain the pending packet for inspection');
+  assert(afterFirstBlockedDuplicate.checkpoint_summary.response_count === 1, 'first blocked response should count once');
+  const secondBlockedDuplicateResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Exercise blocked checkpoint duplicate handling.',
+      engine_state_path: blockedDuplicateEngineStatePath,
+      harness_state_path: blockedDuplicateHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: blockedDuplicateHarnessStatePath,
+    engine: blockedDuplicateEngine,
+    checkpoint_response: blockedDuplicateResponse,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    config: { defaultShipMode: 'none' },
+  });
+  assert(secondBlockedDuplicateResponse.blocker.code === 'checkpoint_response_duplicate', 'duplicate blocked response should be explicit');
+  assert(secondBlockedDuplicateResponse.blocker.details.duplicate === true, 'duplicate blocked response should expose duplicate=true');
+  const afterSecondBlockedDuplicate = readJson(blockedDuplicateHarnessStatePath);
+  assert(afterSecondBlockedDuplicate.checkpoint_summary.response_count === 1, 'duplicate blocked response should not increment accepted response_count');
+  assert(afterSecondBlockedDuplicate.checkpoint_summary.duplicate_response_count === 1, 'duplicate blocked response should increment duplicate_response_count');
+  assert(
+    afterSecondBlockedDuplicate.events.filter((event) => event.kind === 'checkpoint.response.accepted').length === 1,
+    'duplicate blocked response should not emit a second accepted response event',
+  );
+
   const verifyAwaitingJudgment = await localEngine.execute({ action: 'run', state_path: reconLoopStatePath, continue_from_checkpoint: true });
   assert(verifyAwaitingJudgment.checkpoint === 'verify_supervisor_judgment', 'verify should stop for supervising-agent proof assessment after capturing evidence');
   assert(verifyAwaitingJudgment.checkpointContract.accepted_inputs.some((input) => input.name === 'proof_assessment_json'), 'verify checkpoint contract should name proof_assessment_json as an input');

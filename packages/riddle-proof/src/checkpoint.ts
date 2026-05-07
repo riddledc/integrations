@@ -38,6 +38,15 @@ function jsonCloneValue(value: unknown): unknown {
   }
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const record = recordValue(value);
+  if (record) {
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function compactText(value: unknown, limit = 1600): string | undefined {
   const text = nonEmptyString(value);
   if (!text) return undefined;
@@ -240,6 +249,7 @@ export function checkpointSummaryFromState(
   const history = state.checkpoint_history || [];
   const packets = history.filter((entry) => entry.packet);
   const responses = history.filter((entry) => entry.response);
+  const duplicateResponses = (state.events || []).filter((event) => event.kind === "checkpoint.response.duplicate");
   const latestPacketEntry = [...history].reverse().find((entry) => entry.packet);
   const latestResponseEntry = [...history].reverse().find((entry) => entry.response);
   const latestPacket = state.checkpoint_packet || latestPacketEntry?.packet;
@@ -254,6 +264,7 @@ export function checkpointSummaryFromState(
     pending: Boolean(state.checkpoint_packet),
     packet_count: packets.length,
     response_count: responses.length,
+    duplicate_response_count: duplicateResponses.length,
     latest_checkpoint: state.checkpoint_packet?.checkpoint || latestResponse?.checkpoint || state.last_checkpoint || null,
     latest_stage: state.checkpoint_packet?.stage || latestResponse?.continue_with_stage || state.current_stage || null,
     latest_kind: state.checkpoint_packet?.kind || latestPacket?.kind || null,
@@ -273,14 +284,25 @@ export function isDuplicateCheckpointResponse(
   state: RiddleProofRunState,
   response: RiddleProofCheckpointResponse,
 ) {
-  const latestResponse = [...(state.checkpoint_history || [])].reverse().find((entry) => entry.response)?.response;
-  if (!latestResponse) return false;
-  return (
-    latestResponse.run_id === response.run_id &&
-    latestResponse.checkpoint === response.checkpoint &&
-    latestResponse.resume_token === response.resume_token &&
-    latestResponse.decision === response.decision
-  );
+  const identity = checkpointResponseIdentity(response);
+  return (state.checkpoint_history || []).some((entry) => (
+    entry.response ? checkpointResponseIdentity(entry.response) === identity : false
+  ));
+}
+
+export function checkpointResponseIdentity(response: RiddleProofCheckpointResponse) {
+  const logicalResponse = compactRecord({
+    run_id: response.run_id,
+    checkpoint: response.checkpoint,
+    resume_token: response.resume_token,
+    decision: response.decision,
+    summary: response.summary,
+    payload: response.payload,
+    reasons: response.reasons,
+    continue_with_stage: response.continue_with_stage,
+    source: response.source,
+  });
+  return crypto.createHash("sha256").update(stableJson(logicalResponse)).digest("hex").slice(0, 24);
 }
 
 export function authorPacketPayloadFromCheckpointResponse(

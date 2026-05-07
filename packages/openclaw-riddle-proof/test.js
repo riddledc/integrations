@@ -1679,6 +1679,78 @@ const checkpointProtocolResumed = await submitOpenClawRiddleProofReview(
 assert.equal(checkpointProtocolResumed.status, "ready_to_ship");
 assert.ok(checkpointProtocolEngineCalls.some((call) => call.author_packet_json));
 
+const checkpointProtocolBlockedDuplicateEngineStatePath = path.join(checkpointProtocolFixture, "riddle-state-blocked-duplicate.json");
+const checkpointProtocolBlockedDuplicateWrapperStatePath = path.join(checkpointProtocolFixture, "wrapper-state-blocked-duplicate.json");
+writeFileSync(checkpointProtocolBlockedDuplicateEngineStatePath, JSON.stringify({
+  branch: "agent/checkpoint-protocol-blocked-duplicate",
+  author_request: {
+    status: "needs_supervisor_judgment",
+    fallback_defaults: {
+      proof_plan: "Use the OpenClaw blocked duplicate proof plan.",
+      capture_script: "await saveScreenshot('after-proof');",
+    },
+  },
+}, null, 2));
+const checkpointProtocolBlockedDuplicate = await runOpenClawRiddleProof(
+  {
+    ...params,
+    run_mode: "blocking",
+    checkpoint_mode: "manual",
+    harness_state_path: checkpointProtocolBlockedDuplicateWrapperStatePath,
+    state_path: checkpointProtocolBlockedDuplicateEngineStatePath,
+    ship_mode: "none",
+    dry_run: false,
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: checkpointProtocolEngine,
+  },
+);
+assert.equal(checkpointProtocolBlockedDuplicate.status, "awaiting_checkpoint");
+const checkpointProtocolBlockedDuplicateResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: checkpointProtocolBlockedDuplicate.run_id,
+  checkpoint: checkpointProtocolBlockedDuplicate.checkpoint_packet.checkpoint,
+  resume_token: checkpointProtocolBlockedDuplicate.checkpoint_packet.resume_token,
+  decision: "blocked",
+  summary: "Stop at the author checkpoint for OpenClaw duplicate testing.",
+  reasons: ["intentional smoke stop"],
+  created_at: "2026-05-07T00:05:00.000Z",
+};
+const checkpointProtocolBlockedOnce = await submitOpenClawRiddleProofReview(
+  {
+    state_path: checkpointProtocolBlockedDuplicateWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Submit the blocked checkpoint response.",
+    checkpoint_response_json: JSON.stringify(checkpointProtocolBlockedDuplicateResponse),
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: checkpointProtocolEngine,
+  },
+);
+assert.equal(checkpointProtocolBlockedOnce.blocker?.code, "checkpoint_response_blocked");
+assert.equal(readOpenClawRiddleProofStatus(checkpointProtocolBlockedDuplicateWrapperStatePath)?.checkpoint_summary?.response_count, 1);
+const checkpointProtocolBlockedTwice = await submitOpenClawRiddleProofReview(
+  {
+    state_path: checkpointProtocolBlockedDuplicateWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Resubmit the same blocked checkpoint response.",
+    checkpoint_response_json: JSON.stringify(checkpointProtocolBlockedDuplicateResponse),
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: checkpointProtocolEngine,
+  },
+);
+assert.equal(checkpointProtocolBlockedTwice.blocker?.code, "checkpoint_response_duplicate");
+const checkpointProtocolBlockedDuplicateStatus = readOpenClawRiddleProofStatus(checkpointProtocolBlockedDuplicateWrapperStatePath);
+assert.equal(checkpointProtocolBlockedDuplicateStatus?.checkpoint_summary?.response_count, 1);
+assert.equal(checkpointProtocolBlockedDuplicateStatus?.checkpoint_summary?.duplicate_response_count, 1);
+
 const staleHintStatePath = path.join(reviewFixture, "riddle-state-stale-hint.json");
 const staleHintWrapperStatePath = path.join(reviewFixture, "wrapper-state-stale-hint.json");
 writeFileSync(staleHintStatePath, JSON.stringify({

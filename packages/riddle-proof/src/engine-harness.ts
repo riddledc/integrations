@@ -28,6 +28,7 @@ import {
 import {
   authorPacketPayloadFromCheckpointResponse,
   buildAuthorCheckpointPacket,
+  checkpointResponseIdentity,
   checkpointSummaryFromState,
   isDuplicateCheckpointResponse,
   normalizeCheckpointResponse,
@@ -706,20 +707,35 @@ function checkpointResponseContinuation(
       },
     };
   }
-  if (!packet) {
-    if (isDuplicateCheckpointResponse(state, response)) {
-      return {
-        blocker: {
-          code: "checkpoint_response_duplicate",
-          checkpoint: response.checkpoint,
-          message: "Checkpoint response was already accepted and there is no pending checkpoint packet to resume.",
-          details: {
-            response,
-            checkpoint_summary: checkpointSummaryFromState(state),
-          },
+  if (isDuplicateCheckpointResponse(state, response)) {
+    const stage = packet?.stage || state.current_stage || "author";
+    recordEvent(state, {
+      kind: "checkpoint.response.duplicate",
+      checkpoint: response.checkpoint,
+      stage,
+      summary: "Duplicate checkpoint response ignored.",
+      details: compactRecord({
+        decision: response.decision,
+        resume_token: response.resume_token,
+        response_identity: checkpointResponseIdentity(response),
+      }) as Record<string, unknown>,
+    });
+    return {
+      blocker: {
+        code: "checkpoint_response_duplicate",
+        checkpoint: response.checkpoint,
+        message: "Checkpoint response was already accepted for this run/checkpoint/resume token and was not applied again.",
+        details: {
+          stage,
+          duplicate: true,
+          response,
+          response_identity: checkpointResponseIdentity(response),
+          checkpoint_summary: checkpointSummaryFromState(state),
         },
-      };
-    }
+      },
+    };
+  }
+  if (!packet) {
     return {
       blocker: {
         code: "checkpoint_response_without_packet",
