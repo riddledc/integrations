@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.51
+
+### Patch Changes
+
+- Add a sole-agent checkpoint CLI view and flag-based checkpoint responses for the host-agnostic durable loop.
+
 ## 0.5.50
 
 ### Patch Changes

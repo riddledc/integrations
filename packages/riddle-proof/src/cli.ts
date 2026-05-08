@@ -7,6 +7,7 @@ import {
   type RiddleProofAgentAdapter,
   type RiddleProofCheckpointMode,
 } from "./engine-harness";
+import { createCheckpointResponseTemplate } from "./checkpoint";
 import {
   createLocalAgentAdapter,
   runLocalAgentDoctor,
@@ -20,7 +21,9 @@ function usage() {
   return [
     "Usage:",
     "  riddle-proof-loop run --request-json <file|json|-> [--agent disabled|local] [--checkpoint-mode yield|auto]",
+    "  riddle-proof-loop checkpoint --state-path <path> [--decision <decision>]",
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
+    "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
     "  riddle-proof-loop doctor local [--codex-command <path>]",
     "",
@@ -73,12 +76,54 @@ function readJsonValue(value: string | undefined, label: string): Record<string,
   return parsed as Record<string, unknown>;
 }
 
+function readOptionalJsonRecord(value: string | undefined, label: string): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  return readJsonValue(value, label);
+}
+
+function readOptionalJsonStringArray(value: string | undefined, label: string): string[] | undefined {
+  if (!value) return undefined;
+  const parsed = value === "-"
+    ? JSON.parse(readStdin())
+    : existsSync(value)
+      ? JSON.parse(readFileSync(value, "utf-8"))
+      : JSON.parse(value);
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+    throw new Error(`${label} must be a JSON array of strings.`);
+  }
+  return parsed;
+}
+
 function readRunState(statePath: string): RiddleProofRunState {
   const parsed = readJsonValue(statePath, "--state-path");
   if (parsed.version !== "riddle-proof.run-state.v1" || !Array.isArray(parsed.events)) {
     throw new Error(`${statePath} is not a riddle-proof.run-state.v1 file.`);
   }
   return parsed as unknown as RiddleProofRunState;
+}
+
+function checkpointResponseForFlags(statePath: string, options: CliOptions): RiddleProofCheckpointResponse {
+  const state = readRunState(statePath);
+  if (!state.checkpoint_packet) {
+    throw new Error(`${statePath} has no pending checkpoint packet. Use status to inspect the current run state.`);
+  }
+  const decision = optionString(options, "decision");
+  const summary = optionString(options, "summary");
+  if (!decision || !summary) {
+    throw new Error("--decision and --summary are required when --response-json is not supplied.");
+  }
+  if (!state.checkpoint_packet.allowed_decisions.includes(decision)) {
+    throw new Error(`--decision ${decision} is not allowed for ${state.checkpoint_packet.checkpoint}. Allowed decisions: ${state.checkpoint_packet.allowed_decisions.join(", ")}`);
+  }
+  return createCheckpointResponseTemplate(state.checkpoint_packet, {
+    decision,
+    summary,
+    payload: readOptionalJsonRecord(optionString(options, "payloadJson"), "--payload-json"),
+    reasons: readOptionalJsonStringArray(optionString(options, "reasonsJson"), "--reasons-json"),
+    continue_with_stage: optionString(options, "continueWithStage") as RiddleProofCheckpointResponse["continue_with_stage"],
+    source_kind: optionString(options, "sourceKind") as NonNullable<RiddleProofCheckpointResponse["source"]>["kind"] || "codex",
+    created_at: optionString(options, "createdAt"),
+  });
 }
 
 function codexConfig(options: CliOptions): LocalAgentConfig {
@@ -147,11 +192,37 @@ async function main() {
     return;
   }
 
+  if (command === "checkpoint") {
+    const statePath = optionString(options, "statePath");
+    if (!statePath) throw new Error("--state-path is required.");
+    const state = readRunState(statePath);
+    const snapshot = readRiddleProofRunStatus(statePath);
+    if (!state.checkpoint_packet) {
+      throw new Error(`${statePath} has no pending checkpoint packet.`);
+    }
+    const responseTemplate = createCheckpointResponseTemplate(state.checkpoint_packet, {
+      decision: optionString(options, "decision"),
+      source_kind: optionString(options, "sourceKind") as NonNullable<RiddleProofCheckpointResponse["source"]>["kind"] || "codex",
+    });
+    process.stdout.write(`${JSON.stringify({
+      checkpoint_packet: state.checkpoint_packet,
+      run_card: snapshot?.run_card || state.run_card || null,
+      response_template: responseTemplate,
+      next_commands: [
+        `riddle-proof-loop respond --state-path ${statePath} --decision ${responseTemplate.decision} --summary <summary> --payload-json <file|json|->`,
+        `riddle-proof-loop status --state-path ${statePath}`,
+      ],
+    }, null, 2)}\n`);
+    return;
+  }
+
   if (command === "run" || command === "respond") {
     const statePath = optionString(options, "statePath");
     const request = requestForRun(options);
     const response = command === "respond"
-      ? readJsonValue(optionString(options, "responseJson"), "--response-json") as unknown as RiddleProofCheckpointResponse
+      ? optionString(options, "responseJson")
+        ? readJsonValue(optionString(options, "responseJson"), "--response-json") as unknown as RiddleProofCheckpointResponse
+        : checkpointResponseForFlags(statePath || "", options)
       : undefined;
     const result = await runRiddleProofEngineHarness({
       request,

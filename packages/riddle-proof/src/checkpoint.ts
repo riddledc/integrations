@@ -698,6 +698,96 @@ export function normalizeCheckpointResponse(value: unknown): RiddleProofCheckpoi
   }) as RiddleProofCheckpointResponse;
 }
 
+function defaultContinueStage(packet: RiddleProofCheckpointPacket, decision: string): RiddleProofStage | undefined {
+  if (decision === "ready_for_author" || decision === "author_packet" || decision === "needs_author") return "author";
+  if (decision === "implementation_complete") return "verify";
+  if (decision === "ready_to_ship") return "ship";
+  if (decision === "revise_capture") return "verify";
+  if (decision === "retry_recon" || decision === "recon_stuck" || decision === "needs_recon") return "recon";
+  if (decision === "needs_implementation") return "implement";
+  if (decision === "continue_stage" || decision === "retry_stage") return packet.stage;
+  return undefined;
+}
+
+function templatePayloadFor(packet: RiddleProofCheckpointPacket, decision: string): Record<string, unknown> | undefined {
+  if (packet.kind === "author_proof" || decision === "author_packet") {
+    return {
+      proof_plan: "TODO: describe the exact proof plan and stop condition.",
+      capture_script: "TODO: provide the capture script that collects required artifacts/evidence.",
+      summary: "TODO: summarize why this proof packet targets the requested change.",
+    };
+  }
+  if (packet.kind === "implement_change" || decision === "implementation_complete") {
+    return {
+      changed_files: [],
+      tests_run: [],
+      implementation_notes: "TODO: summarize the direct edits made in the after worktree.",
+    };
+  }
+  if (packet.kind === "assess_recon" || packet.stage === "recon") {
+    return {
+      baseline_understanding: {
+        reference: "TODO",
+        target_route: "TODO",
+        before_evidence_url: "TODO",
+        visible_before_state: "TODO",
+        relevant_elements: [],
+        requested_change: packet.change_request,
+        proof_focus: "TODO",
+        stop_condition: "TODO",
+        quality_risks: [],
+      },
+      refined_inputs: {
+        server_path: null,
+        wait_for_selector: null,
+        reference: null,
+      },
+    };
+  }
+  if (packet.kind === "assess_proof" || packet.kind === "recover_evidence" || packet.stage === "verify") {
+    return {
+      recommended_stage: defaultContinueStage(packet, decision) || packet.stage,
+      evidence_issue_code: packet.evidence_excerpt?.evidence_issue_code || null,
+      visual_delta: packet.evidence_excerpt?.visual_delta || null,
+    };
+  }
+  return undefined;
+}
+
+export function createCheckpointResponseTemplate(
+  packet: RiddleProofCheckpointPacket,
+  input: {
+    decision?: string;
+    summary?: string;
+    payload?: Record<string, unknown>;
+    reasons?: string[];
+    continue_with_stage?: RiddleProofStage;
+    source_kind?: NonNullable<RiddleProofCheckpointResponse["source"]>["kind"];
+    created_at?: string;
+  } = {},
+): RiddleProofCheckpointResponse {
+  const allowed = Array.isArray(packet.allowed_decisions) ? packet.allowed_decisions : [];
+  const decision = input.decision && allowed.includes(input.decision)
+    ? input.decision
+    : allowed[0] || "blocked";
+  const continueStage = input.continue_with_stage || defaultContinueStage(packet, decision);
+  return compactRecord({
+    version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
+    run_id: packet.run_id,
+    checkpoint: packet.checkpoint,
+    resume_token: packet.resume_token,
+    decision,
+    summary: input.summary || `TODO: explain checkpoint decision ${decision}.`,
+    payload: input.payload || templatePayloadFor(packet, decision),
+    reasons: input.reasons || ["TODO: replace with concrete reason(s)."],
+    continue_with_stage: continueStage,
+    source: {
+      kind: input.source_kind || "codex",
+    },
+    created_at: input.created_at || timestamp(),
+  }) as RiddleProofCheckpointResponse;
+}
+
 export function checkpointSummaryFromState(
   state: RiddleProofRunState,
   engineStatePath?: string | null,

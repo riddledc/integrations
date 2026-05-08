@@ -63,9 +63,11 @@ Codex/CLI-style testing:
 
 ```sh
 riddle-proof-loop run --request-json request.json --checkpoint-mode yield
+riddle-proof-loop checkpoint --state-path /tmp/riddle-proof-run.json
 riddle-proof-loop run --request-json request.json --agent local
 riddle-proof-loop status --state-path /tmp/riddle-proof-run.json
 riddle-proof-loop respond --state-path /tmp/riddle-proof-run.json --response-json response.json
+riddle-proof-loop respond --state-path /tmp/riddle-proof-run.json --decision ready_for_author --summary "Baseline is trustworthy."
 riddle-proof-loop doctor local
 ```
 
@@ -73,6 +75,13 @@ In yield mode, the harness returns portable checkpoint packets for recon,
 authoring, implementation, proof assessment, and evidence recovery. A host can
 answer those packets with `riddle-proof.checkpoint_response.v1` JSON without
 needing OpenClaw-specific proof semantics.
+
+For a sole-agent loop, keep the agent in charge of the checkpoint response:
+run until a checkpoint, inspect `riddle-proof-loop checkpoint` for the packet,
+act directly when the packet asks for implementation, then respond with either
+full `--response-json` or the shorter `--decision` / `--summary` /
+`--payload-json` flags. No local executor or OpenClaw surface is required for
+that base workflow.
 
 `--agent local` is the generic CLI executor slot. The current implementation
 uses the local Codex CLI adapter underneath, but the loop contract and CLI

@@ -13,6 +13,7 @@ import {
   appendCaptureDiagnostic,
   createDisabledRiddleProofAgentAdapter,
   createCaptureDiagnostic,
+  createCheckpointResponseTemplate,
   createRunStatusSnapshot,
   createRunState,
   createRiddleProofRunCard,
@@ -43,6 +44,7 @@ const cjsPlayability = require("./dist/playability.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
+assert.equal(typeof cjs.createCheckpointResponseTemplate, "function");
 assert.equal(typeof cjs.createRiddleProofRunCard, "function");
 assert.equal(typeof cjs.createCodexExecAgentAdapter, "function");
 assert.equal(typeof cjs.createLocalAgentAdapter, "function");
@@ -1387,6 +1389,45 @@ assert.equal(yieldedRecon.status, "awaiting_checkpoint");
 assert.equal(yieldedRecon.checkpoint_packet.kind, "assess_recon");
 assert.equal(yieldedRecon.run_card.owner_next_action.checkpoint_kind, "assess_recon");
 assert.ok(yieldedRecon.checkpoint_packet.allowed_decisions.includes("ready_for_author"));
+const yieldedReconTemplate = createCheckpointResponseTemplate(yieldedRecon.checkpoint_packet, {
+  decision: "ready_for_author",
+  summary: "Recon baseline is specific enough.",
+});
+assert.equal(yieldedReconTemplate.version, "riddle-proof.checkpoint_response.v1");
+assert.equal(yieldedReconTemplate.run_id, yieldedRecon.run_id);
+assert.equal(yieldedReconTemplate.checkpoint, yieldedRecon.checkpoint_packet.checkpoint);
+assert.equal(yieldedReconTemplate.resume_token, yieldedRecon.checkpoint_packet.resume_token);
+assert.equal(yieldedReconTemplate.decision, "ready_for_author");
+assert.equal(yieldedReconTemplate.continue_with_stage, "author");
+assert.equal(yieldedReconTemplate.source.kind, "codex");
+const yieldedReconCliCheckpoint = JSON.parse(execFileSync(process.execPath, [
+  new URL("./dist/cli.js", import.meta.url).pathname,
+  "checkpoint",
+  "--state-path",
+  yieldedReconHarnessPath,
+  "--decision",
+  "ready_for_author",
+], { encoding: "utf8" }));
+assert.equal(yieldedReconCliCheckpoint.checkpoint_packet.kind, "assess_recon");
+assert.equal(yieldedReconCliCheckpoint.response_template.decision, "ready_for_author");
+assert.ok(yieldedReconCliCheckpoint.next_commands[0].includes("riddle-proof-loop respond"));
+let yieldedReconInvalidDecisionFailed = false;
+try {
+  execFileSync(process.execPath, [
+    new URL("./dist/cli.js", import.meta.url).pathname,
+    "respond",
+    "--state-path",
+    yieldedReconHarnessPath,
+    "--decision",
+    "ready_to_ship",
+    "--summary",
+    "Invalid for recon.",
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+} catch (error) {
+  yieldedReconInvalidDecisionFailed = true;
+  assert.match(String(error.stderr || error.message), /not allowed/);
+}
+assert.equal(yieldedReconInvalidDecisionFailed, true);
 const yieldedReconResponse = {
   version: "riddle-proof.checkpoint_response.v1",
   run_id: yieldedRecon.run_id,
