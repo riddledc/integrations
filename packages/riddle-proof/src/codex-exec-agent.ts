@@ -168,10 +168,11 @@ const PROOF_SCHEMA = {
   },
 };
 
-const PROMPT_STRING_LIMIT = 1_400;
+const PROMPT_STRING_LIMIT = 1_000;
 const PROMPT_ARRAY_LIMIT = 8;
 const PROMPT_OBJECT_KEY_LIMIT = 50;
-const PROMPT_BLOCK_LIMIT = 70_000;
+const PROMPT_BLOCK_LIMIT = 16_000;
+const PROMPT_TOTAL_LIMIT = 58_000;
 
 const PROMPT_KEY_PRIORITY = [
   "ok",
@@ -298,7 +299,7 @@ function resolveWorkdir(context: RiddleProofEngineHarnessContext, fallback = "/t
 }
 
 function basePrompt(context: RiddleProofEngineHarnessContext, role: string) {
-  return [
+  const prompt = [
     role,
     "",
     "You are the supervising Codex worker inside the Riddle Proof harness.",
@@ -310,6 +311,8 @@ function basePrompt(context: RiddleProofEngineHarnessContext, role: string) {
     jsonBlock("Riddle checkpoint result", context.engineResult),
     jsonBlock("Full riddle state", context.fullRiddleState || {}),
   ].join("\n");
+  if (prompt.length <= PROMPT_TOTAL_LIMIT) return prompt;
+  return `${prompt.slice(0, PROMPT_TOTAL_LIMIT).trimEnd()}\n...[truncated ${prompt.length - PROMPT_TOTAL_LIMIT} chars from total prompt]`;
 }
 
 function schemaRequiredKeys(schema?: Record<string, unknown>): string[] {

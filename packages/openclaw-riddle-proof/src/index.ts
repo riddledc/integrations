@@ -806,6 +806,7 @@ function monitorContractFor(
     implementationGapOrigin?: string | null;
     activeSubstepRunning?: boolean;
     checkpointActionable?: boolean;
+    runtimeStale?: boolean;
   } = {},
 ): OpenClawRiddleProofMonitorContract {
   const reportMode = reportModeFromRequest(request);
@@ -814,8 +815,9 @@ function monitorContractFor(
   const terminal = !resumable && isTerminalStatusLike(status);
   const implementationInFlight = options.implementationGapOrigin === "during_agent_attempt";
   const activeSubstepRunning = options.activeSubstepRunning === true;
+  const runtimeStale = options.runtimeStale === true;
   const internalLoopInProgress = status === "running" && resumable && options.checkpointActionable === false;
-  const engineCallInProgress = status === "running" && !resumable && !terminal;
+  const engineCallInProgress = status === "running" && !resumable && !terminal && !runtimeStale;
   const checkpointReady =
     !activeSubstepRunning &&
     !implementationInFlight &&
@@ -824,7 +826,9 @@ function monitorContractFor(
       (!waitForTerminal && resumable && options.checkpointActionable !== false && status !== "running")
     );
   const responseGate =
-    implementationInFlight
+    runtimeStale
+      ? "checkpoint_ok"
+      : implementationInFlight
       ? "hold_for_implementation_outcome"
       : checkpointReady
       ? "checkpoint_ok"
@@ -2630,6 +2634,41 @@ function elapsedMsSince(isoTime: unknown) {
   return Math.max(0, Date.now() - startedMs);
 }
 
+const STALE_RUNTIME_IDLE_MS = 120_000;
+
+function summarizeRuntimeStaleness(
+  snapshot: RiddleProofRunStatusSnapshot,
+  engineState: Record<string, unknown> | null,
+) {
+  const activeSubstep = recordValue(engineState?.current_runtime_step);
+  const latestEvent = latestRuntimeEvent(engineState);
+  const activeStatus = stringValue(activeSubstep?.status) || null;
+  const phaseStatus = stringValue(activeSubstep?.phase_status) || null;
+  const activeStepElapsedMs = elapsedMsSince(activeSubstep?.started_at);
+  const latestEventAgeMs = elapsedMsSince(latestEvent?.ts);
+  const phaseRunning = phaseStatus === "running";
+  const stale = Boolean(
+    snapshot.status === "running" &&
+      activeStatus === "running" &&
+      !phaseRunning &&
+      latestEventAgeMs !== null &&
+      latestEventAgeMs >= STALE_RUNTIME_IDLE_MS,
+  );
+  return compactRecordValue({
+    stale,
+    stale_after_ms: STALE_RUNTIME_IDLE_MS,
+    reason: stale ? "active_runtime_step_running_without_recent_runtime_events" : null,
+    active_step: stringValue(activeSubstep?.step) || null,
+    active_phase: stringValue(activeSubstep?.phase) || null,
+    active_status: activeStatus,
+    phase_status: phaseStatus,
+    active_step_elapsed_ms: activeStepElapsedMs,
+    latest_runtime_event_age_ms: latestEventAgeMs,
+    latest_runtime_event_kind: stringValue(latestEvent?.kind) || null,
+    latest_runtime_event_summary: stringValue(latestEvent?.summary) || null,
+  });
+}
+
 function recommendedPollAfterMs(activeSubstep: Record<string, unknown> | null, snapshot: RiddleProofRunStatusSnapshot) {
   const checkpoint = snapshot.last_checkpoint || snapshot.blocker?.checkpoint || null;
   const resumable = resumableCheckpointLike(snapshot.status, checkpoint, snapshot.blocker?.code);
@@ -2738,8 +2777,10 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   const implementationGapOriginValue = stringValue(snapshotRecord.implementation_gap_origin);
   const implementationInFlight = implementationGap && implementationGapOriginValue === "during_agent_attempt";
   const activeSubstep = recordValue(snapshotRecord.active_substep);
+  const runtimeStale = snapshotRecord.runtime_stale === true;
   const activeSubstepRunning = Boolean(
     snapshot.status === "running" &&
+    !runtimeStale &&
     (activeSubstep?.status === "running" || activeSubstep?.phase_status === "running"),
   );
   const isTerminal = typeof snapshotRecord.is_terminal === "boolean"
@@ -2754,10 +2795,14 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
   );
   const waitForTerminal = snapshotRecord.wait_for_terminal === true;
   const waitForTerminalCanHold = waitForTerminal && snapshot.status !== "awaiting_checkpoint";
-  const monitorShouldContinue = waitForTerminalCanHold && !isTerminal && !isReviewRequired
+  const monitorShouldContinue = runtimeStale
+    ? false
+    : waitForTerminalCanHold && !isTerminal && !isReviewRequired
     ? true
     : !isTerminal && !isReviewRequired && !isActionableRoutable;
-  const checkpointAction = waitForTerminalCanHold && !isReviewRequired
+  const checkpointAction = runtimeStale
+    ? "inspect_stale_run"
+    : waitForTerminalCanHold && !isReviewRequired
     ? null
     : checkpointActionFor({
         checkpoint,
@@ -2774,6 +2819,7 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     checkpoint_action: checkpointAction,
     checkpoint_classification:
       isTerminal ? "terminal" :
+        runtimeStale ? "stale" :
         isReviewRequired ? "review_required" :
           activeSubstepRunning ? "in_progress" :
           implementationInFlight ? "in_progress" :
@@ -2782,6 +2828,7 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
             "blocked",
     checkpoint_disposition:
       isTerminal ? "terminal" :
+        runtimeStale ? "stale_runtime_step" :
         isReviewRequired ? "review_required" :
           activeSubstepRunning ? "engine_substep_in_progress" :
           implementationInFlight ? "implementation_in_flight" :
@@ -2790,7 +2837,8 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
               snapshot.status === "running" ? "in_progress" :
                 "blocked",
     suggested_next_action:
-      monitorShouldContinue ? "continue_monitoring" :
+      runtimeStale ? "inspect_stale_run" :
+        monitorShouldContinue ? "continue_monitoring" :
         isReviewRequired ? "inspect_or_review" :
           isActionableRoutable ? "resume_checkpoint" :
           isTerminal ? "report_terminal_status" :
@@ -2865,16 +2913,20 @@ export function readOpenClawRiddleProofStatus(
   const engineState = readJsonRecord(engineStatePath);
   const activeSubstep = recordValue(engineState?.current_runtime_step);
   const runtimeEvents = Array.isArray(engineState?.runtime_events) ? engineState.runtime_events : [];
+  const runtimeStaleness = summarizeRuntimeStaleness(snapshot, engineState);
+  const runtimeStale = runtimeStaleness.stale === true;
   const engineCurrentStage = stringValue(activeSubstep?.step);
   const effectiveStage = snapshot.status === "running" && engineCurrentStage ? engineCurrentStage : snapshot.current_stage;
   const activeSubstepRunning = Boolean(
     snapshot.status === "running" &&
+    !runtimeStale &&
     (activeSubstep?.status === "running" || activeSubstep?.phase_status === "running"),
   );
   const checkpoint = checkpointStatus({
     ...snapshot,
     implementation_gap_origin: implementationGap,
     active_substep: activeSubstep,
+    runtime_stale: runtimeStale,
     wait_for_terminal: wrapperState ? waitForTerminalFromRequest(wrapperState.request) : false,
   } as RiddleProofRunStatusSnapshot);
   const monitorContract = wrapperState
@@ -2883,6 +2935,7 @@ export function readOpenClawRiddleProofStatus(
         blockerCode: snapshot.blocker?.code || null,
         implementationGapOrigin: implementationGap,
         activeSubstepRunning,
+        runtimeStale,
         checkpointActionable: checkpoint.suggested_next_action === "resume_checkpoint",
       })
     : undefined;
@@ -2928,6 +2981,7 @@ export function readOpenClawRiddleProofStatus(
     phase_elapsed_ms: activeSubstep?.phase_status === "running" ? elapsedMsSince(activeSubstep.phase_started_at) : null,
     engine_latest_event: latestRuntimeEvent(engineState),
     engine_runtime_event_count: runtimeEvents.length,
+    runtime_staleness: runtimeStaleness,
     scratch_cleanup: scratchCleanup,
     scratch_cleanup_status: scratchCleanupStatusLabel(scratchCleanup),
     implementation_status: stringValue(engineState?.implementation_status) || null,

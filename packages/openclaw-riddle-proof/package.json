@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/openclaw-riddle-proof",
-  "version": "0.4.90",
+  "version": "0.4.91",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",

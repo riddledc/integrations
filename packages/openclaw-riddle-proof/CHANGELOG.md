@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.91
+
+### Patch Changes
+
+- Surface stale runtime-step status when a host turn is killed after the engine finishes its latest phase but the wrapper run still appears active.
+
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.50
+
 ## 0.4.90
 
 ### Patch Changes

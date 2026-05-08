@@ -104,7 +104,20 @@ const metricPayload = await metricAdapter.assessRecon({
   fullRiddleState: {
     after_worktree: metricWorkdir,
     route_hints: Array.from({ length: 20 }, (_, index) => ({ path: `/route-${index}`, score: index })),
-    runtime_events: Array.from({ length: 20 }, (_, index) => ({ kind: "sample", index })),
+    runtime_events: Array.from({ length: 200 }, (_, index) => ({
+      kind: "sample",
+      index,
+      details: "large runtime event ".repeat(200),
+    })),
+    capture_diagnostics: Array.from({ length: 80 }, (_, index) => ({
+      role: "before",
+      index,
+      visible_text_sample: "large diagnostic sample ".repeat(120),
+    })),
+    recon_results: Array.from({ length: 80 }, (_, index) => ({
+      attempt: index + 1,
+      summary: "large recon result ".repeat(120),
+    })),
   },
   checkpoint: "recon_supervisor_judgment",
 });
@@ -113,6 +126,7 @@ assert.equal(metricPayload.details.runner_metrics.duration_ms, 17);
 assert.equal(metricPayload.details.runner_metrics.prompt_chars, metricRunnerCalls[0].prompt.length);
 assert.equal(metricRunnerCalls[0].workdir, metricWorkdir);
 assert.ok(metricRunnerCalls[0].prompt.length > 0);
+assert.ok(metricRunnerCalls[0].prompt.length < 70_000);
 
 const playableEvidence = {
   version: "riddle-proof.playability.v1",

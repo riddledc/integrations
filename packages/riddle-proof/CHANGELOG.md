@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.50
+
+### Patch Changes
+
+- Hard-cap local-agent prompt payloads so recon retries cannot balloon into slow six-figure character prompts.
+
 ## 0.5.49
 
 ### Patch Changes

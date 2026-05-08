@@ -756,6 +756,38 @@ assert.equal(runningBackgroundStatus?.monitor_plan?.optional_wait_tool, RIDDLE_P
 const timeoutWait = await waitOpenClawRiddleProof({ state_path: backgroundWrapperStatePath, timeout_ms: 1000 });
 assert.equal(timeoutWait.wait_result, "timeout");
 assert.ok(timeoutWait.waited_ms >= 1000);
+const staleRuntimeAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+writeFileSync(backgroundEngineStatePath, JSON.stringify({
+  branch: "agent/background-proof",
+  current_runtime_step: {
+    step: "recon",
+    action: "run",
+    status: "running",
+    started_at: staleRuntimeAt,
+    phase: "prod_capture",
+    phase_status: "completed",
+    phase_started_at: staleRuntimeAt,
+    phase_finished_at: staleRuntimeAt,
+    workflow_file: "riddle-proof-recon.lobster",
+  },
+  runtime_events: [
+    {
+      ts: staleRuntimeAt,
+      kind: "workflow.phase.finished",
+      step: "recon",
+      phase: "prod_capture",
+      summary: "Production recon baseline capture completed.",
+    },
+  ],
+}, null, 2));
+const staleBackgroundStatus = readOpenClawRiddleProofStatus(backgroundWrapperStatePath);
+assert.equal(staleBackgroundStatus?.runtime_staleness?.stale, true);
+assert.equal(staleBackgroundStatus?.monitor_should_continue, false);
+assert.equal(staleBackgroundStatus?.checkpoint_classification, "stale");
+assert.equal(staleBackgroundStatus?.checkpoint_disposition, "stale_runtime_step");
+assert.equal(staleBackgroundStatus?.suggested_next_action, "inspect_stale_run");
+assert.equal(staleBackgroundStatus?.monitor_contract?.should_continue_monitoring, false);
+assert.equal(staleBackgroundStatus?.monitor_contract?.response_gate, "checkpoint_ok");
 
 const defaultBackgroundFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-default-background-"));
 const defaultBackgroundEngineStatePath = path.join(defaultBackgroundFixture, "riddle-state.json");
