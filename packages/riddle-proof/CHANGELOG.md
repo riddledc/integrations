@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.5.45
+
+### Patch Changes
+
+- Route proof assessment and visual evidence recovery through portable checkpoint packets.
+
+  OpenClaw review submissions now answer pending checkpoint packets while preserving the existing `riddle_proof_review` surface.
+
 ## 0.5.44
 
 ### Patch Changes

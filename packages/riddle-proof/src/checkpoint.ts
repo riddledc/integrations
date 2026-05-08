@@ -99,6 +99,49 @@ function responseSchemaForAuthorPacket() {
   };
 }
 
+function responseSchemaForProofAssessmentPacket() {
+  return {
+    type: "object",
+    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    additionalProperties: false,
+    properties: {
+      version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
+      run_id: { type: "string" },
+      checkpoint: { type: "string" },
+      resume_token: { type: "string" },
+      decision: {
+        type: "string",
+        enum: [
+          "ready_to_ship",
+          "needs_richer_proof",
+          "revise_capture",
+          "needs_recon",
+          "needs_implementation",
+          "blocked",
+          "human_review",
+        ],
+      },
+      summary: { type: "string" },
+      payload: {
+        type: "object",
+        description:
+          "Optional structured assessment details, including recommended_stage, continue_with_stage, visual_delta notes, or blocker diagnostics.",
+      },
+      reasons: { type: "array", items: { type: "string" } },
+      continue_with_stage: { type: "string", enum: ["ship", "author", "implement", "recon", "verify"] },
+      source: {
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          session_id: { type: "string" },
+          user_id: { type: "string" },
+        },
+      },
+      created_at: { type: "string" },
+    },
+  };
+}
+
 function resumeTokenFor(input: {
   runId: string;
   statePath?: string | null;
@@ -214,6 +257,182 @@ export function buildAuthorCheckpointPacket(input: {
     }),
     created_at: input.created_at || timestamp(),
   };
+}
+
+function visualDeltaFromState(fullState: Record<string, unknown>) {
+  const bundle = recordValue(fullState.evidence_bundle);
+  const after = recordValue(bundle?.after);
+  const afterDelta = recordValue(after?.visual_delta);
+  if (afterDelta && Object.keys(afterDelta).length) return afterDelta;
+  const proofAssessmentRequest = recordValue(fullState.proof_assessment_request);
+  return recordValue(proofAssessmentRequest?.visual_delta) || null;
+}
+
+function verificationModeRequiresVisualDelta(value: unknown) {
+  const mode = String(value || "proof").trim().toLowerCase();
+  return [
+    "visual",
+    "render",
+    "interaction",
+    "ui",
+    "layout",
+    "screenshot",
+    "canvas",
+    "animation",
+  ].includes(mode);
+}
+
+function visualDeltaIssueCode(visualDelta: Record<string, unknown> | null, required: boolean) {
+  const status = String(visualDelta?.status || "").trim();
+  const reason = String(visualDelta?.reason || "").toLowerCase();
+  if (status === "unmeasured") {
+    if (
+      reason.includes("fetch") ||
+      reason.includes("allowlist") ||
+      reason.includes("registered domain") ||
+      reason.includes("high risk") ||
+      reason.includes("comparator")
+    ) {
+      return "comparator_fetch_blocked";
+    }
+    return "visual_delta_unmeasured";
+  }
+  if (status === "measured" && visualDelta?.passed === false) return "semantic_proof_failed";
+  if (required && status !== "measured") return "visual_delta_unmeasured";
+  return null;
+}
+
+export function buildProofAssessmentCheckpointPacket(input: {
+  request: RiddleProofRunParams;
+  runState: RiddleProofRunState;
+  engineResult: {
+    state_path?: string | null;
+    checkpoint?: string | null;
+    checkpointContract?: Record<string, unknown> | null;
+    decisionRequest?: Record<string, unknown> | null;
+    summary?: string;
+  };
+  fullRiddleState?: Record<string, unknown> | null;
+  visibility?: "liveblog" | "quiet" | "terminal_only" | "manual" | string;
+  created_at?: string;
+}): RiddleProofCheckpointPacket {
+  const checkpoint = nonEmptyString(input.engineResult.checkpoint) || "verify_supervisor_judgment";
+  const stage = "verify" as const;
+  const runId = input.runState.run_id || "unknown";
+  const fullState = input.fullRiddleState || {};
+  const proofAssessmentRequest =
+    recordValue(fullState.proof_assessment_request) ||
+    recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
+    recordValue(input.engineResult.decisionRequest?.details) ||
+    {};
+  const bundle = recordValue(fullState.evidence_bundle);
+  const artifactContract = recordValue(proofAssessmentRequest.artifact_contract) || recordValue(bundle?.artifact_contract);
+  const requiredSignals = recordValue(recordValue(artifactContract)?.required);
+  const visualDelta = visualDeltaFromState(fullState);
+  const verificationMode =
+    nonEmptyString(input.request.verification_mode) ||
+    nonEmptyString(fullState.verification_mode) ||
+    nonEmptyString(bundle?.verification_mode) ||
+    "proof";
+  const visualDeltaRequired =
+    requiredSignals?.visual_delta === true ||
+    verificationModeRequiresVisualDelta(verificationMode);
+  const evidenceIssueCode = visualDeltaIssueCode(visualDelta, visualDeltaRequired);
+  const summary =
+    nonEmptyString(input.engineResult.summary) ||
+    nonEmptyString(fullState.verify_summary) ||
+    "Verify captured evidence and needs a supervising proof assessment.";
+  const recoveryHint = evidenceIssueCode
+    ? "Required visual_delta evidence is incomplete. Keep this same run in verify/evidence recovery with decision=revise_capture and continue_with_stage=verify unless the evidence proves an implementation or recon problem."
+    : "Assess whether the current artifacts prove the requested change, then choose the next stage.";
+
+  return {
+    version: RIDDLE_PROOF_CHECKPOINT_PACKET_VERSION,
+    run_id: runId,
+    state_path: input.runState.state_path,
+    stage,
+    checkpoint,
+    kind: evidenceIssueCode ? "recover_evidence" : "assess_proof",
+    summary,
+    question:
+      `Assess the current Riddle Proof evidence. ${recoveryHint} Return a CheckpointResponse using one allowed decision.`,
+    change_request: input.request.change_request || nonEmptyString(fullState.change_request) || "",
+    context: input.request.context,
+    artifacts: artifactsFromState(fullState),
+    state_excerpt: compactRecord({
+      repo: input.request.repo || fullState.repo,
+      branch: input.request.branch || fullState.branch,
+      verification_mode: verificationMode,
+      reference: input.request.reference || fullState.reference,
+      server_path: fullState.server_path,
+      wait_for_selector: fullState.wait_for_selector,
+      implementation_status: fullState.implementation_status,
+      implementation_summary: fullState.implementation_summary,
+      changed_files: jsonCloneValue(fullState.changed_files),
+      proof_plan: compactText(fullState.proof_plan, 1200),
+    }) as Record<string, unknown>,
+    evidence_excerpt: compactRecord({
+      before_cdn: fullState.before_cdn || null,
+      prod_cdn: fullState.prod_cdn || null,
+      after_cdn: fullState.after_cdn || null,
+      visual_delta_required: visualDeltaRequired,
+      visual_delta_ready: visualDelta?.status === "measured" && visualDelta?.passed === true,
+      visual_delta: jsonCloneRecord(visualDelta),
+      evidence_issue_code: evidenceIssueCode,
+      proof_assessment_request: jsonCloneRecord(proofAssessmentRequest),
+      verify_decision_request: jsonCloneRecord(fullState.verify_decision_request),
+      checkpoint_contract: jsonCloneRecord(input.engineResult.checkpointContract),
+    }) as Record<string, unknown>,
+    artifact_contract: jsonCloneRecord(artifactContract),
+    allowed_decisions: [
+      "ready_to_ship",
+      "needs_richer_proof",
+      "revise_capture",
+      "needs_recon",
+      "needs_implementation",
+      "blocked",
+      "human_review",
+    ],
+    response_schema: responseSchemaForProofAssessmentPacket(),
+    routing_hint: {
+      suggested_role: evidenceIssueCode ? "proof_judge" : "proof_judge",
+      visibility: input.visibility || "quiet",
+      urgency: evidenceIssueCode ? "high" : "normal",
+      can_auto_answer: input.visibility !== "manual",
+    },
+    resume_token: resumeTokenFor({
+      runId,
+      statePath: input.engineResult.state_path || input.request.engine_state_path || null,
+      checkpoint,
+      stage,
+    }),
+    created_at: input.created_at || timestamp(),
+  };
+}
+
+export function buildCheckpointPacketForEngineResult(input: {
+  request: RiddleProofRunParams;
+  runState: RiddleProofRunState;
+  engineResult: {
+    state_path?: string | null;
+    checkpoint?: string | null;
+    checkpointContract?: Record<string, unknown> | null;
+    decisionRequest?: Record<string, unknown> | null;
+    summary?: string;
+  };
+  fullRiddleState?: Record<string, unknown> | null;
+  visibility?: "liveblog" | "quiet" | "terminal_only" | "manual" | string;
+  created_at?: string;
+}): RiddleProofCheckpointPacket {
+  const checkpoint = nonEmptyString(input.engineResult.checkpoint) || "";
+  if (
+    checkpoint === "verify_supervisor_judgment" ||
+    checkpoint === "verify_supervisor_judgment_required" ||
+    checkpoint === "verify_human_escalation"
+  ) {
+    return buildProofAssessmentCheckpointPacket(input);
+  }
+  return buildAuthorCheckpointPacket(input);
 }
 
 export function normalizeCheckpointResponse(value: unknown): RiddleProofCheckpointResponse | null {

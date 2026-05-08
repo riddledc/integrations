@@ -169,6 +169,7 @@ export interface RiddleProofCheckpointPacket {
   artifacts?: RiddleProofCheckpointArtifact[];
   state_excerpt?: Record<string, unknown>;
   evidence_excerpt?: Record<string, unknown>;
+  artifact_contract?: Record<string, unknown>;
   allowed_decisions: string[];
   response_schema: Record<string, unknown>;
   routing_hint?: RiddleProofCheckpointRoutingHint;

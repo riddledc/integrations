@@ -1055,26 +1055,22 @@ const reviewBlocked = await runOpenClawRiddleProof(
     agent: reviewDelegate,
   },
 );
-assert.equal(reviewBlocked.status, "blocked");
-assert.equal(reviewBlocked.blocker?.code, "main_agent_proof_review_required");
-assert.equal(
-  reviewBlocked.blocker?.details?.proof_review?.image_artifacts?.some((item) => item.url === "https://example.com/after.png"),
-  true,
-);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.route?.after_observed_path, "/games/tic-tac-toe");
-assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.semantic_context?.after?.buttons, ["Reset Game"]);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_contract?.required?.screenshot, true);
-assert.deepEqual(reviewBlocked.blocker?.details?.proof_review?.artifact_usage?.missing_required_signals, []);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.artifact_production?.image_output_count, 1);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.ready_to_ship_candidate, true);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_has_concerns, false);
-assert.equal(reviewBlocked.blocker?.details?.proof_review?.response_schema?.state_path, reviewWrapperStatePath);
+assert.equal(reviewBlocked.status, "awaiting_checkpoint");
+assert.equal(reviewBlocked.blocker, undefined);
+assert.equal(reviewBlocked.checkpoint_packet?.checkpoint, "verify_supervisor_judgment");
+assert.equal(reviewBlocked.checkpoint_packet?.kind, "assess_proof");
+assert.equal(reviewBlocked.checkpoint_packet?.stage, "verify");
+assert.equal(reviewBlocked.checkpoint_packet?.allowed_decisions?.includes("ready_to_ship"), true);
+assert.equal(reviewBlocked.checkpoint_packet?.allowed_decisions?.includes("revise_capture"), true);
+assert.equal(reviewBlocked.checkpoint_packet?.artifacts?.some((item) => item.url === "https://example.com/after.png"), true);
+assert.equal(reviewBlocked.checkpoint_packet?.evidence_excerpt?.visual_delta_ready, true);
+assert.equal(reviewBlocked.checkpoint_packet?.evidence_excerpt?.proof_assessment_request?.semantic_context?.route?.after_observed_path, "/games/tic-tac-toe");
 
 const inspectResult = inspectOpenClawRiddleProof({ state_path: reviewWrapperStatePath });
 assert.equal(inspectResult.ok, true);
 assert.equal(inspectResult.route_matched, true);
 assert.equal(inspectResult.monitor_contract.report_mode, "terminal_only");
-assert.equal(inspectResult.monitor_contract.response_gate, "release_terminal");
+assert.equal(inspectResult.monitor_contract.response_gate, "checkpoint_ok");
 assert.equal(inspectResult.request_metadata.reference_input_ignored, "use the public tic tac toe route");
 assert.equal(inspectResult.request_metadata.effective_reference, "before");
 assert.equal(inspectResult.proof_profile_applied, true);
@@ -1246,12 +1242,48 @@ assert.equal(queryRouteInspect.ready_to_ship_candidate, false);
 assert.equal(queryRouteInspect.visual_delta_ready, false);
 assert(queryRouteInspect.hard_blockers[0].includes("visual_delta.status=unmeasured"));
 
+const queryRouteRecoveryWrapperStatePath = path.join(reviewFixture, "wrapper-state-query-route-recovery.json");
+const queryRouteRecovery = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    run_mode: "blocking",
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: queryRouteRecoveryWrapperStatePath,
+    state_path: queryRouteStatePath,
+    change_request: "Make a tiny sequencer helper-copy change.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    autoReviewShipModeNone: false,
+    engine: {
+      async execute() {
+        return {
+          ok: false,
+          state_path: queryRouteStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Proof evidence needs visual-delta recovery.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(queryRouteRecovery.status, "awaiting_checkpoint");
+assert.equal(queryRouteRecovery.checkpoint_packet?.kind, "recover_evidence");
+assert.equal(queryRouteRecovery.checkpoint_packet?.evidence_excerpt?.evidence_issue_code, "visual_delta_unmeasured");
+assert.equal(queryRouteRecovery.checkpoint_packet?.evidence_excerpt?.visual_delta_ready, false);
+assert.equal(queryRouteRecovery.checkpoint_packet?.allowed_decisions?.includes("revise_capture"), true);
+
 const reviewStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath, { debug: true });
 const reviewWakeClassification = classifyOpenClawRiddleProofWake(reviewStatus);
 assert.equal(reviewWakeClassification.should_dispatch, true);
-assert.equal(reviewWakeClassification.kind, "proof_review_required");
+assert.equal(reviewWakeClassification.kind, "resume_checkpoint");
 assert.deepEqual(reviewWakeClassification.next_tools.slice(0, 2), [
-  RIDDLE_PROOF_INSPECT_TOOL_NAME,
+  RIDDLE_PROOF_STATUS_TOOL_NAME,
   RIDDLE_PROOF_REVIEW_TOOL_NAME,
 ]);
 assert.equal(reviewStatus?.request_metadata?.reference_input_ignored, "use the public tic tac toe route");
@@ -1268,7 +1300,7 @@ assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
-assert.equal(reviewStatus?.pr_handoff_policy?.state, "proof_review_required");
+assert.equal(reviewStatus?.pr_handoff_policy?.state, "proof_checkpoint_required");
 assert.equal(reviewStatus?.pr_handoff_policy?.fallback_pr?.allowed, false);
 assert.equal(reviewStatus?.proof_artifact_summary?.baseline?.before?.url, "https://example.com/before.png");
 assert.equal(reviewStatus?.proof_artifact_summary?.after?.url, "https://example.com/after.png");
@@ -1922,13 +1954,13 @@ const concernReviewBlocked = await runOpenClawRiddleProof(
     agent: reviewDelegate,
   },
 );
-assert.equal(concernReviewBlocked.status, "blocked");
-assert.equal(concernReviewBlocked.blocker?.code, "main_agent_proof_review_required");
-assert.equal(concernReviewBlocked.blocker?.details?.proof_review?.ready_to_ship_candidate, false);
-assert.equal(concernReviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_has_concerns, true);
+assert.equal(concernReviewBlocked.status, "awaiting_checkpoint");
+assert.equal(concernReviewBlocked.checkpoint_packet?.checkpoint, "verify_supervisor_judgment");
+assert.equal(concernReviewBlocked.checkpoint_packet?.kind, "assess_proof");
+assert.equal(concernReviewBlocked.checkpoint_packet?.evidence_excerpt?.visual_delta_ready, true);
 assert.equal(
-  concernReviewBlocked.blocker?.details?.proof_review?.structured_evidence?.proof_evidence_concerns?.[0]?.key,
-  "newHeroCopyVisible",
+  concernReviewBlocked.checkpoint_packet?.evidence_excerpt?.proof_assessment_request?.semantic_context?.after?.headings?.[0],
+  "Evidence-backed agent browser proof",
 );
 
 const expectedAbsenceFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-evidence-expected-absence-"));

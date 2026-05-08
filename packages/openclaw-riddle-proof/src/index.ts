@@ -13,6 +13,7 @@ import {
   extractPlayabilityEvidence,
   isRiddleProofPlayabilityMode,
   readRiddleProofRunStatus,
+  RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
   runRiddleProofEngineHarness,
   setRunStatus,
   statePathsForRunState,
@@ -800,9 +801,18 @@ function monitorContractFor(
   const activeSubstepRunning = options.activeSubstepRunning === true;
   const internalLoopInProgress = status === "running" && resumable && options.checkpointActionable === false;
   const engineCallInProgress = status === "running" && !resumable && !terminal;
+  const checkpointReady =
+    !activeSubstepRunning &&
+    !implementationInFlight &&
+    (
+      status === "awaiting_checkpoint" ||
+      (!waitForTerminal && resumable && options.checkpointActionable !== false && status !== "running")
+    );
   const responseGate =
     implementationInFlight
       ? "hold_for_implementation_outcome"
+      : checkpointReady
+      ? "checkpoint_ok"
       : waitForTerminal && !terminal
       ? "hold_for_terminal"
       : activeSubstepRunning || internalLoopInProgress || engineCallInProgress
@@ -1491,6 +1501,20 @@ function buildPrHandoffPolicy(
   const complete = status === "ready_to_ship" || status === "shipped" || status === "completed";
   const leftDraft = wrapperState?.left_draft === true;
   const blockerCode = stringValue(recordValue(snapshot.blocker)?.code) || stringValue(wrapperState?.blocker?.code);
+  if (status === "awaiting_checkpoint") {
+    return {
+      state: "proof_checkpoint_required",
+      proof_complete: false,
+      merge_ready: false,
+      normal_pr_allowed: false,
+      fallback_pr: {
+        allowed: false,
+        reason: "The proof is waiting for a checkpoint response; resume the same run instead of creating a PR.",
+      },
+      user_facing_summary:
+        "Riddle Proof is waiting for a checkpoint response. Answer the checkpoint packet, then resume the run.",
+    };
+  }
   if (blocked && blockerCode === "main_agent_proof_review_required") {
     return {
       state: "proof_review_required",
@@ -1635,6 +1659,7 @@ function compactCheckpointPacket(packet: unknown, includeStateExcerpt = false) {
     routing_hint: record.routing_hint,
     resume_token: record.resume_token,
     response_schema: record.response_schema,
+    artifact_contract: includeStateExcerpt ? record.artifact_contract : undefined,
     state_excerpt: includeStateExcerpt ? record.state_excerpt : undefined,
     evidence_excerpt: includeStateExcerpt ? record.evidence_excerpt : undefined,
     created_at: record.created_at,
@@ -2713,10 +2738,11 @@ function checkpointStatus(snapshot: RiddleProofRunStatusSnapshot) {
     (checkpoint && REVIEW_CHECKPOINTS.has(checkpoint)),
   );
   const waitForTerminal = snapshotRecord.wait_for_terminal === true;
-  const monitorShouldContinue = waitForTerminal && !isTerminal && !isReviewRequired
+  const waitForTerminalCanHold = waitForTerminal && snapshot.status !== "awaiting_checkpoint";
+  const monitorShouldContinue = waitForTerminalCanHold && !isTerminal && !isReviewRequired
     ? true
     : !isTerminal && !isReviewRequired && !isActionableRoutable;
-  const checkpointAction = waitForTerminal && !isReviewRequired
+  const checkpointAction = waitForTerminalCanHold && !isReviewRequired
     ? null
     : checkpointActionFor({
         checkpoint,
@@ -3410,6 +3436,37 @@ function stageForReviewDecision(decision: RiddleProofReviewDecision) {
   return "author";
 }
 
+function checkpointResponseFromReviewParams(
+  params: RiddleProofReviewParams,
+  state: RiddleProofRunState,
+): RiddleProofCheckpointResponse | null {
+  const packet = state.checkpoint_packet;
+  if (!packet || params.decision === "continue_checkpoint") return null;
+  const stage = params.continue_with_stage || params.recommended_stage || stageForReviewDecision(params.decision) || undefined;
+  return {
+    version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
+    run_id: packet.run_id,
+    checkpoint: packet.checkpoint,
+    resume_token: packet.resume_token,
+    decision: params.decision,
+    summary: params.summary,
+    payload: compactRecordValue({
+      recommended_stage: params.recommended_stage || stage,
+      continue_with_stage: params.continue_with_stage || stage,
+      escalation_target: params.escalation_target || "agent",
+      reasons: Array.isArray(params.reasons) ? params.reasons.filter((item): item is string => typeof item === "string") : [],
+    }),
+    reasons: Array.isArray(params.reasons) ? params.reasons.filter((item): item is string => typeof item === "string") : [],
+    continue_with_stage: stage,
+    source: {
+      kind: "openclaw-main",
+      session_id: stringValue(state.request.integration_context?.thread_id) || stringValue(state.request.integration_context?.channel_id) || undefined,
+      user_id: stringValue(state.request.integration_context?.metadata?.user_id) || undefined,
+    },
+    created_at: new Date().toISOString(),
+  };
+}
+
 function defaultAdvanceStageForCheckpoint(checkpoint: string | null | undefined) {
   if (checkpoint === "recon_supervisor_judgment") return "recon";
   if (checkpoint === "author_supervisor_judgment") return "author";
@@ -3536,6 +3593,50 @@ export async function submitOpenClawRiddleProofReview(
       state,
       state_path: params.state_path,
       checkpoint_response: checkpointResponse,
+      checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(state.request)),
+      checkpoint_visibility: checkpointModeFromRequest(state.request) as RiddleProofCheckpointVisibility,
+      max_iterations: effectiveMaxIterations(state.request, config),
+      dry_run: state.request.dry_run,
+      auto_approve: state.request.auto_approve,
+      engine: config.engine,
+      agent: agentFromConfig(config),
+      config: effectiveHarnessConfig(config),
+    });
+  }
+
+  const reviewCheckpointResponse = checkpointResponseFromReviewParams(params, state);
+  if (reviewCheckpointResponse) {
+    appendRunEvent(state, {
+      kind: "agent.checkpoint_response.submitted",
+      checkpoint: reviewCheckpointResponse.checkpoint,
+      stage: state.current_stage || state.checkpoint_packet?.stage || "verify",
+      summary: params.summary,
+      details: {
+        response: reviewCheckpointResponse,
+        compatibility_source: "riddle_proof_review",
+      },
+    });
+    persistRunState(state);
+
+    if (wasStartedAsBackgroundRun(state)) {
+      return startOpenClawRiddleProofResumeBackground({
+        state,
+        statePath: params.state_path,
+        config,
+        checkpointResponse: reviewCheckpointResponse,
+        summary: "Riddle Proof checkpoint response accepted from riddle_proof_review; resuming the background proof workflow.",
+      });
+    }
+
+    return runRiddleProofEngineHarness({
+      request: {
+        ...state.request,
+        harness_state_path: params.state_path,
+        engine_state_path: engineStatePath,
+      },
+      state,
+      state_path: params.state_path,
+      checkpoint_response: reviewCheckpointResponse,
       checkpoint_mode: coreCheckpointModeFor(checkpointModeFromRequest(state.request)),
       checkpoint_visibility: checkpointModeFromRequest(state.request) as RiddleProofCheckpointVisibility,
       max_iterations: effectiveMaxIterations(state.request, config),

@@ -27,7 +27,7 @@ import {
 } from "./state";
 import {
   authorPacketPayloadFromCheckpointResponse,
-  buildAuthorCheckpointPacket,
+  buildCheckpointPacketForEngineResult,
   checkpointResponseIdentity,
   checkpointSummaryFromState,
   isDuplicateCheckpointResponse,
@@ -470,6 +470,53 @@ function proofAssessmentContinuation(
   return { ...baseContinuation(result), proof_assessment_json };
 }
 
+function defaultStageForProofCheckpointDecision(decision: string): RiddleProofStage | null {
+  if (decision === "ready_to_ship") return "ship";
+  if (decision === "needs_implementation") return "implement";
+  if (decision === "needs_recon") return "recon";
+  if (decision === "revise_capture") return "verify";
+  if (decision === "needs_richer_proof") return "author";
+  return null;
+}
+
+function proofAssessmentPayloadFromCheckpointResponse(
+  response: RiddleProofCheckpointResponse,
+): Record<string, unknown> | null {
+  if (
+    ![
+      "ready_to_ship",
+      "needs_richer_proof",
+      "revise_capture",
+      "needs_recon",
+      "needs_implementation",
+    ].includes(response.decision)
+  ) {
+    return null;
+  }
+  const payload = recordValue(response.payload) || {};
+  const stage =
+    nonEmptyString(payload.continue_with_stage) ||
+    response.continue_with_stage ||
+    nonEmptyString(payload.recommended_stage) ||
+    defaultStageForProofCheckpointDecision(response.decision);
+  return compactRecord({
+    ...payload,
+    decision: response.decision,
+    summary: response.summary,
+    recommended_stage: nonEmptyString(payload.recommended_stage) || stage || undefined,
+    continue_with_stage: stage || undefined,
+    escalation_target: nonEmptyString(payload.escalation_target) || "agent",
+    reasons: Array.isArray(response.reasons)
+      ? response.reasons
+      : Array.isArray(payload.reasons)
+        ? payload.reasons
+        : [],
+    source: "supervising_agent",
+    checkpoint_response_source: response.source || null,
+    checkpoint_response_created_at: response.created_at,
+  }) as Record<string, unknown>;
+}
+
 function proofAssessmentVisualBlocker(
   state: Record<string, unknown> | null,
   payload: Record<string, unknown>,
@@ -652,7 +699,7 @@ function checkpointAwaitingResult(
   result: RiddleProofEngineResult,
   visibility: RiddleProofCheckpointVisibility | undefined,
 ): RiddleProofRunResult {
-  const packet = buildAuthorCheckpointPacket({
+  const packet = buildCheckpointPacketForEngineResult({
     request: state.request,
     runState: state,
     engineResult: result,
@@ -831,7 +878,30 @@ function checkpointResponseContinuation(
 
   if (response.decision === "needs_recon") {
     appendCheckpointResponse(state, response);
+    if (packet.kind === "assess_proof" || packet.kind === "recover_evidence" || packet.stage === "verify") {
+      const assessment = proofAssessmentPayloadFromCheckpointResponse(response);
+      if (assessment) return { next: { ...base, proof_assessment_json: jsonParam(assessment) } };
+    }
     return { next: { ...base, advance_stage: "recon" } };
+  }
+
+  if (packet.kind === "assess_proof" || packet.kind === "recover_evidence" || packet.stage === "verify") {
+    const assessment = proofAssessmentPayloadFromCheckpointResponse(response);
+    if (assessment) {
+      appendCheckpointResponse(state, response);
+      return { next: { ...base, proof_assessment_json: jsonParam(assessment) } };
+    }
+    if (response.decision === "blocked" || response.decision === "human_review") {
+      appendCheckpointResponse(state, response, { clear_packet: false });
+      return {
+        blocker: {
+          code: `checkpoint_response_${response.decision}`,
+          checkpoint: packet.checkpoint,
+          message: response.summary || `Checkpoint response stopped the run with decision=${response.decision}.`,
+          details: { stage: packet.stage, response },
+        },
+      };
+    }
   }
 
   appendCheckpointResponse(state, response, { clear_packet: false });
@@ -1165,9 +1235,24 @@ async function routeCheckpoint(
   }
 
   if (checkpoint === "verify_supervisor_judgment") {
+    if (input.checkpoint_mode === "yield") {
+      return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+    }
     const assessment = await agent.assessProof(context);
     const blocker = requirePayload("proof_assessment", assessment, state, result);
-    if (blocker) return { blocker };
+    if (blocker) {
+      if (blocker.code === "main_agent_proof_review_required") {
+        recordEvent(state, {
+          kind: "checkpoint.packet.requested",
+          checkpoint,
+          stage: "verify",
+          summary: "Main-agent proof review is being converted to a portable checkpoint packet.",
+          details: { blocker },
+        });
+        return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+      }
+      return { blocker };
+    }
     const payload = assessment.payload as Record<string, unknown>;
     recordEvent(state, {
       kind: "agent.proof_assessment.completed",
