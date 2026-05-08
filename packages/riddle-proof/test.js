@@ -839,6 +839,80 @@ assert.equal(engineCalls[0].auth_headers_json, "{\"Authorization\":\"Bearer toke
 assert.equal(engineCalls.at(-1).ship_after_verify, true);
 assert.equal(engineCalls.at(-1).leave_draft, true);
 
+const unmeasuredVisualFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-unmeasured-visual-"));
+const unmeasuredVisualStatePath = path.join(unmeasuredVisualFixture, "riddle-state.json");
+writeFileSync(unmeasuredVisualStatePath, JSON.stringify({
+  verification_mode: "visual",
+  verify_status: "evidence_captured",
+  before_cdn: "https://riddle-screenshots.example/before.png",
+  after_cdn: "https://riddle-screenshots.example/after.png",
+  evidence_bundle: {
+    verification_mode: "visual",
+    artifact_contract: { required: { visual_delta: true } },
+    after: {
+      url: "https://riddle-screenshots.example/after.png",
+      visual_delta: {
+        status: "unmeasured",
+        passed: null,
+        reason: "Fallback comparison rejected Riddle S3 screenshot URLs as Newly registered domain (high risk).",
+      },
+    },
+  },
+}, null, 2));
+const unmeasuredVisualEngineCalls = [];
+const unmeasuredVisualResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Do not ship a visual proof without measured visual delta.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: path.join(unmeasuredVisualFixture, "harness-state.json"),
+    engine_state_path: unmeasuredVisualStatePath,
+  },
+  max_iterations: 3,
+  engine: {
+    async execute(params) {
+      unmeasuredVisualEngineCalls.push(params);
+      if (params.proof_assessment_json) {
+        throw new Error("unmeasured visual delta should terminally block instead of feeding a needs_richer_proof retry back to the engine");
+      }
+      return {
+        ok: false,
+        state_path: unmeasuredVisualStatePath,
+        checkpoint: "verify_supervisor_judgment",
+        summary: "Proof assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() { throw new Error("recon should not run"); },
+    async authorProofPacket() { throw new Error("author should not run"); },
+    async implementChange() { throw new Error("implement should not run"); },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Product change looks right, but visual delta is missing.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["semantic screenshot evidence looks right"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+assert.equal(unmeasuredVisualResult.status, "blocked");
+assert.equal(unmeasuredVisualResult.blocker.code, "comparator_fetch_blocked");
+assert.equal(unmeasuredVisualResult.blocker.details.terminal_evidence_production_blocker, true);
+assert.equal(unmeasuredVisualResult.blocker.details.visual_delta.status, "unmeasured");
+assert.equal(unmeasuredVisualEngineCalls.some((call) => call.proof_assessment_json), false);
+const unmeasuredVisualHarnessState = JSON.parse(readFileSync(unmeasuredVisualResult.state_path, "utf-8"));
+const unmeasuredBlockEvent = unmeasuredVisualHarnessState.events.find((event) => event.kind === "agent.proof_assessment.blocked");
+assert.equal(unmeasuredBlockEvent.details.terminal_evidence_production_blocker, true);
+
 const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
 const noiseWorkdir = path.join(noiseFixture, "after");
 mkdirSync(noiseWorkdir, { recursive: true });

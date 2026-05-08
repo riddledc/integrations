@@ -46,7 +46,7 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
-import { visualDeltaShipGateReason } from "./proof-run-core";
+import { visualDeltaForState, visualDeltaRequiredForState, visualDeltaShipGateReason } from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
 export type RiddleProofCheckpointMode = "auto" | "yield";
@@ -483,15 +483,49 @@ function proofAssessmentVisualBlocker(
   });
 }
 
-function blockedProofAssessmentPayload(payload: Record<string, unknown>, blocker: string) {
-  const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item) => typeof item === "string") : [];
+function visualDeltaBlockerCode(state: Record<string, unknown> | null, blocker: string) {
+  const visualDelta = visualDeltaForState(state || {});
+  const status = nonEmptyString(visualDelta.status);
+  const reason = `${nonEmptyString(visualDelta.reason) || ""}\n${blocker}`.toLowerCase();
+  if (status === "unmeasured") {
+    if (
+      reason.includes("fetch") ||
+      reason.includes("allowlist") ||
+      reason.includes("registered domain") ||
+      reason.includes("high risk") ||
+      reason.includes("comparator")
+    ) {
+      return "comparator_fetch_blocked";
+    }
+    return "visual_delta_unmeasured";
+  }
+  if (status === "measured" && visualDelta.passed === false) return "semantic_proof_failed";
+  if (visualDeltaRequiredForState(state || {})) return "visual_delta_unmeasured";
+  return "semantic_proof_failed";
+}
+
+function visualDeltaTerminalBlocker(
+  state: Record<string, unknown> | null,
+  result: RiddleProofEngineResult,
+  payload: Record<string, unknown>,
+  blocker: string,
+): RiddleProofBlocker {
+  const visualDelta = visualDeltaForState(state || {});
   return {
-    ...payload,
-    blocked_decision: payload.decision || "ready_to_ship",
-    decision: "needs_richer_proof",
-    recommended_stage: payload.recommended_stage === "ship" ? "verify" : payload.recommended_stage || "verify",
-    continue_with_stage: payload.continue_with_stage === "ship" ? "verify" : payload.continue_with_stage || "verify",
-    blockers: [...blockers, blocker],
+    code: visualDeltaBlockerCode(state, blocker),
+    checkpoint: result.checkpoint || null,
+    message: blocker,
+    details: compactRecord({
+      stage: "verify",
+      terminal_evidence_production_blocker: true,
+      decision_blocked: payload.decision || "ready_to_ship",
+      recommended_stage_blocked: payload.recommended_stage || null,
+      continue_with_stage_blocked: payload.continue_with_stage || null,
+      visual_delta: Object.keys(visualDelta).length ? visualDelta : null,
+      proof_assessment: payload,
+      suggested_repair:
+        "Repair the visual comparator/fetch path or produce a measured visual_delta artifact before retrying proof review; do not re-author generic capture scripts just to bypass the missing metric.",
+    }) as Record<string, unknown>,
   };
 }
 
@@ -1148,14 +1182,18 @@ async function routeCheckpoint(
       verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
     }, payload);
     if (visualBlocker) {
+      const terminalBlocker = visualDeltaTerminalBlocker({
+        ...(context.fullRiddleState || {}),
+        verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
+      }, result, payload, visualBlocker);
       recordEvent(state, {
         kind: "agent.proof_assessment.blocked",
         checkpoint,
         stage: "verify",
         summary: visualBlocker,
-        details: { payload },
+        details: terminalBlocker.details,
       });
-      return { next: proofAssessmentContinuation(result, blockedProofAssessmentPayload(payload, visualBlocker)) };
+      return { blocker: terminalBlocker };
     }
     if (effectiveShipMode(request, input.config) !== "ship" && proofAssessmentRequestsShip(payload)) {
       return {
