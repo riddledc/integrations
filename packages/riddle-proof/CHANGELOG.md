@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.44
+
+### Patch Changes
+
+- 8129dcd: Route missing required visual-delta proof metrics back into verify/evidence recovery instead of marking them ready to ship or downgrading them to generic richer-proof requests.
+
 ## 0.5.43
 
 ### Patch Changes

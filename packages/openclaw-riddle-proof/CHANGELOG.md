@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.85
+
+### Patch Changes
+
+- 8129dcd: Route missing required visual-delta proof metrics back into verify/evidence recovery instead of marking them ready to ship or downgrading them to generic richer-proof requests.
+- Updated dependencies [8129dcd]
+  - @riddledc/riddle-proof@0.5.44
+
 ## 0.4.84
 
 ### Patch Changes
