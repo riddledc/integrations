@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.7
+
+### Patch Changes
+
+- Declare Riddle tool contracts in the OpenClaw manifest so direct `openclaw.invoke` calls can load the static npm plugin tools after hot reload.
+
 ## 0.9.6
 
 ### Patch Changes
