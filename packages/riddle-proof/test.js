@@ -1411,6 +1411,19 @@ const yieldedReconCliCheckpoint = JSON.parse(execFileSync(process.execPath, [
 assert.equal(yieldedReconCliCheckpoint.checkpoint_packet.kind, "assess_recon");
 assert.equal(yieldedReconCliCheckpoint.response_template.decision, "ready_for_author");
 assert.ok(yieldedReconCliCheckpoint.next_commands[0].includes("riddle-proof-loop respond"));
+const yieldedReconCliCheckpointMarkdown = execFileSync(process.execPath, [
+  new URL("./dist/cli.js", import.meta.url).pathname,
+  "checkpoint",
+  "--state-path",
+  yieldedReconHarnessPath,
+  "--decision",
+  "ready_for_author",
+  "--format",
+  "markdown",
+], { encoding: "utf8" });
+assert.match(yieldedReconCliCheckpointMarkdown, /# Riddle Proof Checkpoint/);
+assert.match(yieldedReconCliCheckpointMarkdown, /ready_for_author/);
+assert.match(yieldedReconCliCheckpointMarkdown, /riddle-proof-loop respond/);
 let yieldedReconInvalidDecisionFailed = false;
 try {
   execFileSync(process.execPath, [

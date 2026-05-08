@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.53
+
+### Patch Changes
+
+- Add a markdown checkpoint view for readable sole-agent review of the current obligation, evidence, allowed decisions, response template, and next command.
+
 ## 0.5.52
 
 ### Patch Changes

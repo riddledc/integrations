@@ -21,7 +21,7 @@ function usage() {
   return [
     "Usage:",
     "  riddle-proof-loop run --request-json <file|json|-> [--agent disabled|local] [--checkpoint-mode yield|auto]",
-    "  riddle-proof-loop checkpoint --state-path <path> [--decision <decision>]",
+    "  riddle-proof-loop checkpoint --state-path <path> [--decision <decision>] [--format json|markdown]",
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
@@ -109,6 +109,72 @@ function hasPlaceholderValue(value: unknown): boolean {
     return Object.values(value as Record<string, unknown>).some(hasPlaceholderValue);
   }
   return false;
+}
+
+function markdownJson(value: unknown) {
+  return JSON.stringify(value ?? null, null, 2);
+}
+
+function formatCheckpointMarkdown(input: {
+  statePath: string;
+  status?: string;
+  checkpointPacket: NonNullable<RiddleProofRunState["checkpoint_packet"]>;
+  runCard?: RiddleProofRunState["run_card"] | null;
+  responseTemplate: RiddleProofCheckpointResponse;
+}) {
+  const packet = input.checkpointPacket;
+  const runCard = input.runCard;
+  const lines = [
+    "# Riddle Proof Checkpoint",
+    "",
+    `Run: ${packet.run_id}`,
+    `State: ${input.statePath}`,
+    `Status: ${input.status || "awaiting_checkpoint"}`,
+    `Stage: ${packet.stage}`,
+    `Checkpoint: ${packet.checkpoint}`,
+    `Kind: ${packet.kind}`,
+    "",
+    "## Goal",
+    "",
+    runCard?.goal?.change_request || packet.change_request,
+    "",
+    "## Next Action",
+    "",
+    packet.question,
+    "",
+    "## Allowed Decisions",
+    "",
+    ...packet.allowed_decisions.map((decision) => `- ${decision}`),
+    "",
+  ];
+  if (packet.artifacts?.length) {
+    lines.push("## Artifacts", "");
+    for (const artifact of packet.artifacts) {
+      lines.push(`- ${artifact.role}: ${artifact.url || artifact.path || artifact.name || "available"}`);
+    }
+    lines.push("");
+  }
+  if (packet.evidence_excerpt && Object.keys(packet.evidence_excerpt).length) {
+    lines.push("## Evidence Excerpt", "", "```json", markdownJson(packet.evidence_excerpt), "```", "");
+  }
+  if (packet.state_excerpt && Object.keys(packet.state_excerpt).length) {
+    lines.push("## State Excerpt", "", "```json", markdownJson(packet.state_excerpt), "```", "");
+  }
+  lines.push(
+    "## Response Template",
+    "",
+    "```json",
+    markdownJson(input.responseTemplate),
+    "```",
+    "",
+    "## Next Command",
+    "",
+    "```sh",
+    `riddle-proof-loop respond --state-path ${input.statePath} --decision ${input.responseTemplate.decision} --summary <summary> --payload-json <file|json|->`,
+    "```",
+    "",
+  );
+  return `${lines.join("\n")}\n`;
 }
 
 function checkpointResponseForFlags(statePath: string, options: CliOptions): RiddleProofCheckpointResponse {
@@ -222,6 +288,18 @@ async function main() {
       decision: optionString(options, "decision"),
       source_kind: optionString(options, "sourceKind") as NonNullable<RiddleProofCheckpointResponse["source"]>["kind"] || "codex",
     });
+    const format = optionString(options, "format") || "json";
+    if (format === "markdown" || format === "md") {
+      process.stdout.write(formatCheckpointMarkdown({
+        statePath,
+        status: snapshot?.status || state.status,
+        checkpointPacket: state.checkpoint_packet,
+        runCard: snapshot?.run_card || state.run_card || null,
+        responseTemplate,
+      }));
+      return;
+    }
+    if (format !== "json") throw new Error("--format must be json or markdown.");
     process.stdout.write(`${JSON.stringify({
       checkpoint_packet: state.checkpoint_packet,
       run_card: snapshot?.run_card || state.run_card || null,

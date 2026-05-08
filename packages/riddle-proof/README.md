@@ -64,6 +64,7 @@ Codex/CLI-style testing:
 ```sh
 riddle-proof-loop run --request-json request.json --checkpoint-mode yield
 riddle-proof-loop checkpoint --state-path /tmp/riddle-proof-run.json
+riddle-proof-loop checkpoint --state-path /tmp/riddle-proof-run.json --format markdown
 riddle-proof-loop run --request-json request.json --agent local
 riddle-proof-loop status --state-path /tmp/riddle-proof-run.json
 riddle-proof-loop respond --state-path /tmp/riddle-proof-run.json --response-json response.json
