@@ -504,28 +504,27 @@ function visualDeltaBlockerCode(state: Record<string, unknown> | null, blocker: 
   return "semantic_proof_failed";
 }
 
-function visualDeltaTerminalBlocker(
+function visualDeltaEvidenceRecoveryAssessment(
   state: Record<string, unknown> | null,
-  result: RiddleProofEngineResult,
   payload: Record<string, unknown>,
   blocker: string,
-): RiddleProofBlocker {
+) {
   const visualDelta = visualDeltaForState(state || {});
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item) => typeof item === "string") : [];
   return {
-    code: visualDeltaBlockerCode(state, blocker),
-    checkpoint: result.checkpoint || null,
-    message: blocker,
-    details: compactRecord({
-      stage: "verify",
-      terminal_evidence_production_blocker: true,
-      decision_blocked: payload.decision || "ready_to_ship",
-      recommended_stage_blocked: payload.recommended_stage || null,
-      continue_with_stage_blocked: payload.continue_with_stage || null,
-      visual_delta: Object.keys(visualDelta).length ? visualDelta : null,
-      proof_assessment: payload,
-      suggested_repair:
-        "Repair the visual comparator/fetch path or produce a measured visual_delta artifact before retrying proof review; do not re-author generic capture scripts just to bypass the missing metric.",
-    }) as Record<string, unknown>,
+    ...payload,
+    blocked_decision: payload.decision || "ready_to_ship",
+    decision: "revise_capture",
+    recommended_stage: "verify",
+    continue_with_stage: "verify",
+    evidence_collection_incomplete: true,
+    recovery_stage: "verify",
+    recovery_reason: blocker,
+    evidence_issue_code: visualDeltaBlockerCode(state, blocker),
+    visual_delta: Object.keys(visualDelta).length ? visualDelta : null,
+    suggested_repair:
+      "Keep the same Riddle Proof run in evidence/comparison recovery: repair or retry the visual comparator/fetch path, wait for artifact readiness if applicable, or produce a measured visual_delta artifact before proof review can mark ready_to_ship.",
+    blockers: [...blockers, blocker],
   };
 }
 
@@ -1182,18 +1181,24 @@ async function routeCheckpoint(
       verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
     }, payload);
     if (visualBlocker) {
-      const terminalBlocker = visualDeltaTerminalBlocker({
+      const recoveryAssessment = visualDeltaEvidenceRecoveryAssessment({
         ...(context.fullRiddleState || {}),
         verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
-      }, result, payload, visualBlocker);
+      }, payload, visualBlocker);
       recordEvent(state, {
-        kind: "agent.proof_assessment.blocked",
+        kind: "agent.proof_assessment.evidence_recovery_required",
         checkpoint,
         stage: "verify",
         summary: visualBlocker,
-        details: terminalBlocker.details,
+        details: compactRecord({
+          evidence_collection_incomplete: true,
+          recovery_stage: "verify",
+          evidence_issue_code: recoveryAssessment.evidence_issue_code || null,
+          visual_delta: recoveryAssessment.visual_delta || null,
+          proof_assessment: recoveryAssessment,
+        }),
       });
-      return { blocker: terminalBlocker };
+      return { next: proofAssessmentContinuation(result, recoveryAssessment) };
     }
     if (effectiveShipMode(request, input.config) !== "ship" && proofAssessmentRequestsShip(payload)) {
       return {

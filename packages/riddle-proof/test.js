@@ -874,7 +874,20 @@ const unmeasuredVisualResult = await runRiddleProofEngineHarness({
     async execute(params) {
       unmeasuredVisualEngineCalls.push(params);
       if (params.proof_assessment_json) {
-        throw new Error("unmeasured visual delta should terminally block instead of feeding a needs_richer_proof retry back to the engine");
+        const proofAssessment = JSON.parse(params.proof_assessment_json);
+        assert.equal(proofAssessment.decision, "revise_capture");
+        assert.equal(proofAssessment.evidence_collection_incomplete, true);
+        assert.equal(proofAssessment.recovery_stage, "verify");
+        assert.equal(proofAssessment.blocked_decision, "ready_to_ship");
+        return {
+          ok: false,
+          state_path: unmeasuredVisualStatePath,
+          checkpoint: "verify_agent_retry",
+          summary: "Visual delta evidence is incomplete; continue verify evidence recovery.",
+          checkpointContract: {
+            resume: { continue_with_stage: "verify" },
+          },
+        };
       }
       return {
         ok: false,
@@ -905,13 +918,15 @@ const unmeasuredVisualResult = await runRiddleProofEngineHarness({
   },
 });
 assert.equal(unmeasuredVisualResult.status, "blocked");
-assert.equal(unmeasuredVisualResult.blocker.code, "comparator_fetch_blocked");
-assert.equal(unmeasuredVisualResult.blocker.details.terminal_evidence_production_blocker, true);
-assert.equal(unmeasuredVisualResult.blocker.details.visual_delta.status, "unmeasured");
-assert.equal(unmeasuredVisualEngineCalls.some((call) => call.proof_assessment_json), false);
+assert.equal(unmeasuredVisualResult.blocker.code, "max_iterations_reached");
+assert.equal(unmeasuredVisualEngineCalls.some((call) => call.proof_assessment_json), true);
+const unmeasuredVisualProofAssessmentCall = unmeasuredVisualEngineCalls.find((call) => call.proof_assessment_json);
+const unmeasuredVisualProofAssessment = JSON.parse(unmeasuredVisualProofAssessmentCall.proof_assessment_json);
+assert.equal(unmeasuredVisualProofAssessment.evidence_collection_incomplete, true);
+assert.equal(unmeasuredVisualProofAssessment.visual_delta.status, "unmeasured");
 const unmeasuredVisualHarnessState = JSON.parse(readFileSync(unmeasuredVisualResult.state_path, "utf-8"));
-const unmeasuredBlockEvent = unmeasuredVisualHarnessState.events.find((event) => event.kind === "agent.proof_assessment.blocked");
-assert.equal(unmeasuredBlockEvent.details.terminal_evidence_production_blocker, true);
+const unmeasuredRecoveryEvent = unmeasuredVisualHarnessState.events.find((event) => event.kind === "agent.proof_assessment.evidence_recovery_required");
+assert.equal(unmeasuredRecoveryEvent.details.evidence_collection_incomplete, true);
 
 const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
 const noiseWorkdir = path.join(noiseFixture, "after");

@@ -2296,11 +2296,12 @@ const reviewResumed = await submitOpenClawRiddleProofReview(
   },
 );
 assert.equal(reviewResumed.status, "ready_to_ship");
-assert.equal(reviewResumeEngineCalls.length, 0);
+assert.equal(reviewResumeEngineCalls.length, 1);
+assert.ok(reviewResumeEngineCalls[0].proof_assessment_json);
+const reviewResumedPayload = JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json);
+assert.equal(reviewResumedPayload.source, "supervising_agent");
+assert.equal(reviewResumedPayload.continue_with_stage, "ship");
 const reviewResumedState = JSON.parse(readFileSync(reviewWrapperStatePath, "utf-8"));
-const reviewResumedEvent = reviewResumedState.events.findLast((event) => event.kind === "agent.proof_assessment.completed");
-assert.equal(reviewResumedEvent.details.payload.source, "supervising_agent");
-assert.equal(reviewResumedEvent.details.payload.continue_with_stage, "ship");
 assert.equal(reviewResumedState.finalized, true);
 
 const syncFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-sync-"));

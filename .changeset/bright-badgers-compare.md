@@ -1,5 +1,6 @@
 ---
 "@riddledc/riddle-proof": patch
+"@riddledc/openclaw-riddle-proof": patch
 ---
 
-Classify missing visual-delta proof metrics as terminal evidence-production blockers instead of feeding them back into a vague proof retry loop.
+Route missing required visual-delta proof metrics back into verify/evidence recovery instead of marking them ready to ship or downgrading them to generic richer-proof requests.

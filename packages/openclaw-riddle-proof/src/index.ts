@@ -3563,31 +3563,6 @@ export async function submitOpenClawRiddleProofReview(
   const forwardProofAssessment =
     params.decision !== "continue_checkpoint" &&
     proofAssessmentAppliesToCheckpoint(currentCheckpoint, currentBlockerCode);
-  if (forwardProofAssessment && effectiveShipMode(state.request, config) !== "ship" && stage === "ship") {
-    appendRunEvent(state, {
-      kind: "agent.proof_assessment.completed",
-      checkpoint: currentCheckpoint || "verify_supervisor_judgment",
-      stage: "verify",
-      summary: params.summary,
-      details: { payload: assessment },
-    });
-    state.current_stage = "verify";
-    state.proof_decision = "ready_to_ship";
-    state.merge_recommendation = "ready_to_ship (supervising-agent proof assessment)";
-    state.finalized = true;
-    setRunStatus(state, "ready_to_ship");
-    persistRunState(state);
-    return createRunResult({
-      state,
-      status: "ready_to_ship",
-      last_summary: params.summary,
-      raw: {
-        ship_held: true,
-        engine_state_path: engineStatePath,
-        proof_assessment: assessment,
-      },
-    });
-  }
   const resumeParams: RiddleProofWorkflowParams = {
     action: "run",
     state_path: engineStatePath,
