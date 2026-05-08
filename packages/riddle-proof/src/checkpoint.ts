@@ -142,6 +142,107 @@ function responseSchemaForProofAssessmentPacket() {
   };
 }
 
+function responseSchemaForReconPacket() {
+  return {
+    type: "object",
+    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    additionalProperties: false,
+    properties: {
+      version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
+      run_id: { type: "string" },
+      checkpoint: { type: "string" },
+      resume_token: { type: "string" },
+      decision: {
+        type: "string",
+        enum: ["ready_for_author", "retry_recon", "recon_stuck", "needs_recon", "blocked", "human_review"],
+      },
+      summary: { type: "string" },
+      payload: {
+        type: "object",
+        description:
+          "Optional recon assessment details such as baseline_understanding, refined_inputs, reasons, or diagnostic blocker context.",
+      },
+      reasons: { type: "array", items: { type: "string" } },
+      continue_with_stage: { type: "string", enum: ["recon", "author"] },
+      source: {
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          session_id: { type: "string" },
+          user_id: { type: "string" },
+        },
+      },
+      created_at: { type: "string" },
+    },
+  };
+}
+
+function responseSchemaForImplementationPacket() {
+  return {
+    type: "object",
+    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    additionalProperties: false,
+    properties: {
+      version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
+      run_id: { type: "string" },
+      checkpoint: { type: "string" },
+      resume_token: { type: "string" },
+      decision: {
+        type: "string",
+        enum: ["implementation_complete", "needs_author", "needs_recon", "blocked", "human_review"],
+      },
+      summary: { type: "string" },
+      payload: {
+        type: "object",
+        description:
+          "Implementation details such as changed_files, tests_run, and implementation_notes. The changed worktree must contain a real git diff before verify can advance.",
+      },
+      reasons: { type: "array", items: { type: "string" } },
+      continue_with_stage: { type: "string", enum: ["implement", "verify", "author", "recon"] },
+      source: {
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          session_id: { type: "string" },
+          user_id: { type: "string" },
+        },
+      },
+      created_at: { type: "string" },
+    },
+  };
+}
+
+function responseSchemaForAdvancePacket(stage: RiddleProofStage) {
+  return {
+    type: "object",
+    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    additionalProperties: false,
+    properties: {
+      version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
+      run_id: { type: "string" },
+      checkpoint: { type: "string" },
+      resume_token: { type: "string" },
+      decision: {
+        type: "string",
+        enum: ["continue_stage", "retry_stage", "needs_recon", "needs_implementation", "blocked", "human_review"],
+      },
+      summary: { type: "string" },
+      payload: { type: "object" },
+      reasons: { type: "array", items: { type: "string" } },
+      continue_with_stage: { type: "string", enum: ["recon", "author", "implement", "verify", "ship", stage] },
+      source: {
+        type: "object",
+        properties: {
+          kind: { type: "string" },
+          session_id: { type: "string" },
+          user_id: { type: "string" },
+        },
+      },
+      created_at: { type: "string" },
+    },
+  };
+}
+
 function resumeTokenFor(input: {
   runId: string;
   statePath?: string | null;
@@ -178,6 +279,133 @@ function artifactsFromState(state: Record<string, unknown> | null): RiddleProofC
     }
   }
   return artifacts.slice(0, 16);
+}
+
+function stageFromCheckpoint(checkpoint: string): RiddleProofStage {
+  if (checkpoint.startsWith("recon_")) return "recon";
+  if (checkpoint.startsWith("author_")) return "author";
+  if (checkpoint.startsWith("implement_")) return "implement";
+  if (checkpoint.startsWith("verify_")) return "verify";
+  if (checkpoint.startsWith("ship_")) return "ship";
+  if (checkpoint.startsWith("pr_sync_")) return "notify";
+  if (checkpoint.includes("capture")) return "prove";
+  return "setup";
+}
+
+function allowedDecisionsForStage(stage: RiddleProofStage, checkpoint: string) {
+  if (stage === "recon") return ["ready_for_author", "retry_recon", "recon_stuck", "blocked", "human_review"];
+  if (stage === "implement") return ["implementation_complete", "needs_author", "needs_recon", "blocked", "human_review"];
+  if (stage === "ship") return ["continue_stage", "needs_implementation", "needs_recon", "blocked", "human_review"];
+  if (checkpoint === "awaiting_stage_advance") return ["continue_stage", "retry_stage", "blocked", "human_review"];
+  return ["continue_stage", "needs_recon", "needs_implementation", "blocked", "human_review"];
+}
+
+function packetKindForStage(stage: RiddleProofStage, checkpoint: string): RiddleProofCheckpointPacket["kind"] {
+  if (stage === "recon") return "assess_recon";
+  if (stage === "implement") return "implement_change";
+  if (checkpoint.includes("human")) return "human_review";
+  return "advance_decision";
+}
+
+function responseSchemaForStage(stage: RiddleProofStage, checkpoint: string) {
+  if (stage === "recon") return responseSchemaForReconPacket();
+  if (stage === "implement") return responseSchemaForImplementationPacket();
+  return responseSchemaForAdvancePacket(stage);
+}
+
+function questionForStage(stage: RiddleProofStage, checkpoint: string) {
+  if (stage === "recon") {
+    return "Assess the baseline/recon evidence. Return ready_for_author only when the baseline is trustworthy; otherwise choose retry_recon, recon_stuck, blocked, or human_review.";
+  }
+  if (stage === "implement") {
+    return "Implement the requested change in the after worktree, leave a real git diff, then return implementation_complete with changed_files/tests_run/implementation_notes. Choose blocked or human_review if implementation cannot honestly advance.";
+  }
+  if (stage === "ship") {
+    return "Assess whether the ship gate can continue. Return continue_stage only if proof, PR, and policy gates are satisfied; otherwise route to the appropriate earlier stage or block with a concrete reason.";
+  }
+  return "Choose the next Riddle Proof stage for this durable run, or block with a concrete reason if the run cannot honestly advance.";
+}
+
+export function buildStageCheckpointPacket(input: {
+  request: RiddleProofRunParams;
+  runState: RiddleProofRunState;
+  engineResult: {
+    state_path?: string | null;
+    checkpoint?: string | null;
+    checkpointContract?: Record<string, unknown> | null;
+    decisionRequest?: Record<string, unknown> | null;
+    summary?: string;
+    stage?: string | null;
+  };
+  fullRiddleState?: Record<string, unknown> | null;
+  visibility?: "liveblog" | "quiet" | "terminal_only" | "manual" | string;
+  created_at?: string;
+}): RiddleProofCheckpointPacket {
+  const checkpoint = nonEmptyString(input.engineResult.checkpoint) || "stage_checkpoint";
+  const stage = (nonEmptyString(input.engineResult.stage) || stageFromCheckpoint(checkpoint)) as RiddleProofStage;
+  const runId = input.runState.run_id || "unknown";
+  const fullState = input.fullRiddleState || {};
+  const decisionDetails = recordValue(input.engineResult.decisionRequest?.details);
+  const checkpointContract = recordValue(input.engineResult.checkpointContract);
+  const summary =
+    nonEmptyString(input.engineResult.summary) ||
+    nonEmptyString(fullState.stage_summary) ||
+    `${stage} checkpoint needs a supervising decision.`;
+  const kind = packetKindForStage(stage, checkpoint);
+
+  return {
+    version: RIDDLE_PROOF_CHECKPOINT_PACKET_VERSION,
+    run_id: runId,
+    state_path: input.runState.state_path,
+    stage,
+    checkpoint,
+    kind,
+    summary,
+    question: questionForStage(stage, checkpoint),
+    change_request: input.request.change_request || nonEmptyString(fullState.change_request) || "",
+    context: input.request.context,
+    artifacts: artifactsFromState(fullState),
+    state_excerpt: compactRecord({
+      repo: input.request.repo || fullState.repo,
+      branch: input.request.branch || fullState.branch,
+      after_worktree: fullState.after_worktree || input.runState.worktree_path,
+      verification_mode: input.request.verification_mode || fullState.verification_mode,
+      reference: input.request.reference || fullState.reference,
+      server_path: fullState.server_path,
+      wait_for_selector: fullState.wait_for_selector,
+      recon_status: fullState.recon_status,
+      author_status: fullState.author_status,
+      implementation_status: fullState.implementation_status,
+      verify_status: fullState.verify_status,
+      stage_decision_request: jsonCloneRecord(fullState.stage_decision_request),
+    }) as Record<string, unknown>,
+    evidence_excerpt: compactRecord({
+      before_cdn: fullState.before_cdn || null,
+      prod_cdn: fullState.prod_cdn || null,
+      after_cdn: fullState.after_cdn || null,
+      recon_results: jsonCloneRecord(fullState.recon_results),
+      checkpoint_contract: jsonCloneRecord(checkpointContract),
+      decision_details: jsonCloneRecord(decisionDetails),
+    }) as Record<string, unknown>,
+    allowed_decisions: allowedDecisionsForStage(stage, checkpoint),
+    response_schema: responseSchemaForStage(stage, checkpoint),
+    routing_hint: {
+      suggested_role:
+        stage === "implement" ? "builder_agent" :
+          checkpoint.includes("human") ? "human" :
+            "main_agent",
+      visibility: input.visibility || "quiet",
+      urgency: stage === "ship" ? "high" : "normal",
+      can_auto_answer: input.visibility !== "manual",
+    },
+    resume_token: resumeTokenFor({
+      runId,
+      statePath: input.engineResult.state_path || input.request.engine_state_path || null,
+      checkpoint,
+      stage,
+    }),
+    created_at: input.created_at || timestamp(),
+  };
 }
 
 export function buildAuthorCheckpointPacket(input: {
@@ -432,7 +660,16 @@ export function buildCheckpointPacketForEngineResult(input: {
   ) {
     return buildProofAssessmentCheckpointPacket(input);
   }
-  return buildAuthorCheckpointPacket(input);
+  const resume = recordValue(input.engineResult.checkpointContract?.resume);
+  const continueStage = nonEmptyString(resume?.continue_with_stage);
+  if (
+    checkpoint === "author_supervisor_judgment" ||
+    checkpoint === "verify_capture_retry" ||
+    (checkpoint === "verify_agent_retry" && continueStage === "author")
+  ) {
+    return buildAuthorCheckpointPacket(input);
+  }
+  return buildStageCheckpointPacket(input);
 }
 
 export function normalizeCheckpointResponse(value: unknown): RiddleProofCheckpointResponse | null {

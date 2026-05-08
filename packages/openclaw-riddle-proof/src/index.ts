@@ -34,19 +34,19 @@ import {
 import {
   createCodexExecAgentAdapter,
   type CodexExecAgentConfig,
-} from "./codex-exec-agent";
+} from "@riddledc/riddle-proof/codex-exec-agent";
 
 export {
   createCodexExecAgentAdapter,
   createCodexExecJsonRunner,
   runCodexExecAgentDoctor,
-} from "./codex-exec-agent";
+} from "@riddledc/riddle-proof/codex-exec-agent";
 export type {
   CodexExecAgentConfig,
   CodexJsonRequest,
   CodexJsonResult,
   CodexJsonRunner,
-} from "./codex-exec-agent";
+} from "@riddledc/riddle-proof/codex-exec-agent";
 export {
   buildOpenClawAgentInvocationPlan,
   buildOpenClawAgentSessionKey,

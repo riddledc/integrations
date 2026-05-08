@@ -56,6 +56,23 @@ adapters are exposed through subpaths such as
 `@riddledc/riddle-proof/openclaw`, so wrappers can reuse the mapping logic
 without depending on another plugin runtime.
 
+## Durable Loop CLI
+
+The package publishes `riddle-proof-loop` as a host-agnostic runner surface for
+Codex/CLI-style testing:
+
+```sh
+riddle-proof-loop run --request-json request.json --checkpoint-mode yield
+riddle-proof-loop status --state-path /tmp/riddle-proof-run.json
+riddle-proof-loop respond --state-path /tmp/riddle-proof-run.json --response-json response.json
+riddle-proof-loop doctor codex_exec
+```
+
+In yield mode, the harness returns portable checkpoint packets for recon,
+authoring, implementation, proof assessment, and evidence recovery. A host can
+answer those packets with `riddle-proof.checkpoint_response.v1` JSON without
+needing OpenClaw-specific proof semantics.
+
 ## Runner Harness
 
 `runRiddleProof` is the reusable idea-to-PR workflow driver. It does not ship

@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.87
+
+### Patch Changes
+
+- Consume the shared Codex exec adapter from `@riddledc/riddle-proof` so OpenClaw remains an adapter over the generic durable loop contract.
+
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.46
+
 ## 0.4.86
 
 ### Patch Changes

@@ -5,9 +5,9 @@ import path from "node:path";
 import type {
   RiddleProofAgentAdapter,
   RiddleProofAgentPayload,
-  RiddleProofBlocker,
   RiddleProofEngineHarnessContext,
-} from "@riddledc/riddle-proof";
+} from "./engine-harness";
+import type { RiddleProofBlocker } from "./types";
 
 export interface CodexExecAgentConfig {
   codexCommand?: string;

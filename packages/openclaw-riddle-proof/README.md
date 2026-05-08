@@ -175,7 +175,9 @@ OpenClaw-instance-specific configuration.
 
 ## Codex Exec Adapter
 
-The optional adapter can be enabled with config like:
+The optional adapter lives in `@riddledc/riddle-proof/codex-exec-agent`; this
+OpenClaw package only wires it into the OC tool surface. It can be enabled with
+config like:
 
 ```json
 {

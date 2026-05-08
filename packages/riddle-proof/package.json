@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof",
-  "version": "0.5.45",
+  "version": "0.5.46",
   "description": "Reusable Riddle Proof contracts and helpers for evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",
@@ -39,6 +39,11 @@
       "import": "./dist/checkpoint.js",
       "require": "./dist/checkpoint.cjs"
     },
+    "./run-card": {
+      "types": "./dist/run-card.d.ts",
+      "import": "./dist/run-card.js",
+      "require": "./dist/run-card.cjs"
+    },
     "./runner": {
       "types": "./dist/runner.d.ts",
       "import": "./dist/runner.js",
@@ -48,6 +53,11 @@
       "types": "./dist/engine-harness.d.ts",
       "import": "./dist/engine-harness.js",
       "require": "./dist/engine-harness.cjs"
+    },
+    "./codex-exec-agent": {
+      "types": "./dist/codex-exec-agent.d.ts",
+      "import": "./dist/codex-exec-agent.js",
+      "require": "./dist/codex-exec-agent.cjs"
     },
     "./diagnostics": {
       "types": "./dist/diagnostics.d.ts",
@@ -80,6 +90,9 @@
       "require": "./dist/proof-run-engine.cjs"
     }
   },
+  "bin": {
+    "riddle-proof-loop": "./dist/cli.js"
+  },
   "files": [
     "dist",
     "lib",
@@ -92,7 +105,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/runner.ts src/engine-harness.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/run-card.ts src/runner.ts src/engine-harness.ts src/codex-exec-agent.ts src/cli.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js && node proof-run.test.js"

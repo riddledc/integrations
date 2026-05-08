@@ -25,6 +25,7 @@ import {
   normalizeRunParams,
   setRunStatus,
 } from "./state";
+import { createRiddleProofRunCard } from "./run-card";
 import {
   authorPacketPayloadFromCheckpointResponse,
   buildCheckpointPacketForEngineResult,
@@ -228,6 +229,10 @@ function shouldPreserveFinalizedRunState(filePath: string, incoming: RiddleProof
 function persist(state: RiddleProofRunState) {
   state.state_paths = statePathsForRunState(state);
   state.checkpoint_summary = checkpointSummaryFromState(state);
+  state.run_card = createRiddleProofRunCard(state, {
+    fullRiddleState: readJson(state.request.engine_state_path),
+    state_paths: state.state_paths,
+  });
   if (!state.state_path) return;
   if (shouldPreserveFinalizedRunState(state.state_path, state)) return;
   writeJson(state.state_path, state);
@@ -515,6 +520,58 @@ function proofAssessmentPayloadFromCheckpointResponse(
     checkpoint_response_source: response.source || null,
     checkpoint_response_created_at: response.created_at,
   }) as Record<string, unknown>;
+}
+
+function reconAssessmentPayloadFromCheckpointResponse(
+  response: RiddleProofCheckpointResponse,
+): Record<string, unknown> | null {
+  if (![
+    "ready_for_author",
+    "retry_recon",
+    "recon_stuck",
+    "needs_recon",
+  ].includes(response.decision)) {
+    return null;
+  }
+  const payload = recordValue(response.payload) || {};
+  const decision = response.decision === "needs_recon" ? "retry_recon" : response.decision;
+  const continueStage =
+    response.continue_with_stage ||
+    nonEmptyString(payload.continue_with_stage) ||
+    (decision === "ready_for_author" ? "author" : "recon");
+  return compactRecord({
+    ...payload,
+    decision,
+    summary: response.summary,
+    continue_with_stage: continueStage,
+    escalation_target:
+      nonEmptyString(payload.escalation_target) ||
+      (decision === "recon_stuck" ? "human" : "agent"),
+    reasons: Array.isArray(response.reasons)
+      ? response.reasons
+      : Array.isArray(payload.reasons)
+        ? payload.reasons
+        : [],
+    source: "supervising_agent",
+    checkpoint_response_source: response.source || null,
+    checkpoint_response_created_at: response.created_at,
+  }) as Record<string, unknown>;
+}
+
+function implementationNotesFromCheckpointResponse(response: RiddleProofCheckpointResponse) {
+  const payload = recordValue(response.payload) || {};
+  const notes =
+    nonEmptyString(payload.implementation_notes) ||
+    nonEmptyString(payload.implementationNotes) ||
+    nonEmptyString(payload.summary) ||
+    response.summary;
+  const changedFiles = Array.isArray(payload.changed_files) ? payload.changed_files.filter((item) => typeof item === "string") : [];
+  const testsRun = Array.isArray(payload.tests_run) ? payload.tests_run.filter((item) => typeof item === "string") : [];
+  return [
+    notes,
+    changedFiles.length ? `changed_files=${changedFiles.join(", ")}` : "",
+    testsRun.length ? `tests_run=${testsRun.join(", ")}` : "",
+  ].filter(Boolean).join("\n");
 }
 
 function proofAssessmentVisualBlocker(
@@ -876,6 +933,70 @@ function checkpointResponseContinuation(
     return { next: { ...base, author_packet_json: jsonParam(payload) } };
   }
 
+  if (packet.kind === "assess_recon" || packet.stage === "recon") {
+    const assessment = reconAssessmentPayloadFromCheckpointResponse(response);
+    if (assessment) {
+      appendCheckpointResponse(state, response);
+      return { next: { ...base, recon_assessment_json: jsonParam(assessment) } };
+    }
+    if (response.decision === "blocked" || response.decision === "human_review") {
+      appendCheckpointResponse(state, response, { clear_packet: false });
+      return {
+        blocker: {
+          code: `checkpoint_response_${response.decision}`,
+          checkpoint: packet.checkpoint,
+          message: response.summary || `Checkpoint response stopped recon with decision=${response.decision}.`,
+          details: { stage: packet.stage, response },
+        },
+      };
+    }
+  }
+
+  if (packet.kind === "implement_change" || packet.stage === "implement") {
+    if (response.decision === "implementation_complete") {
+      const workdir = nonEmptyString(packet.state_excerpt?.after_worktree) || state.worktree_path;
+      if (workdir) state.worktree_path = workdir;
+      if (!hasGitDiff(workdir)) {
+        return {
+          blocker: {
+            code: "implementation_diff_missing",
+            checkpoint: packet.checkpoint,
+            message:
+              "Checkpoint response claimed implementation_complete, but the after worktree has no detectable git diff.",
+            details: { stage: packet.stage, worktree_path: workdir || null, response },
+          },
+        };
+      }
+      appendCheckpointResponse(state, response);
+      return {
+        next: {
+          ...base,
+          advance_stage: "implement",
+          implementation_notes: implementationNotesFromCheckpointResponse(response),
+        },
+      };
+    }
+    if (response.decision === "needs_author") {
+      appendCheckpointResponse(state, response);
+      return { next: { ...base, advance_stage: "author" } };
+    }
+    if (response.decision === "needs_recon") {
+      appendCheckpointResponse(state, response);
+      return { next: { ...base, advance_stage: "recon" } };
+    }
+    if (response.decision === "blocked" || response.decision === "human_review") {
+      appendCheckpointResponse(state, response, { clear_packet: false });
+      return {
+        blocker: {
+          code: `checkpoint_response_${response.decision}`,
+          checkpoint: packet.checkpoint,
+          message: response.summary || `Checkpoint response stopped implementation with decision=${response.decision}.`,
+          details: { stage: packet.stage, response },
+        },
+      };
+    }
+  }
+
   if (response.decision === "needs_recon") {
     appendCheckpointResponse(state, response);
     if (packet.kind === "assess_proof" || packet.kind === "recover_evidence" || packet.stage === "verify") {
@@ -1182,6 +1303,9 @@ async function routeCheckpoint(
   }
 
   if (checkpoint === "recon_supervisor_judgment") {
+    if (input.checkpoint_mode === "yield") {
+      return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+    }
     const assessment = await agent.assessRecon(context);
     const blocker = requirePayload("recon_assessment", assessment, state, result);
     if (blocker) return { blocker };
@@ -1227,6 +1351,13 @@ async function routeCheckpoint(
     checkpoint === "implement_required" ||
     (checkpoint === "verify_agent_retry" && continueStage === "implement")
   ) {
+    if (input.checkpoint_mode === "yield") {
+      const fullState = context.fullRiddleState || {};
+      state.worktree_path = workdirFromState(fullState) || state.worktree_path;
+      state.branch = nonEmptyString(fullState.branch) || state.branch;
+      persist(state);
+      return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+    }
     return handleImplementation(request, state, result, agent);
   }
 

@@ -15,7 +15,9 @@ import {
   createCaptureDiagnostic,
   createRunStatusSnapshot,
   createRunState,
+  createRiddleProofRunCard,
   createRunResult,
+  createCodexExecAgentAdapter,
   isSuccessfulStatus,
   isTerminalStatus,
   normalizeTerminalMetadata,
@@ -40,6 +42,8 @@ const cjsPlayability = require("./dist/playability.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
+assert.equal(typeof cjs.createRiddleProofRunCard, "function");
+assert.equal(typeof cjs.createCodexExecAgentAdapter, "function");
 assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
@@ -541,6 +545,10 @@ assert.equal(statusSnapshot.is_terminal, false);
 assert.equal(statusSnapshot.monitor_should_continue, true);
 assert.equal(statusSnapshot.latest_event.kind, "stage.heartbeat");
 assert.equal(statusSnapshot.latest_event.details.wait_reason, "waiting_for_clean_worktree");
+assert.equal(statusSnapshot.run_card.version, "riddle-proof.run-card.v1");
+assert.equal(statusSnapshot.run_card.goal.repo, "riddledc/example");
+assert.equal(createRiddleProofRunCard(statusState, { at: "2026-04-15T00:00:10.000Z" }).current_phase.stage, "setup");
+assert.equal(typeof createCodexExecAgentAdapter, "function");
 
 const missingAdapterResult = await runRiddleProof({
   request: {
@@ -1243,6 +1251,189 @@ assert.equal(reconLoopResult.status, "blocked");
 assert.equal(reconLoopResult.blocker.code, "stage_iteration_limit_reached");
 assert.equal(reconLoopResult.blocker.details.stage, "recon");
 assert.equal(reconLoopResult.blocker.details.stage_iteration_limit, 4);
+
+const yieldedReconFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-yielded-recon-"));
+const yieldedReconEngineStatePath = path.join(yieldedReconFixture, "riddle-state.json");
+writeFileSync(yieldedReconEngineStatePath, JSON.stringify({
+  recon_status: "needs_supervisor_judgment",
+  before_cdn: "https://cdn.example.com/recon-before.png",
+}, null, 2));
+const yieldedReconHarnessPath = path.join(yieldedReconFixture, "harness-state.json");
+const yieldedReconCalls = [];
+const yieldedReconEngine = {
+  async execute(params) {
+    yieldedReconCalls.push(params);
+    if (params.recon_assessment_json) {
+      return {
+        ok: false,
+        state_path: yieldedReconEngineStatePath,
+        checkpoint: "author_supervisor_judgment",
+        summary: "Author packet required after recon response.",
+      };
+    }
+    return {
+      ok: false,
+      state_path: yieldedReconEngineStatePath,
+      checkpoint: "recon_supervisor_judgment",
+      summary: "Recon needs a portable checkpoint decision.",
+    };
+  },
+};
+const yieldedRecon = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Yield recon as a portable loop checkpoint.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: yieldedReconHarnessPath,
+    engine_state_path: yieldedReconEngineStatePath,
+  },
+  engine: yieldedReconEngine,
+  checkpoint_mode: "yield",
+  checkpoint_visibility: "manual",
+});
+assert.equal(yieldedRecon.status, "awaiting_checkpoint");
+assert.equal(yieldedRecon.checkpoint_packet.kind, "assess_recon");
+assert.equal(yieldedRecon.run_card.owner_next_action.checkpoint_kind, "assess_recon");
+assert.ok(yieldedRecon.checkpoint_packet.allowed_decisions.includes("ready_for_author"));
+const yieldedReconResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: yieldedRecon.run_id,
+  checkpoint: yieldedRecon.checkpoint_packet.checkpoint,
+  resume_token: yieldedRecon.checkpoint_packet.resume_token,
+  decision: "ready_for_author",
+  summary: "Recon baseline is specific enough.",
+  payload: {
+    baseline_understanding: {
+      reference: "before",
+      target_route: "/",
+      before_evidence_url: "https://cdn.example.com/recon-before.png",
+      visible_before_state: "The page is visible.",
+      relevant_elements: ["body"],
+      requested_change: "Yield recon as a portable loop checkpoint.",
+      proof_focus: "Verify the page after implementation.",
+      stop_condition: "After evidence shows the requested change.",
+      quality_risks: [],
+    },
+  },
+  created_at: "2026-05-08T00:00:00.000Z",
+};
+const yieldedReconResumed = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Yield recon as a portable loop checkpoint.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: yieldedReconHarnessPath,
+    engine_state_path: yieldedReconEngineStatePath,
+  },
+  state_path: yieldedReconHarnessPath,
+  engine: yieldedReconEngine,
+  checkpoint_response: yieldedReconResponse,
+  checkpoint_mode: "yield",
+  checkpoint_visibility: "manual",
+});
+assert.equal(yieldedReconResumed.status, "awaiting_checkpoint");
+assert.equal(yieldedReconResumed.checkpoint_packet.kind, "author_proof");
+const yieldedReconAssessmentCall = yieldedReconCalls.find((call) => call.recon_assessment_json);
+assert.equal(JSON.parse(yieldedReconAssessmentCall.recon_assessment_json).decision, "ready_for_author");
+
+const yieldedImplementFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-yielded-implement-"));
+const yieldedImplementWorkdir = path.join(yieldedImplementFixture, "after");
+mkdirSync(yieldedImplementWorkdir, { recursive: true });
+execFileSync("git", ["init"], { cwd: yieldedImplementWorkdir, stdio: "ignore" });
+const yieldedImplementEngineStatePath = path.join(yieldedImplementFixture, "riddle-state.json");
+writeFileSync(yieldedImplementEngineStatePath, JSON.stringify({
+  after_worktree: yieldedImplementWorkdir,
+  branch: "agent/yielded-implementation",
+}, null, 2));
+const yieldedImplementHarnessPath = path.join(yieldedImplementFixture, "harness-state.json");
+const yieldedImplementCalls = [];
+const yieldedImplementEngine = {
+  async execute(params) {
+    yieldedImplementCalls.push(params);
+    if (params.implementation_notes) {
+      return {
+        ok: true,
+        state_path: yieldedImplementEngineStatePath,
+        checkpoint: "verify_ship_ready",
+        summary: "External implementation response advanced to verify.",
+        shipGate: { ok: true },
+      };
+    }
+    return {
+      ok: false,
+      state_path: yieldedImplementEngineStatePath,
+      checkpoint: "implement_changes_missing",
+      summary: "Implementation needs an external worker checkpoint.",
+    };
+  },
+};
+const yieldedImplement = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Yield implementation as a portable loop checkpoint.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: yieldedImplementHarnessPath,
+    engine_state_path: yieldedImplementEngineStatePath,
+  },
+  engine: yieldedImplementEngine,
+  checkpoint_mode: "yield",
+  checkpoint_visibility: "manual",
+});
+assert.equal(yieldedImplement.status, "awaiting_checkpoint");
+assert.equal(yieldedImplement.checkpoint_packet.kind, "implement_change");
+assert.equal(yieldedImplement.run_card.durable_state.worktree_path, yieldedImplementWorkdir);
+const yieldedImplementationResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: yieldedImplement.run_id,
+  checkpoint: yieldedImplement.checkpoint_packet.checkpoint,
+  resume_token: yieldedImplement.checkpoint_packet.resume_token,
+  decision: "implementation_complete",
+  summary: "Changed the fixture file.",
+  payload: {
+    changed_files: ["feature.txt"],
+    tests_run: ["git status --short"],
+    implementation_notes: "Added the fixture change.",
+  },
+  created_at: "2026-05-08T00:10:00.000Z",
+};
+const yieldedImplementNoDiff = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Yield implementation as a portable loop checkpoint.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: yieldedImplementHarnessPath,
+    engine_state_path: yieldedImplementEngineStatePath,
+  },
+  state_path: yieldedImplementHarnessPath,
+  engine: yieldedImplementEngine,
+  checkpoint_response: yieldedImplementationResponse,
+  checkpoint_mode: "yield",
+  checkpoint_visibility: "manual",
+});
+assert.equal(yieldedImplementNoDiff.status, "blocked");
+assert.equal(yieldedImplementNoDiff.blocker.code, "implementation_diff_missing");
+writeFileSync(path.join(yieldedImplementWorkdir, "feature.txt"), "changed\n");
+const yieldedImplementResumed = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Yield implementation as a portable loop checkpoint.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: yieldedImplementHarnessPath,
+    engine_state_path: yieldedImplementEngineStatePath,
+  },
+  state_path: yieldedImplementHarnessPath,
+  engine: yieldedImplementEngine,
+  checkpoint_response: yieldedImplementationResponse,
+  checkpoint_mode: "yield",
+  checkpoint_visibility: "manual",
+});
+assert.equal(yieldedImplementResumed.status, "ready_to_ship");
+assert.equal(yieldedImplementCalls.some((call) => call.implementation_notes?.includes("Added the fixture change.")), true);
 
 const finalizedGuardFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-finalized-guard-"));
 const finalizedGuardStatePath = path.join(finalizedGuardFixture, "harness-state.json");

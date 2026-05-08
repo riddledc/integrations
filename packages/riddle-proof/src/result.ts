@@ -268,6 +268,7 @@ export function createRunResult(input: {
     checkpoint_summary: state.checkpoint_summary,
     state_paths: state.state_paths,
     proof_contract: state.proof_contract,
+    run_card: state.run_card,
     proof_session: state.proof_session,
     evidence_bundle: input.evidence_bundle,
     raw: input.raw,
