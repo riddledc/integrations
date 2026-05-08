@@ -559,6 +559,27 @@ export function visualDeltaShipGateReason(state: any = {}) {
   return `visual_delta.status=${status} blocks ready_to_ship for visual/UI proof`;
 }
 
+function visualDeltaEvidenceIssueCode(state: any = {}, blocker = "") {
+  const visualDelta = visualDeltaForState(state || {});
+  const status = String(visualDelta.status || "").trim();
+  const reason = `${String(visualDelta.reason || "")}\n${blocker}`.toLowerCase();
+  if (status === "unmeasured") {
+    if (
+      reason.includes("fetch") ||
+      reason.includes("allowlist") ||
+      reason.includes("registered domain") ||
+      reason.includes("high risk") ||
+      reason.includes("comparator")
+    ) {
+      return "comparator_fetch_blocked";
+    }
+    return "visual_delta_unmeasured";
+  }
+  if (status === "measured" && visualDelta.passed === false) return "semantic_proof_failed";
+  if (visualDeltaRequiredForState(state || {})) return "visual_delta_unmeasured";
+  return "semantic_proof_failed";
+}
+
 export function requiredBaselineLabelsForState(state: any = {}) {
   const reference = normalizedReference(state);
   const labels: string[] = [];
@@ -759,7 +780,7 @@ const CHECKPOINT_CONTRACT_SPECS: Record<string, {
       description: "JSON assessment with decision, summary, recommended_stage, continue_with_stage, escalation_target, and reasons.",
     }],
     response_schema: {
-      decision: ["ready_to_ship", "needs_richer_proof"],
+      decision: ["ready_to_ship", "needs_richer_proof", "revise_capture"],
       summary: "string",
       recommended_stage: ["ship", "author", "implement", "recon", "verify"],
       continue_with_stage: ["ship", "author", "implement", "recon", "verify"],
@@ -987,9 +1008,15 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
         : null;
       if (readyBlocker) {
         assessment.blocked_decision = assessment.decision;
-        assessment.decision = "needs_richer_proof";
-        if (assessment.recommended_stage === "ship") assessment.recommended_stage = "verify";
-        if (assessment.continue_with_stage === "ship") assessment.continue_with_stage = "verify";
+        assessment.decision = "revise_capture";
+        assessment.recommended_stage = "verify";
+        assessment.continue_with_stage = "verify";
+        assessment.evidence_collection_incomplete = true;
+        assessment.recovery_stage = "verify";
+        assessment.recovery_reason = readyBlocker;
+        assessment.evidence_issue_code = visualDeltaEvidenceIssueCode(state, readyBlocker);
+        assessment.visual_delta = visualDeltaForState(state);
+        assessment.suggested_repair = "Keep the same Riddle Proof run in evidence/comparison recovery: repair or retry the visual comparator/fetch path, wait for artifact readiness if applicable, or produce a measured visual_delta artifact before proof review can mark ready_to_ship.";
         const blockers = Array.isArray(assessment.blockers) ? assessment.blockers : [];
         assessment.blockers = [...blockers, readyBlocker];
       }
@@ -1008,7 +1035,7 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       }
       appendProofSummaryLine(state, `Supervising proof assessment: ${state.proof_assessment.decision || "unknown"}`);
       if (readyBlocker) {
-        appendProofSummaryLine(state, `Ready-to-ship assessment blocked: ${readyBlocker}`);
+        appendProofSummaryLine(state, `Ready-to-ship assessment routed to evidence recovery: ${readyBlocker}`);
       }
       if (state.proof_assessment_summary) {
         appendProofSummaryLine(state, `Assessment summary: ${state.proof_assessment_summary}`);

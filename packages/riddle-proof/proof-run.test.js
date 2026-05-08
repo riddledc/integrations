@@ -659,10 +659,17 @@ async function run() {
       source: 'supervising_agent',
     }),
   });
-  assert(blockedVisualAssessment.proof_assessment.decision === 'needs_richer_proof', 'unmeasured visual proof should downgrade ready_to_ship assessment');
+  assert(blockedVisualAssessment.proof_assessment.decision === 'revise_capture', 'unmeasured visual proof should route back to evidence/comparison recovery');
   assert(blockedVisualAssessment.proof_assessment.blocked_decision === 'ready_to_ship', 'blocked visual proof should retain attempted ready decision');
+  assert(blockedVisualAssessment.proof_assessment.evidence_collection_incomplete === true, 'blocked visual proof should mark evidence collection incomplete');
+  assert(blockedVisualAssessment.proof_assessment.recovery_stage === 'verify', 'blocked visual proof should keep the same run in verify recovery');
+  assert(blockedVisualAssessment.proof_assessment.evidence_issue_code === 'visual_delta_unmeasured', 'core recovery metadata should name the evidence issue code');
+  assert(blockedVisualAssessment.proof_assessment.visual_delta.status === 'unmeasured', 'core recovery metadata should include visual delta details');
+  assert(typeof blockedVisualAssessment.proof_assessment.suggested_repair === 'string' && blockedVisualAssessment.proof_assessment.suggested_repair.includes('evidence/comparison recovery'), 'core recovery metadata should include suggested repair');
+  assert(blockedVisualAssessment.proof_assessment.recommended_stage === 'verify', 'blocked visual proof should not advance to ship');
+  assert(blockedVisualAssessment.proof_assessment.continue_with_stage === 'verify', 'blocked visual proof should continue evidence recovery in verify');
   assert(blockedVisualAssessment.merge_recommendation === 'do-not-merge', 'blocked visual proof should not become merge-ready');
-  assert(blockedVisualAssessment.proof_summary.includes('Ready-to-ship assessment blocked'), 'blocked visual proof should be recorded in proof summary');
+  assert(blockedVisualAssessment.proof_summary.includes('Ready-to-ship assessment routed to evidence recovery'), 'blocked visual proof should be recorded in proof summary');
 
   const fakeLobsterRoot = installFakeLobster();
   const originalPath = process.env.PATH;

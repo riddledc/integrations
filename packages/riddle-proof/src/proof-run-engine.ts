@@ -924,10 +924,10 @@ export async function executeWorkflow(
   const primaryShipGateNextAction = (shipGate: ReturnType<typeof validateShipGate>) => {
     const reasons = shipGate.reasons || [];
     if (reasons.some((reason) => reason.includes("proof_assessment"))) {
-      return "resume with riddle_proof_review using decision=ready_to_ship only after the screenshots and semantic evidence visibly prove the request; otherwise choose needs_implementation or needs_richer_proof";
+      return "resume with riddle_proof_review using decision=ready_to_ship only after screenshots, semantic evidence, and required comparison metrics prove the request; otherwise choose needs_implementation, revise_capture, or needs_richer_proof for the specific missing stage";
     }
     if (reasons.some((reason) => reason.includes("visual_delta"))) {
-      return "rerun verify with a measured before/after visual delta, or choose needs_richer_proof instead of ready_to_ship for this visual proof";
+      return "keep the run in verify/evidence recovery until a measured before/after visual_delta exists; choose revise_capture rather than ready_to_ship or generic needs_richer_proof for this visual proof";
     }
     if (reasons.some((reason) => reason.includes("after_cdn") || reason.includes("verify_status"))) {
       return "rerun verify with stronger proof framing so after evidence is captured before shipping";

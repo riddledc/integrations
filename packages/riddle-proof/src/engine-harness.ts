@@ -46,7 +46,7 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
-import { visualDeltaShipGateReason } from "./proof-run-core";
+import { visualDeltaForState, visualDeltaRequiredForState, visualDeltaShipGateReason } from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
 export type RiddleProofCheckpointMode = "auto" | "yield";
@@ -483,14 +483,47 @@ function proofAssessmentVisualBlocker(
   });
 }
 
-function blockedProofAssessmentPayload(payload: Record<string, unknown>, blocker: string) {
+function visualDeltaBlockerCode(state: Record<string, unknown> | null, blocker: string) {
+  const visualDelta = visualDeltaForState(state || {});
+  const status = nonEmptyString(visualDelta.status);
+  const reason = `${nonEmptyString(visualDelta.reason) || ""}\n${blocker}`.toLowerCase();
+  if (status === "unmeasured") {
+    if (
+      reason.includes("fetch") ||
+      reason.includes("allowlist") ||
+      reason.includes("registered domain") ||
+      reason.includes("high risk") ||
+      reason.includes("comparator")
+    ) {
+      return "comparator_fetch_blocked";
+    }
+    return "visual_delta_unmeasured";
+  }
+  if (status === "measured" && visualDelta.passed === false) return "semantic_proof_failed";
+  if (visualDeltaRequiredForState(state || {})) return "visual_delta_unmeasured";
+  return "semantic_proof_failed";
+}
+
+function visualDeltaEvidenceRecoveryAssessment(
+  state: Record<string, unknown> | null,
+  payload: Record<string, unknown>,
+  blocker: string,
+) {
+  const visualDelta = visualDeltaForState(state || {});
   const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item) => typeof item === "string") : [];
   return {
     ...payload,
     blocked_decision: payload.decision || "ready_to_ship",
-    decision: "needs_richer_proof",
-    recommended_stage: payload.recommended_stage === "ship" ? "verify" : payload.recommended_stage || "verify",
-    continue_with_stage: payload.continue_with_stage === "ship" ? "verify" : payload.continue_with_stage || "verify",
+    decision: "revise_capture",
+    recommended_stage: "verify",
+    continue_with_stage: "verify",
+    evidence_collection_incomplete: true,
+    recovery_stage: "verify",
+    recovery_reason: blocker,
+    evidence_issue_code: visualDeltaBlockerCode(state, blocker),
+    visual_delta: Object.keys(visualDelta).length ? visualDelta : null,
+    suggested_repair:
+      "Keep the same Riddle Proof run in evidence/comparison recovery: repair or retry the visual comparator/fetch path, wait for artifact readiness if applicable, or produce a measured visual_delta artifact before proof review can mark ready_to_ship.",
     blockers: [...blockers, blocker],
   };
 }
@@ -1148,14 +1181,24 @@ async function routeCheckpoint(
       verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
     }, payload);
     if (visualBlocker) {
+      const recoveryAssessment = visualDeltaEvidenceRecoveryAssessment({
+        ...(context.fullRiddleState || {}),
+        verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
+      }, payload, visualBlocker);
       recordEvent(state, {
-        kind: "agent.proof_assessment.blocked",
+        kind: "agent.proof_assessment.evidence_recovery_required",
         checkpoint,
         stage: "verify",
         summary: visualBlocker,
-        details: { payload },
+        details: compactRecord({
+          evidence_collection_incomplete: true,
+          recovery_stage: "verify",
+          evidence_issue_code: recoveryAssessment.evidence_issue_code || null,
+          visual_delta: recoveryAssessment.visual_delta || null,
+          proof_assessment: recoveryAssessment,
+        }),
       });
-      return { next: proofAssessmentContinuation(result, blockedProofAssessmentPayload(payload, visualBlocker)) };
+      return { next: proofAssessmentContinuation(result, recoveryAssessment) };
     }
     if (effectiveShipMode(request, input.config) !== "ship" && proofAssessmentRequestsShip(payload)) {
       return {
