@@ -1190,7 +1190,10 @@ async function handleImplementation(
     },
   });
 
+  const implementationStartedAt = timestamp();
+  const implementationStartedMs = Date.now();
   const implementation = await agent.implementChange({ ...context, workdir });
+  const implementationDurationMs = Date.now() - implementationStartedMs;
   if (implementation.blocker || implementation.ok === false) {
     recordEvent(state, {
       kind: "agent.implementation.blocked",
@@ -1199,6 +1202,8 @@ async function handleImplementation(
       summary: implementation.summary || implementation.blocker?.message || "Implementation adapter reported a blocker.",
       details: compactRecord({
         worktree_path: workdir || null,
+        started_at: implementationStartedAt,
+        duration_ms: implementationDurationMs,
         changed_files: implementation.changedFiles || [],
         tests_run: implementation.testsRun || [],
         implementation_notes: implementation.implementationNotes || null,
@@ -1225,6 +1230,8 @@ async function handleImplementation(
       summary: implementation.summary || "Implementation adapter returned without leaving a detectable git diff.",
       details: compactRecord({
         worktree_path: workdir || null,
+        started_at: implementationStartedAt,
+        duration_ms: implementationDurationMs,
         changed_files: implementation.changedFiles || [],
         tests_run: implementation.testsRun || [],
         implementation_notes: implementation.implementationNotes || null,
@@ -1240,6 +1247,7 @@ async function handleImplementation(
         worktree_path: workdir || null,
         checkpoint: result.checkpoint || null,
         next_stage: "implement",
+        previous_duration_ms: implementationDurationMs,
       }) as Record<string, unknown>,
     });
     return {
@@ -1262,6 +1270,8 @@ async function handleImplementation(
     summary: implementation.summary || "Implementation adapter reported code changes.",
     details: {
       worktree_path: workdir || null,
+      started_at: implementationStartedAt,
+      duration_ms: implementationDurationMs,
       diffDetected,
       changed_files: implementation.changedFiles || [],
       tests_run: implementation.testsRun || [],
@@ -1399,15 +1409,44 @@ async function routeCheckpoint(
     if (input.checkpoint_mode === "yield") {
       return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
     }
+    const startedAt = timestamp();
+    const startedMs = Date.now();
+    recordEvent(state, {
+      kind: "agent.recon_assessment.started",
+      checkpoint,
+      stage: "recon",
+      summary: "Recon assessment agent started.",
+      details: { started_at: startedAt },
+    });
     const assessment = await agent.assessRecon(context);
+    const durationMs = Date.now() - startedMs;
     const blocker = requirePayload("recon_assessment", assessment, state, result);
-    if (blocker) return { blocker };
+    if (blocker) {
+      recordEvent(state, {
+        kind: "agent.recon_assessment.blocked",
+        checkpoint,
+        stage: "recon",
+        summary: blocker.message,
+        details: compactRecord({
+          started_at: startedAt,
+          duration_ms: durationMs,
+          blocker,
+          adapter_details: assessment.details || null,
+        }) as Record<string, unknown>,
+      });
+      return { blocker };
+    }
     recordEvent(state, {
       kind: "agent.recon_assessment.completed",
       checkpoint,
       stage: "recon",
       summary: assessment.summary,
-      details: { payload: assessment.payload },
+      details: compactRecord({
+        payload: assessment.payload,
+        started_at: startedAt,
+        duration_ms: durationMs,
+        adapter_details: assessment.details || null,
+      }) as Record<string, unknown>,
     });
     return {
       next: { ...baseContinuation(result), recon_assessment_json: jsonParam(assessment.payload as Record<string, unknown>) },
@@ -1424,15 +1463,44 @@ async function routeCheckpoint(
     if (input.checkpoint_mode === "yield") {
       return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
     }
+    const startedAt = timestamp();
+    const startedMs = Date.now();
+    recordEvent(state, {
+      kind: "agent.author_packet.started",
+      checkpoint,
+      stage: "author",
+      summary: "Proof authoring agent started.",
+      details: { started_at: startedAt },
+    });
     const packet = await agent.authorProofPacket(context);
+    const durationMs = Date.now() - startedMs;
     const blocker = requirePayload("author_packet", packet, state, result);
-    if (blocker) return { blocker };
+    if (blocker) {
+      recordEvent(state, {
+        kind: "agent.author_packet.blocked",
+        checkpoint,
+        stage: "author",
+        summary: blocker.message,
+        details: compactRecord({
+          started_at: startedAt,
+          duration_ms: durationMs,
+          blocker,
+          adapter_details: packet.details || null,
+        }) as Record<string, unknown>,
+      });
+      return { blocker };
+    }
     recordEvent(state, {
       kind: "agent.author_packet.completed",
       checkpoint,
       stage: "author",
       summary: packet.summary,
-      details: { payload: packet.payload },
+      details: compactRecord({
+        payload: packet.payload,
+        started_at: startedAt,
+        duration_ms: durationMs,
+        adapter_details: packet.details || null,
+      }) as Record<string, unknown>,
     });
     return {
       next: { ...baseContinuation(result), author_packet_json: jsonParam(packet.payload as Record<string, unknown>) },
@@ -1462,9 +1530,31 @@ async function routeCheckpoint(
     if (input.checkpoint_mode === "yield") {
       return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
     }
+    const startedAt = timestamp();
+    const startedMs = Date.now();
+    recordEvent(state, {
+      kind: "agent.proof_assessment.started",
+      checkpoint,
+      stage: "verify",
+      summary: "Proof assessment agent started.",
+      details: { started_at: startedAt },
+    });
     const assessment = await agent.assessProof(context);
+    const durationMs = Date.now() - startedMs;
     const blocker = requirePayload("proof_assessment", assessment, state, result);
     if (blocker) {
+      recordEvent(state, {
+        kind: "agent.proof_assessment.blocked",
+        checkpoint,
+        stage: "verify",
+        summary: blocker.message,
+        details: compactRecord({
+          started_at: startedAt,
+          duration_ms: durationMs,
+          blocker,
+          adapter_details: assessment.details || null,
+        }) as Record<string, unknown>,
+      });
       if (blocker.code === "main_agent_proof_review_required") {
         recordEvent(state, {
           kind: "checkpoint.packet.requested",
@@ -1483,7 +1573,12 @@ async function routeCheckpoint(
       checkpoint,
       stage: "verify",
       summary: assessment.summary,
-      details: { payload },
+      details: compactRecord({
+        payload,
+        started_at: startedAt,
+        duration_ms: durationMs,
+        adapter_details: assessment.details || null,
+      }) as Record<string, unknown>,
     });
     const visualBlocker = proofAssessmentVisualBlocker({
       ...(context.fullRiddleState || {}),
@@ -1505,6 +1600,7 @@ async function routeCheckpoint(
           evidence_issue_code: recoveryAssessment.evidence_issue_code || null,
           visual_delta: recoveryAssessment.visual_delta || null,
           proof_assessment: recoveryAssessment,
+          agent_duration_ms: durationMs,
         }),
       });
       return { next: proofAssessmentContinuation(result, recoveryAssessment) };

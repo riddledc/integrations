@@ -299,6 +299,18 @@ export interface RiddleProofRunCard {
     proof_evidence_present?: boolean;
     artifacts?: RiddleProofCheckpointArtifact[];
   };
+  observability?: {
+    engine_call_count?: number;
+    agent_call_count?: number;
+    engine_total_ms?: number;
+    agent_total_ms?: number;
+    max_agent_prompt_chars?: number;
+    total_agent_prompt_chars?: number;
+    recent_engine_timings?: Array<Record<string, unknown>>;
+    recent_agent_timings?: Array<Record<string, unknown>>;
+    retry_event_count?: number;
+    recent_retry_reasons?: Array<Record<string, unknown>>;
+  };
   stop_condition: {
     status: RiddleProofStatus;
     terminal?: boolean;

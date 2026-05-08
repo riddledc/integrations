@@ -52,6 +52,68 @@ assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 
+const metricWorkdir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-local-agent-metrics-"));
+const metricRunnerCalls = [];
+const metricAdapter = createCodexExecAgentAdapter({}, (request) => {
+  metricRunnerCalls.push(request);
+  return {
+    ok: true,
+    json: {
+      decision: "ready_for_author",
+      summary: "Recon evidence is concrete enough.",
+      baseline_understanding: {
+        reference: "provided request",
+        target_route: "/",
+        before_evidence_url: "https://example.com/before.png",
+        visible_before_state: "The homepage is visible before implementation.",
+        relevant_elements: ["homepage"],
+        requested_change: "Add proof observability.",
+        proof_focus: "Confirm the homepage still renders.",
+        stop_condition: "The target copy is visible after implementation.",
+        quality_risks: [],
+      },
+      continue_with_stage: "author",
+      escalation_target: "agent",
+      refined_inputs: { server_path: null, wait_for_selector: null, reference: null },
+      reasons: ["baseline is specific"],
+      source: "supervising_agent",
+    },
+    metrics: {
+      purpose: request.purpose,
+      prompt_chars: request.prompt.length,
+      duration_ms: 17,
+    },
+  };
+});
+const metricState = createRunState({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Add proof observability.",
+    verification_mode: "visual",
+  },
+});
+const metricPayload = await metricAdapter.assessRecon({
+  request: metricState.request,
+  state: metricState,
+  engineResult: {
+    ok: false,
+    state_path: path.join(metricWorkdir, "riddle-state.json"),
+    checkpoint: "recon_supervisor_judgment",
+    summary: "Recon assessment required.",
+  },
+  fullRiddleState: {
+    after_worktree: metricWorkdir,
+    route_hints: Array.from({ length: 20 }, (_, index) => ({ path: `/route-${index}`, score: index })),
+    runtime_events: Array.from({ length: 20 }, (_, index) => ({ kind: "sample", index })),
+  },
+  checkpoint: "recon_supervisor_judgment",
+});
+assert.equal(metricPayload.ok, true);
+assert.equal(metricPayload.details.runner_metrics.duration_ms, 17);
+assert.equal(metricPayload.details.runner_metrics.prompt_chars, metricRunnerCalls[0].prompt.length);
+assert.equal(metricRunnerCalls[0].workdir, metricWorkdir);
+assert.ok(metricRunnerCalls[0].prompt.length > 0);
+
 const playableEvidence = {
   version: "riddle-proof.playability.v1",
   input_events: [{ type: "keyboard", key: "ArrowRight" }],
@@ -843,6 +905,12 @@ const firstEngineResultEvent = engineHarnessState.events.find((event) => event.k
 assert.equal(firstEngineCallEvent.details.params.auth_localStorage_json, "[redacted]");
 assert.equal(typeof firstEngineCallEvent.details.started_at, "string");
 assert.equal(typeof firstEngineResultEvent.details.duration_ms, "number");
+assert.equal(typeof engineHarnessState.run_card.observability.engine_call_count, "number");
+assert.equal(typeof engineHarnessState.run_card.observability.agent_call_count, "number");
+assert.ok(engineHarnessState.run_card.observability.agent_call_count >= 4);
+assert.equal(typeof engineHarnessState.run_card.observability.agent_total_ms, "number");
+assert.ok(Array.isArray(engineHarnessState.run_card.observability.recent_engine_timings));
+assert.ok(Array.isArray(engineHarnessState.run_card.observability.recent_agent_timings));
 assert.equal(typeof engineCalls[0].state_path, "string");
 assert.equal(engineCalls[0].auth_localStorage_json, "{\"session\":\"local\"}");
 assert.equal(engineCalls[0].auth_cookies_json, "[{\"name\":\"session\",\"value\":\"cookie\"}]");

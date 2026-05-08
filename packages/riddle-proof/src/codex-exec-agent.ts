@@ -8,6 +8,7 @@ import type {
   RiddleProofEngineHarnessContext,
 } from "./engine-harness";
 import type { RiddleProofBlocker } from "./types";
+import { compactRecord } from "./result";
 
 export interface CodexExecAgentConfig {
   codexCommand?: string;
@@ -31,6 +32,7 @@ export interface CodexJsonResult {
   stdout?: string;
   stderr?: string;
   blocker?: RiddleProofBlocker;
+  metrics?: Record<string, unknown>;
 }
 
 export type CodexJsonRunner = (request: CodexJsonRequest) => Promise<CodexJsonResult> | CodexJsonResult;
@@ -166,10 +168,10 @@ const PROOF_SCHEMA = {
   },
 };
 
-const PROMPT_STRING_LIMIT = 2_000;
-const PROMPT_ARRAY_LIMIT = 12;
-const PROMPT_OBJECT_KEY_LIMIT = 70;
-const PROMPT_BLOCK_LIMIT = 120_000;
+const PROMPT_STRING_LIMIT = 1_400;
+const PROMPT_ARRAY_LIMIT = 8;
+const PROMPT_OBJECT_KEY_LIMIT = 50;
+const PROMPT_BLOCK_LIMIT = 70_000;
 
 const PROMPT_KEY_PRIORITY = [
   "ok",
@@ -192,6 +194,16 @@ const PROMPT_KEY_PRIORITY = [
   "after_cdn",
   "before_baseline",
   "prod_baseline",
+  "route_hints",
+  "route_candidates",
+  "keyword_hits",
+  "observations",
+  "latest_attempt",
+  "attempt_history",
+  "current_plan",
+  "plan_history",
+  "decision_history",
+  "refined_inputs",
   "recon_assessment",
   "baseline_understanding",
   "supervisor_author_packet",
@@ -215,6 +227,7 @@ const PROMPT_KEY_PRIORITY = [
   "shipGate",
   "last_error",
   "errors",
+  "runtime_events",
   "events",
 ];
 
@@ -233,7 +246,7 @@ function compactPromptValue(value: unknown, depth = 0, key = ""): unknown {
     if (!looksLikeUrl && (lowerKey.includes("base64") || lowerKey.includes("data_url") || lowerKey.includes("screenshot_blob"))) {
       return `[omitted ${value.length} chars from ${key || "large artifact"}]`;
     }
-    const limit = looksLikeUrl ? 1_000 : depth <= 1 ? PROMPT_STRING_LIMIT : 1_200;
+    const limit = looksLikeUrl ? 1_000 : depth <= 1 ? PROMPT_STRING_LIMIT : 900;
     return truncatePromptString(value, limit);
   }
   if (Array.isArray(value)) {
@@ -395,11 +408,51 @@ function isHarnessVerificationOnlyBlocker(blocker: string) {
   );
 }
 
+function runnerMetrics(input: {
+  request: CodexJsonRequest;
+  config: CodexExecAgentConfig;
+  startedAt: string;
+  startedMs: number;
+  stdout?: string;
+  stderr?: string;
+  finalText?: string;
+  status?: number | null;
+  timedOut?: boolean;
+  errorCode?: string;
+}) {
+  const schemaText = JSON.stringify(input.request.schema);
+  const finishedAt = new Date().toISOString();
+  return compactRecord({
+    purpose: input.request.purpose,
+    workdir: input.request.workdir,
+    started_at: input.startedAt,
+    finished_at: finishedAt,
+    duration_ms: Date.now() - input.startedMs,
+    prompt_chars: input.request.prompt.length,
+    prompt_lines: input.request.prompt.split(/\r?\n/).length,
+    schema_chars: schemaText.length,
+    stdout_chars: (input.stdout || "").length,
+    stderr_chars: (input.stderr || "").length,
+    final_message_chars: (input.finalText || "").length,
+    exit_status: input.status ?? null,
+    timed_out: input.timedOut || false,
+    error_code: input.errorCode,
+    codex_command: input.config.codexCommand || "codex",
+    codex_model: input.config.codexModel,
+    codex_sandbox: input.config.codexSandbox || "workspace-write",
+    codex_full_auto: input.config.codexFullAuto !== false,
+    timeout_ms: Number(input.config.codexTimeoutMs || 600_000),
+  }) as Record<string, unknown>;
+}
+
 export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): CodexJsonRunner {
   return (request: CodexJsonRequest): CodexJsonResult => {
+    const startedAt = new Date().toISOString();
+    const startedMs = Date.now();
     if (!request.workdir || !existsSync(request.workdir)) {
       return {
         ok: false,
+        metrics: runnerMetrics({ request, config, startedAt, startedMs, errorCode: "workdir_missing" }),
         blocker: {
           code: "codex_workdir_missing",
           message: `Codex workdir does not exist for ${request.purpose}.`,
@@ -449,6 +502,17 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
           ok: false,
           stdout: proc.stdout || "",
           stderr: proc.stderr || "",
+          metrics: runnerMetrics({
+            request,
+            config,
+            startedAt,
+            startedMs,
+            stdout: proc.stdout || "",
+            stderr: proc.stderr || "",
+            status: proc.status,
+            timedOut,
+            errorCode: (proc.error as NodeJS.ErrnoException).code || "spawn_error",
+          }),
           blocker: {
             code: timedOut ? "codex_timeout" : "codex_exec_error",
             message: timedOut
@@ -464,6 +528,16 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
           ok: false,
           stdout: proc.stdout || "",
           stderr: proc.stderr || "",
+          metrics: runnerMetrics({
+            request,
+            config,
+            startedAt,
+            startedMs,
+            stdout: proc.stdout || "",
+            stderr: proc.stderr || "",
+            status: proc.status,
+            errorCode: "nonzero_exit",
+          }),
           blocker: {
             code: "codex_nonzero_exit",
             message: `Codex exited with status ${proc.status} during ${request.purpose}.`,
@@ -481,6 +555,17 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
           ok: false,
           stdout: proc.stdout || "",
           stderr: proc.stderr || "",
+          metrics: runnerMetrics({
+            request,
+            config,
+            startedAt,
+            startedMs,
+            stdout: proc.stdout || "",
+            stderr: proc.stderr || "",
+            finalText,
+            status: proc.status,
+            errorCode: "invalid_json",
+          }),
           blocker: {
             code: "codex_invalid_json",
             message: `Codex completed ${request.purpose}, but did not return valid JSON.`,
@@ -494,6 +579,16 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
         json: parsed,
         stdout: proc.stdout || "",
         stderr: proc.stderr || "",
+        metrics: runnerMetrics({
+          request,
+          config,
+          startedAt,
+          startedMs,
+          stdout: proc.stdout || "",
+          stderr: proc.stderr || "",
+          finalText,
+          status: proc.status,
+        }),
       };
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
@@ -517,6 +612,10 @@ function payloadOrBlocker(raw: CodexJsonResult, checkpoint: string): RiddleProof
       blocker: {
         ...blocker,
         checkpoint,
+        details: {
+          ...(blocker.details || {}),
+          runner_metrics: raw.metrics || null,
+        },
       },
     };
   }
@@ -524,6 +623,9 @@ function payloadOrBlocker(raw: CodexJsonResult, checkpoint: string): RiddleProof
     ok: true,
     payload: raw.json,
     summary: typeof raw.json.summary === "string" ? raw.json.summary : undefined,
+    details: compactRecord({
+      runner_metrics: raw.metrics || null,
+    }) as Record<string, unknown>,
   };
 }
 
@@ -686,6 +788,7 @@ export function createCodexExecAgentAdapter(
           agent_changed_files: changedFiles,
           agent_tests_run: testsRun,
           agent_blockers: blockers,
+          runner_metrics: raw.metrics || null,
         };
 
         attemptSummaries.push({
@@ -694,6 +797,7 @@ export function createCodexExecAgentAdapter(
           changed_files: changedFiles,
           tests_run: testsRun,
           blockers,
+          runner_metrics: raw.metrics || null,
         });
 
         if (hardBlockers.length) {

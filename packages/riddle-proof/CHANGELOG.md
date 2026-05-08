@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.5.49
+
+### Patch Changes
+
+- Add run-card observability for engine/agent timings, retry/recovery summaries, and local-agent prompt size metrics.
+
+- Tighten local-agent prompt compaction while preserving recon/proof priority fields.
+
 ## 0.5.48
 
 ### Patch Changes

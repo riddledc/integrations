@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.90
+
+### Patch Changes
+
+- Pick up Riddle Proof observability and local-agent prompt compaction metrics.
+
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.49
+
 ## 0.4.89
 
 ### Patch Changes

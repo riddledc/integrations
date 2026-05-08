@@ -32,6 +32,86 @@ function compactText(value: unknown, limit = 600): string | undefined {
   return text.length <= limit ? text : `${text.slice(0, limit - 20).trimEnd()}...`;
 }
 
+function numericValue(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function eventDetails(event: unknown) {
+  return recordValue(recordValue(event)?.details) || {};
+}
+
+function collectRunnerMetrics(details: Record<string, unknown>) {
+  const metrics: Record<string, unknown>[] = [];
+  const adapterDetails = recordValue(details.adapter_details);
+  const direct = recordValue(adapterDetails?.runner_metrics);
+  if (direct) metrics.push(direct);
+  const attempts = Array.isArray(adapterDetails?.attempt_summaries) ? adapterDetails.attempt_summaries : [];
+  for (const attempt of attempts) {
+    const attemptMetrics = recordValue(recordValue(attempt)?.runner_metrics);
+    if (attemptMetrics) metrics.push(attemptMetrics);
+  }
+  return metrics;
+}
+
+function observabilityFrom(state: RiddleProofRunState) {
+  const engineEvents = state.events
+    .filter((event) => event.kind === "engine.result")
+    .map((event) => ({ event, details: eventDetails(event) }));
+  const agentEvents = state.events
+    .filter((event) => event.kind.startsWith("agent."))
+    .map((event) => ({ event, details: eventDetails(event) }))
+    .filter(({ details }) => numericValue(details.duration_ms) !== undefined);
+  const retryEvents = state.events
+    .filter((event) => /retry|recovery/i.test(event.kind) || /retry|recovery/i.test(event.summary || ""))
+    .slice(-8);
+  const runnerMetrics = agentEvents.flatMap(({ details }) => collectRunnerMetrics(details));
+  const promptChars = runnerMetrics
+    .map((metrics) => numericValue(metrics.prompt_chars))
+    .filter((value): value is number => value !== undefined);
+  const sum = (values: Array<number | undefined>) =>
+    values.reduce<number>((total, value) => total + (value ?? 0), 0);
+  const recentEngineTimings = engineEvents.slice(-8).map(({ event, details }) => compactRecord({
+    checkpoint: event.checkpoint || null,
+    stage: event.stage || null,
+    duration_ms: numericValue(details.duration_ms),
+    ok: details.ok ?? null,
+  }));
+  const recentAgentTimings = agentEvents.slice(-8).map(({ event, details }) => {
+    const metrics = collectRunnerMetrics(details);
+    const localPromptChars = metrics
+      .map((item) => numericValue(item.prompt_chars))
+      .filter((value): value is number => value !== undefined);
+    return compactRecord({
+      kind: event.kind,
+      checkpoint: event.checkpoint || null,
+      stage: event.stage || null,
+      duration_ms: numericValue(details.duration_ms),
+      prompt_chars: localPromptChars.length ? Math.max(...localPromptChars) : undefined,
+      attempt_count: numericValue(recordValue(details.adapter_details)?.attempt_count),
+    });
+  });
+  return compactRecord({
+    engine_call_count: engineEvents.length,
+    agent_call_count: agentEvents.length,
+    engine_total_ms: sum(engineEvents.map(({ details }) => numericValue(details.duration_ms))),
+    agent_total_ms: sum(agentEvents.map(({ details }) => numericValue(details.duration_ms))),
+    max_agent_prompt_chars: promptChars.length ? Math.max(...promptChars) : undefined,
+    total_agent_prompt_chars: promptChars.length ? sum(promptChars) : undefined,
+    recent_engine_timings: recentEngineTimings.length ? recentEngineTimings : undefined,
+    recent_agent_timings: recentAgentTimings.length ? recentAgentTimings : undefined,
+    retry_event_count: retryEvents.length,
+    recent_retry_reasons: retryEvents.length
+      ? retryEvents.map((event) => compactRecord({
+        kind: event.kind,
+        checkpoint: event.checkpoint || null,
+        stage: event.stage || null,
+        summary: compactText(event.summary, 240),
+      }))
+      : undefined,
+  }) as RiddleProofRunCard["observability"];
+}
+
 function visualDeltaFrom(input: {
   fullRiddleState?: Record<string, unknown> | null;
   runState: RiddleProofRunState;
@@ -175,6 +255,7 @@ export function createRiddleProofRunCard(
       proof_evidence_present: fullState.proof_evidence_present === true || Boolean(bundle?.proof_evidence || bundle?.proof_evidence_sample),
       artifacts,
     }),
+    observability: observabilityFrom(state),
     stop_condition: compactRecord({
       status: state.status,
       terminal: isTerminalStatus(state.status),
