@@ -428,6 +428,28 @@ function checkpointContinueStage(result: RiddleProofEngineResult) {
   return nonEmptyString(resume?.continue_with_stage);
 }
 
+function checkpointRecommendedStage(result: RiddleProofEngineResult) {
+  const resumeStage = checkpointContinueStage(result);
+  if (resumeStage) return resumeStage;
+  return (
+    nonEmptyString(result.checkpointContract?.recommended_advance_stage) ||
+    nonEmptyString(result.decisionRequest?.continue_with_stage) ||
+    nonEmptyString(result.decisionRequest?.recommended_advance_stage) ||
+    nonEmptyString(recordValue(result.decisionRequest)?.continueWithStage) ||
+    nonEmptyString(recordValue(result.decisionRequest)?.recommendedAdvanceStage)
+  );
+}
+
+function stageCheckpointContinuation(result: RiddleProofEngineResult): RiddleProofWorkflowParams | null {
+  const stage = checkpointRecommendedStage(result);
+  if (!stage) return null;
+  return {
+    action: "run",
+    state_path: String(result.state_path || ""),
+    advance_stage: stage,
+  };
+}
+
 function recommendedContinuation(result: RiddleProofEngineResult): RiddleProofWorkflowParams | null {
   const continueStage = checkpointContinueStage(result);
   if (!continueStage) return null;
@@ -482,6 +504,32 @@ function defaultStageForProofCheckpointDecision(decision: string): RiddleProofSt
   if (decision === "revise_capture") return "verify";
   if (decision === "needs_richer_proof") return "author";
   return null;
+}
+
+function checkpointContractFromPacket(packet: NonNullable<RiddleProofRunState["checkpoint_packet"]>) {
+  return (
+    recordValue(packet.evidence_excerpt?.checkpoint_contract) ||
+    recordValue(recordValue(packet.state_excerpt?.stage_decision_request)?.checkpoint_contract) ||
+    null
+  );
+}
+
+function stageFromCheckpointResponse(
+  response: RiddleProofCheckpointResponse,
+  packet: NonNullable<RiddleProofRunState["checkpoint_packet"]>,
+): RiddleProofStage | null {
+  if (response.decision === "needs_recon") return "recon";
+  if (response.decision === "needs_implementation") return "implement";
+  const payload = recordValue(response.payload) || {};
+  const contract = checkpointContractFromPacket(packet);
+  const resume = recordValue(contract?.resume);
+  const stage =
+    response.continue_with_stage ||
+    nonEmptyString(payload.continue_with_stage) ||
+    nonEmptyString(payload.recommended_stage) ||
+    nonEmptyString(resume?.continue_with_stage) ||
+    (response.decision === "retry_stage" ? packet.stage : "");
+  return stage ? (stage as RiddleProofStage) : null;
 }
 
 function proofAssessmentPayloadFromCheckpointResponse(
@@ -630,6 +678,14 @@ function visualDeltaEvidenceRecoveryAssessment(
       "Keep the same Riddle Proof run in evidence/comparison recovery: repair or retry the visual comparator/fetch path, wait for artifact readiness if applicable, or produce a measured visual_delta artifact before proof review can mark ready_to_ship.",
     blockers: [...blockers, blocker],
   };
+}
+
+function isRecoverableStageCheckpoint(checkpoint: string) {
+  return [
+    "ship_gate_blocked",
+    "verify_required",
+    "verify_supervisor_judgment_required",
+  ].includes(checkpoint);
 }
 
 function contextFor(
@@ -1025,6 +1081,19 @@ function checkpointResponseContinuation(
     }
   }
 
+  if (response.decision === "continue_stage" || response.decision === "retry_stage" || response.decision === "needs_implementation") {
+    const stage = stageFromCheckpointResponse(response, packet);
+    if (stage) {
+      appendCheckpointResponse(state, response);
+      return {
+        next: {
+          ...base,
+          advance_stage: stage,
+        },
+      };
+    }
+  }
+
   appendCheckpointResponse(state, response, { clear_packet: false });
   return {
     blocker: {
@@ -1162,19 +1231,26 @@ async function handleImplementation(
         adapter_details: implementation.details || null,
       }) as Record<string, unknown>,
     });
-    return {
-      blocker: {
-        code: "implementation_diff_missing",
+    recordEvent(state, {
+      kind: "agent.implementation.retry_requested",
+      checkpoint: result.checkpoint || null,
+      stage: "implement",
+      summary: "Implementation adapter left no detectable diff; retrying the implement checkpoint inside the bounded loop.",
+      details: compactRecord({
+        worktree_path: workdir || null,
         checkpoint: result.checkpoint || null,
-        message:
-          "The implementation adapter returned, but the after worktree has no detectable git diff. The harness will not advance to verify.",
-        details: compactRecord({
-          worktree_path: workdir || null,
-          changed_files: implementation.changedFiles || [],
-          tests_run: implementation.testsRun || [],
-          implementation_notes: implementation.implementationNotes || null,
-          adapter_details: implementation.details || null,
-        }) as Record<string, unknown>,
+        next_stage: "implement",
+      }) as Record<string, unknown>,
+    });
+    return {
+      next: {
+        action: "run",
+        state_path: String(result.state_path || ""),
+        advance_stage: "implement",
+        implementation_notes:
+          implementation.implementationNotes ||
+          implementation.summary ||
+          "Implementation adapter returned without a detectable git diff; retry the implement checkpoint.",
       },
     };
   }
@@ -1221,6 +1297,26 @@ async function routeCheckpoint(
     };
   }
 
+  if (isRecoverableStageCheckpoint(checkpoint) && !input.dry_run && !request.dry_run) {
+    if (input.checkpoint_mode === "yield") {
+      return { terminal: checkpointAwaitingResult(state, result, input.checkpoint_visibility) };
+    }
+    const next = stageCheckpointContinuation(result);
+    if (next) {
+      recordEvent(state, {
+        kind: "checkpoint.recovery_continuation",
+        checkpoint,
+        stage: stageFromCheckpoint(result),
+        summary: `Routing recoverable checkpoint ${checkpoint} back to ${next.advance_stage}.`,
+        details: {
+          next,
+          checkpointContract: result.checkpointContract || null,
+        },
+      });
+      return { next };
+    }
+  }
+
   const failureBlocker = engineFailureBlocker(result, checkpoint);
   if (failureBlocker) {
     return { blocker: failureBlocker };
@@ -1229,9 +1325,6 @@ async function routeCheckpoint(
   if ([
     "recon_human_escalation",
     "verify_human_escalation",
-    "ship_gate_blocked",
-    "verify_required",
-    "verify_supervisor_judgment_required",
   ].includes(checkpoint) && result.ok === false) {
     return {
       blocker: {

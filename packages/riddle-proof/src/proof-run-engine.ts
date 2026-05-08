@@ -938,6 +938,23 @@ export async function executeWorkflow(
     return "inspect the ship gate details, repair the missing invariant, then resume the run";
   };
 
+  const shipGateRecoveryStage = (shipGate: ReturnType<typeof validateShipGate>): WorkflowStage => {
+    const reasons = shipGate.reasons || [];
+    if (reasons.some((reason) => reason.includes("before_cdn") || reason.includes("prod_cdn") || reason.includes("prod_url"))) {
+      return "recon";
+    }
+    if (reasons.some((reason) => reason.includes("implementation"))) {
+      return "implement";
+    }
+    if (reasons.some((reason) => reason.includes("after_cdn") || reason.includes("verify_status") || reason.includes("visual_delta"))) {
+      return "verify";
+    }
+    if (reasons.some((reason) => reason.includes("proof_assessment"))) {
+      return "verify";
+    }
+    return "verify";
+  };
+
   const shipGateBlocked = (
     state: any,
     executed: any[],
@@ -945,6 +962,8 @@ export async function executeWorkflow(
   ) => {
     const shipGate = validateShipGate(state);
     const nextAction = primaryShipGateNextAction(shipGate);
+    const recoveryStage = shipGateRecoveryStage(shipGate);
+    const advanceOptions = Array.from(new Set([recoveryStage, "verify", "author", "implement", "recon", "ship"])) as WorkflowStage[];
     return checkpoint(
       "verify",
       "ship_gate_blocked",
@@ -952,12 +971,13 @@ export async function executeWorkflow(
       {
         ok: false,
         nextActions: ["inspect_ship_gate", "advance_run_to_verify", "supply_proof_assessment_json", "return_to_recon_if_baseline_is_missing"],
-        advanceOptions: ["verify", "author", "implement", "recon"],
-        recommendedAdvanceStage: "verify",
-        continueWithStage: "verify",
+        advanceOptions,
+        recommendedAdvanceStage: recoveryStage,
+        continueWithStage: recoveryStage,
         blocking: true,
-        details: { ...details, shipGate, next_action: nextAction, executed },
+        details: { ...details, shipGate, next_action: nextAction, recovery_stage: recoveryStage, executed },
         nextAction,
+        recoveryStage,
         shipGate,
         verifyStatus: state?.verify_status || null,
         mergeRecommendation: state?.merge_recommendation || null,

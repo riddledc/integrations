@@ -914,6 +914,142 @@ async function run() {
   assert(duplicateCheckpointResponse.status === 'blocked', 'duplicate checkpoint response should be deterministic, not silently rerun');
   assert(duplicateCheckpointResponse.blocker.code === 'checkpoint_response_duplicate', 'duplicate checkpoint response should get a distinct blocker');
 
+  const recoveryHarnessDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-recovery-harness-'));
+  const recoveryHarnessStatePath = path.join(recoveryHarnessDir, 'wrapper-state.json');
+  const recoveryEngineStatePath = path.join(recoveryHarnessDir, 'engine-state.json');
+  writeJson(recoveryEngineStatePath, {
+    repo: 'riddledc/example',
+    branch: 'agent/recovery-routing',
+    change_request: 'Route recoverable ship blockers.',
+    reference: 'before',
+    before_cdn: '',
+    after_cdn: 'https://cdn.example.com/after.png',
+  });
+  const recoveryEngineCalls = [];
+  const recoveryEngine = {
+    async execute(params) {
+      recoveryEngineCalls.push(params);
+      if (params.advance_stage === 'recon') {
+        return {
+          ok: true,
+          state_path: recoveryEngineStatePath,
+          checkpoint: 'verify_ship_ready',
+          summary: 'Recovery recon repaired the missing baseline.',
+          shipGate: { ok: true },
+        };
+      }
+      return {
+        ok: false,
+        state_path: recoveryEngineStatePath,
+        checkpoint: 'ship_gate_blocked',
+        stage: 'verify',
+        summary: 'Ship gate is missing the before baseline.',
+        shipGate: { ok: false, reasons: ['before_cdn is required before ship'] },
+        checkpointContract: {
+          resume: {
+            action: 'run',
+            state_path: recoveryEngineStatePath,
+            continue_from_checkpoint: true,
+            continue_with_stage: 'recon',
+          },
+          ship_gate: { ok: false, reasons: ['before_cdn is required before ship'] },
+        },
+      };
+    },
+  };
+  const recoveredShipGate = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Route recoverable ship blockers.',
+      engine_state_path: recoveryEngineStatePath,
+      harness_state_path: recoveryHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: recoveryHarnessStatePath,
+    engine: recoveryEngine,
+    max_iterations: 4,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(recoveredShipGate.status === 'ready_to_ship', 'recoverable ship gate blockers should route to their contract recovery stage');
+  assert(recoveryEngineCalls.some((call) => call.advance_stage === 'recon'), 'ship gate recovery should advance back to recon when the baseline is missing');
+  const recoveredShipGateState = readJson(recoveryHarnessStatePath);
+  assert(
+    recoveredShipGateState.events.some((event) => event.kind === 'checkpoint.recovery_continuation' && event.details?.next?.advance_stage === 'recon'),
+    'wrapper state should record automatic checkpoint recovery continuation',
+  );
+
+  const implementationRetryDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-implementation-retry-'));
+  const implementationWorkdir = path.join(implementationRetryDir, 'repo');
+  mkdirSync(implementationWorkdir, { recursive: true });
+  execFileSync('git', ['init'], { cwd: implementationWorkdir, stdio: 'ignore' });
+  const implementationRetryHarnessStatePath = path.join(implementationRetryDir, 'wrapper-state.json');
+  const implementationRetryEngineStatePath = path.join(implementationRetryDir, 'engine-state.json');
+  writeJson(implementationRetryEngineStatePath, {
+    repo: 'riddledc/example',
+    branch: 'agent/implementation-retry',
+    change_request: 'Retry implementation until a diff exists.',
+    after_worktree: implementationWorkdir,
+    implementation_status: 'changes_missing',
+  });
+  const implementationRetryEngineCalls = [];
+  const implementationRetryEngine = {
+    async execute(params) {
+      implementationRetryEngineCalls.push(params);
+      if (implementationRetryEngineCalls.length >= 3) {
+        return {
+          ok: true,
+          state_path: implementationRetryEngineStatePath,
+          checkpoint: 'verify_ship_ready',
+          summary: 'Implementation retry produced a diff and proof is ready.',
+          shipGate: { ok: true },
+        };
+      }
+      return {
+        ok: true,
+        state_path: implementationRetryEngineStatePath,
+        checkpoint: 'implement_changes_missing',
+        summary: 'No implementation diff exists yet.',
+      };
+    },
+  };
+  let implementationAgentAttempts = 0;
+  const implementationRetryAgent = {
+    assessRecon: async () => ({ ok: false, blocker: { code: 'unexpected_recon', message: 'unexpected recon' } }),
+    authorProofPacket: async () => ({ ok: false, blocker: { code: 'unexpected_author', message: 'unexpected author' } }),
+    assessProof: async () => ({ ok: false, blocker: { code: 'unexpected_verify', message: 'unexpected verify' } }),
+    async implementChange() {
+      implementationAgentAttempts += 1;
+      if (implementationAgentAttempts === 1) {
+        return { ok: true, summary: 'First implementation attempt left no diff.' };
+      }
+      writeFileSync(path.join(implementationWorkdir, 'changed.txt'), 'changed\n');
+      return {
+        ok: true,
+        summary: 'Second implementation attempt wrote a diff.',
+        changedFiles: ['changed.txt'],
+      };
+    },
+  };
+  const implementationRetried = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Retry implementation until a diff exists.',
+      engine_state_path: implementationRetryEngineStatePath,
+      harness_state_path: implementationRetryHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: implementationRetryHarnessStatePath,
+    engine: implementationRetryEngine,
+    agent: implementationRetryAgent,
+    max_iterations: 5,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(implementationRetried.status === 'ready_to_ship', 'implementation no-diff should retry instead of terminally blocking');
+  assert(implementationAgentAttempts === 2, 'implementation agent should be called again after a no-diff attempt');
+  const implementationRetryState = readJson(implementationRetryHarnessStatePath);
+  assert(implementationRetryState.events.some((event) => event.kind === 'agent.implementation.no_diff'), 'no-diff implementation attempt should be recorded');
+  assert(implementationRetryState.events.some((event) => event.kind === 'agent.implementation.retry_requested'), 'implementation retry request should be recorded');
+
   const blockedDuplicateHarnessStatePath = path.join(checkpointHarnessDir, 'wrapper-state-blocked-duplicate.json');
   const blockedDuplicateEngineStatePath = path.join(checkpointHarnessDir, 'engine-state-blocked-duplicate.json');
   writeJson(blockedDuplicateEngineStatePath, {

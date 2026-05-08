@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.89
+
+### Patch Changes
+
+- Pick up the Riddle Proof core recovery loop so recoverable ship/verify blockers and no-diff implementation attempts stay inside bounded retry.
+
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.48
+
 ## 0.4.88
 
 ### Patch Changes

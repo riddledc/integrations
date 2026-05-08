@@ -957,12 +957,17 @@ const noiseHarnessResult = await runRiddleProofEngineHarness({
     verification_mode: "visual",
     harness_state_path: path.join(noiseFixture, "harness-state.json"),
   },
-  max_iterations: 5,
+  max_iterations: 8,
   engine: {
     async execute(params) {
       noiseEngineCalls.push(params);
       if (params.advance_stage === "implement") {
-        throw new Error("noise-only worktree should not advance to engine implement");
+        return {
+          ok: false,
+          state_path: noiseStatePath,
+          checkpoint: "implement_changes_missing",
+          summary: "Implementation changes are still required.",
+        };
       }
       if (params.author_packet_json) {
         return {
@@ -1023,8 +1028,9 @@ const noiseHarnessResult = await runRiddleProofEngineHarness({
   },
 });
 assert.equal(noiseHarnessResult.status, "blocked");
-assert.equal(noiseHarnessResult.blocker.code, "implementation_diff_missing");
-assert.equal(noiseEngineCalls.some((call) => call.advance_stage === "implement"), false);
+assert.equal(noiseHarnessResult.blocker.code, "stage_iteration_limit_reached");
+assert.equal(noiseHarnessResult.blocker.details.stage, "implement");
+assert.equal(noiseEngineCalls.some((call) => call.advance_stage === "implement"), true);
 
 const runwayFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-iteration-runway-"));
 const runwayWorkdir = path.join(runwayFixture, "after");

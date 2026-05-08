@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.5.48
+
+### Patch Changes
+
+- Route recoverable ship/verify blockers through their checkpoint recovery stage instead of terminally blocking when the contract can continue.
+
+- Retry no-diff implementation-agent attempts inside the existing bounded stage loop before escalating as non-convergent.
+
 ## 0.5.47
 
 ### Patch Changes
