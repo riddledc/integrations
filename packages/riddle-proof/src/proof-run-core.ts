@@ -559,6 +559,27 @@ export function visualDeltaShipGateReason(state: any = {}) {
   return `visual_delta.status=${status} blocks ready_to_ship for visual/UI proof`;
 }
 
+function visualDeltaEvidenceIssueCode(state: any = {}, blocker = "") {
+  const visualDelta = visualDeltaForState(state || {});
+  const status = String(visualDelta.status || "").trim();
+  const reason = `${String(visualDelta.reason || "")}\n${blocker}`.toLowerCase();
+  if (status === "unmeasured") {
+    if (
+      reason.includes("fetch") ||
+      reason.includes("allowlist") ||
+      reason.includes("registered domain") ||
+      reason.includes("high risk") ||
+      reason.includes("comparator")
+    ) {
+      return "comparator_fetch_blocked";
+    }
+    return "visual_delta_unmeasured";
+  }
+  if (status === "measured" && visualDelta.passed === false) return "semantic_proof_failed";
+  if (visualDeltaRequiredForState(state || {})) return "visual_delta_unmeasured";
+  return "semantic_proof_failed";
+}
+
 export function requiredBaselineLabelsForState(state: any = {}) {
   const reference = normalizedReference(state);
   const labels: string[] = [];
@@ -993,6 +1014,9 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
         assessment.evidence_collection_incomplete = true;
         assessment.recovery_stage = "verify";
         assessment.recovery_reason = readyBlocker;
+        assessment.evidence_issue_code = visualDeltaEvidenceIssueCode(state, readyBlocker);
+        assessment.visual_delta = visualDeltaForState(state);
+        assessment.suggested_repair = "Keep the same Riddle Proof run in evidence/comparison recovery: repair or retry the visual comparator/fetch path, wait for artifact readiness if applicable, or produce a measured visual_delta artifact before proof review can mark ready_to_ship.";
         const blockers = Array.isArray(assessment.blockers) ? assessment.blockers : [];
         assessment.blockers = [...blockers, readyBlocker];
       }

@@ -2382,8 +2382,9 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For playable/gameplay modes, do not choose ready_to_ship unless structured_evidence.playability_ready is true; a static screenshot or generated plate alone is not proof of playability.",
           "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
-          "If visual_delta is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof.",
-          `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing.`,
+          "If required visual_delta is unmeasured, missing, or not_applicable, choose revise_capture with recommended_stage=verify and continue_with_stage=verify so the same run stays in evidence/comparison recovery.",
+          "If visual_delta is measured with passed=false, choose needs_implementation when the visual result is wrong, or needs_richer_proof only when non-visual proof artifacts are insufficient.",
+          `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing and required visual_delta metrics are measured/passing.`,
         ]
       : [
           "Review artifact_contract, artifact_usage, proof_evidence, semantic_context, and any image artifacts if present.",

@@ -663,6 +663,9 @@ async function run() {
   assert(blockedVisualAssessment.proof_assessment.blocked_decision === 'ready_to_ship', 'blocked visual proof should retain attempted ready decision');
   assert(blockedVisualAssessment.proof_assessment.evidence_collection_incomplete === true, 'blocked visual proof should mark evidence collection incomplete');
   assert(blockedVisualAssessment.proof_assessment.recovery_stage === 'verify', 'blocked visual proof should keep the same run in verify recovery');
+  assert(blockedVisualAssessment.proof_assessment.evidence_issue_code === 'visual_delta_unmeasured', 'core recovery metadata should name the evidence issue code');
+  assert(blockedVisualAssessment.proof_assessment.visual_delta.status === 'unmeasured', 'core recovery metadata should include visual delta details');
+  assert(typeof blockedVisualAssessment.proof_assessment.suggested_repair === 'string' && blockedVisualAssessment.proof_assessment.suggested_repair.includes('evidence/comparison recovery'), 'core recovery metadata should include suggested repair');
   assert(blockedVisualAssessment.proof_assessment.recommended_stage === 'verify', 'blocked visual proof should not advance to ship');
   assert(blockedVisualAssessment.proof_assessment.continue_with_stage === 'verify', 'blocked visual proof should continue evidence recovery in verify');
   assert(blockedVisualAssessment.merge_recommendation === 'do-not-merge', 'blocked visual proof should not become merge-ready');
