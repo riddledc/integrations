@@ -19,11 +19,11 @@ engine harness in `@riddledc/riddle-proof`.
 That harness drives the packaged proof-run checkpoint engine in
 `@riddledc/riddle-proof` directly.
 By default it still stops at concrete blockers when an agent adapter is not
-configured. When `agentMode: "codex_exec"` is explicitly set, the wrapper uses a
-local `codex exec` adapter for recon judgment, proof packet authoring,
+configured. When `agentMode: "local_exec"` is explicitly set, the wrapper uses a
+configured local CLI adapter for recon judgment, proof packet authoring,
 implementation, and proof judgment.
 
-Set `proofReviewMode: "main_agent"` when the local Codex adapter should still
+Set `proofReviewMode: "main_agent"` when the local CLI adapter should still
 handle recon, proof authoring, and implementation, but final proof judgment
 should pause for the current OpenClaw agent. In that mode the run blocks at
 `main_agent_proof_review_required` with a proof-review packet containing the
@@ -173,16 +173,16 @@ The package should call configured services and credentials at runtime; it must
 not publish Riddle server secrets, Discord credentials, GitHub tokens, or
 OpenClaw-instance-specific configuration.
 
-## Codex Exec Adapter
+## Local Exec Adapter
 
-The optional adapter lives in `@riddledc/riddle-proof/codex-exec-agent`; this
+The optional adapter lives in `@riddledc/riddle-proof/local-agent`; this
 OpenClaw package only wires it into the OC tool surface. It can be enabled with
 config like:
 
 ```json
 {
   "executionMode": "engine",
-  "agentMode": "codex_exec",
+  "agentMode": "local_exec",
   "codexHome": "/root/.codex",
   "codexSandbox": "workspace-write",
   "proofReviewMode": "main_agent",
@@ -190,10 +190,11 @@ config like:
 }
 ```
 
-The adapter runs `codex exec` in the isolated after-worktree supplied by the
-Riddle Proof engine. It writes no package-time secrets and removes inherited
-`OPENAI_API_KEY` from the child process environment so a configured
-`CODEX_HOME` login is used unless the host wraps the command differently.
+The current local adapter implementation runs `codex exec` in the isolated
+after-worktree supplied by the Riddle Proof engine. It writes no package-time
+secrets and removes inherited `OPENAI_API_KEY` from the child process
+environment so a configured `CODEX_HOME` login is used unless the host wraps
+the command differently.
 
 With `proofReviewMode: "main_agent"`, `codex exec` is not asked to make the
 final proof judgment. It implements the change and captures proof, then the

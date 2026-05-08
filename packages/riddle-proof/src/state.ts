@@ -282,7 +282,7 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     checkpoint_summary: state.checkpoint_summary,
     state_paths: state.state_paths,
     proof_contract: state.proof_contract,
-    run_card: createRiddleProofRunCard(state, { at }),
+    run_card: state.run_card || createRiddleProofRunCard(state, { at }),
     latest_event: latestEvent,
   }) as RiddleProofRunStatusSnapshot;
 }

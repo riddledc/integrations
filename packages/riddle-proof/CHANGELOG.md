@@ -1,10 +1,18 @@
 # @riddledc/riddle-proof
 
+## 0.5.47
+
+### Patch Changes
+
+- Add generic local-agent aliases for the CLI loop surface: `riddle-proof-loop --agent local`, `doctor local`, and `@riddledc/riddle-proof/local-agent`.
+
+- Preserve persisted run-card evidence context in status snapshots and allow CLI smokes to point at an explicit test engine module.
+
 ## 0.5.46
 
 ### Patch Changes
 
-- Promote the Codex exec adapter into the reusable Riddle Proof package, add the `riddle-proof-loop` CLI, and persist compact run cards for durable loop supervision.
+- Promote the local CLI agent adapter into the reusable Riddle Proof package, add the `riddle-proof-loop` CLI, and persist compact run cards for durable loop supervision.
 
 - Extend portable checkpoint packets/responses across recon and implementation stages so CLI, Codex, Claude Code, OpenClaw, or another host can drive the same run contract without OC-specific proof logic.
 

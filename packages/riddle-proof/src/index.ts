@@ -6,6 +6,7 @@ export * from "./run-card";
 export * from "./runner";
 export * from "./engine-harness";
 export * from "./codex-exec-agent";
+export * from "./local-agent";
 export * from "./diagnostics";
 export * from "./proof-session";
 export * from "./playability";

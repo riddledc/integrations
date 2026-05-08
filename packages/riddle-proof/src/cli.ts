@@ -8,10 +8,10 @@ import {
   type RiddleProofCheckpointMode,
 } from "./engine-harness";
 import {
-  createCodexExecAgentAdapter,
-  runCodexExecAgentDoctor,
-  type CodexExecAgentConfig,
-} from "./codex-exec-agent";
+  createLocalAgentAdapter,
+  runLocalAgentDoctor,
+  type LocalAgentConfig,
+} from "./local-agent";
 import type { RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
 
 type CliOptions = Record<string, string | boolean>;
@@ -19,12 +19,13 @@ type CliOptions = Record<string, string | boolean>;
 function usage() {
   return [
     "Usage:",
-    "  riddle-proof-loop run --request-json <file|json|-> [--agent disabled|codex_exec] [--checkpoint-mode yield|auto]",
+    "  riddle-proof-loop run --request-json <file|json|-> [--agent disabled|local] [--checkpoint-mode yield|auto]",
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop doctor codex_exec [--codex-command <path>]",
+    "  riddle-proof-loop doctor local [--codex-command <path>]",
     "",
-    "The default CLI run mode is checkpoint-mode=yield unless --agent codex_exec is used.",
+    "The default CLI run mode is checkpoint-mode=yield unless --agent local is used.",
+    "Compatibility aliases: --agent codex_exec and doctor codex_exec.",
   ].join("\n");
 }
 
@@ -80,7 +81,7 @@ function readRunState(statePath: string): RiddleProofRunState {
   return parsed as unknown as RiddleProofRunState;
 }
 
-function codexConfig(options: CliOptions): CodexExecAgentConfig {
+function codexConfig(options: CliOptions): LocalAgentConfig {
   const codexFullAuto = optionString(options, "codexFullAuto");
   return {
     codexCommand: optionString(options, "codexCommand"),
@@ -89,16 +90,20 @@ function codexConfig(options: CliOptions): CodexExecAgentConfig {
     codexTimeoutMs: optionString(options, "codexTimeoutMs")
       ? Number(optionString(options, "codexTimeoutMs"))
       : undefined,
-    codexSandbox: optionString(options, "codexSandbox") as CodexExecAgentConfig["codexSandbox"],
+    codexSandbox: optionString(options, "codexSandbox") as LocalAgentConfig["codexSandbox"],
     codexFullAuto: codexFullAuto === "false" ? false : undefined,
   };
 }
 
+function isLocalAgentMode(value: string | undefined) {
+  return value === "local" || value === "local_exec" || value === "codex_exec";
+}
+
 function agentFor(options: CliOptions): RiddleProofAgentAdapter {
   const agentMode = optionString(options, "agent") || "disabled";
-  if (agentMode === "codex_exec") return createCodexExecAgentAdapter(codexConfig(options));
+  if (isLocalAgentMode(agentMode)) return createLocalAgentAdapter(codexConfig(options));
   if (agentMode === "disabled") return createDisabledRiddleProofAgentAdapter();
-  throw new Error(`Unsupported --agent ${agentMode}. Use disabled or codex_exec.`);
+  throw new Error(`Unsupported --agent ${agentMode}. Use disabled or local.`);
 }
 
 function requestForRun(options: CliOptions): RiddleProofRunParams {
@@ -113,7 +118,7 @@ function requestForRun(options: CliOptions): RiddleProofRunParams {
 function checkpointModeFor(options: CliOptions) {
   const explicit = optionString(options, "checkpointMode") as RiddleProofCheckpointMode | undefined;
   if (explicit) return explicit;
-  return optionString(options, "agent") === "codex_exec" ? "auto" : "yield";
+  return isLocalAgentMode(optionString(options, "agent")) ? "auto" : "yield";
 }
 
 async function main() {
@@ -126,8 +131,8 @@ async function main() {
 
   if (command === "doctor") {
     const subject = positional[1];
-    if (subject !== "codex_exec") throw new Error("Only `doctor codex_exec` is supported.");
-    const result = await runCodexExecAgentDoctor(codexConfig(options));
+    if (!isLocalAgentMode(subject)) throw new Error("Only `doctor local` is supported.");
+    const result = await runLocalAgentDoctor(codexConfig(options));
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = result.ok ? 0 : 1;
     return;
@@ -158,6 +163,7 @@ async function main() {
       agent: agentFor(options),
       config: {
         stateDir: optionString(options, "stateDir"),
+        riddleEngineModuleUrl: optionString(options, "riddleEngineModuleUrl"),
         riddleProofDir: optionString(options, "riddleProofDir"),
         defaultReviewer: optionString(options, "defaultReviewer"),
         defaultShipMode: optionString(options, "defaultShipMode") as "none" | "ship" | undefined,

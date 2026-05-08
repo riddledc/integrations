@@ -2,7 +2,7 @@
   "id": "openclaw-riddle-proof",
   "name": "Riddle Proof",
   "description": "OpenClaw wrapper for Riddle Proof evidence-backed agent changes.",
-  "version": "0.4.87",
+  "version": "0.4.88",
   "type": "plugin",
   "bundledSkills": [
     "riddle-proof"
@@ -81,17 +81,19 @@
         "type": "string",
         "enum": [
           "disabled",
+          "local_exec",
           "codex_exec"
         ],
-        "description": "disabled stops at agent checkpoints; codex_exec uses the local codex CLI as the checkpoint agent."
+        "description": "disabled stops at agent checkpoints; local_exec uses the configured local CLI agent. codex_exec is accepted as a compatibility alias."
       },
       "proofReviewMode": {
         "type": "string",
         "enum": [
+          "local_exec",
           "codex_exec",
           "main_agent"
         ],
-        "description": "codex_exec lets the configured Codex adapter judge proof; main_agent pauses after proof capture so the current OpenClaw agent can inspect the evidence and resume with riddle_proof_review."
+        "description": "local_exec lets the configured local CLI adapter judge proof; codex_exec is a compatibility alias; main_agent pauses after proof capture so the current OpenClaw agent can inspect the evidence and resume with riddle_proof_review."
       },
       "riddleEngineModuleUrl": {
         "type": "string"

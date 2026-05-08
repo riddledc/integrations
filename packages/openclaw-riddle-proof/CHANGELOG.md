@@ -1,5 +1,14 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.88
+
+### Patch Changes
+
+- Prefer `local_exec` as the OpenClaw-facing executor mode while retaining `codex_exec` as a compatibility alias.
+
+- Updated dependencies
+  - @riddledc/riddle-proof@0.5.47
+
 ## 0.4.87
 
 ### Patch Changes

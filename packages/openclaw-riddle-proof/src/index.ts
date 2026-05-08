@@ -32,10 +32,21 @@ import {
   type OpenClawProofedChangeParams,
 } from "@riddledc/riddle-proof/openclaw";
 import {
-  createCodexExecAgentAdapter,
-  type CodexExecAgentConfig,
-} from "@riddledc/riddle-proof/codex-exec-agent";
+  createLocalAgentAdapter,
+  type LocalAgentConfig,
+} from "@riddledc/riddle-proof/local-agent";
 
+export {
+  createLocalAgentAdapter,
+  createLocalAgentJsonRunner,
+  runLocalAgentDoctor,
+} from "@riddledc/riddle-proof/local-agent";
+export type {
+  LocalAgentConfig,
+  LocalAgentJsonRequest,
+  LocalAgentJsonResult,
+  LocalAgentJsonRunner,
+} from "@riddledc/riddle-proof/local-agent";
 export {
   createCodexExecAgentAdapter,
   createCodexExecJsonRunner,
@@ -103,8 +114,8 @@ export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
   wait_for_terminal?: boolean;
 };
 export type OpenClawRiddleProofExecutionMode = "disabled" | "engine";
-export type OpenClawRiddleProofAgentMode = "disabled" | "codex_exec";
-export type OpenClawRiddleProofReviewMode = "codex_exec" | "main_agent";
+export type OpenClawRiddleProofAgentMode = "disabled" | "local_exec" | "codex_exec";
+export type OpenClawRiddleProofReviewMode = "local_exec" | "codex_exec" | "main_agent";
 export type RiddleProofReviewDecision =
   | "ready_to_ship"
   | "needs_richer_proof"
@@ -185,12 +196,12 @@ export interface OpenClawRiddleProofRuntimeConfig {
   checkpointMode?: OpenClawRiddleProofCheckpointMode;
   autoReviewShipModeNone?: boolean;
   enableWakeMonitor?: boolean;
-  codexCommand?: CodexExecAgentConfig["codexCommand"];
-  codexHome?: CodexExecAgentConfig["codexHome"];
-  codexModel?: CodexExecAgentConfig["codexModel"];
-  codexTimeoutMs?: CodexExecAgentConfig["codexTimeoutMs"];
-  codexSandbox?: CodexExecAgentConfig["codexSandbox"];
-  codexFullAuto?: CodexExecAgentConfig["codexFullAuto"];
+  codexCommand?: LocalAgentConfig["codexCommand"];
+  codexHome?: LocalAgentConfig["codexHome"];
+  codexModel?: LocalAgentConfig["codexModel"];
+  codexTimeoutMs?: LocalAgentConfig["codexTimeoutMs"];
+  codexSandbox?: LocalAgentConfig["codexSandbox"];
+  codexFullAuto?: LocalAgentConfig["codexFullAuto"];
 }
 
 interface BackgroundWorkerData {
@@ -341,8 +352,12 @@ export function createOpenClawRiddleProofResult(
 function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
   const cfg = (api.pluginConfig ?? {}) as Record<string, unknown>;
   const executionMode = cfg.executionMode === "engine" ? "engine" : "disabled";
-  const agentMode = cfg.agentMode === "codex_exec" ? "codex_exec" : "disabled";
-  const proofReviewMode = cfg.proofReviewMode === "main_agent" ? "main_agent" : "codex_exec";
+  const agentMode =
+    cfg.agentMode === "local_exec" || cfg.agentMode === "codex_exec" ? "local_exec" : "disabled";
+  const proofReviewMode =
+    cfg.proofReviewMode === "main_agent" ? "main_agent" :
+      cfg.proofReviewMode === "local_exec" || cfg.proofReviewMode === "codex_exec" ? "local_exec" :
+        "local_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
   const checkpointMode = normalizeCheckpointDispatchMode(cfg.checkpointMode);
@@ -997,8 +1012,8 @@ function agentFromConfig(config: OpenClawRiddleProofRuntimeConfig): RiddleProofA
   const wrapForReview = (agent: RiddleProofAgentAdapter) =>
     config.proofReviewMode === "main_agent" ? createMainAgentProofReviewAdapter(agent, config) : agent;
   if (config.agent) return wrapForReview(config.agent);
-  if (config.agentMode !== "codex_exec") return undefined;
-  return wrapForReview(createCodexExecAgentAdapter({
+  if (config.agentMode !== "local_exec" && config.agentMode !== "codex_exec") return undefined;
+  return wrapForReview(createLocalAgentAdapter({
     codexCommand: config.codexCommand,
     codexHome: config.codexHome,
     codexModel: config.codexModel,

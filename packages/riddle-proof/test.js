@@ -18,6 +18,7 @@ import {
   createRiddleProofRunCard,
   createRunResult,
   createCodexExecAgentAdapter,
+  createLocalAgentAdapter,
   isSuccessfulStatus,
   isTerminalStatus,
   normalizeTerminalMetadata,
@@ -44,6 +45,7 @@ assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
 assert.equal(typeof cjs.createRiddleProofRunCard, "function");
 assert.equal(typeof cjs.createCodexExecAgentAdapter, "function");
+assert.equal(typeof cjs.createLocalAgentAdapter, "function");
 assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
@@ -549,6 +551,7 @@ assert.equal(statusSnapshot.run_card.version, "riddle-proof.run-card.v1");
 assert.equal(statusSnapshot.run_card.goal.repo, "riddledc/example");
 assert.equal(createRiddleProofRunCard(statusState, { at: "2026-04-15T00:00:10.000Z" }).current_phase.stage, "setup");
 assert.equal(typeof createCodexExecAgentAdapter, "function");
+assert.equal(typeof createLocalAgentAdapter, "function");
 
 const missingAdapterResult = await runRiddleProof({
   request: {
