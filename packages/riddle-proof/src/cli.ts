@@ -102,6 +102,15 @@ function readRunState(statePath: string): RiddleProofRunState {
   return parsed as unknown as RiddleProofRunState;
 }
 
+function hasPlaceholderValue(value: unknown): boolean {
+  if (typeof value === "string") return /\bTODO\b/.test(value);
+  if (Array.isArray(value)) return value.some(hasPlaceholderValue);
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).some(hasPlaceholderValue);
+  }
+  return false;
+}
+
 function checkpointResponseForFlags(statePath: string, options: CliOptions): RiddleProofCheckpointResponse {
   const state = readRunState(statePath);
   if (!state.checkpoint_packet) {
@@ -115,15 +124,24 @@ function checkpointResponseForFlags(statePath: string, options: CliOptions): Rid
   if (!state.checkpoint_packet.allowed_decisions.includes(decision)) {
     throw new Error(`--decision ${decision} is not allowed for ${state.checkpoint_packet.checkpoint}. Allowed decisions: ${state.checkpoint_packet.allowed_decisions.join(", ")}`);
   }
-  return createCheckpointResponseTemplate(state.checkpoint_packet, {
+  const payload = readOptionalJsonRecord(optionString(options, "payloadJson"), "--payload-json");
+  const reasons = readOptionalJsonStringArray(optionString(options, "reasonsJson"), "--reasons-json");
+  const response = createCheckpointResponseTemplate(state.checkpoint_packet, {
     decision,
     summary,
-    payload: readOptionalJsonRecord(optionString(options, "payloadJson"), "--payload-json"),
-    reasons: readOptionalJsonStringArray(optionString(options, "reasonsJson"), "--reasons-json"),
+    payload,
+    reasons,
     continue_with_stage: optionString(options, "continueWithStage") as RiddleProofCheckpointResponse["continue_with_stage"],
     source_kind: optionString(options, "sourceKind") as NonNullable<RiddleProofCheckpointResponse["source"]>["kind"] || "codex",
     created_at: optionString(options, "createdAt"),
   });
+  if (!payload && hasPlaceholderValue(response.payload)) {
+    throw new Error(`--payload-json is required for ${decision} at ${state.checkpoint_packet.checkpoint}; the generated template contains placeholders.`);
+  }
+  if (!reasons && hasPlaceholderValue(response.reasons)) {
+    delete response.reasons;
+  }
+  return response;
 }
 
 function codexConfig(options: CliOptions): LocalAgentConfig {

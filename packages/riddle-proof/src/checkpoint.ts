@@ -710,21 +710,21 @@ function defaultContinueStage(packet: RiddleProofCheckpointPacket, decision: str
 }
 
 function templatePayloadFor(packet: RiddleProofCheckpointPacket, decision: string): Record<string, unknown> | undefined {
-  if (packet.kind === "author_proof" || decision === "author_packet") {
+  if (decision === "author_packet") {
     return {
       proof_plan: "TODO: describe the exact proof plan and stop condition.",
       capture_script: "TODO: provide the capture script that collects required artifacts/evidence.",
       summary: "TODO: summarize why this proof packet targets the requested change.",
     };
   }
-  if (packet.kind === "implement_change" || decision === "implementation_complete") {
+  if (decision === "implementation_complete") {
     return {
       changed_files: [],
       tests_run: [],
       implementation_notes: "TODO: summarize the direct edits made in the after worktree.",
     };
   }
-  if (packet.kind === "assess_recon" || packet.stage === "recon") {
+  if (decision === "ready_for_author") {
     return {
       baseline_understanding: {
         reference: "TODO",

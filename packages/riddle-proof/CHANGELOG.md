@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.52
+
+### Patch Changes
+
+- Refuse flag-based checkpoint responses that would submit generated placeholder payloads, while keeping templates useful for sole-agent review.
+
 ## 0.5.51
 
 ### Patch Changes

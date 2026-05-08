@@ -83,6 +83,10 @@ full `--response-json` or the shorter `--decision` / `--summary` /
 `--payload-json` flags. No local executor or OpenClaw surface is required for
 that base workflow.
 
+Flag-based `respond` refuses to submit generated placeholder payloads. If the
+checkpoint template includes `TODO` fields, provide a real `--payload-json`
+file/object before resuming the run.
+
 `--agent local` is the generic CLI executor slot. The current implementation
 uses the local Codex CLI adapter underneath, but the loop contract and CLI
 surface are intentionally not Codex-specific.

@@ -1428,6 +1428,23 @@ try {
   assert.match(String(error.stderr || error.message), /not allowed/);
 }
 assert.equal(yieldedReconInvalidDecisionFailed, true);
+let yieldedReconMissingPayloadFailed = false;
+try {
+  execFileSync(process.execPath, [
+    new URL("./dist/cli.js", import.meta.url).pathname,
+    "respond",
+    "--state-path",
+    yieldedReconHarnessPath,
+    "--decision",
+    "ready_for_author",
+    "--summary",
+    "Recon baseline is specific enough.",
+  ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+} catch (error) {
+  yieldedReconMissingPayloadFailed = true;
+  assert.match(String(error.stderr || error.message), /--payload-json is required/);
+}
+assert.equal(yieldedReconMissingPayloadFailed, true);
 const yieldedReconResponse = {
   version: "riddle-proof.checkpoint_response.v1",
   run_id: yieldedRecon.run_id,
