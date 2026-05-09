@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof",
-  "version": "0.5.54",
+  "version": "0.5.55",
   "description": "Reusable Riddle Proof contracts and helpers for evidence-backed agent changes.",
   "license": "MIT",
   "author": "RiddleDC",
@@ -79,6 +79,11 @@
       "import": "./dist/playability.js",
       "require": "./dist/playability.cjs"
     },
+    "./basic-gameplay": {
+      "types": "./dist/basic-gameplay.d.ts",
+      "import": "./dist/basic-gameplay.js",
+      "require": "./dist/basic-gameplay.cjs"
+    },
     "./openclaw": {
       "types": "./dist/openclaw.d.ts",
       "import": "./dist/openclaw.js",
@@ -115,7 +120,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/run-card.ts src/runner.ts src/engine-harness.ts src/codex-exec-agent.ts src/local-agent.ts src/cli.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts src/riddle-client.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/run-card.ts src/runner.ts src/engine-harness.ts src/codex-exec-agent.ts src/local-agent.ts src/cli.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/basic-gameplay.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts src/riddle-client.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js && node proof-run.test.js"

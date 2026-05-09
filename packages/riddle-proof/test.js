@@ -11,6 +11,7 @@ import {
   applyTerminalMetadata,
   applyPrLifecycleState,
   appendCaptureDiagnostic,
+  assessBasicGameplayEvidence,
   createDisabledRiddleProofAgentAdapter,
   createCaptureDiagnostic,
   createCheckpointResponseTemplate,
@@ -25,6 +26,7 @@ import {
   normalizeTerminalMetadata,
   redactForProofDiagnostics,
   extractPlayabilityEvidence,
+  extractBasicGameplayEvidence,
   readRiddleProofRunStatus,
   runRiddleProofEngineHarness,
   runRiddleProof,
@@ -44,6 +46,7 @@ const require = createRequire(import.meta.url);
 const cjs = require("./dist/index.cjs");
 const cjsDiagnostics = require("./dist/diagnostics.cjs");
 const cjsPlayability = require("./dist/playability.cjs");
+const cjsBasicGameplay = require("./dist/basic-gameplay.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
@@ -54,6 +57,8 @@ assert.equal(typeof cjs.createLocalAgentAdapter, "function");
 assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
+assert.equal(typeof cjs.assessBasicGameplayEvidence, "function");
+assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
@@ -234,6 +239,75 @@ const staticAssessment = assessPlayabilityEvidence({
 assert.equal(staticAssessment.passed, false);
 assert.equal(staticAssessment.motion_observed, false);
 assert.ok(staticAssessment.concerns.includes("playfield/canvas pixels did not measurably change"));
+
+const basicGameplayEvidence = {
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "Good Game",
+      path: "/games/good",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        visible_canvas_count: 1,
+        screenshot_hash: "initial-shot",
+        body_text_hash: "initial-text",
+        canvases: [{ hash: "initial-canvas", visible: true }],
+      },
+      timed: {
+        screenshot_hash: "timed-shot",
+        body_text_hash: "initial-text",
+        canvases: [{ hash: "initial-canvas", visible: true }],
+      },
+      after_action: {
+        screenshot_hash: "after-shot",
+        body_text_hash: "after-text",
+        canvases: [{ hash: "after-canvas", visible: true }],
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+    },
+  ],
+};
+const basicGameplayAssessment = assessBasicGameplayEvidence({ proof_evidence: { basic_gameplay: basicGameplayEvidence } });
+assert.equal(basicGameplayAssessment.passed, true);
+assert.equal(basicGameplayAssessment.checked_routes, 1);
+assert.equal(basicGameplayAssessment.warning_counts.missing_reset_path, undefined);
+assert.equal(extractBasicGameplayEvidence(JSON.stringify(basicGameplayEvidence))?.version, "riddle-proof.basic-gameplay.v1");
+
+const inertGameplayAssessment = assessBasicGameplayEvidence({
+  results: [
+    {
+      name: "Inert Game",
+      path: "/games/inert",
+      http_status: 200,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "same-shot",
+        body_text_hash: "same-text",
+      },
+      timed: {
+        screenshot_hash: "same-shot",
+        body_text_hash: "same-text",
+      },
+      after_action: {
+        screenshot_hash: "same-shot",
+        body_text_hash: "same-text",
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+    },
+  ],
+});
+assert.equal(inertGameplayAssessment.passed, false);
+assert.equal(inertGameplayAssessment.failure_counts.primary_control_inert, 1);
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
