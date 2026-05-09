@@ -1,5 +1,6 @@
 export const RIDDLE_PROOF_BASIC_GAMEPLAY_VERSION = "riddle-proof.basic-gameplay.v1";
 export const RIDDLE_PROOF_BASIC_GAMEPLAY_ASSESSMENT_VERSION = "riddle-proof.basic-gameplay.assessment.v1";
+export const RIDDLE_PROOF_BASIC_GAMEPLAY_CATCH_VERSION = "riddle-proof.basic-gameplay.catch.v1";
 
 export type BasicGameplayFailureCode =
   | "route_http_error"
@@ -134,6 +135,61 @@ export interface RiddleProofBasicGameplayAssessment {
   route_results: RiddleProofBasicGameplayRouteAssessment[];
 }
 
+export interface BasicGameplayProofArtifact {
+  name: string;
+  role?: string;
+  kind?: string;
+  url?: string;
+  path?: string;
+  sha256?: string;
+  [key: string]: unknown;
+}
+
+export interface BasicGameplayFixReference {
+  repo?: string;
+  commit?: string;
+  pr_url?: string;
+  summary?: string;
+  [key: string]: unknown;
+}
+
+export interface CreateBasicGameplayCatchSummaryInput {
+  title?: string;
+  site?: string;
+  route?: string;
+  detected_at?: string;
+  before: unknown;
+  after?: unknown;
+  fix?: BasicGameplayFixReference;
+  artifacts?: BasicGameplayProofArtifact[];
+}
+
+export interface BasicGameplayAssessmentSummary {
+  evidence_present: boolean;
+  passed: boolean;
+  checked_routes: number;
+  passing_routes: number;
+  failing_routes: RiddleProofBasicGameplayAssessment["failing_routes"];
+  failure_counts: Record<string, number>;
+  warning_counts: Record<string, number>;
+  notable_codes: string[];
+}
+
+export interface RiddleProofBasicGameplayCatchSummary {
+  version: typeof RIDDLE_PROOF_BASIC_GAMEPLAY_CATCH_VERSION;
+  title: string;
+  site?: string;
+  route?: string;
+  detected_at: string;
+  before: BasicGameplayAssessmentSummary;
+  after?: BasicGameplayAssessmentSummary;
+  fixed: boolean;
+  fix?: BasicGameplayFixReference;
+  artifacts: BasicGameplayProofArtifact[];
+  summary_lines: string[];
+  marketing_summary: string;
+}
+
 const BASIC_GAMEPLAY_CONTAINER_KEYS = [
   "basic_gameplay",
   "basicGameplay",
@@ -264,6 +320,46 @@ export function assessBasicGameplayRoute(
   };
 }
 
+export function createBasicGameplayCatchSummary(
+  input: CreateBasicGameplayCatchSummaryInput,
+  options: AssessBasicGameplayOptions = {},
+): RiddleProofBasicGameplayCatchSummary {
+  const before = summarizeAssessment(assessBasicGameplayEvidence(input.before, options));
+  const after = input.after === undefined ? undefined : summarizeAssessment(assessBasicGameplayEvidence(input.after, options));
+  const fixed = Boolean(after && before.notable_codes.length > 0 && after.passed && after.notable_codes.length === 0);
+  const title = input.title || [
+    input.site || "Basic gameplay",
+    input.route ? `${input.route} proof catch` : "proof catch",
+  ].join(" ");
+  const beforeCodes = before.notable_codes.length ? before.notable_codes.join(", ") : "no failing or warning codes";
+  const afterCodes = after
+    ? after.notable_codes.length ? after.notable_codes.join(", ") : "no failing or warning codes"
+    : "not verified";
+  const summaryLines = [
+    `Before: ${before.checked_routes} checked, ${before.passing_routes} passing, codes: ${beforeCodes}.`,
+    after ? `After: ${after.checked_routes} checked, ${after.passing_routes} passing, codes: ${afterCodes}.` : "After: not provided.",
+  ];
+  if (input.fix?.summary) summaryLines.push(`Fix: ${input.fix.summary}`);
+  if (input.artifacts?.length) summaryLines.push(`Artifacts: ${input.artifacts.length} attached.`);
+
+  return {
+    version: RIDDLE_PROOF_BASIC_GAMEPLAY_CATCH_VERSION,
+    title,
+    site: input.site,
+    route: input.route,
+    detected_at: input.detected_at || new Date().toISOString(),
+    before,
+    after,
+    fixed,
+    fix: input.fix,
+    artifacts: input.artifacts || [],
+    summary_lines: summaryLines,
+    marketing_summary: fixed
+      ? `${title}: Riddle Proof caught ${beforeCodes}; after the fix, ${afterCodes}.`
+      : `${title}: Riddle Proof caught ${beforeCodes}; after evidence is ${after ? "not yet clean" : "not yet attached"}.`,
+  };
+}
+
 export function extractBasicGameplayEvidence(...sources: unknown[]): RiddleProofBasicGameplayEvidence | null {
   const seen = new Set<unknown>();
   for (const source of sources) {
@@ -271,6 +367,22 @@ export function extractBasicGameplayEvidence(...sources: unknown[]): RiddleProof
     if (found) return found;
   }
   return null;
+}
+
+function summarizeAssessment(assessment: RiddleProofBasicGameplayAssessment): BasicGameplayAssessmentSummary {
+  return {
+    evidence_present: assessment.evidence_present,
+    passed: assessment.passed,
+    checked_routes: assessment.checked_routes,
+    passing_routes: assessment.passing_routes,
+    failing_routes: assessment.failing_routes,
+    failure_counts: assessment.failure_counts,
+    warning_counts: assessment.warning_counts,
+    notable_codes: [
+      ...Object.keys(assessment.failure_counts),
+      ...Object.keys(assessment.warning_counts),
+    ].sort(),
+  };
 }
 
 function findBasicGameplayEvidence(

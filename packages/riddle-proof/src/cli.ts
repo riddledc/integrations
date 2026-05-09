@@ -31,6 +31,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
+    "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720]",
     "  riddle-proof-loop riddle-poll <job-id> [--wait]",
     "  riddle-proof-loop doctor local [--codex-command <path>]",
@@ -310,6 +311,32 @@ async function main() {
     const label = positional[2];
     const result = await createRiddleApiClient(riddleClientConfig(options)).deployStaticPreview(buildDir, label);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "riddle-server-preview") {
+    const directory = positional[1];
+    const scriptFile = optionString(options, "scriptFile");
+    if (!directory || !scriptFile) throw new Error("riddle-server-preview requires <directory> and --script-file.");
+    const result = await createRiddleApiClient(riddleClientConfig(options)).runServerPreview({
+      directory,
+      script: readFileSync(scriptFile, "utf-8"),
+      image: optionString(options, "image"),
+      command: optionString(options, "command"),
+      port: optionString(options, "port") ? Number(optionString(options, "port")) : undefined,
+      path: optionString(options, "path"),
+      readinessPath: optionString(options, "readinessPath"),
+      readinessTimeoutSec: optionString(options, "readinessTimeout") ? Number(optionString(options, "readinessTimeout")) : undefined,
+      waitForSelector: optionString(options, "waitForSelector"),
+      navigationTimeoutSec: optionString(options, "navigationTimeout") ? Number(optionString(options, "navigationTimeout")) : undefined,
+      viewport: parseRiddleViewport(optionString(options, "viewport")),
+      timeoutSec: optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      pollAttempts: optionString(options, "pollAttempts") ? Number(optionString(options, "pollAttempts")) : undefined,
+      pollIntervalMs: optionString(options, "pollIntervalMs") ? Number(optionString(options, "pollIntervalMs")) : undefined,
+      exclude: optionString(options, "exclude")?.split(",").map((item) => item.trim()).filter(Boolean),
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exitCode = result.ok ? 0 : 1;
     return;
   }
 

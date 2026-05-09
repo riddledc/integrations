@@ -12,6 +12,7 @@ import {
   applyPrLifecycleState,
   appendCaptureDiagnostic,
   assessBasicGameplayEvidence,
+  createBasicGameplayCatchSummary,
   createDisabledRiddleProofAgentAdapter,
   createCaptureDiagnostic,
   createCheckpointResponseTemplate,
@@ -58,6 +59,7 @@ assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
 assert.equal(typeof cjs.assessBasicGameplayEvidence, "function");
+assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
@@ -96,6 +98,29 @@ const riddleClient = createRiddleApiClient({
         total_bytes: 52,
       }), { status: 200 });
     }
+    if (String(url) === "https://api.test/v1/server-preview") {
+      return new Response(JSON.stringify({
+        job_id: "sp_test",
+        upload_url: "https://upload.test/sp_test",
+      }), { status: 200 });
+    }
+    if (String(url) === "https://upload.test/sp_test") {
+      return new Response("", { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/server-preview/sp_test/start") {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/server-preview/sp_test") {
+      return new Response(JSON.stringify({
+        job_id: "sp_test",
+        status: "complete",
+        script_error: null,
+        outputs: [
+          { name: "before.png", url: "https://cdn.test/before.png" },
+          { name: "evidence.json", url: "https://cdn.test/evidence.json" },
+        ],
+      }), { status: 200 });
+    }
     if (String(url) === "https://api.test/v1/run") {
       return new Response(JSON.stringify({ job_id: "job_test" }), { status: 200 });
     }
@@ -120,6 +145,18 @@ const scriptRun = await riddleClient.runScript({
   timeoutSec: 30,
 });
 assert.equal(scriptRun.job_id, "job_test");
+const serverPreviewRun = await riddleClient.runServerPreview({
+  directory: riddlePreviewDir,
+  path: "/games/example",
+  waitForSelector: "canvas",
+  script: "return { ok: true };",
+  viewport: parseRiddleViewport("390x844"),
+  timeoutSec: 30,
+  pollAttempts: 1,
+});
+assert.equal(serverPreviewRun.ok, true);
+assert.equal(serverPreviewRun.job_id, "sp_test");
+assert.equal(serverPreviewRun.script_error, null);
 const polledJob = await riddleClient.pollJob("job_test");
 assert.equal(polledJob.ok, true);
 assert.equal(polledJob.terminal, true);
@@ -131,6 +168,10 @@ assert(
 assert(
   riddleClientCalls.some((call) => call.url === "https://upload.test/pv_test" && call.auth === null),
   "Riddle preview upload should not send API bearer auth to the signed upload URL",
+);
+assert(
+  riddleClientCalls.some((call) => call.url === "https://upload.test/sp_test" && call.auth === null),
+  "Riddle server-preview upload should not send API bearer auth to the signed upload URL",
 );
 
 const metricWorkdir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-local-agent-metrics-"));
@@ -308,6 +349,34 @@ const inertGameplayAssessment = assessBasicGameplayEvidence({
 });
 assert.equal(inertGameplayAssessment.passed, false);
 assert.equal(inertGameplayAssessment.failure_counts.primary_control_inert, 1);
+
+const gameplayCatchSummary = createBasicGameplayCatchSummary({
+  title: "Gem Mine texture warning",
+  site: "LilArcade",
+  route: "/games/gem-mine",
+  detected_at: "2026-05-09T00:00:00.000Z",
+  before: {
+    results: [{
+      name: "Gem Mine",
+      path: "/games/gem-mine",
+      http_status: 200,
+      console_error_count: 1,
+      page_error_count: 0,
+      initial: { body_text_length: 120, visible_large_node_count: 12, visible_canvas_count: 1, screenshot_hash: "a", body_text_hash: "a" },
+      timed: { screenshot_hash: "b", body_text_hash: "a" },
+      after_action: { screenshot_hash: "c", body_text_hash: "b" },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "canvas-click" }],
+    }],
+  },
+  after: basicGameplayEvidence,
+  fix: { commit: "abc123", summary: "Replace existing generated canvas textures before registering them." },
+  artifacts: [{ name: "evidence.json", path: "artifacts/evidence.json", sha256: "abc" }],
+});
+assert.equal(gameplayCatchSummary.version, "riddle-proof.basic-gameplay.catch.v1");
+assert.equal(gameplayCatchSummary.fixed, true);
+assert.ok(gameplayCatchSummary.before.notable_codes.includes("critical_console_error"));
+assert.equal(gameplayCatchSummary.artifacts[0].sha256, "abc");
 
 function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
