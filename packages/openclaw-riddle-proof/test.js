@@ -24,6 +24,7 @@ import register, {
   waitOpenClawRiddleProof,
   submitOpenClawRiddleProofReview,
   syncOpenClawRiddleProof,
+  createRiddleApiClient,
 } from "./dist/index.js";
 
 const openclawRiddleProofPackageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
@@ -32,6 +33,7 @@ const openclawPluginManifest = JSON.parse(readFileSync(new URL("./openclaw.plugi
 assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_PROOF_WAIT_TOOL_NAME), true);
 assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
 assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
+assert.equal(typeof createRiddleApiClient, "function");
 
 const params = {
   repo: "riddledc/example",

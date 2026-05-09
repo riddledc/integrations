@@ -101,6 +101,7 @@ export interface RiddleProofRunParams {
   leave_draft?: boolean;
   engine_state_path?: string;
   harness_state_path?: string;
+  riddle_engine_module_url?: string;
   max_iterations?: number;
   auto_approve?: boolean;
   dry_run?: boolean;

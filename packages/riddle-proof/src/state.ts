@@ -164,6 +164,7 @@ export function normalizeRunParams(input: RiddleProofRunParams): RiddleProofRunP
     leave_draft: input.leave_draft,
     engine_state_path: input.engine_state_path,
     harness_state_path: input.harness_state_path,
+    riddle_engine_module_url: input.riddle_engine_module_url,
     max_iterations: input.max_iterations,
     auto_approve: input.auto_approve,
     dry_run: input.dry_run,

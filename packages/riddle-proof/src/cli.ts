@@ -13,6 +13,11 @@ import {
   runLocalAgentDoctor,
   type LocalAgentConfig,
 } from "./local-agent";
+import {
+  createRiddleApiClient,
+  parseRiddleViewport,
+  type RiddleClientConfig,
+} from "./riddle-client";
 import type { RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
 
 type CliOptions = Record<string, string | boolean>;
@@ -25,6 +30,9 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
+    "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
+    "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720]",
+    "  riddle-proof-loop riddle-poll <job-id> [--wait]",
     "  riddle-proof-loop doctor local [--codex-command <path>]",
     "",
     "The default CLI run mode is checkpoint-mode=yield unless --agent local is used.",
@@ -235,13 +243,34 @@ function agentFor(options: CliOptions): RiddleProofAgentAdapter {
   throw new Error(`Unsupported --agent ${agentMode}. Use disabled or local.`);
 }
 
+function riddleClientConfig(options: CliOptions): RiddleClientConfig {
+  return {
+    apiKey: optionString(options, "apiKey"),
+    apiKeyFile: optionString(options, "apiKeyFile"),
+    apiBaseUrl: optionString(options, "apiBaseUrl"),
+  };
+}
+
 function requestForRun(options: CliOptions): RiddleProofRunParams {
   const statePath = optionString(options, "statePath");
+  const withEngineModuleUrl = (request: RiddleProofRunParams): RiddleProofRunParams => {
+    const moduleUrl = optionString(options, "riddleEngineModuleUrl");
+    return moduleUrl && !request.riddle_engine_module_url
+      ? { ...request, riddle_engine_module_url: moduleUrl }
+      : request;
+  };
   if (optionString(options, "requestJson")) {
-    return readJsonValue(optionString(options, "requestJson"), "--request-json") as RiddleProofRunParams;
+    return withEngineModuleUrl(readJsonValue(optionString(options, "requestJson"), "--request-json") as RiddleProofRunParams);
   }
-  if (statePath) return readRunState(statePath).request;
+  if (statePath) return withEngineModuleUrl(readRunState(statePath).request);
   throw new Error("--request-json is required unless --state-path points to an existing run state.");
+}
+
+function riddleEngineModuleUrlFor(options: CliOptions, request: RiddleProofRunParams) {
+  return optionString(options, "riddleEngineModuleUrl") ||
+    (typeof request.riddle_engine_module_url === "string" && request.riddle_engine_module_url.trim()
+      ? request.riddle_engine_module_url.trim()
+      : undefined);
 }
 
 function checkpointModeFor(options: CliOptions) {
@@ -273,6 +302,42 @@ async function main() {
     const snapshot = readRiddleProofRunStatus(statePath);
     if (!snapshot) throw new Error(`${statePath} is not a readable Riddle Proof run state.`);
     process.stdout.write(`${JSON.stringify(snapshot, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "riddle-preview-deploy") {
+    const buildDir = positional[1];
+    const label = positional[2];
+    const result = await createRiddleApiClient(riddleClientConfig(options)).deployStaticPreview(buildDir, label);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "riddle-run-script") {
+    const url = optionString(options, "url");
+    const scriptFile = optionString(options, "scriptFile");
+    if (!url || !scriptFile) throw new Error("riddle-run-script requires --url and --script-file.");
+    const result = await createRiddleApiClient(riddleClientConfig(options)).runScript({
+      url,
+      script: readFileSync(scriptFile, "utf-8"),
+      viewport: parseRiddleViewport(optionString(options, "viewport")),
+      timeoutSec: optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      sync: options.sync === true ? true : undefined,
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "riddle-poll") {
+    const jobId = positional[1];
+    if (!jobId) throw new Error("riddle-poll requires <job-id>.");
+    const result = await createRiddleApiClient(riddleClientConfig(options)).pollJob(jobId, {
+      wait: options.wait === true,
+      attempts: optionString(options, "attempts") ? Number(optionString(options, "attempts")) : undefined,
+      intervalMs: optionString(options, "intervalMs") ? Number(optionString(options, "intervalMs")) : undefined,
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exitCode = result.ok ? 0 : 1;
     return;
   }
 
@@ -330,7 +395,7 @@ async function main() {
       agent: agentFor(options),
       config: {
         stateDir: optionString(options, "stateDir"),
-        riddleEngineModuleUrl: optionString(options, "riddleEngineModuleUrl"),
+        riddleEngineModuleUrl: riddleEngineModuleUrlFor(options, request),
         riddleProofDir: optionString(options, "riddleProofDir"),
         defaultReviewer: optionString(options, "defaultReviewer"),
         defaultShipMode: optionString(options, "defaultShipMode") as "none" | "ship" | undefined,

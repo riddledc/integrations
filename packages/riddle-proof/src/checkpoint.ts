@@ -558,13 +558,15 @@ export function buildProofAssessmentCheckpointPacket(input: {
   const requiredSignals = recordValue(recordValue(artifactContract)?.required);
   const visualDelta = visualDeltaFromState(fullState);
   const verificationMode =
-    nonEmptyString(input.request.verification_mode) ||
-    nonEmptyString(fullState.verification_mode) ||
     nonEmptyString(bundle?.verification_mode) ||
+    nonEmptyString(fullState.verification_mode) ||
+    nonEmptyString(input.request.verification_mode) ||
     "proof";
   const visualDeltaRequired =
-    requiredSignals?.visual_delta === true ||
-    verificationModeRequiresVisualDelta(verificationMode);
+    requiredSignals?.visual_delta !== false && (
+      requiredSignals?.visual_delta === true ||
+      verificationModeRequiresVisualDelta(verificationMode)
+    );
   const evidenceIssueCode = visualDeltaIssueCode(visualDelta, visualDeltaRequired);
   const summary =
     nonEmptyString(input.engineResult.summary) ||

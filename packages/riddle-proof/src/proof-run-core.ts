@@ -528,6 +528,7 @@ export function visualDeltaRequiredForState(state: any = {}) {
   const bundle = objectValue(state?.evidence_bundle);
   const contract = objectValue(bundle.artifact_contract);
   const required = objectValue(contract.required);
+  if (required.visual_delta === false) return false;
   return required.visual_delta === true || VISUAL_FIRST_MODES.has(normalizedVerificationMode(state));
 }
 

@@ -10,3 +10,4 @@ export * from "./local-agent";
 export * from "./diagnostics";
 export * from "./proof-session";
 export * from "./playability";
+export * from "./riddle-client";

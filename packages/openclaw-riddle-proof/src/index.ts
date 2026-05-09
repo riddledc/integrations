@@ -59,6 +59,19 @@ export type {
   CodexJsonRunner,
 } from "@riddledc/riddle-proof/codex-exec-agent";
 export {
+  createRiddleApiClient,
+  deployRiddleStaticPreview,
+  pollRiddleJob,
+  parseRiddleViewport,
+  runRiddleScript,
+} from "@riddledc/riddle-proof/riddle-client";
+export type {
+  RiddleClientConfig,
+  RiddlePollJobResult,
+  RiddlePreviewDeployResult,
+  RiddleRunScriptInput,
+} from "@riddledc/riddle-proof/riddle-client";
+export {
   buildOpenClawAgentInvocationPlan,
   buildOpenClawAgentSessionKey,
 } from "./oc-agent-routing";

@@ -18,6 +18,10 @@ When configured with `executionMode: "engine"`, the wrapper calls the reusable
 engine harness in `@riddledc/riddle-proof`.
 That harness drives the packaged proof-run checkpoint engine in
 `@riddledc/riddle-proof` directly.
+Riddle preview deployment, script execution, job polling, and artifact retrieval
+also live in `@riddledc/riddle-proof/riddle-client`; this package re-exports
+that client for OpenClaw integrations but does not carry a second copy of the
+artifact logic.
 By default it still stops at concrete blockers when an agent adapter is not
 configured. When `agentMode: "local_exec"` is explicitly set, the wrapper uses a
 configured local CLI adapter for recon judgment, proof packet authoring,

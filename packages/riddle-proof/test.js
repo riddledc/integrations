@@ -30,6 +30,9 @@ import {
   runRiddleProof,
   setRunStatus,
   summarizeCaptureArtifacts,
+  createRiddleApiClient,
+  deployRiddleStaticPreview,
+  parseRiddleViewport,
 } from "./dist/index.js";
 import {
   parseOpenClawAssertions,
@@ -53,6 +56,77 @@ assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
+assert.equal(typeof cjs.createRiddleApiClient, "function");
+assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
+
+const riddlePreviewDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-client-preview-"));
+writeFileSync(path.join(riddlePreviewDir, "index.html"), "<!doctype html><title>Riddle Preview</title>");
+const riddleClientCalls = [];
+const riddleClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.test",
+  fetchImpl: async (url, init = {}) => {
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+    riddleClientCalls.push({
+      url: String(url),
+      method: init.method || "GET",
+      auth: init.headers?.Authorization || init.headers?.authorization || null,
+      body,
+    });
+    if (String(url) === "https://api.test/v1/preview") {
+      return new Response(JSON.stringify({
+        id: "pv_test",
+        upload_url: "https://upload.test/pv_test",
+        expires_at: "2026-05-09T00:00:00.000Z",
+      }), { status: 200 });
+    }
+    if (String(url) === "https://upload.test/pv_test") {
+      return new Response("", { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/preview/pv_test/publish") {
+      return new Response(JSON.stringify({
+        id: "pv_test",
+        preview_url: "https://preview.riddledc.com/s/pv_test/",
+        file_count: 1,
+        total_bytes: 52,
+      }), { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/run") {
+      return new Response(JSON.stringify({ job_id: "job_test" }), { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/jobs/job_test") {
+      return new Response(JSON.stringify({ id: "job_test", status: "completed" }), { status: 200 });
+    }
+    if (String(url) === "https://api.test/v1/jobs/job_test/artifacts") {
+      return new Response(JSON.stringify({ artifacts: [{ name: "proof.json", url: "https://cdn.test/proof.json" }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const deployedPreview = await riddleClient.deployStaticPreview(riddlePreviewDir, "unit-preview");
+assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/pv_test/");
+assert.equal(deployedPreview.file_count, 1);
+assert.equal(typeof deployRiddleStaticPreview, "function");
+assert.deepEqual(parseRiddleViewport("390x844"), { width: 390, height: 844 });
+const scriptRun = await riddleClient.runScript({
+  url: deployedPreview.preview_url,
+  script: "return { ok: true };",
+  viewport: parseRiddleViewport("390x844"),
+  timeoutSec: 30,
+});
+assert.equal(scriptRun.job_id, "job_test");
+const polledJob = await riddleClient.pollJob("job_test");
+assert.equal(polledJob.ok, true);
+assert.equal(polledJob.terminal, true);
+assert.equal(polledJob.artifacts.artifacts[0].name, "proof.json");
+assert(
+  riddleClientCalls.some((call) => call.auth === "Bearer test-riddle-key"),
+  "Riddle client should send bearer auth to API calls",
+);
+assert(
+  riddleClientCalls.some((call) => call.url === "https://upload.test/pv_test" && call.auth === null),
+  "Riddle preview upload should not send API bearer auth to the signed upload URL",
+);
 
 const metricWorkdir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-local-agent-metrics-"));
 const metricRunnerCalls = [];
@@ -188,6 +262,36 @@ function withMeasuredVisualEvidence(state = {}) {
           status: "measured",
           passed: true,
           change_percent: 2.4,
+        },
+      },
+    },
+  };
+}
+
+function withSemanticMetricEvidence(state = {}) {
+  return {
+    ...state,
+    verification_mode: "visual",
+    verify_status: "evidence_captured",
+    before_cdn: state.before_cdn || "https://cdn.example.com/before.png",
+    after_cdn: state.after_cdn || "https://cdn.example.com/after.png",
+    evidence_bundle: {
+      ...(state.evidence_bundle || {}),
+      verification_mode: "riddle_semantic_visual_artifacts",
+      artifact_contract: {
+        ...((state.evidence_bundle || {}).artifact_contract || {}),
+        required: {
+          ...(((state.evidence_bundle || {}).artifact_contract || {}).required || {}),
+          semantic_dom_metrics: true,
+          mobile_overflow_fixed: true,
+          visual_delta: false,
+        },
+      },
+      after: {
+        ...((state.evidence_bundle || {}).after || {}),
+        metrics: {
+          mobile_overflow_fixed: true,
+          overflowing_pages: [],
         },
       },
     },
@@ -1022,6 +1126,57 @@ assert.equal(unmeasuredVisualProofAssessment.visual_delta.status, "unmeasured");
 const unmeasuredVisualHarnessState = JSON.parse(readFileSync(unmeasuredVisualResult.state_path, "utf-8"));
 const unmeasuredRecoveryEvent = unmeasuredVisualHarnessState.events.find((event) => event.kind === "agent.proof_assessment.evidence_recovery_required");
 assert.equal(unmeasuredRecoveryEvent.details.evidence_collection_incomplete, true);
+
+const metricProofFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-semantic-metric-"));
+const metricProofStatePath = path.join(metricProofFixture, "riddle-state.json");
+writeFileSync(metricProofStatePath, JSON.stringify(withSemanticMetricEvidence(), null, 2));
+const metricProofResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Accept a Riddle-backed layout metric proof without pixel visual delta.",
+    verification_mode: "visual",
+    ship_mode: "none",
+    harness_state_path: path.join(metricProofFixture, "harness-state.json"),
+    engine_state_path: metricProofStatePath,
+  },
+  max_iterations: 2,
+  engine: {
+    async execute(params) {
+      if (params.proof_assessment_json) {
+        throw new Error("metric proof should not be forced through visual delta recovery");
+      }
+      return {
+        ok: false,
+        state_path: metricProofStatePath,
+        checkpoint: "verify_supervisor_judgment",
+        summary: "Proof assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() { throw new Error("recon should not run"); },
+    async authorProofPacket() { throw new Error("author should not run"); },
+    async implementChange() { throw new Error("implement should not run"); },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Metric proof is ready.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["Riddle artifact metrics prove zero mobile overflow"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+assert.equal(metricProofResult.status, "ready_to_ship");
+assert.equal(metricProofResult.raw.ship_held, true);
+const metricProofHarnessState = JSON.parse(readFileSync(metricProofResult.state_path, "utf-8"));
+assert.equal(metricProofHarnessState.events.some((event) => event.kind === "agent.proof_assessment.evidence_recovery_required"), false);
 
 const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
 const noiseWorkdir = path.join(noiseFixture, "after");
