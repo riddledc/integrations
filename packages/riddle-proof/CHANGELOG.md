@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.56
+
+### Patch Changes
+
+- Promote reusable server-preview proof helpers, add the `riddle-server-preview` CLI command, and add a basic-gameplay catch summary helper for durable proof stories.
+
 ## 0.5.53
 
 ### Patch Changes
