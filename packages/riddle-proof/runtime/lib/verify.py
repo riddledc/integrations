@@ -7,8 +7,9 @@ while good captures produce a structured evidence packet that the supervising ag
 must assess before the wrapper routes back into author/implement/recon work or ship.
 """
 
-import json, os, sys, time
+import json, os, struct, sys, time, zlib
 from urllib.parse import parse_qsl, urlparse
+from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import (
     append_capture_diagnostic,
@@ -935,6 +936,204 @@ def visual_delta_baseline_candidate(state, results):
     return {'label': '', 'url': ''}
 
 
+def image_artifact_url(value):
+    text = str(value or '').strip()
+    if not text:
+        return False
+    parsed = urlparse(text)
+    if parsed.scheme != 'https':
+        return False
+    path = parsed.path.lower()
+    return path.endswith(IMAGE_EXTENSIONS)
+
+
+def fetch_url_bytes(url, timeout=20, max_bytes=25 * 1024 * 1024):
+    request = Request(
+        url,
+        headers={
+            'User-Agent': 'riddle-proof-visual-delta/1.0',
+            'Accept': 'image/png,image/jpeg,image/webp,image/*;q=0.8,*/*;q=0.1',
+        },
+    )
+    with urlopen(request, timeout=timeout) as response:
+        content_length = response.headers.get('Content-Length')
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    raise ValueError('image artifact exceeds max fetch size')
+            except ValueError:
+                raise
+            except Exception:
+                pass
+        data = response.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError('image artifact exceeds max fetch size')
+    return data
+
+
+def _png_paeth(a, b, c):
+    p = a + b - c
+    pa = abs(p - a)
+    pb = abs(p - b)
+    pc = abs(p - c)
+    if pa <= pb and pa <= pc:
+        return a
+    if pb <= pc:
+        return b
+    return c
+
+
+def decode_png_rgba(data):
+    if not isinstance(data, (bytes, bytearray)) or not data.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise ValueError('unsupported image format; expected PNG artifact')
+    offset = 8
+    width = height = bit_depth = color_type = interlace = None
+    idat = []
+    while offset + 8 <= len(data):
+        length = struct.unpack('>I', data[offset:offset + 4])[0]
+        chunk_type = data[offset + 4:offset + 8]
+        chunk_data = data[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if chunk_type == b'IHDR':
+            width, height, bit_depth, color_type, _compression, _filter, interlace = struct.unpack('>IIBBBBB', chunk_data)
+        elif chunk_type == b'IDAT':
+            idat.append(chunk_data)
+        elif chunk_type == b'IEND':
+            break
+    if not width or not height or bit_depth != 8 or interlace != 0:
+        raise ValueError('unsupported PNG artifact; requires 8-bit non-interlaced PNG')
+    channels_by_type = {0: 1, 2: 3, 4: 2, 6: 4}
+    channels = channels_by_type.get(color_type)
+    if not channels:
+        raise ValueError('unsupported PNG color type')
+    raw = zlib.decompress(b''.join(idat))
+    stride = width * channels
+    rows = []
+    pos = 0
+    previous = bytearray(stride)
+    for _row in range(height):
+        if pos >= len(raw):
+            raise ValueError('truncated PNG data')
+        filter_type = raw[pos]
+        pos += 1
+        scanline = bytearray(raw[pos:pos + stride])
+        pos += stride
+        for index in range(stride):
+            left = scanline[index - channels] if index >= channels else 0
+            up = previous[index]
+            up_left = previous[index - channels] if index >= channels else 0
+            if filter_type == 1:
+                scanline[index] = (scanline[index] + left) & 0xff
+            elif filter_type == 2:
+                scanline[index] = (scanline[index] + up) & 0xff
+            elif filter_type == 3:
+                scanline[index] = (scanline[index] + ((left + up) // 2)) & 0xff
+            elif filter_type == 4:
+                scanline[index] = (scanline[index] + _png_paeth(left, up, up_left)) & 0xff
+            elif filter_type != 0:
+                raise ValueError('unsupported PNG filter')
+        rows.append(bytes(scanline))
+        previous = scanline
+    rgba = bytearray(width * height * 4)
+    out = 0
+    for row in rows:
+        for index in range(0, len(row), channels):
+            if color_type == 0:
+                gray = row[index]
+                rgba[out:out + 4] = bytes((gray, gray, gray, 255))
+            elif color_type == 2:
+                rgba[out:out + 4] = bytes((row[index], row[index + 1], row[index + 2], 255))
+            elif color_type == 4:
+                gray = row[index]
+                rgba[out:out + 4] = bytes((gray, gray, gray, row[index + 1]))
+            else:
+                rgba[out:out + 4] = bytes((row[index], row[index + 1], row[index + 2], row[index + 3]))
+            out += 4
+    return {'width': width, 'height': height, 'rgba': bytes(rgba)}
+
+
+def compare_rgba_images(before_image, after_image, threshold=10):
+    before_width = int(before_image.get('width') or 0)
+    before_height = int(before_image.get('height') or 0)
+    after_width = int(after_image.get('width') or 0)
+    after_height = int(after_image.get('height') or 0)
+    before_rgba = before_image.get('rgba') or b''
+    after_rgba = after_image.get('rgba') or b''
+    overlap_width = min(before_width, after_width)
+    overlap_height = min(before_height, after_height)
+    total_pixels = max(before_width * before_height, after_width * after_height)
+    changed_pixels = total_pixels - (overlap_width * overlap_height)
+    for y in range(overlap_height):
+        before_row = y * before_width * 4
+        after_row = y * after_width * 4
+        for x in range(overlap_width):
+            b = before_row + x * 4
+            a = after_row + x * 4
+            if max(
+                abs(before_rgba[b] - after_rgba[a]),
+                abs(before_rgba[b + 1] - after_rgba[a + 1]),
+                abs(before_rgba[b + 2] - after_rgba[a + 2]),
+                abs(before_rgba[b + 3] - after_rgba[a + 3]),
+            ) > threshold:
+                changed_pixels += 1
+    change_percent = (changed_pixels / total_pixels) * 100 if total_pixels else None
+    return {
+        'changed_pixels': changed_pixels,
+        'total_pixels': total_pixels,
+        'change_percent': change_percent,
+        'before_width': before_width,
+        'before_height': before_height,
+        'after_width': after_width,
+        'after_height': after_height,
+    }
+
+
+def measure_visual_delta_from_image_artifacts(before_url, after_url):
+    if not (image_artifact_url(before_url) and image_artifact_url(after_url)):
+        return {
+            'status': 'skipped',
+            'reason': 'before/after URLs are not direct HTTPS image artifacts',
+        }
+    try:
+        before_image = decode_png_rgba(fetch_url_bytes(before_url))
+        after_image = decode_png_rgba(fetch_url_bytes(after_url))
+        comparison = compare_rgba_images(before_image, after_image)
+    except Exception as exc:
+        return {
+            'status': 'error',
+            'error': type(exc).__name__ + ': ' + str(exc)[:300],
+        }
+    changed_pixels = comparison.get('changed_pixels')
+    total_pixels = comparison.get('total_pixels')
+    percent = comparison.get('change_percent')
+    percent_pass = percent is not None and percent >= MIN_VISUAL_DELTA_PERCENT
+    pixel_pass = changed_pixels is not None and changed_pixels >= MIN_VISUAL_CHANGED_PIXELS
+    passed = bool(percent_pass or pixel_pass)
+    return {
+        'status': 'measured',
+        'passed': passed,
+        'change_percent': round(percent, 4) if percent is not None else None,
+        'changed_pixels': int(changed_pixels) if changed_pixels is not None else None,
+        'total_pixels': int(total_pixels) if total_pixels is not None else None,
+        'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
+        'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
+        'source': 'riddle_artifact_image_diff',
+        'reason': (
+            'Measured visual delta from before/after screenshot artifacts clears the legibility threshold.'
+            if passed else
+            'Measured visual delta from before/after screenshot artifacts is below the legibility threshold.'
+        ),
+        'comparison': {
+            'before_url': before_url,
+            'after_url': after_url,
+            'before_width': comparison.get('before_width'),
+            'before_height': comparison.get('before_height'),
+            'after_width': comparison.get('after_width'),
+            'after_height': comparison.get('after_height'),
+        },
+    }
+
+
 def add_visual_delta_diagnostic(visual_delta, key, value):
     updated = dict(visual_delta or {})
     diagnostic = dict(updated.get('diagnostic') or {})
@@ -969,6 +1168,21 @@ def measure_visual_delta_against_baseline(state, results, after_payload, current
                 'after_url_present': bool(after_url),
             },
         )
+
+    artifact_delta = measure_visual_delta_from_image_artifacts(before_url, after_url)
+    append_capture_diagnostic(state, 'visual_delta', 'riddle_artifact_image_diff', {
+        'baseline_label': baseline.get('label') or '',
+        'before_url': before_url,
+        'after_url': after_url,
+    }, artifact_delta)
+    if isinstance(artifact_delta, dict) and artifact_delta.get('status') == 'measured':
+        artifact_delta['comparison']['baseline_label'] = baseline.get('label') or ''
+        return artifact_delta
+    current_visual_delta = add_visual_delta_diagnostic(
+        current_visual_delta,
+        'artifact_image_diff',
+        artifact_delta,
+    )
 
     args = {
         'url_before': before_url,
@@ -1497,6 +1711,39 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
     }
 
 
+def build_visual_delta_recovery_decision(verification_mode, visual_delta, visual_delta_blocker=''):
+    if not visual_delta_applies(verification_mode):
+        return None
+    if visual_delta_passes_ship_gate(visual_delta):
+        return None
+    if not isinstance(visual_delta, dict):
+        status = 'missing'
+    else:
+        status = str(visual_delta.get('status') or 'missing')
+    if status == 'measured':
+        return None
+    reason = visual_delta_blocker or visual_delta_blocker_for_mode(verification_mode, visual_delta)
+    diagnostic = visual_delta.get('diagnostic') if isinstance(visual_delta, dict) else {}
+    reasons = [
+        reason or 'Required visual_delta evidence is incomplete.',
+        'Stay in verify so the same run can retry capture/comparison recovery before proof review.',
+    ]
+    fallback = diagnostic.get('visual_diff_fallback') if isinstance(diagnostic, dict) else None
+    artifact_diff = diagnostic.get('artifact_image_diff') if isinstance(diagnostic, dict) else None
+    if isinstance(artifact_diff, dict) and artifact_diff.get('error'):
+        reasons.append('Artifact image diff failed: ' + str(artifact_diff.get('error'))[:300])
+    if isinstance(fallback, dict) and fallback.get('error'):
+        reasons.append('Riddle visual_diff fallback failed: ' + str(fallback.get('error'))[:300])
+    return {
+        'decision': 'revise_capture',
+        'summary': reason or 'Verify needs measured visual_delta evidence before proof review.',
+        'recommended_stage': 'verify',
+        'continue_with_stage': 'verify',
+        'reasons': reasons,
+        'visual_delta_status': status,
+    }
+
+
 def compact_semantic_list(value, limit):
     if not isinstance(value, list):
         return []
@@ -2006,7 +2253,20 @@ if proof_evidence_required_for_mode(s.get('verification_mode')):
     if proof_evidence_blocker:
         summary_lines.append('Structured proof evidence gate: ' + proof_evidence_blocker)
 
-has_good_evidence = required_baseline_present and after_observation.get('valid') and not proof_evidence_blocker
+visual_delta_recovery = build_visual_delta_recovery_decision(
+    s.get('verification_mode'),
+    visual_delta,
+    visual_delta_blocker,
+)
+if visual_delta_recovery:
+    summary_lines.append('Visual delta recovery: ' + visual_delta_recovery['summary'])
+
+has_good_evidence = (
+    required_baseline_present
+    and after_observation.get('valid')
+    and not proof_evidence_blocker
+    and not visual_delta_recovery
+)
 
 if has_good_evidence:
     s['capture_hint_saved'] = record_successful_capture_hint(
@@ -2044,7 +2304,7 @@ if has_good_evidence:
     summary_lines.append('Proof assessment: awaiting supervising agent judgment')
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
-    capture_retry = build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker)
+    capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker)
     s['verify_status'] = 'capture_incomplete'
     s['merge_recommendation'] = 'do-not-merge'
     s['proof_assessment'] = {}
@@ -2061,8 +2321,9 @@ else:
         'continue_with_stage': capture_retry.get('continue_with_stage') or 'author',
         'fields_agent_may_update': ['capture_script', 'server_path', 'wait_for_selector', 'proof_plan'],
         'instructions': [
-            'The after-proof is missing or low quality, so return to author when the capture plan itself needs revision.',
-            'Adjust capture_script, server_path, wait_for_selector, and/or proof_plan before rerunning verify.',
+            'The after-proof evidence packet is incomplete, so use the recommended stage before proof review.',
+            'Adjust capture_script, server_path, wait_for_selector, and/or proof_plan only when the recommended stage is author.',
+            'If recommended_stage=verify, rerun verify so capture/comparison recovery can continue without changing proof authorship.',
             'If the baseline itself is wrong, return to recon instead of forcing verify to rediscover context.',
         ],
     }

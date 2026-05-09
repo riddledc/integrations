@@ -3,8 +3,10 @@ import json
 import os
 import shutil
 import subprocess as sp
+import struct
 import sys
 import tempfile
+import zlib
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -33,6 +35,28 @@ def state_console(payload):
             'info': [],
         },
     }
+
+
+def png_rgba(width, height, pixels):
+    raw_rows = []
+    for y in range(height):
+        row = bytearray([0])
+        for x in range(width):
+            row.extend(pixels[(y * width + x) * 4:(y * width + x + 1) * 4])
+        raw_rows.append(bytes(row))
+    def chunk(kind, data):
+        return (
+            struct.pack('>I', len(data))
+            + kind
+            + data
+            + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+        )
+    return (
+        b'\x89PNG\r\n\x1a\n'
+        + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0))
+        + chunk(b'IDAT', zlib.compress(b''.join(raw_rows)))
+        + chunk(b'IEND', b'')
+    )
 
 
 def load_module(name: str, path: Path):
@@ -204,12 +228,13 @@ class FakeRiddle:
                     ],
                 }
             if 'after-proof' in script:
-                outputs = [{'name': 'after.png', 'url': 'https://cdn.example.com/after.png'}]
+                after_url = 'https://cdn.example.com/after-artifact' if 'noVisualDelta' in script else 'https://cdn.example.com/after.png'
+                outputs = [{'name': 'after.png', 'url': after_url}]
                 if 'proof-session' in script:
                     outputs.append({'name': 'proof-session.json', 'url': 'https://cdn.example.com/proof-session.json'})
-                return {
+                payload = {
                     'ok': True,
-                    'screenshots': [{'url': 'https://cdn.example.com/after.png'}],
+                    'screenshots': [{'url': after_url}],
                     'outputs': outputs,
                     'console': state_console({
                         'bodyTextLength': 180,
@@ -225,6 +250,13 @@ class FakeRiddle:
                         'largeVisibleElements': [{'tag': 'button', 'text': 'Buy Now'}],
                     }),
                 }
+                if 'noVisualDelta' not in script:
+                    payload['visual_diff'] = {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    }
+                return payload
             if 'prod.example.com/pricing' in script:
                 return {
                     'ok': True,
@@ -585,6 +617,32 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert visual_diff_delta['change_percent'] == 1.45
     assert visual_diff_delta['changed_pixels'] == 14094
 
+    before_png = png_rgba(2, 1, bytes([
+        0, 0, 0, 255,
+        0, 0, 0, 255,
+    ]))
+    after_png = png_rgba(2, 1, bytes([
+        0, 0, 0, 255,
+        255, 255, 255, 255,
+    ]))
+
+    def fake_fetch_url_bytes(url, timeout=20, max_bytes=25 * 1024 * 1024):
+        if url.endswith('before.png'):
+            return before_png
+        if url.endswith('after.png'):
+            return after_png
+        raise AssertionError(f'unexpected image fetch: {url}')
+
+    namespace['fetch_url_bytes'] = fake_fetch_url_bytes
+    artifact_image_delta = namespace['measure_visual_delta_from_image_artifacts'](
+        'https://riddle-screenshots.example/before.png',
+        'https://riddle-screenshots.example/after.png',
+    )
+    assert artifact_image_delta['status'] == 'measured'
+    assert artifact_image_delta['source'] == 'riddle_artifact_image_diff'
+    assert artifact_image_delta['changed_pixels'] == 1
+    assert artifact_image_delta['change_percent'] == 50
+
     fallback_calls = []
 
     def fake_invoke_retry(tool, args, retries=3, timeout=180):
@@ -601,6 +659,7 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
 
     namespace['invoke_retry'] = fake_invoke_retry
     namespace['append_capture_diagnostic'] = lambda *args, **kwargs: None
+    namespace['fetch_url_bytes'] = lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('image fetch unavailable'))
     fallback_delta = namespace['measure_visual_delta_against_baseline'](
         {'verification_mode': 'visual', 'requested_reference': 'before', 'before_cdn': 'https://cdn.example.com/before.png'},
         {'baseline': {'before': {'url': 'https://cdn.example.com/before.png'}}},
@@ -1433,8 +1492,9 @@ def run_verify_requests_supervisor_assessment():
         assert after_verify['proof_assessment_source'] is None
         assert after_verify['proof_assessment_request']['status'] == 'needs_supervising_agent_assessment'
         visual_delta = after_verify['proof_assessment_request']['visual_delta']
-        assert visual_delta['status'] == 'unmeasured'
-        assert visual_delta['passed'] is None
+        assert visual_delta['status'] == 'measured'
+        assert visual_delta['passed'] is True
+        assert visual_delta['changed_pixels'] == 12000
         semantic_context = after_verify['proof_assessment_request']['semantic_context']
         assert semantic_context['route']['expected_path'] == '/pricing'
         assert semantic_context['route']['after_observed_path'] == '/pricing'
@@ -1450,14 +1510,15 @@ def run_verify_requests_supervisor_assessment():
         assert artifact_production['image_output_count'] >= 1
         assert artifact_production['proof_evidence_present'] is False
         artifact_usage = after_verify['proof_assessment_request']['artifact_usage']
-        assert artifact_usage['missing_required_signals'] == ['visual_delta']
+        assert artifact_usage['missing_required_signals'] == []
         assert 'after-capture' in artifact_usage['supervisor_review_signals']
         assert 'baseline_context' in artifact_usage['required_signals']
         assert 'route_semantics' in artifact_usage['available_signals']
-        assert 'visual_delta.status=unmeasured' in after_verify['proof_assessment_request']['hard_blockers'][0]
+        assert 'visual_delta' in artifact_usage['available_signals']
+        assert after_verify['proof_assessment_request']['hard_blockers'] == []
         assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_contract']['required']['screenshot'] is True
         assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_production']['image_output_count'] >= 1
-        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_usage']['missing_required_signals'] == ['visual_delta']
+        assert after_verify['proof_assessment_request']['evidence_bundle']['artifact_usage']['missing_required_signals'] == []
         assert 'capture success is not proof' in '\n'.join(after_verify['proof_assessment_request']['instructions'])
         assert after_verify['verify_decision_request']['continue_with_stage'] is None
         assert after_verify['verify_results']['baseline']['before']['source'] == 'recon'
@@ -1496,6 +1557,55 @@ def run_verify_requests_supervisor_assessment():
             'verify_status': after_verify['verify_status'],
             'merge_recommendation': after_verify['merge_recommendation'],
             'assessment_status': after_verify['proof_assessment_request']['status'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_verify_routes_unmeasured_visual_delta_to_recovery():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-verify-visual-recovery-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'repo': 'example/repo',
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'before_cdn': 'https://cdn.example.com/before-artifact',
+            'proof_plan': 'Use the recon-confirmed /pricing route and capture the CTA state once it stabilizes.',
+            'capture_script': "noVisualDelta(); await page.waitForSelector('[data-testid=pricing-cta]'); await saveScreenshot('after-proof');",
+            'wait_for_selector': '[data-testid=pricing-cta]',
+            'recon_results': {
+                'baselines': {
+                    'before': {'path': '/pricing', 'url': 'https://cdn.example.com/before-artifact'},
+                },
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_unmeasured_visual_delta_recovery', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify['proof_assessment_request'] == {}
+        decision_request = after_verify['verify_decision_request']
+        assert decision_request['capture_quality']['decision'] == 'revise_capture'
+        assert decision_request['recommended_stage'] == 'verify'
+        assert decision_request['continue_with_stage'] == 'verify'
+        visual_delta = after_verify['evidence_bundle']['after']['visual_delta']
+        assert visual_delta['status'] == 'unmeasured'
+        assert visual_delta['diagnostic']['visual_diff_fallback']['status'] == 'error'
+        assert 'Visual delta recovery' in after_verify['verify_summary']
+
+        return {
+            'ok': True,
+            'verify_status': after_verify['verify_status'],
+            'continue_with_stage': decision_request['continue_with_stage'],
         }
     finally:
         shutil.rmtree(tempdir, ignore_errors=True)
@@ -2142,6 +2252,7 @@ if __name__ == '__main__':
         'capture_hint_rejects_route_specific_mode_only_match': run_capture_hint_rejects_route_specific_mode_only_match(),
         'author_applies_supervisor_packet': run_author_applies_supervisor_packet(),
         'verify_requests_supervisor_assessment': run_verify_requests_supervisor_assessment(),
+        'verify_routes_unmeasured_visual_delta_to_recovery': run_verify_routes_unmeasured_visual_delta_to_recovery(),
         'verify_structured_evidence_without_screenshot': run_verify_structured_evidence_without_screenshot(),
         'verify_audio_requires_proof_evidence': run_verify_audio_requires_proof_evidence(),
         'verify_audio_rejects_failed_nested_proof_evidence': run_verify_audio_rejects_failed_nested_proof_evidence(),

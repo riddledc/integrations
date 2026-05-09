@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.5.57
+
+### Patch Changes
+
+- Measure visual delta directly from before/after screenshot artifacts when possible and keep unmeasured visual-delta proofs in verify recovery instead of supervisor review.
+
 ## 0.5.56
 
 ### Patch Changes
