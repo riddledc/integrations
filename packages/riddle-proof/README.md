@@ -214,6 +214,32 @@ Expose that as `window.__riddleProofEvidence.playability` or
 still frame, including a generated image plate, is supporting evidence only and
 does not satisfy playable proof by itself.
 
+### Basic Gameplay Helpers
+
+`@riddledc/riddle-proof/basic-gameplay` exposes reusable proof primitives for
+route-by-route game/site suites. The helpers assess the public
+`riddle-proof.basic-gameplay.v1` evidence schema, attach Riddle screenshot
+artifact hashes back to phase metrics, resolve visual false negatives when
+artifact screenshots differ, and convert progression failures into catch
+records.
+
+```ts
+import {
+  assessBasicGameplayEvidence,
+  attachBasicGameplayArtifactScreenshotHashes,
+  createBasicGameplayCatchRecords,
+} from "@riddledc/riddle-proof/basic-gameplay";
+
+attachBasicGameplayArtifactScreenshotHashes(evidence, { artifacts });
+const assessment = assessBasicGameplayEvidence(evidence);
+const catches = createBasicGameplayCatchRecords(assessment, evidence);
+```
+
+The package owns generic contracts such as `state_path`, `state_call`,
+`property_path`, `number_unchanged`, held-key/window-call/evaluate action type
+constants, and JSON-safe text compaction. Site-specific manifests, selectors,
+and deterministic game scripts should stay in the caller.
+
 ### Server Preview Usage
 
 Server preview proof is most useful when the request, capture, and PR comment
