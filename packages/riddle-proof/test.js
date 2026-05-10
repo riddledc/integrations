@@ -20,16 +20,22 @@ import {
   createDisabledRiddleProofAgentAdapter,
   createCaptureDiagnostic,
   createCheckpointResponseTemplate,
+  assessRiddleProofProfileEvidence,
+  buildRiddleProofProfileScript,
+  collectRiddleProfileArtifactRefs,
   createRunStatusSnapshot,
   createRunState,
   createRiddleProofRunCard,
+  extractRiddleProofProfileResult,
   createRunResult,
   createCodexExecAgentAdapter,
   createLocalAgentAdapter,
   isSuccessfulStatus,
   isTerminalStatus,
+  normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
   redactForProofDiagnostics,
+  resolveRiddleProofProfileTargetUrl,
   extractPlayabilityEvidence,
   extractBasicGameplayEvidence,
   readRiddleProofRunStatus,
@@ -52,6 +58,7 @@ const cjs = require("./dist/index.cjs");
 const cjsDiagnostics = require("./dist/diagnostics.cjs");
 const cjsPlayability = require("./dist/playability.cjs");
 const cjsBasicGameplay = require("./dist/basic-gameplay.cjs");
+const cjsProfile = require("./dist/profile.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
@@ -68,6 +75,9 @@ assert.equal(typeof cjs.createBasicGameplayCatchRecords, "function");
 assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
+assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
+assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
@@ -180,6 +190,99 @@ assert(
   riddleClientCalls.some((call) => call.url === "https://upload.test/sp_test" && call.auth === null),
   "Riddle server-preview upload should not send API bearer auth to the signed upload URL",
 );
+
+const profile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "pricing-page-basic",
+  target: {
+    route: "/pricing",
+    viewports: [
+      { name: "mobile", width: 390, height: 844 },
+      { name: "desktop", width: 1440, height: 1000 },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/pricing" },
+    { type: "selector_visible", selector: "[data-testid='pricing-cards']" },
+    { type: "text_visible", text: "Start building" },
+    { type: "no_mobile_horizontal_overflow" },
+    { type: "no_fatal_console_errors" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
+const profileScript = buildRiddleProofProfileScript(profile);
+assert.ok(profileScript.includes('saveJson("proof.json"'));
+assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
+const profileEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "pricing-page-basic",
+  target_url: "https://example.com/pricing",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-10T00:00:00.000Z",
+  viewports: [
+    {
+      name: "mobile",
+      width: 390,
+      height: 844,
+      route: { requested: "https://example.com/pricing", observed: "/pricing", expected_path: "/pricing", matched: true, http_status: 200 },
+      body_text_sample: "Pricing Start building",
+      overflow_px: 0,
+      selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
+      text_matches: { "text:Start building": true },
+      screenshot_label: "pricing-page-basic-mobile",
+    },
+    {
+      name: "desktop",
+      width: 1440,
+      height: 1000,
+      route: { requested: "https://example.com/pricing", observed: "/pricing", expected_path: "/pricing", matched: true, http_status: 200 },
+      body_text_sample: "Pricing Start building",
+      overflow_px: 0,
+      selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
+      text_matches: { "text:Start building": true },
+      screenshot_label: "pricing-page-basic-desktop",
+    },
+  ],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 2 },
+};
+const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
+assert.equal(profileAssessment.status, "passed");
+assert.equal(profileAssessment.checks.length, 5);
+assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const overflowingProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [
+    { ...profileEvidence.viewports[0], overflow_px: 24 },
+    profileEvidence.viewports[1],
+  ],
+});
+assert.equal(overflowingProfileAssessment.status, "product_regression");
+assert.equal(overflowingProfileAssessment.checks.find((check) => check.type === "no_mobile_horizontal_overflow").status, "failed");
+const blockedProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [
+    {
+      ...profileEvidence.viewports[0],
+      navigation_error: "net::ERR_CONNECTION_REFUSED",
+      route: { ...profileEvidence.viewports[0].route, matched: false, error: "net::ERR_CONNECTION_REFUSED" },
+    },
+  ],
+});
+assert.equal(blockedProfileAssessment.status, "environment_blocked");
+assert.throws(
+  () => normalizeRiddleProofProfile({ name: "bad", target: { url: "https://example.com" }, checks: [{ type: "unknown_check" }] }),
+  /not supported/,
+);
+const profileArtifacts = collectRiddleProfileArtifactRefs({
+  artifacts: [
+    { name: "proof.json", url: "https://cdn.test/proof.json", kind: "json" },
+    { name: "pricing-page-basic-mobile.png", url: "https://cdn.test/mobile.png", kind: "screenshot" },
+  ],
+});
+assert.equal(profileArtifacts.length, 2);
+assert.equal(extractRiddleProofProfileResult({ value: profileAssessment })?.status, "passed");
 
 const metricWorkdir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-local-agent-metrics-"));
 const metricRunnerCalls = [];

@@ -92,6 +92,71 @@ file/object before resuming the run.
 uses the local Codex CLI adapter underneath, but the loop contract and CLI
 surface are intentionally not Codex-specific.
 
+## CI / Profile Mode
+
+Profile mode runs durable proof profiles against an existing site without an
+implementation step. Use it for audits, regression checks, CI smoke profiles,
+or as a stronger proof base before a change loop.
+
+```json
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "pricing-page-basic",
+  "target": {
+    "route": "/pricing",
+    "viewports": [
+      { "name": "mobile", "width": 390, "height": 844 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "auth": "none"
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/pricing" },
+    { "type": "selector_visible", "selector": "[data-testid='pricing-cards']" },
+    { "type": "text_visible", "text": "Start building" },
+    { "type": "no_mobile_horizontal_overflow" },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  }
+}
+```
+
+Run a profile with the hosted Riddle runner:
+
+```sh
+riddle-proof-loop run-profile \
+  --profile .riddle-proof/profiles/pricing.json \
+  --url https://example.com \
+  --runner riddle \
+  --output artifacts/riddle-proof/pricing
+```
+
+The package includes a generic starter profile at
+`examples/profiles/page-content-basic.json`; copy that shape into a repository
+profile directory and replace the selector/text checks with app-specific
+invariants.
+
+The result uses `riddle-proof.profile-result.v1` and separates product failures
+from weak proof and environment blockers:
+
+- `passed`: required evidence exists and checks passed.
+- `product_regression`: the app loaded, but an invariant failed.
+- `proof_insufficient`: capture did not produce enough evidence to decide.
+- `environment_blocked`: browser, network, auth, or runner setup blocked proof.
+- `configuration_error`: the profile or runner options are invalid.
+- `needs_human_review`: artifacts were collected, but automation cannot safely decide.
+
+`--output` writes `profile-result.json`, `summary.md`, and local copies of the
+structured `proof.json`, `console.json`, and `dom-summary.json` when they are
+available. Riddle screenshot URLs remain referenced in the result's artifact
+list. The profile/result schema is runner-agnostic; Riddle is the first hosted
+adapter.
+
 ## Runner Harness
 
 `runRiddleProof` is the reusable idea-to-PR workflow driver. It does not ship

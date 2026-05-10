@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import {
   createDisabledRiddleProofAgentAdapter,
   readRiddleProofRunStatus,
@@ -18,6 +19,23 @@ import {
   parseRiddleViewport,
   type RiddleClientConfig,
 } from "./riddle-client";
+import {
+  assessRiddleProofProfileEvidence,
+  buildRiddleProofProfileScript,
+  collectRiddleProfileArtifactRefs,
+  createRiddleProofProfileEnvironmentBlockedResult,
+  createRiddleProofProfileInsufficientResult,
+  extractRiddleProofProfileResult,
+  normalizeRiddleProofProfile,
+  profileStatusExitCode,
+  resolveRiddleProofProfileTargetUrl,
+  type RiddleProofProfile,
+  type RiddleProofProfileArtifactRef,
+  type RiddleProofProfileEvidence,
+  type RiddleProofProfileResult,
+  type RiddleProofProfileRunner,
+  type RiddleProofProfileViewport,
+} from "./profile";
 import type { RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
 
 type CliOptions = Record<string, string | boolean>;
@@ -30,6 +48,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--output <dir>]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720]",
@@ -252,6 +271,205 @@ function riddleClientConfig(options: CliOptions): RiddleClientConfig {
   };
 }
 
+function parseProfileViewports(value: string | undefined): RiddleProofProfileViewport[] | undefined {
+  if (!value) return undefined;
+  return value.split(",").map((part, index) => {
+    const trimmed = part.trim();
+    const named = /^([a-zA-Z0-9_-]+)=(\d+x\d+)$/.exec(trimmed);
+    const viewport = parseRiddleViewport(named ? named[2] : trimmed);
+    if (!viewport) throw new Error(`Invalid viewport ${trimmed}.`);
+    return {
+      name: named ? named[1] : `viewport-${index + 1}`,
+      width: viewport.width,
+      height: viewport.height,
+    };
+  });
+}
+
+function normalizeProfileForCli(options: CliOptions): RiddleProofProfile {
+  const rawProfile = readJsonValue(optionString(options, "profile"), "--profile");
+  return normalizeRiddleProofProfile(rawProfile, {
+    url: optionString(options, "url"),
+    route: optionString(options, "route"),
+    viewports: parseProfileViewports(optionString(options, "viewports") || optionString(options, "viewport")),
+  });
+}
+
+function profileResultMarkdown(result: RiddleProofProfileResult) {
+  const lines = [
+    `# Riddle Proof Profile: ${result.profile_name}`,
+    "",
+    `Status: ${result.status}`,
+    `Runner: ${result.runner}`,
+    `Captured: ${result.captured_at}`,
+    "",
+    result.summary,
+    "",
+    "## Checks",
+    "",
+  ];
+  for (const check of result.checks) {
+    lines.push(`- ${check.status}: ${check.label || check.type}`);
+    if (check.message) lines.push(`  ${check.message}`);
+  }
+  if (result.artifacts.riddle_artifacts?.length) {
+    lines.push("", "## Riddle Artifacts", "");
+    for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
+      lines.push(`- ${artifact.name || artifact.kind || "artifact"}${artifact.url ? `: ${artifact.url}` : ""}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function writeProfileOutput(outputDir: string | undefined, result: RiddleProofProfileResult) {
+  if (!outputDir) return;
+  mkdirSync(outputDir, { recursive: true });
+  writeFileSync(path.join(outputDir, "profile-result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "summary.md"), profileResultMarkdown(result));
+  if (result.evidence) writeFileSync(path.join(outputDir, "proof.json"), `${JSON.stringify(result, null, 2)}\n`);
+  if (result.evidence?.console) writeFileSync(path.join(outputDir, "console.json"), `${JSON.stringify(result.evidence.console, null, 2)}\n`);
+  if (result.evidence?.dom_summary) writeFileSync(path.join(outputDir, "dom-summary.json"), `${JSON.stringify(result.evidence.dom_summary, null, 2)}\n`);
+}
+
+async function readArtifactJson(artifact: RiddleProofProfileArtifactRef): Promise<Record<string, unknown> | undefined> {
+  const target = artifact.url || artifact.path;
+  if (!target) return undefined;
+  try {
+    const raw = artifact.url
+      ? await (await fetch(artifact.url)).text()
+      : existsSync(target)
+        ? readFileSync(target, "utf-8")
+        : "";
+    if (!raw.trim()) return undefined;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function profileResultFromRiddleArtifacts(
+  profile: RiddleProofProfile,
+  artifacts: RiddleProofProfileArtifactRef[],
+  fallbackInputs: unknown[],
+): Promise<RiddleProofProfileResult | undefined> {
+  for (const input of fallbackInputs) {
+    const result = extractRiddleProofProfileResult(input);
+    if (result) return result;
+  }
+  const proofArtifacts = artifacts
+    .filter((artifact) => /(^|\/)proof\.json(?:\.json)?$/i.test(artifact.name || artifact.url || artifact.path || ""))
+    .sort((left, right) => {
+      const leftName = left.name || left.url || left.path || "";
+      const rightName = right.name || right.url || right.path || "";
+      return Number(/proof\.json\.json$/i.test(rightName)) - Number(/proof\.json\.json$/i.test(leftName));
+    });
+  for (const artifact of proofArtifacts) {
+    const parsed = await readArtifactJson(artifact);
+    const result = extractRiddleProofProfileResult(parsed);
+    if (result) return result;
+  }
+  const evidenceArtifacts = artifacts.filter((artifact) => /profile-evidence|evidence\.json/i.test(artifact.name || artifact.url || artifact.path || ""));
+  for (const artifact of evidenceArtifacts) {
+    const parsed = await readArtifactJson(artifact);
+    if (parsed?.version === "riddle-proof.profile-evidence.v1") {
+      return assessRiddleProofProfileEvidence(profile, parsed as unknown as RiddleProofProfileEvidence, { artifacts });
+    }
+  }
+  return undefined;
+}
+
+function withRiddleMetadata(
+  result: RiddleProofProfileResult,
+  input: {
+    job_id?: string;
+    status?: string | null;
+    terminal?: boolean;
+    artifacts?: RiddleProofProfileArtifactRef[];
+  },
+): RiddleProofProfileResult {
+  return {
+    ...result,
+    riddle: {
+      ...(result.riddle || {}),
+      job_id: input.job_id || result.riddle?.job_id,
+      status: input.status ?? result.riddle?.status,
+      terminal: input.terminal ?? result.riddle?.terminal,
+    },
+    artifacts: {
+      ...result.artifacts,
+      riddle_artifacts: input.artifacts || result.artifacts.riddle_artifacts,
+    },
+  };
+}
+
+async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
+  const runner = (optionString(options, "runner") || "riddle") as RiddleProofProfileRunner;
+  if (runner !== "riddle") {
+    throw new Error(`Unsupported --runner ${runner}. The current CLI supports --runner riddle.`);
+  }
+  const targetUrl = resolveRiddleProofProfileTargetUrl(profile);
+  const client = createRiddleApiClient(riddleClientConfig(options));
+  let created: Record<string, unknown> | undefined;
+  try {
+    created = await client.runScript({
+      url: targetUrl,
+      script: buildRiddleProofProfileScript(profile),
+      viewport: profile.target.viewports[0],
+      timeoutSec: optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      sync: options.sync === true ? true : undefined,
+    });
+  } catch (error) {
+    return createRiddleProofProfileEnvironmentBlockedResult({ profile, runner, error });
+  }
+
+  const jobId = typeof created.job_id === "string"
+    ? created.job_id
+    : typeof created.id === "string"
+      ? created.id
+      : "";
+  if (!jobId) {
+    const directResult = extractRiddleProofProfileResult(created);
+    return directResult
+      ? withRiddleMetadata(directResult, { artifacts: collectRiddleProfileArtifactRefs(created) })
+      : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: collectRiddleProfileArtifactRefs(created) });
+  }
+
+  const poll = await client.pollJob(jobId, {
+    wait: true,
+    attempts: optionString(options, "attempts") ? Number(optionString(options, "attempts")) : undefined,
+    intervalMs: optionString(options, "intervalMs") ? Number(optionString(options, "intervalMs")) : undefined,
+  });
+  const artifacts = collectRiddleProfileArtifactRefs(poll.artifacts);
+  if (!poll.ok || !poll.terminal) {
+    return createRiddleProofProfileEnvironmentBlockedResult({
+      profile,
+      runner,
+      error: `Riddle job ${jobId} ended with status ${poll.status || "unknown"}.`,
+      riddle: { job_id: jobId, status: poll.status, terminal: poll.terminal },
+      artifacts,
+    });
+  }
+
+  const artifactResult = await profileResultFromRiddleArtifacts(profile, artifacts, [poll.job, poll.artifacts, created]);
+  if (!artifactResult) {
+    return createRiddleProofProfileInsufficientResult({
+      profile,
+      runner,
+      riddle: { job_id: jobId, status: poll.status, terminal: poll.terminal },
+      artifacts,
+    });
+  }
+  return withRiddleMetadata(artifactResult, {
+    job_id: jobId,
+    status: poll.status,
+    terminal: poll.terminal,
+    artifacts,
+  });
+}
+
 function requestForRun(options: CliOptions): RiddleProofRunParams {
   const statePath = optionString(options, "statePath");
   const withEngineModuleUrl = (request: RiddleProofRunParams): RiddleProofRunParams => {
@@ -303,6 +521,15 @@ async function main() {
     const snapshot = readRiddleProofRunStatus(statePath);
     if (!snapshot) throw new Error(`${statePath} is not a readable Riddle Proof run state.`);
     process.stdout.write(`${JSON.stringify(snapshot, null, 2)}\n`);
+    return;
+  }
+
+  if (command === "run-profile") {
+    const profile = normalizeProfileForCli(options);
+    const result = await runProfileForCli(profile, options);
+    writeProfileOutput(optionString(options, "output"), result);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exitCode = profileStatusExitCode(profile, result.status);
     return;
   }
 
