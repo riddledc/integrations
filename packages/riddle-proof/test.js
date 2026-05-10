@@ -12,6 +12,10 @@ import {
   applyPrLifecycleState,
   appendCaptureDiagnostic,
   assessBasicGameplayEvidence,
+  attachBasicGameplayArtifactScreenshotHashes,
+  BASIC_GAMEPLAY_ACTION_TYPES,
+  compactBasicGameplayText,
+  createBasicGameplayCatchRecords,
   createBasicGameplayCatchSummary,
   createDisabledRiddleProofAgentAdapter,
   createCaptureDiagnostic,
@@ -59,8 +63,11 @@ assert.equal(typeof cjsDiagnostics.summarizeCaptureArtifacts, "function");
 assert.equal(typeof cjs.assessPlayabilityEvidence, "function");
 assert.equal(typeof cjsPlayability.extractPlayabilityEvidence, "function");
 assert.equal(typeof cjs.assessBasicGameplayEvidence, "function");
+assert.equal(typeof cjs.attachBasicGameplayArtifactScreenshotHashes, "function");
+assert.equal(typeof cjs.createBasicGameplayCatchRecords, "function");
 assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
+assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
@@ -349,6 +356,120 @@ const inertGameplayAssessment = assessBasicGameplayEvidence({
 });
 assert.equal(inertGameplayAssessment.passed, false);
 assert.equal(inertGameplayAssessment.failure_counts.primary_control_inert, 1);
+
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("window-call"));
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("evaluate"));
+assert.equal(compactBasicGameplayText("ok \ud83d emoji 😀", 100), "ok emoji 😀");
+
+const progressionGameplayEvidence = {
+  version: "riddle-proof.basic-gameplay.v1",
+  site: "LilArcade",
+  results: [
+    {
+      name: "Cupcake Courier",
+      path: "/games/cupcake-courier",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "cupcake-before",
+        body_text_hash: "cupcake-before-text",
+      },
+      timed: {
+        screenshot_hash: "cupcake-before",
+        body_text_hash: "cupcake-before-text",
+      },
+      after_action: {
+        screenshot_hash: "cupcake-after",
+        body_text_hash: "cupcake-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "evaluate" }],
+      progression_checks: [
+        {
+          label: "invalid cupcake move does not increment steps",
+          type: "number_unchanged",
+          state_call: "gameAPI.getState",
+          property_path: "steps",
+          from_phase: "after_action",
+          to_phase: "after_continue",
+          before: { phase: "after_action", state_call: "gameAPI.getState", property_path: "steps", number: 1, count: 1, present: true },
+          after: { phase: "after_continue", state_call: "gameAPI.getState", property_path: "steps", number: 2, count: 1, present: true },
+        },
+      ],
+    },
+  ],
+};
+const progressionGameplayAssessment = assessBasicGameplayEvidence(progressionGameplayEvidence);
+assert.equal(progressionGameplayAssessment.passed, false);
+assert.equal(progressionGameplayAssessment.failure_counts.progression_assertion_failed, 1);
+assert.equal(progressionGameplayAssessment.failing_routes[0].suite_failures[0].state_call, "gameAPI.getState");
+assert.equal(progressionGameplayAssessment.failing_routes[0].suite_failures[0].property_path, "steps");
+const progressionCatchRecords = createBasicGameplayCatchRecords(progressionGameplayAssessment, progressionGameplayEvidence);
+assert.equal(progressionCatchRecords[0].code, "progression_assertion_failed");
+assert.equal(progressionCatchRecords[0].state_call, "gameAPI.getState");
+assert.equal(progressionCatchRecords[0].before.number, 1);
+
+const artifactBackedGameplayEvidence = {
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "Canvas Game",
+      path: "/games/canvas-game",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "canvas-before",
+        body_text_hash: "canvas-before-text",
+      },
+      timed: {
+        screenshot_hash: "canvas-before",
+        body_text_hash: "canvas-before-text",
+      },
+      after_action: {
+        screenshot_hash: "canvas-after",
+        body_text_hash: "canvas-after-text",
+        reset_control_count: 1,
+      },
+      after_continue: {
+        screenshot_hash: "canvas-after",
+        body_text_hash: "canvas-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      progression_checks: [
+        {
+          label: "canvas keeps moving",
+          type: "canvas_hash_changes",
+          ok: false,
+          reason: "canvas_or_visual_sample_hash_did_not_change",
+          from_phase: "after_action",
+          to_phase: "after_continue",
+          before: { phase: "after_action", first_canvas_hash: "same-canvas" },
+          after: { phase: "after_continue", first_canvas_hash: "same-canvas" },
+        },
+      ],
+    },
+  ],
+};
+attachBasicGameplayArtifactScreenshotHashes(artifactBackedGameplayEvidence, {
+  artifacts: [
+    { name: "canvas-game-after.png", kind: "screenshot", sha256: "after-one" },
+    { name: "canvas-game-after-continue.png", kind: "screenshot", sha256: "after-two" },
+  ],
+});
+assert.equal(artifactBackedGameplayEvidence.results[0].progression_checks[0].ok, true);
+assert.equal(artifactBackedGameplayEvidence.results[0].progression_checks[0].artifact_resolution.source, "riddle_screenshot_artifacts");
+assert.equal(assessBasicGameplayEvidence(artifactBackedGameplayEvidence).passed, true);
 
 const gameplayCatchSummary = createBasicGameplayCatchSummary({
   title: "Gem Mine texture warning",
