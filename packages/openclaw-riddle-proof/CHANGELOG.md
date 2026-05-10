@@ -1,5 +1,12 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.93
+
+### Patch Changes
+
+- Updated dependencies [716da8d]
+  - @riddledc/riddle-proof@0.6.0
+
 ## 0.4.91
 
 ### Patch Changes

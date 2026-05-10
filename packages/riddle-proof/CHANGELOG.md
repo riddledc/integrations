@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.6.0
+
+### Minor Changes
+
+- 716da8d: Promote reusable basic-gameplay proof primitives: progression assertions, artifact-backed screenshot resolution, state/state-call metric metadata, catch records, JSON-safe text compaction, and public action/assertion contract constants.
+
 ## 0.5.57
 
 ### Patch Changes
