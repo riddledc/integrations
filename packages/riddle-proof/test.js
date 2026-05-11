@@ -14,6 +14,7 @@ import {
   assessBasicGameplayEvidence,
   attachBasicGameplayArtifactScreenshotHashes,
   BASIC_GAMEPLAY_ACTION_TYPES,
+  BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES,
   compactBasicGameplayText,
   createBasicGameplayCatchRecords,
   createBasicGameplayCatchSummary,
@@ -431,6 +432,39 @@ assert.equal(basicGameplayAssessment.checked_routes, 1);
 assert.equal(basicGameplayAssessment.warning_counts.missing_reset_path, undefined);
 assert.equal(extractBasicGameplayEvidence(JSON.stringify(basicGameplayEvidence))?.version, "riddle-proof.basic-gameplay.v1");
 
+const terminalRecoveryAssessment = assessBasicGameplayEvidence({
+  results: [
+    {
+      name: "Terminal Canvas Game",
+      path: "/games/terminal-canvas",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        visible_canvas_count: 1,
+        screenshot_hash: "terminal-before",
+        body_text_hash: "terminal-text",
+      },
+      timed: {
+        screenshot_hash: "terminal-before",
+        body_text_hash: "terminal-text",
+      },
+      after_action: {
+        screenshot_hash: "terminal-after",
+        body_text_hash: "terminal-text",
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "key" }],
+      restart_action_results: [{ ok: true, action: "canvas-click" }],
+    },
+  ],
+});
+assert.equal(terminalRecoveryAssessment.warning_counts.missing_reset_path, undefined);
+assert.equal(terminalRecoveryAssessment.route_results[0].signals.reset_path_present, true);
+
 const inertGameplayAssessment = assessBasicGameplayEvidence({
   results: [
     {
@@ -462,6 +496,7 @@ assert.equal(inertGameplayAssessment.failure_counts.primary_control_inert, 1);
 
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("window-call"));
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("evaluate"));
+assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("number_at_least"));
 assert.equal(compactBasicGameplayText("ok \ud83d emoji 😀", 100), "ok emoji 😀");
 
 const progressionGameplayEvidence = {
@@ -516,6 +551,46 @@ const progressionCatchRecords = createBasicGameplayCatchRecords(progressionGamep
 assert.equal(progressionCatchRecords[0].code, "progression_assertion_failed");
 assert.equal(progressionCatchRecords[0].state_call, "gameAPI.getState");
 assert.equal(progressionCatchRecords[0].before.number, 1);
+
+const thresholdGameplayAssessment = assessBasicGameplayEvidence({
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "Threshold Game",
+      path: "/games/threshold",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "threshold-before",
+        body_text_hash: "threshold-before-text",
+      },
+      timed: {
+        screenshot_hash: "threshold-before",
+        body_text_hash: "threshold-before-text",
+      },
+      after_action: {
+        screenshot_hash: "threshold-after",
+        body_text_hash: "threshold-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "evaluate" }],
+      progression_checks: [
+        {
+          label: "proof counter reaches threshold",
+          type: "number_at_least",
+          min: 3,
+          after: { phase: "after_action", number: 3, count: 1, present: true },
+        },
+      ],
+    },
+  ],
+});
+assert.equal(thresholdGameplayAssessment.passed, true);
 
 const artifactBackedGameplayEvidence = {
   version: "riddle-proof.basic-gameplay.v1",

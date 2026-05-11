@@ -75,6 +75,8 @@ export const BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES = [
   "selector_text_matches",
   "number_increases",
   "number_decreases",
+  "number_at_least",
+  "number_gte",
   "number_unchanged",
   "number_stays_equal",
   "number_equals",
@@ -175,6 +177,7 @@ export interface RiddleProofBasicGameplayRouteEvidence {
   actionResults?: BasicGameplayActionResult[];
   continued_action_results?: BasicGameplayActionResult[];
   restart_action_results?: BasicGameplayActionResult[];
+  restartActionResults?: BasicGameplayActionResult[];
   progression_checks?: BasicGameplayProgressionCheck[];
   progressionChecks?: BasicGameplayProgressionCheck[];
   requires_reset?: boolean;
@@ -433,12 +436,15 @@ export function assessBasicGameplayRoute(
     numberValue(initial.enabled_clickable_count) > 0 ||
     numberValue(initial.visible_large_node_count) >= minSurfaceLargeNodes;
   const actionResults = listValue(route.action_results || route.actionResults) as BasicGameplayActionResult[];
+  const restartActionResults = listValue(route.restart_action_results || route.restartActionResults) as BasicGameplayActionResult[];
   const actionAttempted = actionResults.some((result) => result.ok === true && result.action !== "wait");
   const actionFailed = actionResults.some((result) => result.ok === false && result.action !== "wait");
+  const restartActionAttempted = restartActionResults.some((result) => result.ok === true && result.action !== "wait");
   const stateChangeObserved = actionChange.changed || timedChange.changed;
   const resetPathPresent = numberValue(initial.reset_control_count) > 0 ||
     numberValue(timed.reset_control_count) > 0 ||
-    numberValue(afterAction.reset_control_count) > 0;
+    numberValue(afterAction.reset_control_count) > 0 ||
+    restartActionAttempted;
   const responseStatus = firstNumber(route.http_status, route.response_status, route.status);
   const pageErrorCount = numberValue(route.page_error_count);
   const consoleErrorCount = numberValue(route.console_error_count);
@@ -546,6 +552,13 @@ export function assessBasicGameplayProgressionCheck(
       numericValue(after?.number) !== null &&
       numberValue(after?.number) < numberValue(before?.number);
     reason = ok ? null : "number_did_not_decrease";
+  } else if (type === "number_at_least" || type === "number_gte") {
+    const min = numericValue(check.min ?? check.expected ?? check.value);
+    if (min === null && hasExplicitResult) return resolveBasicGameplayProgressionCheckWithArtifactScreenshots({ ...check, ok, reason });
+    ok = numericValue(after?.number) !== null &&
+      min !== null &&
+      numberValue(after?.number) >= min;
+    reason = ok ? null : "number_below_minimum";
   } else if (type === "number_unchanged" || type === "number_stays_equal") {
     ok = numericValue(before?.number) !== null &&
       numericValue(after?.number) !== null &&
