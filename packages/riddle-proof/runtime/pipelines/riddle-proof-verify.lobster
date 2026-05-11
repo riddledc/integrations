@@ -15,8 +15,27 @@ steps:
       s = json.load(open(state_file))
       if not s.get('workspace_ready'):
           raise SystemExit('Workspace not ready. Run riddle-proof-setup first.')
-      if s.get('implementation_status') not in ('changes_detected', 'completed'):
+      implementation_mode = str(s.get('implementation_mode') or '').strip().lower()
+      workflow_mode = str(s.get('workflow_mode') or '').strip().lower()
+      require_diff = s.get('require_diff')
+      allow_code_changes = s.get('allow_code_changes')
+      def explicitly_false(value):
+          return value is False or str(value).strip().lower() in ('false', '0', 'no', 'off')
+      no_implementation_mode = (
+          s.get('implementation_status') == 'not_required'
+          or implementation_mode in ('none', 'audit', 'no_implementation', 'no-implementation')
+          or workflow_mode == 'audit'
+          or explicitly_false(require_diff)
+          or explicitly_false(allow_code_changes)
+      )
+      if not no_implementation_mode and s.get('implementation_status') not in ('changes_detected', 'completed'):
           raise SystemExit('Implementation not recorded. Run riddle-proof-implement after making code changes.')
+      if no_implementation_mode:
+          s['implementation_status'] = 'not_required'
+          s['implementation_mode'] = s.get('implementation_mode') or 'none'
+          s.setdefault('require_diff', False)
+          s.setdefault('allow_code_changes', False)
+          json.dump(s, open(state_file, 'w'), indent=2)
       print('VERIFY — ' + s.get('mode', 'server').upper())
       print('Proof goal: ' + s.get('change_request', ''))
       print('Success criteria: ' + (s.get('success_criteria') or '(none provided)'))
@@ -27,7 +46,10 @@ steps:
       if s.get('prod_cdn'):
           print('Prod baseline: ' + s.get('prod_cdn'))
       after_dir = s.get('after_worktree', '')
-      print('After worktree: ' + after_dir + (' (exists)' if os.path.exists(after_dir) else ' (MISSING)'))
+      if no_implementation_mode:
+          print('After worktree: not required for audit/no-diff verify')
+      else:
+          print('After worktree: ' + after_dir + (' (exists)' if os.path.exists(after_dir) else ' (MISSING)'))
       PYEOF
 
   - id: run_verify

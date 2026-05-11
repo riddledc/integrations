@@ -606,6 +606,16 @@ function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
 }
 
+const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
+const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
+const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");
+execFileSync("python3", ["-m", "py_compile", verifyRuntimePath.pathname]);
+assert.match(verifyRuntimeSource, /def audit_no_diff_mode/);
+assert.match(verifyRuntimeSource, /Audit\/no-diff mode skips after-worktree build/);
+assert.match(verifyRuntimeSource, /capture_current_target/);
+assert.match(verifyRuntimeSource, /visual_delta_required_for_state/);
+assert.match(verifyPipelineSource, /After worktree: not required for audit\/no-diff verify/);
+
 function withMeasuredVisualEvidence(state = {}) {
   return {
     ...state,

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import (
     append_capture_diagnostic,
     apply_auth_context,
+    build_capture_script,
     build_visual_proof_session,
     capture_proof_session_seed,
     capture_static_preview,
@@ -21,6 +22,7 @@ from util import (
     has_auth_context,
     invoke,
     invoke_retry,
+    join_url_path,
     load_state,
     prepare_server_preview,
     record_successful_capture_hint,
@@ -84,6 +86,82 @@ VISUAL_HEIGHT_KEYS = {'height', 'image_height', 'screenshot_height'}
 
 def capture_script_saves_screenshot(script):
     return 'saveScreenshot' in (script or '')
+
+
+def explicitly_false(value):
+    if value is False:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() in ('false', '0', 'no', 'off')
+    return False
+
+
+def audit_no_diff_mode(state):
+    implementation_mode = str(state.get('implementation_mode') or '').strip().lower()
+    workflow_mode = str(state.get('workflow_mode') or '').strip().lower()
+    return (
+        state.get('implementation_status') == 'not_required'
+        or implementation_mode in ('none', 'audit', 'no_implementation', 'no-implementation')
+        or workflow_mode == 'audit'
+        or explicitly_false(state.get('require_diff'))
+        or explicitly_false(state.get('allow_code_changes'))
+    )
+
+
+def implementation_ready_for_verify(state):
+    if audit_no_diff_mode(state):
+        return True
+    return state.get('implementation_status') in ('changes_detected', 'completed')
+
+
+def visual_delta_required_for_state(state):
+    return visual_delta_applies(state.get('verification_mode')) and not audit_no_diff_mode(state)
+
+
+def audit_current_capture_url(state, prod_url, expected_path):
+    target = (prod_url or '').strip()
+    server_path = (state.get('server_path') or '').strip()
+    if target:
+        parsed = urlparse(target)
+        if server_path and server_path != '/' and (not parsed.path or parsed.path == '/'):
+            return join_url_path(target, server_path)
+        return target
+    fallback = (state.get('target_url') or state.get('url') or '').strip()
+    if fallback:
+        return fallback
+    return ''
+
+
+def capture_current_target(state, target_url, label, capture_script, timeout=300):
+    script = build_capture_script(target_url, capture_script, label, state.get('wait_for_selector', ''))
+    args = {'script': script, 'timeout_sec': 60}
+    apply_auth_context(state, args)
+    shot = invoke_retry('riddle_script', args, retries=3, timeout=max(timeout, 120))
+    screenshots = shot.get('screenshots') or []
+    url = screenshots[0].get('url', '') if screenshots else extract_screenshot_url(shot, label)
+    return {
+        'ok': bool(url),
+        'capture_url': target_url,
+        'url': url,
+        'raw': shot,
+    }
+
+
+def baseline_payload_from_recon(state, results):
+    baseline = (results.get('baseline') or {}) if isinstance(results, dict) else {}
+    selected = baseline.get('prod') or baseline.get('before') or {}
+    url = selected.get('url') if isinstance(selected, dict) else ''
+    if not url:
+        return {'ok': False, 'error': 'Audit/no-diff verify has no current target URL and no recon screenshot to reuse.'}
+    return {
+        'ok': True,
+        'screenshots': [{'name': 'after-proof', 'url': url}],
+        'result': {
+            'audit_no_diff_reused_recon_baseline': True,
+            'baseline_source': selected.get('source') or 'recon',
+            'path': selected.get('path') or state.get('server_path') or '',
+        },
+    }
 
 
 def normalized_verification_mode(value):
@@ -1143,7 +1221,7 @@ def add_visual_delta_diagnostic(visual_delta, key, value):
 
 
 def measure_visual_delta_against_baseline(state, results, after_payload, current_visual_delta):
-    if not visual_delta_applies(state.get('verification_mode')):
+    if not visual_delta_required_for_state(state):
         return current_visual_delta
     if isinstance(current_visual_delta, dict) and current_visual_delta.get('status') == 'measured':
         return current_visual_delta
@@ -1438,6 +1516,14 @@ def artifact_contract_for_mode(verification_mode):
     }
 
 
+def artifact_contract_for_state(state):
+    contract = artifact_contract_for_mode(state.get('verification_mode'))
+    if audit_no_diff_mode(state):
+        contract['required']['visual_delta'] = False
+        contract['optional']['visual_delta'] = True
+    return contract
+
+
 def artifact_production_summary(payload, supporting):
     artifact_summary = summarize_capture_artifacts(payload)
     return {
@@ -1484,7 +1570,7 @@ def artifact_signal_availability(state, after_observation, supporting, visual_de
 
 
 def artifact_usage_summary(state, after_observation, supporting, visual_delta, required_baseline_present, semantic_context, evidence_basis):
-    contract = artifact_contract_for_mode(state.get('verification_mode'))
+    contract = artifact_contract_for_state(state)
     available = artifact_signal_availability(
         state,
         after_observation,
@@ -1810,14 +1896,21 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
     proof_evidence = extract_proof_evidence(after_payload)
     playability_assessment = assess_playability_evidence(proof_evidence)
     playability_evidence = extract_playability_evidence(proof_evidence)
-    visual_delta = (
-        extract_visual_delta(after_payload)
-        if visual_delta_applies(state.get('verification_mode'))
-        else {'status': 'not_applicable', 'passed': None, 'reason': 'Verification mode does not require visual delta gating.'}
-    )
+    if audit_no_diff_mode(state):
+        visual_delta = {
+            'status': 'not_applicable',
+            'passed': None,
+            'reason': 'Audit/no-diff verification judges current target evidence directly and does not require a before/after implementation delta.',
+        }
+    else:
+        visual_delta = (
+            extract_visual_delta(after_payload)
+            if visual_delta_applies(state.get('verification_mode'))
+            else {'status': 'not_applicable', 'passed': None, 'reason': 'Verification mode does not require visual delta gating.'}
+        )
     visual_delta = measure_visual_delta_against_baseline(state, results, after_payload, visual_delta)
     semantic_context = build_semantic_context(state, results, after_observation, expected_path)
-    artifact_contract = artifact_contract_for_mode(state.get('verification_mode'))
+    artifact_contract = artifact_contract_for_state(state)
     artifact_production = artifact_production_summary(after_payload, supporting)
     artifact_usage = artifact_usage_summary(
         state,
@@ -1918,7 +2011,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
 
     artifact_contract = (evidence_bundle or {}).get('artifact_contract') if isinstance(evidence_bundle, dict) else None
     if not isinstance(artifact_contract, dict):
-        artifact_contract = artifact_contract_for_mode(verification_mode)
+        artifact_contract = artifact_contract_for_state(state)
     artifact_production = (evidence_bundle or {}).get('artifact_production') if isinstance(evidence_bundle, dict) else None
     if not isinstance(artifact_production, dict):
         artifact_production = artifact_production_summary(payload, supporting)
@@ -1935,7 +2028,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_bundle['artifact_contract'] = artifact_contract
         evidence_bundle['artifact_production'] = artifact_production
         evidence_bundle['artifact_usage'] = artifact_usage
-    visual_delta_blocker = visual_delta_blocker_for_mode(verification_mode, visual_delta)
+    visual_delta_blocker = '' if audit_no_diff_mode(state) else visual_delta_blocker_for_mode(verification_mode, visual_delta)
     hard_blockers = [visual_delta_blocker] if visual_delta_blocker else []
     if verification_mode in PLAYABILITY_MODES and not supporting.get('playability_ready'):
         assessment = supporting.get('playability_assessment') or {}
@@ -1945,6 +2038,30 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
             'playability evidence blocks ready_to_ship for playable/gameplay proof'
             + (f': {detail}' if detail else '.')
         )
+
+    instructions = [
+        'The supervising agent owns proof assessment. Inspect the recon baseline(s), after evidence, and any structured artifacts together.',
+        'Decide whether the evidence is ready_to_ship or should continue internally through author, implement, or recon.',
+        'Hard blockers cannot be overridden by supervisor judgment; if hard_blockers is non-empty, do not choose ready_to_ship.',
+        'Do not mark ready_to_ship if the before/prod baseline is blank, shell-only, generic, or not visibly tied to the requested feature.',
+        'Use semantic_context.route plus headings/buttons/text anchors to ground route and content judgment before treating a screenshot as wrong-route.',
+        'For visual/UI modes, use screenshots plus after_observation.details.visible_text_sample, headings, buttons, links, canvas_count, and large_visible_elements to explain what the proof actually shows.',
+    ]
+    if audit_no_diff_mode(state):
+        instructions.append(
+            'Audit/no-diff mode intentionally has implementation_status=not_required and visual_delta.status=not_applicable; judge the current target evidence directly instead of requiring an implementation diff.'
+        )
+    else:
+        instructions.append(
+            'For visual/UI polish, capture success is not proof. If visual_delta.status is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.'
+        )
+    instructions.extend([
+        'For playable/gameplay proof, screenshots are supporting evidence only. Do not mark ready_to_ship unless playability_assessment.passed is true and the proof shows accepted input, state/time progression, and playfield/canvas pixel motion.',
+        'For data/audio/log/metrics/custom modes, judge the structured evidence bundle and proof_evidence_sample directly; screenshots are optional supporting context.',
+        'The summary must name the concrete change, the target route/UI, what changed in after evidence, and why the stop condition is satisfied.',
+        'Only set escalation_target=human when you conclude the workflow has hit a real wall or is not converging.',
+        'Pass the judgment back via proof_assessment_json and resume the workflow.',
+    ])
 
     return {
         'status': 'needs_supervising_agent_assessment',
@@ -1961,20 +2078,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'artifact_production': artifact_production,
         'artifact_usage': artifact_usage,
         'hard_blockers': hard_blockers,
-        'instructions': [
-            'The supervising agent owns proof assessment. Inspect the recon baseline(s), after evidence, and any structured artifacts together.',
-            'Decide whether the evidence is ready_to_ship or should continue internally through author, implement, or recon.',
-            'Hard blockers cannot be overridden by supervisor judgment; if hard_blockers is non-empty, do not choose ready_to_ship.',
-            'Do not mark ready_to_ship if the before/prod baseline is blank, shell-only, generic, or not visibly tied to the requested feature.',
-            'Use semantic_context.route plus headings/buttons/text anchors to ground route and content judgment before treating a screenshot as wrong-route.',
-            'For visual/UI modes, use screenshots plus after_observation.details.visible_text_sample, headings, buttons, links, canvas_count, and large_visible_elements to explain what the proof actually shows.',
-            'For visual/UI polish, capture success is not proof. If visual_delta.status is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.',
-            'For playable/gameplay proof, screenshots are supporting evidence only. Do not mark ready_to_ship unless playability_assessment.passed is true and the proof shows accepted input, state/time progression, and playfield/canvas pixel motion.',
-            'For data/audio/log/metrics/custom modes, judge the structured evidence bundle and proof_evidence_sample directly; screenshots are optional supporting context.',
-            'The summary must name the concrete change, the target route/UI, what changed in after evidence, and why the stop condition is satisfied.',
-            'Only set escalation_target=human when you conclude the workflow has hit a real wall or is not converging.',
-            'Pass the judgment back via proof_assessment_json and resume the workflow.',
-        ],
+        'instructions': instructions,
         'response_schema': {
             'decision': 'ready_to_ship | needs_richer_proof | revise_capture | needs_recon | needs_implementation',
             'summary': 'string',
@@ -1992,14 +2096,22 @@ capture_script = (s.get('capture_script') or '').strip()
 if not capture_script:
     raise SystemExit('capture_script not set in state. Recon should finish homework first, then verify should receive the real capture plan.')
 
-if s.get('implementation_status') not in ('changes_detected', 'completed'):
+no_implementation_mode = audit_no_diff_mode(s)
+if not implementation_ready_for_verify(s):
     raise SystemExit('Implementation not recorded. Make the code changes and run riddle-proof-implement before verify.')
+if no_implementation_mode and s.get('implementation_status') != 'not_required':
+    s['implementation_status'] = 'not_required'
+    s['implementation_mode'] = s.get('implementation_mode') or 'none'
+    if 'require_diff' not in s:
+        s['require_diff'] = False
+    if 'allow_code_changes' not in s:
+        s['allow_code_changes'] = False
 
 mode = s.get('mode', 'server')
 reference = s.get('requested_reference') or s.get('reference', 'both')
 prod_url = (s.get('prod_url') or '').strip()
 after_dir = s.get('after_worktree', '').strip()
-if not after_dir or not os.path.exists(after_dir):
+if not no_implementation_mode and (not after_dir or not os.path.exists(after_dir)):
     raise SystemExit('after_worktree not found. Run setup first.')
 
 build_cmd = s.get('build_command', 'npm run build')
@@ -2069,82 +2181,122 @@ if existing_before:
 if existing_prod:
     print('Prod baseline: ' + existing_prod)
 
-# AFTER (always from after worktree)
-record_verify_phase('build', 'running', 'Building after worktree for verify capture.')
-print('Building after worktree...')
-build_attempt = run_project_build(after_dir, build_cmd, timeout=600, clean_cache_dir='.next')
-br = build_attempt.get('result')
-if build_attempt.get('clean_retry_used'):
-    print('Verify build recovered after cleaning .next cache.')
-if br.returncode != 0:
-    record_verify_phase('build', 'failed', 'After build failed: ' + br.stderr[:300])
-    raise SystemExit('After build failed: ' + br.stderr[:500])
-if build_attempt.get('attempts'):
-    s['verify_build_attempts'] = build_attempt['attempts']
-    s['verify_build_clean_retry_used'] = bool(build_attempt.get('clean_retry_used'))
-record_verify_phase('build', 'completed', 'After worktree build completed.')
-
 after_payload = {}
-static_reason = should_use_static_preview(after_dir, s) if mode == 'server' else ''
-record_verify_phase('capture', 'running', 'Capturing after-proof evidence.')
-if mode == 'server' and not static_reason:
-    build_dir, server_command, server_exclude = prepare_server_preview(after_dir, s)
-
-    server_args = {
-        'directory': build_dir,
-        'image': s['server_image'],
-        'command': server_command,
-        'port': int(s['server_port']),
-        'wait_until': 'domcontentloaded',
-        'readiness_timeout': 180,
-        'timeout': 300,
-        'env': {'PORT': str(s['server_port']), 'HOSTNAME': '0.0.0.0'},
-        'exclude': server_exclude,
-    }
-    if s.get('server_path'):
-        server_args['path'] = s['server_path']
-        server_args['readiness_path'] = '/' if has_auth_context(s) else s['server_path']
-    if s.get('color_scheme'):
-        server_args['color_scheme'] = s['color_scheme']
-    if s.get('wait_for_selector'):
-        server_args['wait_for_selector'] = s['wait_for_selector']
-    apply_auth_context(s, server_args)
-    server_args['script'] = probe_capture_script
-
-    print('Running after server preview from: ' + build_dir)
-    shot = invoke_retry('riddle_server_preview', server_args, retries=3, timeout=420)
-    append_capture_diagnostic(s, 'after', 'riddle_server_preview', server_args, shot)
-    after_payload = shot
-    capture_error = capture_payload_error(after_payload)
-    if capture_error:
-        abort_capture_failure(s, results, expected_path, capture_error, after_payload)
-    url = extract_screenshot_url(shot, 'after-proof')
-    if not url:
-        print('WARNING: After server preview no screenshot.')
-    results['after'] = {'screenshots': [{'url': url}] if url else [], 'raw': shot}
-    s['after_cdn'] = url
-
+if no_implementation_mode:
+    record_verify_phase('build', 'completed', 'Audit/no-diff mode skips after-worktree build.')
+    current_url = audit_current_capture_url(s, prod_url, expected_path)
+    record_verify_phase('capture', 'running', 'Capturing current target evidence for audit/no-diff verify.')
+    if current_url:
+        print('Audit/no-diff verify capture at: ' + current_url)
+        capture = capture_current_target(s, current_url, 'after-proof', probe_capture_script, timeout=300)
+        after_payload = capture.get('raw') or capture
+        append_capture_diagnostic(
+            s,
+            'after',
+            'riddle_script',
+            {'target_url': current_url, 'audit_no_diff': True},
+            after_payload,
+        )
+        capture_error = capture_payload_error(after_payload)
+        if capture_error:
+            abort_capture_failure(s, results, expected_path, capture_error, after_payload)
+        results['after'] = {'screenshots': [{'url': capture.get('url', '')}] if capture.get('url') else [], 'raw': after_payload}
+        s['after_cdn'] = capture.get('url', '')
+        s['after_capture_source'] = 'audit_current_target'
+        s['audit_current_url'] = current_url
+    else:
+        print('Audit/no-diff verify has no current target URL; reusing recon screenshot as current evidence.')
+        after_payload = baseline_payload_from_recon(s, results)
+        append_capture_diagnostic(
+            s,
+            'after',
+            'recon_baseline_reuse',
+            {'audit_no_diff': True},
+            after_payload,
+        )
+        capture_error = capture_payload_error(after_payload)
+        if capture_error:
+            abort_capture_failure(s, results, expected_path, capture_error, after_payload)
+        url = extract_screenshot_url(after_payload, 'after-proof')
+        results['after'] = {'screenshots': [{'url': url}] if url else [], 'raw': after_payload}
+        s['after_cdn'] = url
+        s['after_capture_source'] = 'audit_recon_baseline'
 else:
-    if static_reason:
-        print('Static preview fallback for after capture: ' + static_reason)
-    old_id = s.get('after_preview_id', '')
-    if old_id:
-        invoke('riddle_preview_delete', {'id': old_id}, timeout=30)
-    capture = capture_static_preview(s, after_dir, 'after', probe_capture_script, timeout=300, target_path=s.get('server_path', ''))
-    s['after_preview_id'] = capture.get('preview_id', '')
-    after_payload = ((capture.get('raw') or {}).get('capture') or (capture.get('raw') or {}) or capture)
-    append_capture_diagnostic(
-        s,
-        'after',
-        'riddle_static_preview',
-        {'target_path': s.get('server_path', ''), 'static_fallback_reason': static_reason},
-        after_payload,
-    )
-    capture_error = capture_payload_error(after_payload)
-    if capture_error:
-        abort_capture_failure(s, results, expected_path, capture_error, after_payload)
-    results['after'] = {'screenshots': [{'url': capture.get('url', '')}] if capture.get('url') else [], 'raw': capture.get('raw')}
-    s['after_cdn'] = capture.get('url', '')
+    # AFTER (from after worktree)
+    record_verify_phase('build', 'running', 'Building after worktree for verify capture.')
+    print('Building after worktree...')
+    build_attempt = run_project_build(after_dir, build_cmd, timeout=600, clean_cache_dir='.next')
+    br = build_attempt.get('result')
+    if build_attempt.get('clean_retry_used'):
+        print('Verify build recovered after cleaning .next cache.')
+    if br.returncode != 0:
+        record_verify_phase('build', 'failed', 'After build failed: ' + br.stderr[:300])
+        raise SystemExit('After build failed: ' + br.stderr[:500])
+    if build_attempt.get('attempts'):
+        s['verify_build_attempts'] = build_attempt['attempts']
+        s['verify_build_clean_retry_used'] = bool(build_attempt.get('clean_retry_used'))
+    record_verify_phase('build', 'completed', 'After worktree build completed.')
+
+    static_reason = should_use_static_preview(after_dir, s) if mode == 'server' else ''
+    record_verify_phase('capture', 'running', 'Capturing after-proof evidence.')
+    if mode == 'server' and not static_reason:
+        build_dir, server_command, server_exclude = prepare_server_preview(after_dir, s)
+
+        server_args = {
+            'directory': build_dir,
+            'image': s['server_image'],
+            'command': server_command,
+            'port': int(s['server_port']),
+            'wait_until': 'domcontentloaded',
+            'readiness_timeout': 180,
+            'timeout': 300,
+            'env': {'PORT': str(s['server_port']), 'HOSTNAME': '0.0.0.0'},
+            'exclude': server_exclude,
+        }
+        if s.get('server_path'):
+            server_args['path'] = s['server_path']
+            server_args['readiness_path'] = '/' if has_auth_context(s) else s['server_path']
+        if s.get('color_scheme'):
+            server_args['color_scheme'] = s['color_scheme']
+        if s.get('wait_for_selector'):
+            server_args['wait_for_selector'] = s['wait_for_selector']
+        apply_auth_context(s, server_args)
+        server_args['script'] = probe_capture_script
+
+        print('Running after server preview from: ' + build_dir)
+        shot = invoke_retry('riddle_server_preview', server_args, retries=3, timeout=420)
+        append_capture_diagnostic(s, 'after', 'riddle_server_preview', server_args, shot)
+        after_payload = shot
+        capture_error = capture_payload_error(after_payload)
+        if capture_error:
+            abort_capture_failure(s, results, expected_path, capture_error, after_payload)
+        url = extract_screenshot_url(shot, 'after-proof')
+        if not url:
+            print('WARNING: After server preview no screenshot.')
+        results['after'] = {'screenshots': [{'url': url}] if url else [], 'raw': shot}
+        s['after_cdn'] = url
+
+    else:
+        if static_reason:
+            print('Static preview fallback for after capture: ' + static_reason)
+        old_id = s.get('after_preview_id', '')
+        if old_id:
+            invoke('riddle_preview_delete', {'id': old_id}, timeout=30)
+        capture = capture_static_preview(s, after_dir, 'after', probe_capture_script, timeout=300, target_path=s.get('server_path', ''))
+        s['after_preview_id'] = capture.get('preview_id', '')
+        after_payload = ((capture.get('raw') or {}).get('capture') or (capture.get('raw') or {}) or capture)
+        append_capture_diagnostic(
+            s,
+            'after',
+            'riddle_static_preview',
+            {'target_path': s.get('server_path', ''), 'static_fallback_reason': static_reason},
+            after_payload,
+        )
+        capture_error = capture_payload_error(after_payload)
+        if capture_error:
+            abort_capture_failure(s, results, expected_path, capture_error, after_payload)
+        results['after'] = {'screenshots': [{'url': capture.get('url', '')}] if capture.get('url') else [], 'raw': capture.get('raw')}
+        s['after_cdn'] = capture.get('url', '')
 
 after_observation = evaluate_capture_quality(after_payload, expected_path, verification_mode)
 results['after']['observation'] = after_observation
@@ -2237,7 +2389,7 @@ if s.get('proof_session_artifact_url'):
 visual_delta = ((evidence_bundle.get('after') or {}).get('visual_delta') or {})
 if visual_delta.get('status') != 'not_applicable':
     summary_lines.append('Visual delta gate: ' + compact_value(visual_delta, limit=700))
-visual_delta_blocker = visual_delta_blocker_for_mode(s.get('verification_mode'), visual_delta)
+visual_delta_blocker = '' if no_implementation_mode else visual_delta_blocker_for_mode(s.get('verification_mode'), visual_delta)
 if visual_delta_blocker:
     summary_lines.append('Visual delta hard gate: ' + visual_delta_blocker)
 
@@ -2257,7 +2409,7 @@ visual_delta_recovery = build_visual_delta_recovery_decision(
     s.get('verification_mode'),
     visual_delta,
     visual_delta_blocker,
-)
+) if not no_implementation_mode else None
 if visual_delta_recovery:
     summary_lines.append('Visual delta recovery: ' + visual_delta_recovery['summary'])
 
@@ -2285,15 +2437,19 @@ if has_good_evidence:
     s['proof_assessment'] = {}
     s['proof_assessment_source'] = None
     s['proof_assessment_request'] = supervisor_request
+    next_stage_options = ['verify', 'author', 'recon'] if no_implementation_mode else ['verify', 'author', 'implement', 'ship', 'recon']
+    fields_agent_may_update = ['proof_assessment_json', 'capture_script', 'server_path', 'wait_for_selector', 'proof_plan', 'assertions_json']
+    if not no_implementation_mode:
+        fields_agent_may_update.append('implementation_notes')
     s['verify_decision_request'] = {
         'status': s['verify_status'],
         'summary': 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.',
         'expected_path': expected_path,
         'latest_observation': after_observation,
-        'next_stage_options': ['verify', 'author', 'implement', 'ship', 'recon'],
+        'next_stage_options': next_stage_options,
         'recommended_stage': None,
         'continue_with_stage': None,
-        'fields_agent_may_update': ['proof_assessment_json', 'capture_script', 'server_path', 'wait_for_selector', 'implementation_notes', 'proof_plan', 'assertions_json'],
+        'fields_agent_may_update': fields_agent_may_update,
         'assessment_request': supervisor_request,
         'instructions': [
             'Inspect the recon baseline(s), after evidence, and any structured artifacts together.',
@@ -2305,6 +2461,7 @@ if has_good_evidence:
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
     capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker)
+    next_stage_options = ['author', 'verify', 'recon'] if no_implementation_mode else ['author', 'verify', 'implement', 'recon']
     s['verify_status'] = 'capture_incomplete'
     s['merge_recommendation'] = 'do-not-merge'
     s['proof_assessment'] = {}
@@ -2316,7 +2473,7 @@ else:
         'expected_path': expected_path,
         'latest_observation': after_observation,
         'capture_quality': capture_retry,
-        'next_stage_options': ['author', 'verify', 'implement', 'recon'],
+        'next_stage_options': next_stage_options,
         'recommended_stage': capture_retry.get('recommended_stage') or 'author',
         'continue_with_stage': capture_retry.get('continue_with_stage') or 'author',
         'fields_agent_may_update': ['capture_script', 'server_path', 'wait_for_selector', 'proof_plan'],

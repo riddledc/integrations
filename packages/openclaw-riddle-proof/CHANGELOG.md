@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.96
+
+### Patch Changes
+
+- Allow audit/no-diff verify runs to accept implementation_status=not_required, skip after-worktree implementation evidence, and judge current target evidence directly.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.7.2
+
 ## 0.4.95
 
 ### Patch Changes

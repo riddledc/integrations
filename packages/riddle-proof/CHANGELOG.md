@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.2
+
+### Patch Changes
+
+- Allow audit/no-diff verify runs to accept implementation_status=not_required, skip after-worktree implementation evidence, and judge current target evidence directly.
+
 ## 0.7.1
 
 ### Patch Changes
