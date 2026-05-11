@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.99
+
+### Patch Changes
+
+- Treat audit/no-diff verify completion as a terminal completed result instead of an unhandled checkpoint blocker.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.7.5
+
 ## 0.4.98
 
 ### Patch Changes

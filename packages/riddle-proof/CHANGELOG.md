@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.5
+
+### Patch Changes
+
+- Treat audit/no-diff verify completion as a terminal completed result instead of an unhandled checkpoint blocker.
+
 ## 0.7.4
 
 ### Patch Changes

@@ -1397,6 +1397,21 @@ async function routeCheckpoint(
     };
   }
 
+  if (checkpoint === "verify_audit_complete") {
+    return {
+      terminal: terminalResult(
+        state,
+        "completed",
+        result,
+        result.summary || "Riddle Proof audit complete.",
+        {
+          audit_complete: true,
+          ship_disabled: true,
+        },
+      ),
+    };
+  }
+
   if (input.dry_run || request.dry_run) {
     return {
       blocker: {

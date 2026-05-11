@@ -973,6 +973,40 @@ async function run() {
   assert(resumedCheckpointState.proof_contract.artifact_contract.required.playability === true, 'accepted author packet should persist artifact contract');
   assert(resumedCheckpointState.checkpoint_history.length === 2, 'wrapper state should record both packet and response');
 
+  const auditCompleteHarnessStatePath = path.join(checkpointHarnessDir, 'audit-complete-wrapper-state.json');
+  const auditComplete = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Audit the deployed site without changes.',
+      engine_state_path: checkpointEngineStatePath,
+      harness_state_path: auditCompleteHarnessStatePath,
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+      ship_mode: 'none',
+    },
+    state_path: auditCompleteHarnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: checkpointEngineStatePath,
+          checkpoint: 'verify_audit_complete',
+          summary: 'Audit proof is complete and no ship action is required.',
+          checkpointContract: {
+            checkpoint: 'verify_audit_complete',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    config: { defaultShipMode: 'none' },
+  });
+  assert(auditComplete.status === 'completed', 'verify_audit_complete should be a terminal completed audit, not an unhandled blocker');
+  assert(!auditComplete.blocker, 'verify_audit_complete should not create a wrapper blocker');
+  assert(auditComplete.raw.audit_complete === true, 'audit completion should be labeled in terminal metadata');
+
   const duplicateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: {
       repo: 'riddledc/example',
