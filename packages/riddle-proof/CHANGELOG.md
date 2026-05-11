@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.3
+
+### Patch Changes
+
+- Forward audit/no-diff runtime flags through setup so no-implementation runs preserve implementation_mode, require_diff, and allow_code_changes across the wrapper/runtime boundary.
+
 ## 0.7.2
 
 ### Patch Changes

@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.97
+
+### Patch Changes
+
+- Forward audit/no-diff runtime flags through setup so no-implementation runs preserve implementation_mode, require_diff, and allow_code_changes across the wrapper/runtime boundary.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.7.3
+
 ## 0.4.96
 
 ### Patch Changes

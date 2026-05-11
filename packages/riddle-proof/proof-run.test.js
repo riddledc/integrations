@@ -150,6 +150,9 @@ state.recon_results = state.recon_results || { max_attempts: 4, attempt_history:
 state.stage_attempts = state.stage_attempts || {};
 state.stage_decision_request = state.stage_decision_request || {};
 if (stage === 'setup') {
+  if (payload.implementation_mode !== undefined) state.implementation_mode = payload.implementation_mode;
+  if (payload.require_diff !== undefined) state.require_diff = payload.require_diff;
+  if (payload.allow_code_changes !== undefined) state.allow_code_changes = payload.allow_code_changes;
   state.workspace_ready = true;
   state.stage = 'setup';
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
@@ -492,8 +495,14 @@ async function run() {
     repo: 'openclaw/openclaw-plugins',
     change_request: 'Audit the deployed site',
     mode: 'audit',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
   }, config);
   assert(auditArgs.mode === '', 'audit workflow mode should not be passed to runtime as a preview mode');
+  assert(auditArgs.implementation_mode === 'none', 'setup args should preserve audit/no-diff implementation mode');
+  assert(auditArgs.require_diff === false, 'setup args should preserve require_diff=false');
+  assert(auditArgs.allow_code_changes === false, 'setup args should preserve allow_code_changes=false');
 
   const patched = core.mergeStateFromParams(fakeStatePath, {
     action: 'author',
@@ -688,6 +697,25 @@ async function run() {
   process.env.RIDDLE_PROOF_LOBSTER_COMMAND = process.execPath;
   process.env.RIDDLE_PROOF_LOBSTER_SCRIPT = path.join(fakeLobsterRoot, 'bin', 'lobster');
 
+  const auditSetupStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-audit-setup-')), 'state.json');
+  const localEngine = engineMod.createRiddleProofEngine({ riddleProofDir: fakeSkillDir, defaultReviewer: 'octocat' });
+  const auditSetup = await localEngine.execute({
+    action: 'setup',
+    state_path: auditSetupStatePath,
+    repo: 'openclaw/openclaw-plugins',
+    branch: 'agent/openclaw/audit-setup',
+    change_request: 'Audit the deployed site without implementation',
+    mode: 'audit',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+  });
+  assert(auditSetup.ok === true, 'audit/no-diff setup should complete through the runtime');
+  const auditSetupState = readJson(auditSetupStatePath);
+  assert(auditSetupState.implementation_mode === 'none', 'audit/no-diff setup should deliver implementation_mode to the runtime');
+  assert(auditSetupState.require_diff === false, 'audit/no-diff setup should deliver require_diff=false to the runtime');
+  assert(auditSetupState.allow_code_changes === false, 'audit/no-diff setup should deliver allow_code_changes=false to the runtime');
+
   const reconLoopStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-recon-')), 'state.json');
   writeJson(reconLoopStatePath, {
     workspace_ready: true,
@@ -709,7 +737,6 @@ async function run() {
     prod_cdn: '',
   });
   const reconConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir, statePath: reconLoopStatePath, defaultReviewer: 'octocat' }, { action: 'run', state_path: reconLoopStatePath });
-  const localEngine = engineMod.createRiddleProofEngine({ riddleProofDir: fakeSkillDir, defaultReviewer: 'octocat' });
   assert(localEngine.resolveConfig({ action: 'run', state_path: reconLoopStatePath }).statePath === reconConfig.statePath, 'local engine should resolve the same state path as the wrapper config');
   const reconBlocked = await localEngine.execute({ action: 'run', state_path: reconLoopStatePath });
   assert(
