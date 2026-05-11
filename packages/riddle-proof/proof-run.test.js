@@ -382,6 +382,7 @@ async function run() {
   assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
   assert(typeof harnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.js should expose runRiddleProofEngineHarness');
   assert(typeof cjsHarnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.cjs should expose runRiddleProofEngineHarness');
+  assert(typeof core.noImplementationModeFor === 'function', 'dist/proof-run-core.js should expose noImplementationModeFor');
   assert(typeof proofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.js should expose buildVisualProofSession');
   assert(typeof cjsProofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.cjs should expose buildVisualProofSession');
   assert(
@@ -485,6 +486,14 @@ async function run() {
   assert(args.target_image_hash === 'sha256:spec', 'setup args should preserve visual target image hash');
   assert(args.viewport_matrix_json === '[{"name":"mobile","width":390,"height":844}]', 'setup args should stringify viewport matrix');
   assert(args.deterministic_setup_json === '{"seed":"setup-v1"}', 'setup args should stringify deterministic setup');
+  assert(core.noImplementationModeFor({ implementation_mode: 'none' }), 'implementation_mode=none should activate audit/no-diff routing');
+  const auditArgs = core.buildSetupArgs({
+    action: 'setup',
+    repo: 'openclaw/openclaw-plugins',
+    change_request: 'Audit the deployed site',
+    mode: 'audit',
+  }, config);
+  assert(auditArgs.mode === '', 'audit workflow mode should not be passed to runtime as a preview mode');
 
   const patched = core.mergeStateFromParams(fakeStatePath, {
     action: 'author',
@@ -780,6 +789,47 @@ async function run() {
   const afterAuthored = readJson(reconLoopStatePath);
   assert(afterAuthored.stage_attempts.author.count === 2, 'author request plus author application should both be recorded');
   assert(afterAuthored.author_mode === 'supervising_agent', 'author mode should record supervising_agent ownership');
+
+  const auditNoDiffStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-audit-no-diff-')), 'state.json');
+  writeJson(auditNoDiffStatePath, {
+    ...makeLoopState(),
+    branch: 'agent/openclaw/audit-no-diff',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    implementation_status: 'pending_recon',
+    author_status: 'needs_supervisor_judgment',
+    proof_plan_status: 'needs_supervisor_judgment',
+    active_checkpoint: 'author_supervisor_judgment',
+    active_checkpoint_stage: 'author',
+    stage_decision_request: {
+      stage: 'author',
+      checkpoint: 'author_supervisor_judgment',
+      recommended_advance_stage: 'author',
+      continue_with_stage: 'author',
+    },
+  });
+  const auditNoDiffAuthored = await localEngine.execute({
+    action: 'run',
+    state_path: auditNoDiffStatePath,
+    continue_from_checkpoint: true,
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    author_packet_json: JSON.stringify({
+      proof_plan: 'Audit the existing deployed state without implementation.',
+      capture_script: "await saveScreenshot('audit-proof');",
+      baseline_understanding_used: baselineUnderstanding(),
+      refined_inputs: { server_path: '/good', wait_for_selector: '.cta' },
+      rationale: ['This is an audit/profile run, not a proof-of-change run.'],
+      confidence: 'high',
+      summary: 'Audit packet',
+    }),
+  });
+  assert(auditNoDiffAuthored.checkpoint === 'verify_supervisor_judgment', `audit/no-diff authoring should continue directly to verify (got ${auditNoDiffAuthored.checkpoint})`);
+  const auditNoDiffState = readJson(auditNoDiffStatePath);
+  assert(auditNoDiffState.implementation_status === 'not_required', 'audit/no-diff verify should mark implementation as not required');
+  assert(auditNoDiffState.stage_attempts.implement.last_checkpoint === 'implementation_not_required', 'audit/no-diff mode should record a skipped implementation checkpoint');
 
   const checkpointHarnessDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-checkpoint-harness-'));
   const checkpointHarnessStatePath = path.join(checkpointHarnessDir, 'wrapper-state.json');

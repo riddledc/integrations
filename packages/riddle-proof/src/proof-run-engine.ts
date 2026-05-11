@@ -10,6 +10,7 @@ import {
   ensureAction,
   invalidateVerifyEvidence,
   mergeStateFromParams,
+  noImplementationModeFor,
   readState,
   recordStageAttempt,
   resolveConfig,
@@ -36,8 +37,12 @@ function implementationReady(state: any) {
   return ["changes_detected", "completed"].includes(state?.implementation_status || "");
 }
 
-function stageAfterAuthor(state: any): WorkflowStage {
-  return implementationReady(state) ? "verify" : "implement";
+function implementationRequired(params: WorkflowParams, state: any) {
+  return !noImplementationModeFor(params, state);
+}
+
+function stageAfterAuthor(state: any, params: WorkflowParams): WorkflowStage {
+  return implementationReady(state) || !implementationRequired(params, state) ? "verify" : "implement";
 }
 
 function latestReconAttempt(state: any) {
@@ -315,7 +320,7 @@ function recommendedAdvanceStage(state: any): WorkflowStage | null {
   if (!state?.workspace_ready) return "setup";
   if (!state?.recon_results || ["needs_agent_decision", "needs_supervisor_judgment"].includes(state?.recon_status || "")) return "recon";
   if (!authorReady(state)) return "author";
-  if (!implementationReady(state)) return "implement";
+  if (!implementationReady(state) && !noImplementationModeFor(state)) return "implement";
   if (state?.verify_status === "capture_incomplete") return verifyAssessment(state).continueWithStage || verifyAssessment(state).recommendedStage || "author";
   if (state?.verify_status === "evidence_captured") return verifyAssessment(state).continueWithStage || verifyAssessment(state).recommendedStage;
   if (!(state?.after_cdn || "").trim()) return "verify";
@@ -1037,6 +1042,7 @@ export async function executeWorkflow(
         checkpoint: params.advance_stage === "setup" ? "setup_review" : null,
         autoApproved: setupRes.autoApproved || false,
       });
+      mergeStateFromParams(config.statePath, params);
       state = readState(config.statePath);
       if (params.advance_stage === "setup") {
         return checkpoint(
@@ -1344,7 +1350,8 @@ export async function executeWorkflow(
           },
         );
       }
-      const authorNextStage = stageAfterAuthor(state);
+      const noImplementationMode = !implementationRequired(params, state);
+      const authorNextStage = stageAfterAuthor(state, params);
       const explicitAuthorDebug = params.advance_stage === "author";
       recordAttempt("author", "completed", "Author applied the supervising agent's proof packet to recon observations.", {
         autoApproved: authorRes.autoApproved || false,
@@ -1363,7 +1370,9 @@ export async function executeWorkflow(
           "author",
           "author_review",
           authorNextStage === "verify"
-            ? "Author applied the supervising agent's proof packet. Because implementation is already recorded, you can continue straight into verify."
+            ? noImplementationMode
+              ? "Author applied the supervising agent's proof packet. Audit/no-diff mode disables implementation, so you can continue straight into verify."
+              : "Author applied the supervising agent's proof packet. Because implementation is already recorded, you can continue straight into verify."
             : "Author applied the supervising agent's proof packet. Inspect it if needed, then continue into implement.",
           {
             nextActions: authorNextStage === "verify"
@@ -1402,13 +1411,14 @@ export async function executeWorkflow(
 
     if (!effectiveAdvanceStage) {
       const recommended = recommendedAdvanceStage(state);
+      const noImplementationMode = !implementationRequired(params, state);
       return checkpoint(
-        recommended || "implement",
+        recommended || (noImplementationMode ? "verify" : "implement"),
         "awaiting_stage_advance",
         "Proof authoring is ready. The wrapper will not guess the next stage from here, explicitly choose whether to revisit recon/author, validate implementation, capture verify evidence, or ship.",
         {
           nextActions: ["inspect_state", "set_advance_stage", "resume_run"],
-          advanceOptions: ["recon", "author", "implement", "verify", "ship"],
+          advanceOptions: noImplementationMode ? ["recon", "author", "verify", "ship"] : ["recon", "author", "implement", "verify", "ship"],
           recommendedAdvanceStage: recommended,
           details: { executed },
           executed,
@@ -1417,6 +1427,26 @@ export async function executeWorkflow(
     }
 
     if (effectiveAdvanceStage === "implement") {
+      if (!implementationRequired(params, state)) {
+        recordAttempt("implement", "checkpoint", "Implementation stage was skipped because audit/no-diff mode disables code changes.", {
+          checkpoint: "implement_disabled_for_audit",
+          details: { executed },
+        });
+        return checkpoint(
+          "verify",
+          "implement_disabled_for_audit",
+          "Audit/no-diff mode disables implementation. Continue to verify against the existing target; do not launch an implementation agent or require a git diff.",
+          {
+            nextActions: ["advance_run_to_verify", "inspect_author_packet", "rerun_recon_if_target_changed"],
+            advanceOptions: ["verify", "author", "recon"],
+            recommendedAdvanceStage: "verify",
+            continueWithStage: "verify",
+            blocking: false,
+            details: { executed },
+            executed,
+          },
+        );
+      }
       const implementRes = runOne("implement");
       executed.push(executedStep(implementRes));
       if (implementRes.haltedForApproval) {
@@ -1513,7 +1543,8 @@ export async function executeWorkflow(
 
     if (effectiveAdvanceStage === "verify") {
       state = readState(config.statePath);
-      if (!["changes_detected", "completed"].includes(state?.implementation_status || "")) {
+      const needsImplementation = implementationRequired(params, state);
+      if (needsImplementation && !implementationReady(state)) {
         return checkpoint(
           "implement",
           "implement_required",
@@ -1529,6 +1560,18 @@ export async function executeWorkflow(
             executed,
           },
         );
+      }
+      if (!needsImplementation && !implementationReady(state)) {
+        recordAttempt("implement", "completed", "Implementation stage is not required for this audit/no-diff run.", {
+          checkpoint: "implementation_not_required",
+          details: { executed },
+        });
+        state = updateState(config.statePath, (currentState) => {
+          currentState.implementation_status = "not_required";
+          currentState.implementation_mode = currentState.implementation_mode || "none";
+          if (currentState.require_diff === undefined) currentState.require_diff = false;
+          if (currentState.allow_code_changes === undefined) currentState.allow_code_changes = false;
+        });
       }
 
       const hasIncomingProofAssessment = typeof params.proof_assessment_json === "string" && params.proof_assessment_json.trim().length > 0;
@@ -1559,10 +1602,15 @@ export async function executeWorkflow(
       const verifySummary = state?.verify_summary || state?.proof_summary || null;
       const proofAssessment = verifyAssessment(state);
       const convergenceSignals = nonConvergenceSignals(state, proofAssessment);
-      const verifyRecommendedStage = proofAssessment.recommendedStage || null;
-      const verifyContinueWithStage = shouldEscalateVerifyToHuman(state, proofAssessment)
+      const rawVerifyRecommendedStage = proofAssessment.recommendedStage || null;
+      const verifyRecommendedStage = !needsImplementation && rawVerifyRecommendedStage === "implement" ? "verify" : rawVerifyRecommendedStage;
+      const rawVerifyContinueWithStage = shouldEscalateVerifyToHuman(state, proofAssessment)
         ? null
         : (proofAssessment.continueWithStage || verifyRecommendedStage || null);
+      const verifyContinueWithStage = !needsImplementation && rawVerifyContinueWithStage === "implement" ? "verify" : rawVerifyContinueWithStage;
+      const verifyLoopAdvanceOptions: WorkflowStage[] = needsImplementation ? ["author", "verify", "implement", "recon"] : ["author", "verify", "recon"];
+      const verifyReviewAdvanceOptions: WorkflowStage[] = needsImplementation ? ["verify", "author", "implement", "recon", "ship"] : ["verify", "author", "recon"];
+      const verifyRetryAdvanceOptions: WorkflowStage[] = needsImplementation ? ["author", "implement", "ship", "verify", "recon"] : ["author", "verify", "recon"];
       const verifyDetails = {
         executed,
         verifyStatus,
@@ -1601,7 +1649,7 @@ export async function executeWorkflow(
           {
             ok: true,
             nextActions: ["inspect_after_capture", "continue_internal_loop_with_checkpoint", "return_to_recon_if_baseline_is_wrong"],
-            advanceOptions: ["author", "verify", "implement", "recon"],
+            advanceOptions: verifyLoopAdvanceOptions,
             recommendedAdvanceStage: verifyRecommendedStage || "author",
             continueWithStage: verifyContinueWithStage || "author",
             blocking: false,
@@ -1630,7 +1678,7 @@ export async function executeWorkflow(
           summary,
           {
             nextActions: ["inspect_evidence", "author_proof_assessment_json", "continue_internal_loop_with_checkpoint"],
-            advanceOptions: ["verify", "author", "implement", "recon", "ship"],
+            advanceOptions: verifyReviewAdvanceOptions,
             recommendedAdvanceStage: "verify",
             continueWithStage: "verify",
             blocking: false,
@@ -1661,7 +1709,7 @@ export async function executeWorkflow(
           {
             ok: false,
             nextActions: ["inspect_retry_history", "summarize_internal_loop", "ask_human_for_direction"],
-            advanceOptions: ["author", "implement", "ship", "verify", "recon"],
+            advanceOptions: verifyRetryAdvanceOptions,
             recommendedAdvanceStage: null,
             continueWithStage: null,
             blocking: true,
@@ -1679,6 +1727,7 @@ export async function executeWorkflow(
 
       const shouldAutoShip =
         verifyContinueWithStage === "ship" &&
+        needsImplementation &&
         (params.ship_after_verify || params.continue_from_checkpoint || params.advance_stage !== "verify");
 
       if (shouldAutoShip) {
@@ -1741,6 +1790,33 @@ export async function executeWorkflow(
       }
 
       if (proofAssessment.decision === "ready_to_ship") {
+        if (!needsImplementation) {
+          recordAttempt("verify", "completed", "Verify captured a proof packet for audit/no-diff mode; shipping remains disabled.", {
+            autoApproved: verifyRes.autoApproved || false,
+            checkpoint: "verify_audit_complete",
+            details: verifyDetails,
+          });
+          return checkpoint(
+            "verify",
+            "verify_audit_complete",
+            "The supervising agent judged the audit proof sufficient. Audit/no-diff mode disables ship, PR creation, implementation agents, and git-diff requirements.",
+            {
+              nextActions: ["inspect_evidence", "report_audit_result", "rerun_verify_if_needed"],
+              advanceOptions: ["verify", "author", "recon"],
+              recommendedAdvanceStage: "verify",
+              continueWithStage: null,
+              blocking: false,
+              details: verifyDetails,
+              verifyStatus,
+              verifySummary,
+              afterCdn: state?.after_cdn || null,
+              mergeRecommendation: state?.merge_recommendation || null,
+              verifyDecisionRequest,
+              proofAssessment: proofAssessment.raw,
+              executed,
+            },
+          );
+        }
         const shipGate = validateShipGate(state);
         if (!shipGate.ok) {
           recordAttempt("verify", "checkpoint", "Verify cannot mark ship ready because the hard ship gate is missing required evidence or approval.", {
@@ -1803,8 +1879,10 @@ export async function executeWorkflow(
           ok: true,
           nextActions: convergenceSignals.warning
             ? ["inspect_retry_history", "decide_whether_to_keep_iterating_or_escalate", "continue_internal_loop_with_checkpoint"]
-            : ["inspect_proof_assessment", "continue_internal_loop_with_checkpoint", "return_to_implement_if_fix_failed"],
-          advanceOptions: ["author", "implement", "ship", "verify", "recon"],
+            : needsImplementation
+              ? ["inspect_proof_assessment", "continue_internal_loop_with_checkpoint", "return_to_implement_if_fix_failed"]
+              : ["inspect_proof_assessment", "continue_internal_loop_with_checkpoint", "rerun_author_if_proof_contract_is_wrong"],
+          advanceOptions: verifyRetryAdvanceOptions,
           recommendedAdvanceStage: verifyRecommendedStage,
           continueWithStage: verifyContinueWithStage,
           blocking: false,
@@ -1822,6 +1900,23 @@ export async function executeWorkflow(
 
     if (effectiveAdvanceStage === "ship") {
       state = readState(config.statePath);
+      if (!implementationRequired(params, state)) {
+        return checkpoint(
+          "verify",
+          "ship_disabled_for_audit",
+          "Audit/no-diff mode disables ship and PR creation. Report the audit result from verify evidence instead.",
+          {
+            ok: false,
+            nextActions: ["inspect_verify_state", "report_audit_result"],
+            advanceOptions: ["verify", "author", "recon"],
+            recommendedAdvanceStage: "verify",
+            continueWithStage: "verify",
+            blocking: true,
+            details: { executed },
+            executed,
+          },
+        );
+      }
       const shipAssessment = verifyAssessment(state);
       const shipGate = validateShipGate(state);
       if (state?.verify_status !== "evidence_captured") {

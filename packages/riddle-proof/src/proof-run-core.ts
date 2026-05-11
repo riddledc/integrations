@@ -32,7 +32,10 @@ export interface WorkflowParams {
   allow_static_preview_fallback?: boolean;
   context?: string;
   reviewer?: string;
-  mode?: "server" | "static";
+  mode?: "server" | "static" | "audit" | (string & {});
+  implementation_mode?: "change" | "none" | (string & {});
+  require_diff?: boolean;
+  allow_code_changes?: boolean;
   build_command?: string;
   build_output?: string;
   server_image?: string;
@@ -63,6 +66,43 @@ export interface WorkflowParams {
   fetch_base?: boolean;
   update_base_checkout?: boolean;
   advance_stage?: WorkflowStage;
+}
+
+type NoImplementationModeInput = {
+  mode?: unknown;
+  workflow_mode?: unknown;
+  implementation_mode?: unknown;
+  require_diff?: unknown;
+  allow_code_changes?: unknown;
+};
+
+function normalizedMode(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+export function previewModeFromWorkflowMode(value: unknown): "server" | "static" | undefined {
+  const mode = normalizedMode(value);
+  return mode === "server" || mode === "static" ? mode : undefined;
+}
+
+function noImplementationModeInput(value: unknown): NoImplementationModeInput {
+  return value && typeof value === "object" ? value as NoImplementationModeInput : {};
+}
+
+export function noImplementationModeFor(params?: unknown, state?: unknown) {
+  const input = noImplementationModeInput(params);
+  const stateInput = noImplementationModeInput(state);
+  const mode = normalizedMode(input.mode ?? input.workflow_mode ?? stateInput.mode ?? stateInput.workflow_mode);
+  const implementationMode = normalizedMode(input.implementation_mode ?? stateInput.implementation_mode);
+  const requireDiff = input.require_diff ?? stateInput.require_diff;
+  const allowCodeChanges = input.allow_code_changes ?? stateInput.allow_code_changes;
+  return (
+    mode === "audit" ||
+    mode === "profile" ||
+    implementationMode === "none" ||
+    requireDiff === false ||
+    allowCodeChanges === false
+  );
 }
 
 export interface PluginConfig {
@@ -209,7 +249,7 @@ export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof
     allow_static_preview_fallback: params.allow_static_preview_fallback ? "true" : "",
     context: params.context || "",
     reviewer: params.reviewer || config.defaultReviewer,
-    mode: params.mode || "",
+    mode: previewModeFromWorkflowMode(params.mode) || "",
     build_command: params.build_command || "npm run build",
     build_output: params.build_output || "build",
     server_image: params.server_image || "node:20-slim",
@@ -913,6 +953,7 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
     "auth_headers_json",
     "proof_plan",
     "implementation_notes",
+    "implementation_mode",
   ] as const;
 
   for (const field of stringFields) {
@@ -929,7 +970,17 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
   }
 
   if (params.reference !== undefined) state.reference = params.reference;
-  if (params.mode !== undefined) state.mode = params.mode;
+  if (params.mode !== undefined) {
+    const previewMode = previewModeFromWorkflowMode(params.mode);
+    if (previewMode) {
+      state.mode = previewMode;
+    } else {
+      state.workflow_mode = normalizeOptionalString(params.mode);
+    }
+  }
+  if (params.implementation_mode !== undefined) state.implementation_mode = normalizeOptionalString(params.implementation_mode);
+  if (params.require_diff !== undefined) state.require_diff = params.require_diff;
+  if (params.allow_code_changes !== undefined) state.allow_code_changes = params.allow_code_changes;
   if (params.allow_static_preview_fallback !== undefined) {
     state.allow_static_preview_fallback = params.allow_static_preview_fallback;
   }
@@ -1086,6 +1137,11 @@ export function summarizeState(state: any) {
     repo: state.repo || null,
     branch: state.branch || null,
     mode: state.mode || null,
+    workflow_mode: state.workflow_mode || null,
+    implementation_mode: state.implementation_mode || null,
+    require_diff: state.require_diff ?? null,
+    allow_code_changes: state.allow_code_changes ?? null,
+    no_implementation_mode: noImplementationModeFor(state),
     reference: state.reference || null,
     before_ref: state.before_ref || null,
     allow_static_preview_fallback: Boolean(state.allow_static_preview_fallback),

@@ -85,6 +85,9 @@ export interface RiddleProofRunParams {
   context?: string;
   reviewer?: string;
   mode?: string;
+  implementation_mode?: "change" | "none" | (string & {});
+  require_diff?: boolean;
+  allow_code_changes?: boolean;
   build_command?: string;
   build_output?: string;
   server_image?: string;

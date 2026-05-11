@@ -1,5 +1,6 @@
 import { createRunResult } from "./result";
 import { appendRunEvent, appendStageHeartbeat, createRunState, setRunStatus } from "./state";
+import { noImplementationModeFor } from "./proof-run-core";
 import type {
   ImplementationAdapter,
   ImplementationAdapterResult,
@@ -266,6 +267,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
   }
 
   const changeRequest = state.request.change_request?.trim();
+  const noImplementationMode = noImplementationModeFor(state.request);
   if (!changeRequest) {
     return blockRun({
       state,
@@ -274,7 +276,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
     });
   }
 
-  if (!workdir) {
+  if (!noImplementationMode && !workdir) {
     return blockRun({
       state,
       stage: "setup",
@@ -282,7 +284,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
     });
   }
 
-  if (!adapters.implementation) {
+  if (!noImplementationMode && !adapters.implementation) {
     return blockRun({
       state,
       stage: "implement",
@@ -312,60 +314,71 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
 
   for (let attempt = 0; attempt < maxIterations; attempt += 1) {
     state.iterations += 1;
-    appendStageHeartbeat(state, {
-      stage: "implement",
-      summary: "Implementation stage is active.",
-      details: { iteration: state.iterations },
-    });
-    appendRunEvent(state, {
-      kind: "implementation.started",
-      checkpoint: "implementation_started",
-      stage: "implement",
-      summary: "Implementation adapter started.",
-      details: { iteration: state.iterations },
-    });
-
-    try {
-      implementation = await adapters.implementation.implement({
-        workdir,
-        change_request: changeRequest,
-        evidence_context: evidenceContext,
-        state,
-      });
-    } catch (error) {
-      return blockRun({
-        state,
+    if (noImplementationMode) {
+      (state as any).implementation_status = "not_required";
+      appendRunEvent(state, {
+        kind: "implementation.skipped",
+        checkpoint: "implementation_not_required",
         stage: "implement",
-        blocker: adapterBlocker("implementation_exception", "The implementation adapter threw an exception.", "implementation_failed", errorDetails(error)),
-        evidence_bundle: evidenceBundle,
+        summary: "Implementation stage skipped because audit/no-diff mode disables code changes.",
+        details: { iteration: state.iterations },
+      });
+    } else {
+      appendStageHeartbeat(state, {
+        stage: "implement",
+        summary: "Implementation stage is active.",
+        details: { iteration: state.iterations },
+      });
+      appendRunEvent(state, {
+        kind: "implementation.started",
+        checkpoint: "implementation_started",
+        stage: "implement",
+        summary: "Implementation adapter started.",
+        details: { iteration: state.iterations },
+      });
+
+      try {
+        implementation = await adapters.implementation!.implement({
+          workdir: workdir!,
+          change_request: changeRequest,
+          evidence_context: evidenceContext,
+          state,
+        });
+      } catch (error) {
+        return blockRun({
+          state,
+          stage: "implement",
+          blocker: adapterBlocker("implementation_exception", "The implementation adapter threw an exception.", "implementation_failed", errorDetails(error)),
+          evidence_bundle: evidenceBundle,
+        });
+      }
+
+      if (!implementation.ok) {
+        return blockRun({
+          state,
+          stage: "implement",
+          blocker: adapterBlocker(
+            "implementation_failed",
+            "The implementation adapter did not complete successfully.",
+            "implementation_failed",
+            { blockers: implementation.blockers },
+          ),
+          evidence_bundle: evidenceBundle,
+          raw: { implementation },
+        });
+      }
+
+      appendRunEvent(state, {
+        kind: "implementation.completed",
+        checkpoint: "implementation_completed",
+        stage: "implement",
+        summary: "Implementation adapter completed.",
+        details: {
+          changed_files: implementation.changed_files,
+          tests_run: implementation.tests_run,
+        },
       });
     }
-
-    if (!implementation.ok) {
-      return blockRun({
-        state,
-        stage: "implement",
-        blocker: adapterBlocker(
-          "implementation_failed",
-          "The implementation adapter did not complete successfully.",
-          "implementation_failed",
-          { blockers: implementation.blockers },
-        ),
-        evidence_bundle: evidenceBundle,
-        raw: { implementation },
-      });
-    }
-
-    appendRunEvent(state, {
-      kind: "implementation.completed",
-      checkpoint: "implementation_completed",
-      stage: "implement",
-      summary: "Implementation adapter completed.",
-      details: {
-        changed_files: implementation.changed_files,
-        tests_run: implementation.tests_run,
-      },
-    });
 
     appendStageHeartbeat(state, {
       stage: "prove",

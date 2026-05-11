@@ -1008,6 +1008,18 @@ assert.equal(toRiddleProofRunParams({
   leave_draft: true,
 }).leave_draft, true);
 
+const auditNoDiffParams = toRiddleProofRunParams({
+  repo: "riddledc/example",
+  change_request: "Audit the live site without code changes.",
+  implementation_mode: "none",
+  require_diff: false,
+  allow_code_changes: false,
+  ship_mode: "none",
+});
+assert.equal(auditNoDiffParams.implementation_mode, "none");
+assert.equal(auditNoDiffParams.require_diff, false);
+assert.equal(auditNoDiffParams.allow_code_changes, false);
+
 const visualSessionParams = toRiddleProofRunParams({
   repo: "davisdiehl/lilarcade",
   change_request: "Iterate Luge Run against the reusable visual spec.",
@@ -1112,6 +1124,52 @@ const missingAdapterResult = await runRiddleProof({
 });
 assert.equal(missingAdapterResult.status, "blocked");
 assert.equal(missingAdapterResult.blocker.code, "implementation_adapter_not_configured");
+
+const auditCalls = [];
+const auditNoDiffResult = await runRiddleProof({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Audit the current site without implementation.",
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    ship_mode: "none",
+  },
+  max_iterations: 1,
+  adapters: {
+    proof: {
+      async prove(input) {
+        auditCalls.push(`prove:${input.implementation === undefined}`);
+        return {
+          ok: true,
+          evidence_bundle: {
+            verification_mode: "visual",
+            after: {
+              kind: "after",
+              role: "after_proof",
+              url: "https://example.com/audit.png",
+            },
+            artifacts: [],
+          },
+        };
+      },
+    },
+    judge: {
+      async assessProof() {
+        auditCalls.push("judge");
+        return {
+          decision: "ready_to_ship",
+          summary: "Audit evidence is sufficient.",
+          source: "supervisor",
+        };
+      },
+    },
+  },
+});
+assert.deepEqual(auditCalls, ["prove:true", "judge"]);
+assert.equal(auditNoDiffResult.status, "ready_to_ship");
+assert.equal(auditNoDiffResult.ok, true);
 
 const calls = [];
 const harnessResult = await runRiddleProof({

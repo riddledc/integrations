@@ -24,6 +24,9 @@ export interface OpenClawProofedChangeParams {
   context?: string;
   reviewer?: string;
   mode?: string;
+  implementation_mode?: "change" | "none" | (string & {});
+  require_diff?: boolean;
+  allow_code_changes?: boolean;
   build_command?: string;
   build_output?: string;
   server_image?: string;
@@ -131,6 +134,9 @@ export function toRiddleProofRunParams(params: OpenClawProofedChangeParams): Rid
     context: params.context,
     reviewer: params.reviewer,
     mode: params.mode,
+    implementation_mode: params.implementation_mode,
+    require_diff: params.require_diff,
+    allow_code_changes: params.allow_code_changes,
     build_command: params.build_command,
     build_output: params.build_output,
     server_image: params.server_image,

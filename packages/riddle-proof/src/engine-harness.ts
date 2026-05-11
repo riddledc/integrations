@@ -47,7 +47,7 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
-import { visualDeltaForState, visualDeltaRequiredForState, visualDeltaShipGateReason } from "./proof-run-core";
+import { noImplementationModeFor, visualDeltaForState, visualDeltaRequiredForState, visualDeltaShipGateReason } from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
 export type RiddleProofCheckpointMode = "auto" | "yield";
@@ -356,7 +356,7 @@ function stageFromWorkflowParams(params: RiddleProofWorkflowParams): RiddleProof
   if (params.ship_after_verify) return "ship";
   if (params.proof_assessment_json) return "verify";
   if (params.implementation_notes) return "verify";
-  if (params.author_packet_json) return "implement";
+  if (params.author_packet_json) return noImplementationModeFor(params) ? "verify" : "implement";
   if (params.recon_assessment_json) return "author";
   return "setup";
 }
@@ -394,6 +394,9 @@ function initialRunParams(
     context: request.context,
     reviewer: request.reviewer,
     mode: request.mode,
+    implementation_mode: request.implementation_mode,
+    require_diff: request.require_diff,
+    allow_code_changes: request.allow_code_changes,
     build_command: request.build_command,
     build_output: request.build_output,
     server_image: request.server_image,
