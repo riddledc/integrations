@@ -316,10 +316,13 @@ def build_probe_capture_script(base_script='', verification_mode='proof', proof_
     pieces = []
     script = (base_script or '').strip()
     pieces.append('let __riddleProofCaptureScriptError = null;')
+    pieces.append('let __riddleProofCaptureScriptResult = null;')
     if script:
         pieces.extend([
             'try {',
+            '__riddleProofCaptureScriptResult = await (async () => {',
             script.rstrip(';') + ';',
+            '})();',
             '} catch (err) {',
             '  __riddleProofCaptureScriptError = err;',
             '}',
@@ -359,17 +362,13 @@ def build_probe_capture_script(base_script='', verification_mode='proof', proof_
         '  };',
         '});',
         'console.log(' + json.dumps(PAGE_STATE_PREFIX) + ' + JSON.stringify(pageState));',
-        'let __riddleProofEvidenceValue = null;',
-        'try {',
+        'let __riddleProofEvidenceValue = __riddleProofCaptureScriptResult ?? null;',
+        'if (__riddleProofEvidenceValue === null || __riddleProofEvidenceValue === undefined) { try {',
         '  __riddleProofEvidenceValue = await page.evaluate(() => {',
-        '    const root = (typeof window !== "undefined" && window) || (typeof globalThis !== "undefined" && globalThis) || (typeof self !== "undefined" && self) || {};',
+        '    const root = (typeof window !== "undefined" && window) || {};',
         '    return root.__riddleProofEvidence ?? root.riddleProofEvidence ?? null;',
         '  });',
-        '} catch {}',
-        'if (__riddleProofEvidenceValue === null || __riddleProofEvidenceValue === undefined) {',
-        '  const __riddleProofEvidenceRoot = (typeof globalThis !== "undefined" && globalThis) || (typeof window !== "undefined" && window) || (typeof self !== "undefined" && self) || {};',
-        '  __riddleProofEvidenceValue = __riddleProofEvidenceRoot.__riddleProofEvidence ?? __riddleProofEvidenceRoot.riddleProofEvidence ?? null;',
-        '}',
+        '} catch {} }',
         'if (__riddleProofEvidenceValue !== null && __riddleProofEvidenceValue !== undefined) {',
         '  try { console.log(' + json.dumps(PROOF_EVIDENCE_PREFIX) + ' + JSON.stringify(__riddleProofEvidenceValue)); }',
         '  catch (err) { console.log(' + json.dumps(PROOF_EVIDENCE_PREFIX) + ' + JSON.stringify({ serialization_error: String(err) })); }',

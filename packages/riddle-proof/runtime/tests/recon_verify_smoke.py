@@ -197,7 +197,7 @@ class FakeRiddle:
                         },
                     },
                 }
-            if 'window.__riddleProofEvidence' in script or 'globalThis.__riddleProofEvidence' in script:
+            if 'attack_ms_after' in script or 'window.__riddleProofEvidence' in script or 'globalThis.__riddleProofEvidence' in script:
                 page_state = {
                     'bodyTextLength': 36,
                     'visibleTextSample': 'Neon step sequencer audio workbench',
@@ -1626,10 +1626,10 @@ def run_verify_structured_evidence_without_screenshot():
             'server_path': '/sequencer',
             'proof_plan': 'Measure the rendered synth transient envelope and compare attack/energy metrics.',
             'capture_script': (
-                "await page.evaluate(() => { "
-                "window.__riddleProofEvidence = { "
+                "const evidence = await page.evaluate(() => ({ "
                 "modality: 'audio', attack_ms_before: 42, attack_ms_after: 12, "
-                "transient_energy_delta_db: 4.8, passed: true }; });"
+                "transient_energy_delta_db: 4.8, passed: true })); "
+                "return evidence;"
             ),
             'recon_results': {
                 'baselines': {'before': {'path': '/sequencer', 'url': 'https://cdn.example.com/before.png'}},
@@ -1657,8 +1657,9 @@ def run_verify_structured_evidence_without_screenshot():
         assert script_calls, 'verify should run a proof capture script'
         capture_script = script_calls[-1]
         assert 'globalThis.__riddleProofEvidence ??' not in capture_script
-        assert 'typeof globalThis !== "undefined"' in capture_script
-        assert '__riddleProofEvidenceRoot.__riddleProofEvidence' in capture_script
+        assert 'typeof globalThis !== "undefined"' not in capture_script
+        assert '__riddleProofEvidenceRoot.__riddleProofEvidence' not in capture_script
+        assert '__riddleProofCaptureScriptResult = await (async () =>' in capture_script
         assert 'attack_ms_after' in supporting['proof_evidence_sample']
         assert after_verify['evidence_bundle']['proof_evidence']['attack_ms_after'] == 12
         assert after_verify['evidence_bundle']['after']['proof_evidence']['attack_ms_after'] == 12

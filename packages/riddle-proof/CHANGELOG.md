@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.4
+
+### Patch Changes
+
+- Capture returned proof evidence from verify scripts and remove worker-global evidence probing that Riddle rejects during audit/no-diff captures.
+
 ## 0.7.3
 
 ### Patch Changes
