@@ -465,6 +465,46 @@ const terminalRecoveryAssessment = assessBasicGameplayEvidence({
 assert.equal(terminalRecoveryAssessment.warning_counts.missing_reset_path, undefined);
 assert.equal(terminalRecoveryAssessment.route_results[0].signals.reset_path_present, true);
 
+const continuedActionAssessment = assessBasicGameplayEvidence({
+  results: [
+    {
+      name: "Continued Action Game",
+      path: "/games/continued",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        visible_canvas_count: 1,
+        screenshot_hash: "continued-before",
+        body_text_hash: "continued-text",
+      },
+      timed: {
+        screenshot_hash: "continued-before",
+        body_text_hash: "continued-text",
+      },
+      after_action: {
+        screenshot_hash: "continued-before",
+        body_text_hash: "continued-text",
+      },
+      after_continue: {
+        screenshot_hash: "continued-after",
+        body_text_hash: "continued-text",
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "wait" }],
+      continued_action_results: [{ ok: true, action: "canvas-pointer-down" }],
+    },
+  ],
+});
+assert.equal(continuedActionAssessment.passed, true);
+assert.equal(continuedActionAssessment.route_results[0].signals.action_attempted, true);
+assert.equal(continuedActionAssessment.route_results[0].signals.first_interaction_observed, true);
+assert.equal(continuedActionAssessment.route_results[0].signals.state_change_observed, true);
+assert.equal(continuedActionAssessment.route_results[0].diffs.after_continue?.changed, true);
+
 const inertGameplayAssessment = assessBasicGameplayEvidence({
   results: [
     {

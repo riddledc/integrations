@@ -172,10 +172,13 @@ export interface RiddleProofBasicGameplayRouteEvidence {
   timed?: BasicGameplaySnapshot;
   after_action?: BasicGameplaySnapshot;
   afterAction?: BasicGameplaySnapshot;
+  after_continue?: BasicGameplaySnapshot;
+  afterContinue?: BasicGameplaySnapshot;
   mobile?: BasicGameplayMobileEvidence;
   action_results?: BasicGameplayActionResult[];
   actionResults?: BasicGameplayActionResult[];
   continued_action_results?: BasicGameplayActionResult[];
+  continuedActionResults?: BasicGameplayActionResult[];
   restart_action_results?: BasicGameplayActionResult[];
   restartActionResults?: BasicGameplayActionResult[];
   progression_checks?: BasicGameplayProgressionCheck[];
@@ -230,6 +233,7 @@ export interface RiddleProofBasicGameplayRouteAssessment {
   diffs: {
     timed: BasicGameplayChangeSummary;
     after_action: BasicGameplayChangeSummary;
+    after_continue?: BasicGameplayChangeSummary;
   };
 }
 
@@ -429,18 +433,22 @@ export function assessBasicGameplayRoute(
   const initial = route.initial || {};
   const timed = route.timed || {};
   const afterAction = route.after_action || route.afterAction || {};
+  const afterContinue = route.after_continue || route.afterContinue || {};
   const mobile = route.mobile || {};
   const timedChange = changed(initial, timed);
   const actionChange = changed(timed, afterAction);
+  const continuedActionChange = changed(afterAction, afterContinue);
   const surfaceVisible = numberValue(initial.visible_canvas_count) > 0 ||
     numberValue(initial.enabled_clickable_count) > 0 ||
     numberValue(initial.visible_large_node_count) >= minSurfaceLargeNodes;
   const actionResults = listValue(route.action_results || route.actionResults) as BasicGameplayActionResult[];
+  const continuedActionResults = listValue(route.continued_action_results || route.continuedActionResults) as BasicGameplayActionResult[];
   const restartActionResults = listValue(route.restart_action_results || route.restartActionResults) as BasicGameplayActionResult[];
-  const actionAttempted = actionResults.some((result) => result.ok === true && result.action !== "wait");
-  const actionFailed = actionResults.some((result) => result.ok === false && result.action !== "wait");
+  const primaryActionResults = [...actionResults, ...continuedActionResults];
+  const actionAttempted = primaryActionResults.some((result) => result.ok === true && result.action !== "wait");
+  const actionFailed = primaryActionResults.some((result) => result.ok === false && result.action !== "wait");
   const restartActionAttempted = restartActionResults.some((result) => result.ok === true && result.action !== "wait");
-  const stateChangeObserved = actionChange.changed || timedChange.changed;
+  const stateChangeObserved = actionChange.changed || continuedActionChange.changed || timedChange.changed;
   const resetPathPresent = numberValue(initial.reset_control_count) > 0 ||
     numberValue(timed.reset_control_count) > 0 ||
     numberValue(afterAction.reset_control_count) > 0 ||
@@ -481,7 +489,7 @@ export function assessBasicGameplayRoute(
       surface_visible: surfaceVisible,
       action_attempted: actionAttempted,
       timed_progression_observed: timedChange.changed,
-      first_interaction_observed: actionChange.changed,
+      first_interaction_observed: actionChange.changed || continuedActionChange.changed,
       state_change_observed: stateChangeObserved,
       mobile_overflow_absent: mobileOverflowPx <= maxMobileOverflowPx,
       reset_path_present: resetPathPresent,
@@ -490,6 +498,7 @@ export function assessBasicGameplayRoute(
     diffs: {
       timed: timedChange,
       after_action: actionChange,
+      after_continue: continuedActionChange,
     },
   };
 }
