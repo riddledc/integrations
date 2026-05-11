@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.7
+
+### Patch Changes
+
+- ca82fff: Count continued gameplay actions as primary action attempts in basic gameplay assessment.
+
 ## 0.7.6
 
 ### Patch Changes
