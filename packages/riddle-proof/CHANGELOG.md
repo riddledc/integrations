@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.1
+
+### Patch Changes
+
+- 62d26d7: Mechanically enforce audit/no-diff runs by skipping implementation, disabling ship, preserving no-diff request flags, and exposing the controls through the OpenClaw wrapper schema.
+
 ## 0.7.0
 
 ### Minor Changes
