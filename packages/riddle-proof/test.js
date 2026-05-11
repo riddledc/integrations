@@ -536,6 +536,10 @@ assert.equal(inertGameplayAssessment.failure_counts.primary_control_inert, 1);
 
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("window-call"));
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("evaluate"));
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-click"));
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-down"));
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-move"));
+assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-up"));
 assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("number_at_least"));
 assert.equal(compactBasicGameplayText("ok \ud83d emoji 😀", 100), "ok emoji 😀");
 
