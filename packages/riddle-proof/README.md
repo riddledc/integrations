@@ -301,9 +301,10 @@ const catches = createBasicGameplayCatchRecords(assessment, evidence);
 ```
 
 The package owns generic contracts such as `state_path`, `state_call`,
-`property_path`, `number_unchanged`, held-key/window-call/evaluate action type
-constants, and JSON-safe text compaction. Site-specific manifests, selectors,
-and deterministic game scripts should stay in the caller.
+`property_path`, `number_unchanged`, held-key, canvas-click,
+canvas-pointer-down/move/up, window-call/evaluate action type constants, and
+JSON-safe text compaction. Site-specific manifests, selectors, and
+deterministic game scripts should stay in the caller.
 
 ### Server Preview Usage
 
