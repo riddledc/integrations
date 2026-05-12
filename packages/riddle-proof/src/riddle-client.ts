@@ -32,6 +32,7 @@ export interface RiddleRunScriptInput {
   viewport?: { width: number; height: number };
   timeoutSec?: number;
   sync?: boolean;
+  strict?: boolean;
   include?: string[];
   options?: Record<string, unknown>;
 }
@@ -296,6 +297,7 @@ export async function runRiddleScript(
   };
   if (input.viewport) payload.viewport = input.viewport;
   if (input.include) payload.include = input.include;
+  if (typeof input.strict === "boolean") payload.strict = input.strict;
   if (input.options) payload.options = input.options;
   return riddleRequestJson<Record<string, unknown>>(config, "/v1/run", {
     method: "POST",

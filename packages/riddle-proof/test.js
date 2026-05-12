@@ -164,6 +164,7 @@ const scriptRun = await riddleClient.runScript({
   script: "return { ok: true };",
   viewport: parseRiddleViewport("390x844"),
   timeoutSec: 30,
+  strict: false,
 });
 assert.equal(scriptRun.job_id, "job_test");
 const serverPreviewRun = await riddleClient.runServerPreview({
@@ -185,6 +186,10 @@ assert.equal(polledJob.artifacts.artifacts[0].name, "proof.json");
 assert(
   riddleClientCalls.some((call) => call.auth === "Bearer test-riddle-key"),
   "Riddle client should send bearer auth to API calls",
+);
+assert(
+  riddleClientCalls.some((call) => call.url === "https://api.test/v1/run" && call.body?.strict === false),
+  "Riddle client should send top-level strict=false when requested",
 );
 assert(
   riddleClientCalls.some((call) => call.url === "https://upload.test/pv_test" && call.auth === null),
