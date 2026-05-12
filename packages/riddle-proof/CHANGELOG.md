@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.13
+
+### Patch Changes
+
+- ba2c000: Expose `set-input-value` in the basic gameplay action contract for value-driven inputs, selects, textareas, and range controls.
+
 ## 0.7.12
 
 ### Patch Changes
