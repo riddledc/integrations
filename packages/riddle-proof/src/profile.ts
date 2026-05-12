@@ -72,6 +72,7 @@ export interface RiddleProofProfileTarget {
   route?: string;
   viewports: RiddleProofProfileViewport[];
   auth?: "none" | (string & {});
+  timeout_sec?: number;
   wait_for_selector?: string;
   wait_ms?: number;
   setup_actions?: RiddleProofProfileSetupAction[];
@@ -207,6 +208,11 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function timeoutSecValue(value: unknown): number | undefined {
+  const number = numberValue(value);
+  return number && number > 0 ? Math.ceil(number) : undefined;
 }
 
 function jsonRecord(value: unknown): Record<string, JsonValue> | undefined {
@@ -369,6 +375,10 @@ export function normalizeRiddleProofProfile(
       route,
       viewports: options.viewports?.length ? options.viewports : normalizeViewports(targetInput.viewports),
       auth: stringValue(targetInput.auth) || "none",
+      timeout_sec: timeoutSecValue(targetInput.timeout_sec)
+        ?? timeoutSecValue(targetInput.timeoutSec)
+        ?? timeoutSecValue(targetInput.riddle_timeout_sec)
+        ?? timeoutSecValue(targetInput.riddleTimeoutSec),
       wait_for_selector: stringValue(targetInput.wait_for_selector) || stringValue(targetInput.waitForSelector),
       wait_ms: numberValue(targetInput.wait_ms) ?? numberValue(targetInput.waitMs),
       setup_actions: normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions),
@@ -390,6 +400,13 @@ export function resolveRiddleProofProfileTargetUrl(profile: RiddleProofProfile):
   if (/^https?:\/\//i.test(route)) return route;
   if (targetUrl) return targetUrl;
   throw new Error("profile target URL could not be resolved.");
+}
+
+export function resolveRiddleProofProfileTimeoutSec(
+  profile: RiddleProofProfile,
+  requestedTimeoutSec?: number,
+): number | undefined {
+  return timeoutSecValue(requestedTimeoutSec) ?? timeoutSecValue(profile.target.timeout_sec);
 }
 
 function routeForViewport(viewport: RiddleProofProfileViewportEvidence | undefined, targetUrl?: string): RiddleProofProfileRouteEvidence {

@@ -154,6 +154,10 @@ reaching the intended state. Text-matched `click` actions prefer visible
 matching elements, which keeps responsive layouts from selecting hidden desktop
 or mobile-only links.
 
+`target.timeout_sec` is optional. Use it for known-heavy profile targets so the
+profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
+still overrides the profile value for one-off runs.
+
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:
 

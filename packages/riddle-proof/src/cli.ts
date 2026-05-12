@@ -29,6 +29,7 @@ import {
   normalizeRiddleProofProfile,
   profileStatusExitCode,
   resolveRiddleProofProfileTargetUrl,
+  resolveRiddleProofProfileTimeoutSec,
   type RiddleProofProfile,
   type RiddleProofProfileArtifactRef,
   type RiddleProofProfileEvidence,
@@ -418,7 +419,10 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
       url: targetUrl,
       script: buildRiddleProofProfileScript(profile),
       viewport: profile.target.viewports[0],
-      timeoutSec: optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      timeoutSec: resolveRiddleProofProfileTimeoutSec(
+        profile,
+        optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      ),
       sync: options.sync === true ? true : undefined,
     });
   } catch (error) {

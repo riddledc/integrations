@@ -35,6 +35,7 @@ import {
   isTerminalStatus,
   normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
+  resolveRiddleProofProfileTimeoutSec,
   resolveRiddleProofProfileRouteUrl,
   redactForProofDiagnostics,
   resolveRiddleProofProfileTargetUrl,
@@ -78,8 +79,10 @@ assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
+assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
@@ -205,6 +208,7 @@ const profile = normalizeRiddleProofProfile({
   name: "pricing-page-basic",
   target: {
     route: "/pricing",
+    timeout_sec: 420,
     viewports: [
       { name: "mobile", width: 390, height: 844 },
       { name: "desktop", width: 1440, height: 1000 },
@@ -223,6 +227,9 @@ const profile = normalizeRiddleProofProfile({
   ],
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
+assert.equal(profile.target.timeout_sec, 420);
+assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
+assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
   resolveRiddleProofProfileRouteUrl("https://preview.riddledc.com/s/ps_1234abcd/", "/playground/"),
   "https://preview.riddledc.com/s/ps_1234abcd/playground/",
@@ -249,6 +256,20 @@ assert.equal(
   resolveRiddleProofProfileTargetUrl(mountedPreviewProfile),
   "https://preview.riddledc.com/s/ps_1234abcd/playground/",
 );
+const camelTimeoutProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "timeout-alias",
+  target: { route: "/heavy", timeoutSec: 90 },
+  checks: [{ type: "route_loaded", expected_path: "/heavy" }],
+}, { url: "https://example.com" });
+assert.equal(camelTimeoutProfile.target.timeout_sec, 90);
+const riddleAliasTimeoutProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "riddle-timeout-alias",
+  target: { route: "/heavy", riddle_timeout_sec: 95 },
+  checks: [{ type: "route_loaded", expected_path: "/heavy" }],
+}, { url: "https://example.com" });
+assert.equal(riddleAliasTimeoutProfile.target.timeout_sec, 95);
 assert.equal(profile.target.setup_actions.length, 2);
 assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
 const profileScript = buildRiddleProofProfileScript(profile);
