@@ -814,6 +814,51 @@ const thresholdGameplayAssessment = assessBasicGameplayEvidence({
 });
 assert.equal(thresholdGameplayAssessment.passed, true);
 
+const compactedSelectorTextAssessment = assessBasicGameplayEvidence({
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "Long Docs Page",
+      path: "/docs/riddle-proof/markdown.md",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 3000,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "docs-before",
+        body_text_hash: "docs-before-text",
+      },
+      timed: {
+        screenshot_hash: "docs-before",
+        body_text_hash: "docs-before-text",
+      },
+      after_action: {
+        screenshot_hash: "docs-after",
+        body_text_hash: "docs-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      progression_checks: [
+        {
+          label: "long markdown includes deep section",
+          type: "selector_text_matches",
+          pattern: "##\\s*Proof Packets",
+          after: {
+            phase: "after_action",
+            selector: "body",
+            text: "# Riddle Proof Evidence-backed workflows for agent-authored browser changes.",
+            pattern_matched: true,
+          },
+        },
+      ],
+    },
+  ],
+});
+assert.equal(compactedSelectorTextAssessment.passed, true);
+
 const exactSelectorCountGameplayAssessment = assessBasicGameplayEvidence({
   version: "riddle-proof.basic-gameplay.v1",
   results: [
