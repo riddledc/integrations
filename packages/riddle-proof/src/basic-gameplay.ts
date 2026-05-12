@@ -106,6 +106,7 @@ export interface BasicGameplayMetric {
   property_path?: string | null;
   present?: boolean;
   text?: string | null;
+  pattern_matched?: boolean | null;
   number?: number | null;
   count?: number | null;
   value_type?: string | null;
@@ -577,7 +578,7 @@ export function assessBasicGameplayProgressionCheck(
     reason = ok ? null : "selector_still_present";
   } else if (type === "selector_text_matches") {
     if (!check.pattern && hasExplicitResult) return resolveBasicGameplayProgressionCheckWithArtifactScreenshots({ ...check, ok, reason });
-    ok = textMatches(after?.text, check.pattern, check.flags);
+    ok = after?.pattern_matched === true || textMatches(after?.text, check.pattern, check.flags);
     reason = ok ? null : "selector_text_did_not_match";
   } else if (type === "number_increases") {
     ok = numericValue(before?.number) !== null &&
