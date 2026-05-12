@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.12
+
+### Patch Changes
+
+- 88423f2: Allow trusted Riddle script runs to send top-level `strict: false`.
+
 ## 0.7.11
 
 ### Patch Changes
