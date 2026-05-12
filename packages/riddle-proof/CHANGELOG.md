@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.17
+
+### Patch Changes
+
+- 4ac651a: Add Riddle Proof profile target timeout metadata so durable audit profiles can carry known-heavy Riddle worker timeouts without relying on CLI-only overrides.
+
 ## 0.7.16
 
 ### Patch Changes
