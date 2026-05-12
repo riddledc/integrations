@@ -8,7 +8,10 @@
       { "name": "desktop", "width": 1440, "height": 1000 }
     ],
     "auth": "none",
-    "wait_for_selector": "body"
+    "wait_for_selector": "body",
+    "setup_actions": [
+      { "type": "wait", "ms": 250 }
+    ]
   },
   "checks": [
     { "type": "route_loaded", "expected_path": "/" },
