@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.9
+
+### Patch Changes
+
+- 5465c50: Add profile `target.setup_actions` for driving audited pages into a meaningful state before viewport checks and screenshots.
+
 ## 0.7.8
 
 ### Patch Changes
