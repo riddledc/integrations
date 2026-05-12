@@ -201,6 +201,10 @@ const profile = normalizeRiddleProofProfile({
       { name: "mobile", width: 390, height: 844 },
       { name: "desktop", width: 1440, height: 1000 },
     ],
+    setup_actions: [
+      { type: "click", selector: "[data-testid='open-pricing']", after_ms: 50 },
+      { type: "wait-for-text", selector: "body", text: "Start building", timeout_ms: 1500 },
+    ],
   },
   checks: [
     { type: "route_loaded", expected_path: "/pricing" },
@@ -211,9 +215,13 @@ const profile = normalizeRiddleProofProfile({
   ],
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
+assert.equal(profile.target.setup_actions.length, 2);
+assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
+assert.ok(profileScript.includes("executeSetupActions"));
+assert.ok(profileScript.includes("setup_action_results"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -230,6 +238,10 @@ const profileEvidence = {
       overflow_px: 0,
       selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
       text_matches: { "text:Start building": true },
+      setup_action_results: [
+        { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
+        { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
+      ],
       screenshot_label: "pricing-page-basic-mobile",
     },
     {
@@ -241,6 +253,10 @@ const profileEvidence = {
       overflow_px: 0,
       selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
       text_matches: { "text:Start building": true },
+      setup_action_results: [
+        { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
+        { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
+      ],
       screenshot_label: "pricing-page-basic-desktop",
     },
   ],
@@ -250,8 +266,23 @@ const profileEvidence = {
 };
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
-assert.equal(profileAssessment.checks.length, 5);
+assert.equal(profileAssessment.checks.length, 6);
+assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const failedSetupProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [
+    {
+      ...profileEvidence.viewports[0],
+      setup_action_results: [
+        { ok: false, action: "click", selector: "[data-testid='open-pricing']", reason: "selector_not_found" },
+      ],
+    },
+    profileEvidence.viewports[1],
+  ],
+});
+assert.equal(failedSetupProfileAssessment.status, "product_regression");
+assert.equal(failedSetupProfileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "failed");
 const overflowingProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [

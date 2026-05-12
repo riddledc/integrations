@@ -24,8 +24,16 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "no_fatal_console_errors",
 ] as const;
 
+export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
+  "click",
+  "wait",
+  "wait_for_selector",
+  "wait_for_text",
+] as const;
+
 export type RiddleProofProfileStatus = typeof RIDDLE_PROOF_PROFILE_STATUSES[number];
 export type RiddleProofProfileCheckType = typeof RIDDLE_PROOF_PROFILE_CHECK_TYPES[number];
+export type RiddleProofProfileSetupActionType = typeof RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES[number];
 export type RiddleProofProfileRunner =
   | "riddle"
   | "local-playwright"
@@ -46,6 +54,19 @@ export interface RiddleProofProfileViewport {
   height: number;
 }
 
+export interface RiddleProofProfileSetupAction {
+  type: RiddleProofProfileSetupActionType;
+  selector?: string;
+  text?: string;
+  pattern?: string;
+  flags?: string;
+  index?: number;
+  ms?: number;
+  timeout_ms?: number;
+  after_ms?: number;
+  continue_on_failure?: boolean;
+}
+
 export interface RiddleProofProfileTarget {
   url?: string;
   route?: string;
@@ -53,6 +74,7 @@ export interface RiddleProofProfileTarget {
   auth?: "none" | (string & {});
   wait_for_selector?: string;
   wait_ms?: number;
+  setup_actions?: RiddleProofProfileSetupAction[];
 }
 
 export interface RiddleProofProfileCheck {
@@ -101,6 +123,7 @@ export interface RiddleProofProfileViewportEvidence {
   overflow_px?: number;
   selectors?: Record<string, { count: number; visible_count: number }>;
   text_matches?: Record<string, boolean>;
+  setup_action_results?: Array<Record<string, JsonValue>>;
   screenshot_label?: string;
   navigation_error?: string;
   wait_error?: string;
@@ -237,6 +260,44 @@ function isSupportedCheckType(value: string): value is RiddleProofProfileCheckTy
   return (RIDDLE_PROOF_PROFILE_CHECK_TYPES as readonly string[]).includes(value);
 }
 
+function normalizeSetupActionType(value: string | undefined, index: number): RiddleProofProfileSetupActionType {
+  const normalized = String(value || "").trim().replace(/-/g, "_");
+  if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
+    return normalized as RiddleProofProfileSetupActionType;
+  }
+  throw new Error(`target.setup_actions[${index}].type ${value || "(missing)"} is not supported. Supported actions: ${RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.join(", ")}`);
+}
+
+function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
+  if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
+  const type = normalizeSetupActionType(stringValue(input.type), index);
+  const selector = stringValue(input.selector);
+  if ((type === "click" || type === "wait_for_selector" || type === "wait_for_text") && !selector) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
+  }
+  if (type === "wait_for_text" && !stringValue(input.text) && !stringValue(input.pattern)) {
+    throw new Error(`target.setup_actions[${index}] wait_for_text requires text or pattern.`);
+  }
+  return {
+    type,
+    selector,
+    text: stringValue(input.text),
+    pattern: stringValue(input.pattern),
+    flags: stringValue(input.flags),
+    index: numberValue(input.index),
+    ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
+    timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
+    after_ms: numberValue(input.after_ms) ?? numberValue(input.afterMs),
+    continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
+  };
+}
+
+function normalizeSetupActions(value: unknown): RiddleProofProfileSetupAction[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("target.setup_actions must be an array.");
+  return value.map(normalizeSetupAction);
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -310,6 +371,7 @@ export function normalizeRiddleProofProfile(
       auth: stringValue(targetInput.auth) || "none",
       wait_for_selector: stringValue(targetInput.wait_for_selector) || stringValue(targetInput.waitForSelector),
       wait_ms: numberValue(targetInput.wait_ms) ?? numberValue(targetInput.waitMs),
+      setup_actions: normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions),
     },
     checks,
     artifacts: Array.isArray(input.artifacts)
@@ -507,6 +569,53 @@ function assessCheckFromEvidence(
   };
 }
 
+function assessSetupActionsFromEvidence(
+  profile: RiddleProofProfile,
+  evidence: RiddleProofProfileEvidence,
+): RiddleProofProfileCheckResult | undefined {
+  if (!profile.target.setup_actions?.length) return undefined;
+  const actionCount = profile.target.setup_actions.length;
+  const failed: Array<Record<string, JsonValue>> = [];
+  const viewports = evidence.viewports || [];
+  for (const viewport of viewports) {
+    const results = viewport.setup_action_results || [];
+    for (const result of results) {
+      if (result.ok === false) {
+        failed.push({
+          viewport: viewport.name,
+          action: result.action ?? result.type ?? null,
+          selector: result.selector ?? null,
+          reason: result.reason ?? result.error ?? null,
+        });
+      }
+    }
+    if (results.length < actionCount && results.every((result) => result.ok !== false)) {
+      failed.push({
+        viewport: viewport.name,
+        action: "setup_actions",
+        selector: null,
+        reason: `missing setup action results: ${results.length}/${actionCount}`,
+      });
+    }
+  }
+  return {
+    type: "setup_actions_succeeded",
+    label: "setup actions succeeded",
+    status: failed.length ? "failed" : "passed",
+    evidence: {
+      action_count: actionCount,
+      viewports: viewports.map((viewport) => ({
+        name: viewport.name,
+        ok: (viewport.setup_action_results || []).length >= actionCount
+          && (viewport.setup_action_results || []).every((result) => result.ok !== false),
+        result_count: (viewport.setup_action_results || []).length,
+      })),
+      failed,
+    },
+    message: failed.length ? `Setup actions failed in ${failed.length} viewport action(s).` : undefined,
+  };
+}
+
 function profileStatusFromEvidence(
   evidence: RiddleProofProfileEvidence | undefined,
   checks: RiddleProofProfileCheckResult[],
@@ -526,7 +635,12 @@ export function assessRiddleProofProfileEvidence(
   options: { runner?: RiddleProofProfileRunner; riddle?: RiddleProofProfileResult["riddle"]; artifacts?: RiddleProofProfileArtifactRef[] } = {},
 ): RiddleProofProfileResult {
   const capturedAt = evidence?.captured_at || new Date().toISOString();
-  const checks = evidence ? profile.checks.map((check) => assessCheckFromEvidence(check, evidence)) : [];
+  const checks = evidence
+    ? [
+      assessSetupActionsFromEvidence(profile, evidence),
+      ...profile.checks.map((check) => assessCheckFromEvidence(check, evidence)),
+    ].filter((check): check is RiddleProofProfileCheckResult => Boolean(check))
+    : [];
   const status = profileStatusFromEvidence(evidence, checks);
   const firstViewport = evidence?.viewports?.[0];
   const screenshots = (evidence?.viewports || [])
@@ -669,6 +783,47 @@ function textMatches(sample, check) {
 function assessProfile(profile, evidence) {
   const checks = [];
   const viewports = evidence.viewports || [];
+  if (profile.target && Array.isArray(profile.target.setup_actions) && profile.target.setup_actions.length) {
+    const actionCount = profile.target.setup_actions.length;
+    const failed = [];
+    for (const viewport of viewports) {
+      const results = viewport.setup_action_results || [];
+      for (const result of results) {
+        if (result && result.ok === false) {
+          failed.push({
+            viewport: viewport.name,
+            action: result.action || result.type || null,
+            selector: result.selector || null,
+            reason: result.reason || result.error || null,
+          });
+        }
+      }
+      if (results.length < actionCount && results.every((result) => !result || result.ok !== false)) {
+        failed.push({
+          viewport: viewport.name,
+          action: "setup_actions",
+          selector: null,
+          reason: "missing setup action results: " + results.length + "/" + actionCount,
+        });
+      }
+    }
+    checks.push({
+      type: "setup_actions_succeeded",
+      label: "setup actions succeeded",
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        action_count: actionCount,
+        viewports: viewports.map((viewport) => ({
+          name: viewport.name,
+          ok: (viewport.setup_action_results || []).length >= actionCount
+            && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false),
+          result_count: (viewport.setup_action_results || []).length,
+        })),
+        failed,
+      },
+      message: failed.length ? "Setup actions failed in " + failed.length + " viewport action(s)." : undefined,
+    });
+  }
   for (const check of profile.checks || []) {
     if (check.type === "route_loaded") {
       const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
@@ -832,6 +987,92 @@ function textMatches(sample, check) {
   }
   return String(sample || "").includes(check.text || "");
 }
+function setupActionType(action) {
+  return String(action && action.type ? action.type : "").replace(/-/g, "_");
+}
+function setupNumber(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+function setupTextMatches(sample, action) {
+  if (action.pattern) {
+    try { return new RegExp(action.pattern, action.flags || "").test(sample || ""); } catch { return false; }
+  }
+  return String(sample || "").includes(action.text || "");
+}
+async function setupLocatorText(locator, index) {
+  return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
+}
+async function executeSetupAction(action, ordinal) {
+  const type = setupActionType(action);
+  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null };
+  const timeout = setupNumber(action.timeout_ms, 5000);
+  try {
+    if (type === "wait") {
+      const ms = setupNumber(action.ms, 500);
+      await page.waitForTimeout(ms);
+      return { ...base, ok: true, ms };
+    }
+    if (type === "wait_for_selector") {
+      await page.waitForSelector(action.selector, { state: "visible", timeout });
+      return { ...base, ok: true, timeout_ms: timeout };
+    }
+    if (type === "click") {
+      const locator = page.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, reason: "selector_not_found", count };
+      let targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      let matchedText = null;
+      if (action.text || action.pattern) {
+        targetIndex = -1;
+        for (let index = 0; index < count; index += 1) {
+          const text = await setupLocatorText(locator, index);
+          if (setupTextMatches(text, action)) {
+            targetIndex = index;
+            matchedText = text;
+            break;
+          }
+        }
+        if (targetIndex < 0) return { ...base, reason: "text_not_found", count };
+      }
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
+      await locator.nth(targetIndex).click({ timeout });
+      return { ...base, ok: true, count, target_index: targetIndex, text: matchedText };
+    }
+    if (type === "wait_for_text") {
+      const locator = page.locator(action.selector);
+      const startedAt = Date.now();
+      let lastText = "";
+      while (Date.now() - startedAt <= timeout) {
+        const count = await locator.count().catch(() => 0);
+        for (let index = 0; index < count; index += 1) {
+          const text = await setupLocatorText(locator, index);
+          lastText = text || lastText;
+          if (setupTextMatches(text, action)) {
+            return { ...base, ok: true, text, target_index: index, timeout_ms: timeout };
+          }
+        }
+        await page.waitForTimeout(100);
+      }
+      return { ...base, reason: "text_not_found", text: lastText, timeout_ms: timeout };
+    }
+    return { ...base, reason: "unsupported_action" };
+  } catch (error) {
+    return { ...base, error: String(error && error.message ? error.message : error).slice(0, 1000) };
+  }
+}
+async function executeSetupActions(actions) {
+  const results = [];
+  for (let index = 0; index < (actions || []).length; index += 1) {
+    const action = actions[index] || {};
+    const result = await executeSetupAction(action, index);
+    results.push(result);
+    const afterMs = setupNumber(action.after_ms, 0);
+    if (afterMs) await page.waitForTimeout(afterMs);
+    if (result.ok === false && action.continue_on_failure !== true) break;
+  }
+  return results;
+}
 function expectedPathFor(check) {
   return check.expected_path || new URL(targetUrl).pathname || "/";
 }
@@ -866,6 +1107,9 @@ async function captureViewport(viewport) {
   if (!navigationError && profile.target.wait_ms) {
     await page.waitForTimeout(profile.target.wait_ms);
   }
+  const setupActionResults = (!navigationError && !waitError)
+    ? await executeSetupActions(profile.target.setup_actions || [])
+    : [];
   const dom = await page.evaluate(() => {
     const body = document.body;
     const documentElement = document.documentElement;
@@ -927,6 +1171,7 @@ async function captureViewport(viewport) {
     overflow_px: Math.max(0, (dom.scroll_width || 0) - (dom.client_width || viewport.width)),
     selectors,
     text_matches,
+    setup_action_results: setupActionResults,
     screenshot_label: screenshotLabel,
     navigation_error: navigationError,
     wait_error: waitError,

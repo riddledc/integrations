@@ -108,7 +108,11 @@ or as a stronger proof base before a change loop.
       { "name": "mobile", "width": 390, "height": 844 },
       { "name": "desktop", "width": 1440, "height": 1000 }
     ],
-    "auth": "none"
+    "auth": "none",
+    "setup_actions": [
+      { "type": "click", "selector": "[data-testid='show-plans']" },
+      { "type": "wait_for_text", "selector": "body", "text": "Start building" }
+    ]
   },
   "checks": [
     { "type": "route_loaded", "expected_path": "/pricing" },
@@ -140,6 +144,13 @@ The package includes a generic starter profile at
 `examples/profiles/page-content-basic.json`; copy that shape into a repository
 profile directory and replace the selector/text checks with app-specific
 invariants.
+
+`target.setup_actions` is optional. Use it when the meaningful proof surface
+appears only after a picker, tab, login stub, transport control, or other
+bounded interaction. Supported setup actions are `click`, `wait`,
+`wait_for_selector`, and `wait_for_text`; a failed setup action is recorded as
+a failed `setup_actions_succeeded` check so the profile cannot pass without
+reaching the intended state.
 
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:
