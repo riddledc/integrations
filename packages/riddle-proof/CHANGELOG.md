@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.16
+
+### Patch Changes
+
+- 7d81595: Honor explicit selector text pattern match metrics when assessing basic gameplay progression checks.
+
 ## 0.7.15
 
 ### Patch Changes
