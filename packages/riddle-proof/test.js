@@ -640,6 +640,9 @@ assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-down"));
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-move"));
 assert.ok(BASIC_GAMEPLAY_ACTION_TYPES.includes("canvas-pointer-up"));
 assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("number_at_least"));
+assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("selector_count_equals"));
+assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("selector_count_equal"));
+assert.ok(BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES.includes("selector_count_eq"));
 assert.equal(compactBasicGameplayText("ok \ud83d emoji 😀", 100), "ok emoji 😀");
 
 const progressionGameplayEvidence = {
@@ -734,6 +737,57 @@ const thresholdGameplayAssessment = assessBasicGameplayEvidence({
   ],
 });
 assert.equal(thresholdGameplayAssessment.passed, true);
+
+const exactSelectorCountGameplayAssessment = assessBasicGameplayEvidence({
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "Exact Count Game",
+      path: "/games/exact-count",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "exact-before",
+        body_text_hash: "exact-before-text",
+      },
+      timed: {
+        screenshot_hash: "exact-before",
+        body_text_hash: "exact-before-text",
+      },
+      after_action: {
+        screenshot_hash: "exact-after",
+        body_text_hash: "exact-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      progression_checks: [
+        {
+          label: "renders exactly four tabs",
+          type: "selector_count_equals",
+          expected: 4,
+          after: { phase: "after_action", selector: ".mode-tab", count: 4, present: true },
+        },
+        {
+          label: "has exactly one active tab",
+          type: "selector_count_eq",
+          value: 1,
+          after: { phase: "after_action", selector: ".mode-tab.active", count: 2, present: true },
+        },
+      ],
+    },
+  ],
+});
+assert.equal(exactSelectorCountGameplayAssessment.passed, false);
+assert.equal(exactSelectorCountGameplayAssessment.failure_counts.progression_assertion_failed, 1);
+assert.equal(
+  exactSelectorCountGameplayAssessment.failing_routes[0].suite_failures[0].reason,
+  "selector_count_did_not_equal_expected",
+);
 
 const artifactBackedGameplayEvidence = {
   version: "riddle-proof.basic-gameplay.v1",
