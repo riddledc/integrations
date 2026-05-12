@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.15
+
+### Patch Changes
+
+- ef65918: Promote basic gameplay `after_cleanup` terminal-before-restart evidence.
+
 ## 0.7.14
 
 ### Patch Changes
