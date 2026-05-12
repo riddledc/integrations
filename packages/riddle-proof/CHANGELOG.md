@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.14
+
+### Patch Changes
+
+- db0c0c5: Expose exact selector-count progression checks in the basic gameplay contract.
+
 ## 0.7.13
 
 ### Patch Changes
