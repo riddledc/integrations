@@ -76,6 +76,9 @@ export const BASIC_GAMEPLAY_ACTION_TYPES = [
 export const BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES = [
   "selector_count_increases",
   "selector_count_at_least",
+  "selector_count_equals",
+  "selector_count_equal",
+  "selector_count_eq",
   "selector_absent",
   "selector_text_matches",
   "number_increases",
@@ -549,6 +552,13 @@ export function assessBasicGameplayProgressionCheck(
     if (numericValue(check.min) === null && hasExplicitResult) return resolveBasicGameplayProgressionCheckWithArtifactScreenshots({ ...check, ok, reason });
     ok = numberValue(after?.count) >= numberValue(check.min);
     reason = ok ? null : "selector_count_below_min";
+  } else if (type === "selector_count_equals" || type === "selector_count_equal" || type === "selector_count_eq") {
+    const expected = numericValue(check.expected ?? check.count ?? check.value);
+    if (expected === null && hasExplicitResult) return resolveBasicGameplayProgressionCheckWithArtifactScreenshots({ ...check, ok, reason });
+    ok = numericValue(after?.count) !== null &&
+      expected !== null &&
+      numberValue(after?.count) === expected;
+    reason = ok ? null : "selector_count_did_not_equal_expected";
   } else if (type === "selector_absent") {
     ok = !after?.present || numberValue(after?.count) === 0;
     reason = ok ? null : "selector_still_present";
