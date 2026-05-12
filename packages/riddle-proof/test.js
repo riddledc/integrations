@@ -603,6 +603,82 @@ assert.equal(continuedActionAssessment.route_results[0].signals.first_interactio
 assert.equal(continuedActionAssessment.route_results[0].signals.state_change_observed, true);
 assert.equal(continuedActionAssessment.route_results[0].diffs.after_continue?.changed, true);
 
+const cleanupActionAssessment = assessBasicGameplayEvidence({
+  results: [
+    {
+      name: "Terminal Cleanup Game",
+      path: "/games/terminal-cleanup",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "cleanup-before",
+        body_text_hash: "cleanup-text",
+      },
+      timed: {
+        screenshot_hash: "cleanup-before",
+        body_text_hash: "cleanup-text",
+      },
+      after_action: {
+        screenshot_hash: "cleanup-before",
+        body_text_hash: "cleanup-text",
+      },
+      after_cleanup: {
+        screenshot_hash: "cleanup-ended",
+        body_text_hash: "cleanup-ended-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      continued_cleanup_action_results: [{ ok: true, action: "window-call" }],
+    },
+  ],
+});
+assert.equal(cleanupActionAssessment.passed, true);
+assert.equal(cleanupActionAssessment.route_results[0].signals.state_change_observed, true);
+assert.equal(cleanupActionAssessment.route_results[0].signals.reset_path_present, true);
+assert.equal(cleanupActionAssessment.route_results[0].diffs.after_cleanup?.changed, true);
+
+const cleanupFailureEvidence = {
+  results: [
+    {
+      name: "Cleanup Failure Game",
+      path: "/games/cleanup-failure",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "cleanup-failure-before",
+        body_text_hash: "cleanup-failure-before-text",
+      },
+      timed: {
+        screenshot_hash: "cleanup-failure-before",
+        body_text_hash: "cleanup-failure-before-text",
+      },
+      after_action: {
+        screenshot_hash: "cleanup-failure-after",
+        body_text_hash: "cleanup-failure-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      continued_cleanup_action_results: [{ ok: false, action: "evaluate", reason: "unexpected_return_value" }],
+    },
+  ],
+};
+const cleanupFailureAssessment = assessBasicGameplayEvidence(cleanupFailureEvidence);
+const cleanupFailureCatches = createBasicGameplayCatchRecords(cleanupFailureAssessment, cleanupFailureEvidence);
+assert.equal(cleanupFailureAssessment.warning_counts.some_actions_failed, 1);
+assert.equal(cleanupFailureCatches[0].code, "action_failed");
+assert.equal(cleanupFailureCatches[0].phase, "after_cleanup");
+assert.equal(cleanupFailureCatches[0].reason, "unexpected_return_value");
+
 const inertGameplayAssessment = assessBasicGameplayEvidence({
   results: [
     {
@@ -819,6 +895,11 @@ const artifactBackedGameplayEvidence = {
         body_text_hash: "canvas-after-text",
         reset_control_count: 1,
       },
+      after_cleanup: {
+        screenshot_hash: "canvas-cleanup",
+        body_text_hash: "canvas-cleanup-text",
+        reset_control_count: 1,
+      },
       mobile: { overflow_px: 0 },
       action_results: [{ ok: true, action: "click" }],
       progression_checks: [
@@ -832,6 +913,16 @@ const artifactBackedGameplayEvidence = {
           before: { phase: "after_action", first_canvas_hash: "same-canvas" },
           after: { phase: "after_continue", first_canvas_hash: "same-canvas" },
         },
+        {
+          label: "terminal state appears before restart",
+          type: "screenshot_hash_changes",
+          ok: false,
+          reason: "screenshot_hash_did_not_change",
+          from_phase: "after_continue",
+          to_phase: "after_cleanup",
+          before: { phase: "after_continue", screenshot_hash: "same-shot" },
+          after: { phase: "after_cleanup", screenshot_hash: "same-shot" },
+        },
       ],
     },
   ],
@@ -840,10 +931,13 @@ attachBasicGameplayArtifactScreenshotHashes(artifactBackedGameplayEvidence, {
   artifacts: [
     { name: "canvas-game-after.png", kind: "screenshot", sha256: "after-one" },
     { name: "canvas-game-after-continue.png", kind: "screenshot", sha256: "after-two" },
+    { name: "canvas-game-after-cleanup.png", kind: "screenshot", sha256: "after-three" },
   ],
 });
 assert.equal(artifactBackedGameplayEvidence.results[0].progression_checks[0].ok, true);
 assert.equal(artifactBackedGameplayEvidence.results[0].progression_checks[0].artifact_resolution.source, "riddle_screenshot_artifacts");
+assert.equal(artifactBackedGameplayEvidence.results[0].progression_checks[1].ok, true);
+assert.equal(artifactBackedGameplayEvidence.results[0].after_cleanup.artifact_screenshot_hash, "after-three");
 assert.equal(assessBasicGameplayEvidence(artifactBackedGameplayEvidence).passed, true);
 
 const gameplayCatchSummary = createBasicGameplayCatchSummary({

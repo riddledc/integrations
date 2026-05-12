@@ -182,11 +182,15 @@ export interface RiddleProofBasicGameplayRouteEvidence {
   afterAction?: BasicGameplaySnapshot;
   after_continue?: BasicGameplaySnapshot;
   afterContinue?: BasicGameplaySnapshot;
+  after_cleanup?: BasicGameplaySnapshot;
+  afterCleanup?: BasicGameplaySnapshot;
   mobile?: BasicGameplayMobileEvidence;
   action_results?: BasicGameplayActionResult[];
   actionResults?: BasicGameplayActionResult[];
   continued_action_results?: BasicGameplayActionResult[];
   continuedActionResults?: BasicGameplayActionResult[];
+  continued_cleanup_action_results?: BasicGameplayActionResult[];
+  continuedCleanupActionResults?: BasicGameplayActionResult[];
   restart_action_results?: BasicGameplayActionResult[];
   restartActionResults?: BasicGameplayActionResult[];
   progression_checks?: BasicGameplayProgressionCheck[];
@@ -242,6 +246,7 @@ export interface RiddleProofBasicGameplayRouteAssessment {
     timed: BasicGameplayChangeSummary;
     after_action: BasicGameplayChangeSummary;
     after_continue?: BasicGameplayChangeSummary;
+    after_cleanup?: BasicGameplayChangeSummary;
   };
 }
 
@@ -373,6 +378,7 @@ const PHASE_SCREENSHOT_SUFFIXES: Record<string, string> = {
   initial: "before",
   after_action: "after",
   after_continue: "after-continue",
+  after_cleanup: "after-cleanup",
   after_restart: "after-restart",
   revisit: "revisit",
 };
@@ -442,24 +448,30 @@ export function assessBasicGameplayRoute(
   const timed = route.timed || {};
   const afterAction = route.after_action || route.afterAction || {};
   const afterContinue = route.after_continue || route.afterContinue || {};
+  const afterCleanup = route.after_cleanup || route.afterCleanup || {};
   const mobile = route.mobile || {};
   const timedChange = changed(initial, timed);
   const actionChange = changed(timed, afterAction);
   const continuedActionChange = changed(afterAction, afterContinue);
+  const cleanupBase = route.after_continue || route.afterContinue ? afterContinue : afterAction;
+  const cleanupActionChange = changed(cleanupBase, afterCleanup);
   const surfaceVisible = numberValue(initial.visible_canvas_count) > 0 ||
     numberValue(initial.enabled_clickable_count) > 0 ||
     numberValue(initial.visible_large_node_count) >= minSurfaceLargeNodes;
   const actionResults = listValue(route.action_results || route.actionResults) as BasicGameplayActionResult[];
   const continuedActionResults = listValue(route.continued_action_results || route.continuedActionResults) as BasicGameplayActionResult[];
+  const continuedCleanupActionResults = listValue(route.continued_cleanup_action_results || route.continuedCleanupActionResults) as BasicGameplayActionResult[];
   const restartActionResults = listValue(route.restart_action_results || route.restartActionResults) as BasicGameplayActionResult[];
   const primaryActionResults = [...actionResults, ...continuedActionResults];
   const actionAttempted = primaryActionResults.some((result) => result.ok === true && result.action !== "wait");
-  const actionFailed = primaryActionResults.some((result) => result.ok === false && result.action !== "wait");
+  const actionFailed = [...primaryActionResults, ...continuedCleanupActionResults].some((result) => result.ok === false && result.action !== "wait");
   const restartActionAttempted = restartActionResults.some((result) => result.ok === true && result.action !== "wait");
-  const stateChangeObserved = actionChange.changed || continuedActionChange.changed || timedChange.changed;
+  const stateChangeObserved = actionChange.changed || continuedActionChange.changed || cleanupActionChange.changed || timedChange.changed;
   const resetPathPresent = numberValue(initial.reset_control_count) > 0 ||
     numberValue(timed.reset_control_count) > 0 ||
     numberValue(afterAction.reset_control_count) > 0 ||
+    numberValue(afterContinue.reset_control_count) > 0 ||
+    numberValue(afterCleanup.reset_control_count) > 0 ||
     restartActionAttempted;
   const responseStatus = firstNumber(route.http_status, route.response_status, route.status);
   const pageErrorCount = numberValue(route.page_error_count);
@@ -507,6 +519,7 @@ export function assessBasicGameplayRoute(
       timed: timedChange,
       after_action: actionChange,
       after_continue: continuedActionChange,
+      after_cleanup: cleanupActionChange,
     },
   };
 }
@@ -751,6 +764,7 @@ export function createBasicGameplayCatchRecords(
     for (const [group, phase] of [
       ["action_results", "after_action"],
       ["continued_action_results", "after_continue"],
+      ["continued_cleanup_action_results", "after_cleanup"],
       ["restart_action_results", "after_restart"],
     ] as const) {
       for (const actionResult of listValue(route[group]) as BasicGameplayActionResult[]) {
@@ -936,8 +950,12 @@ function hasRouteShape(record: Record<string, unknown> | null) {
     record.initial ||
     record.after_action ||
     record.afterAction ||
+    record.after_cleanup ||
+    record.afterCleanup ||
     record.action_results ||
-    record.actionResults
+    record.actionResults ||
+    record.continued_cleanup_action_results ||
+    record.continuedCleanupActionResults
   ) && (record.path || record.name));
 }
 
