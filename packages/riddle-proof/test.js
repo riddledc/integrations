@@ -222,6 +222,8 @@ assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
 assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setup_action_results"));
+assert.ok(profileScript.includes("setupLocatorVisible"));
+assert.ok(profileScript.includes("matching_element_not_visible"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -233,7 +235,7 @@ const profileEvidence = {
       name: "mobile",
       width: 390,
       height: 844,
-      route: { requested: "https://example.com/pricing", observed: "/pricing", expected_path: "/pricing", matched: true, http_status: 200 },
+      route: { requested: "https://example.com/pricing", observed: "/pricing/", expected_path: "/pricing", matched: false, http_status: 200 },
       body_text_sample: "Pricing Start building",
       overflow_px: 0,
       selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
@@ -266,6 +268,7 @@ const profileEvidence = {
 };
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
+assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 6);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);

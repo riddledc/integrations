@@ -150,7 +150,9 @@ appears only after a picker, tab, login stub, transport control, or other
 bounded interaction. Supported setup actions are `click`, `wait`,
 `wait_for_selector`, and `wait_for_text`; a failed setup action is recorded as
 a failed `setup_actions_succeeded` check so the profile cannot pass without
-reaching the intended state.
+reaching the intended state. Text-matched `click` actions prefer visible
+matching elements, which keeps responsive layouts from selecting hidden desktop
+or mobile-only links.
 
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:

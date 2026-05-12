@@ -393,7 +393,13 @@ export function resolveRiddleProofProfileTargetUrl(profile: RiddleProofProfile):
 }
 
 function routeForViewport(viewport: RiddleProofProfileViewportEvidence | undefined): RiddleProofProfileRouteEvidence {
-  return viewport?.route || {
+  if (viewport?.route) {
+    return {
+      ...viewport.route,
+      matched: viewport.route.matched || routePathMatches(viewport.route.observed, viewport.route.expected_path),
+    };
+  }
+  return {
     requested: "",
     observed: "",
     matched: false,
@@ -424,8 +430,19 @@ function matchText(sample: string, check: RiddleProofProfileCheck) {
   return sample.includes(check.text || "");
 }
 
+function normalizeRoutePath(path: string | undefined) {
+  const value = path || "/";
+  if (value === "/") return "/";
+  return value.replace(/\/+$/, "") || "/";
+}
+
+function routePathMatches(observed: string | undefined, expected: string | undefined) {
+  return normalizeRoutePath(observed) === normalizeRoutePath(expected);
+}
+
 function successfulRoute(route: RiddleProofProfileRouteEvidence) {
-  return route.matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
+  const matched = route.matched || routePathMatches(route.observed, route.expected_path);
+  return matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
 }
 
 function assessCheckFromEvidence(
@@ -444,12 +461,12 @@ function assessCheckFromEvidence(
   }
 
   if (check.type === "route_loaded") {
-    const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
-    const failed = viewports.filter((viewport) => !successfulRoute({
-      ...viewport.route,
-      expected_path: expectedPath,
-      matched: viewport.route.observed === expectedPath || viewport.route.matched,
-    }));
+      const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
+      const failed = viewports.filter((viewport) => !successfulRoute({
+        ...viewport.route,
+        expected_path: expectedPath,
+        matched: routePathMatches(viewport.route.observed, expectedPath) || viewport.route.matched,
+      }));
     return {
       type: check.type,
       label: checkLabel(check),
@@ -771,8 +788,16 @@ export function createRiddleProofProfileInsufficientResult(input: {
 
 function runtimeScriptAssessmentSource() {
   return String.raw`
+function normalizeRoutePath(path) {
+  const value = path || "/";
+  if (value === "/") return "/";
+  return value.replace(/\/+$/, "") || "/";
+}
+function routePathMatches(observed, expected) {
+  return normalizeRoutePath(observed) === normalizeRoutePath(expected);
+}
 function routeOk(route) {
-  return Boolean(route && route.matched && !route.error && (route.http_status == null || route.http_status < 400));
+  return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path)) && !route.error && (route.http_status == null || route.http_status < 400));
 }
 function textMatches(sample, check) {
   if (check.pattern) {
@@ -829,7 +854,7 @@ function assessProfile(profile, evidence) {
       const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
       const failed = viewports.filter((viewport) => {
         const route = { ...(viewport.route || {}), expected_path: expectedPath };
-        route.matched = route.observed === expectedPath || route.matched;
+        route.matched = routePathMatches(route.observed, expectedPath) || route.matched;
         return !routeOk(route);
       });
       checks.push({
@@ -1003,6 +1028,9 @@ function setupTextMatches(sample, action) {
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
 }
+async function setupLocatorVisible(locator, index) {
+  return await locator.nth(index).isVisible({ timeout: 1000 }).catch(() => false);
+}
 async function executeSetupAction(action, ordinal) {
   const type = setupActionType(action);
   const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null };
@@ -1023,16 +1051,26 @@ async function executeSetupAction(action, ordinal) {
       if (!count) return { ...base, reason: "selector_not_found", count };
       let targetIndex = Number.isInteger(action.index) ? action.index : 0;
       let matchedText = null;
+      let hiddenMatchIndex = -1;
+      let hiddenMatchedText = null;
       if (action.text || action.pattern) {
         targetIndex = -1;
         for (let index = 0; index < count; index += 1) {
           const text = await setupLocatorText(locator, index);
           if (setupTextMatches(text, action)) {
-            targetIndex = index;
-            matchedText = text;
-            break;
+            const visible = await setupLocatorVisible(locator, index);
+            if (visible) {
+              targetIndex = index;
+              matchedText = text;
+              break;
+            }
+            if (hiddenMatchIndex < 0) {
+              hiddenMatchIndex = index;
+              hiddenMatchedText = text;
+            }
           }
         }
+        if (targetIndex < 0 && hiddenMatchIndex >= 0) return { ...base, reason: "matching_element_not_visible", count, target_index: hiddenMatchIndex, text: hiddenMatchedText };
         if (targetIndex < 0) return { ...base, reason: "text_not_found", count };
       }
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
@@ -1159,7 +1197,7 @@ async function captureViewport(viewport) {
       requested: targetUrl,
       observed: dom.pathname,
       expected_path: expectedPath,
-      matched: dom.pathname === expectedPath,
+      matched: routePathMatches(dom.pathname, expectedPath),
       http_status: httpStatus,
       error: navigationError || waitError || undefined,
     },
