@@ -386,17 +386,17 @@ export function normalizeRiddleProofProfile(
 export function resolveRiddleProofProfileTargetUrl(profile: RiddleProofProfile): string {
   const route = profile.target.route || "";
   const targetUrl = profile.target.url || "";
+  if (targetUrl && route) return resolveRiddleProofProfileRouteUrl(targetUrl, route);
   if (/^https?:\/\//i.test(route)) return route;
-  if (targetUrl && route) return new URL(route, targetUrl).href;
   if (targetUrl) return targetUrl;
   throw new Error("profile target URL could not be resolved.");
 }
 
-function routeForViewport(viewport: RiddleProofProfileViewportEvidence | undefined): RiddleProofProfileRouteEvidence {
+function routeForViewport(viewport: RiddleProofProfileViewportEvidence | undefined, targetUrl?: string): RiddleProofProfileRouteEvidence {
   if (viewport?.route) {
     return {
       ...viewport.route,
-      matched: viewport.route.matched || routePathMatches(viewport.route.observed, viewport.route.expected_path),
+      matched: viewport.route.matched || routePathMatches(viewport.route.observed, viewport.route.expected_path, targetUrl),
     };
   }
   return {
@@ -436,12 +436,53 @@ function normalizeRoutePath(path: string | undefined) {
   return value.replace(/\/+$/, "") || "/";
 }
 
-function routePathMatches(observed: string | undefined, expected: string | undefined) {
-  return normalizeRoutePath(observed) === normalizeRoutePath(expected);
+function previewMountPrefix(pathname: string | undefined) {
+  const value = pathname || "/";
+  const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+  if (apiPreview) return apiPreview[1];
+  const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+  return internalPreview ? internalPreview[1] : "";
 }
 
-function successfulRoute(route: RiddleProofProfileRouteEvidence) {
-  const matched = route.matched || routePathMatches(route.observed, route.expected_path);
+function joinMountedRoutePath(mountPrefix: string, routePath: string) {
+  const route = routePath.startsWith("/") ? routePath : `/${routePath}`;
+  if (!mountPrefix) return route;
+  if (route === mountPrefix || route.startsWith(`${mountPrefix}/`)) return route;
+  return `${mountPrefix}${route}`;
+}
+
+export function resolveRiddleProofProfileRouteUrl(targetUrl: string, route: string): string {
+  if (/^https?:\/\//i.test(route)) return route;
+  if (!targetUrl) return route;
+  if (route.startsWith("/")) {
+    const base = new URL(targetUrl);
+    const mountPrefix = previewMountPrefix(base.pathname);
+    if (mountPrefix) {
+      const routeParts = new URL(route, base.origin);
+      base.pathname = joinMountedRoutePath(mountPrefix, routeParts.pathname);
+      base.search = routeParts.search;
+      base.hash = routeParts.hash;
+      return base.href;
+    }
+  }
+  return new URL(route, targetUrl).href;
+}
+
+function mountedExpectedRoutePath(targetUrl: string | undefined, expected: string | undefined) {
+  if (!targetUrl || !expected || !expected.startsWith("/")) return expected;
+  const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+  return mountPrefix ? joinMountedRoutePath(mountPrefix, expected) : expected;
+}
+
+function routePathMatches(observed: string | undefined, expected: string | undefined, targetUrl?: string) {
+  const normalizedObserved = normalizeRoutePath(observed);
+  const normalizedExpected = normalizeRoutePath(expected);
+  if (normalizedObserved === normalizedExpected) return true;
+  return normalizedObserved === normalizeRoutePath(mountedExpectedRoutePath(targetUrl, expected));
+}
+
+function successfulRoute(route: RiddleProofProfileRouteEvidence, targetUrl?: string) {
+  const matched = route.matched || routePathMatches(route.observed, route.expected_path, targetUrl);
   return matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
 }
 
@@ -465,8 +506,8 @@ function assessCheckFromEvidence(
       const failed = viewports.filter((viewport) => !successfulRoute({
         ...viewport.route,
         expected_path: expectedPath,
-        matched: routePathMatches(viewport.route.observed, expectedPath) || viewport.route.matched,
-      }));
+        matched: routePathMatches(viewport.route.observed, expectedPath, evidence.target_url) || viewport.route.matched,
+      }, evidence.target_url));
     return {
       type: check.type,
       label: checkLabel(check),
@@ -669,7 +710,7 @@ export function assessRiddleProofProfileEvidence(
     runner: options.runner || "riddle",
     status,
     baseline_policy: profile.baseline_policy,
-    route: routeForViewport(firstViewport),
+    route: routeForViewport(firstViewport, evidence?.target_url),
     artifacts: {
       screenshots,
       console: "console.json",
@@ -793,11 +834,32 @@ function normalizeRoutePath(path) {
   if (value === "/") return "/";
   return value.replace(/\/+$/, "") || "/";
 }
-function routePathMatches(observed, expected) {
-  return normalizeRoutePath(observed) === normalizeRoutePath(expected);
+function previewMountPrefix(pathname) {
+  const value = pathname || "/";
+  const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+  if (apiPreview) return apiPreview[1];
+  const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+  return internalPreview ? internalPreview[1] : "";
 }
-function routeOk(route) {
-  return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path)) && !route.error && (route.http_status == null || route.http_status < 400));
+function joinMountedRoutePath(mountPrefix, routePath) {
+  const route = routePath.startsWith("/") ? routePath : "/" + routePath;
+  if (!mountPrefix) return route;
+  if (route === mountPrefix || route.startsWith(mountPrefix + "/")) return route;
+  return mountPrefix + route;
+}
+function mountedExpectedRoutePath(targetUrl, expected) {
+  if (!targetUrl || !expected || !expected.startsWith("/")) return expected;
+  const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+  return mountPrefix ? joinMountedRoutePath(mountPrefix, expected) : expected;
+}
+function routePathMatches(observed, expected, targetUrl) {
+  const normalizedObserved = normalizeRoutePath(observed);
+  const normalizedExpected = normalizeRoutePath(expected);
+  if (normalizedObserved === normalizedExpected) return true;
+  return normalizedObserved === normalizeRoutePath(mountedExpectedRoutePath(targetUrl, expected));
+}
+function routeOk(route, targetUrl) {
+  return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path, targetUrl)) && !route.error && (route.http_status == null || route.http_status < 400));
 }
 function textMatches(sample, check) {
   if (check.pattern) {
@@ -854,8 +916,8 @@ function assessProfile(profile, evidence) {
       const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
       const failed = viewports.filter((viewport) => {
         const route = { ...(viewport.route || {}), expected_path: expectedPath };
-        route.matched = routePathMatches(route.observed, expectedPath) || route.matched;
-        return !routeOk(route);
+        route.matched = routePathMatches(route.observed, expectedPath, evidence.target_url) || route.matched;
+        return !routeOk(route, evidence.target_url);
       });
       checks.push({
         type: check.type,
@@ -1197,7 +1259,7 @@ async function captureViewport(viewport) {
       requested: targetUrl,
       observed: dom.pathname,
       expected_path: expectedPath,
-      matched: routePathMatches(dom.pathname, expectedPath),
+      matched: routePathMatches(dom.pathname, expectedPath, targetUrl),
       http_status: httpStatus,
       error: navigationError || waitError || undefined,
     },
