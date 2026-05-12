@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.10
+
+### Patch Changes
+
+- cb1aa4c: Make profile setup clicks prefer visible text matches and normalize trailing slashes in profile route checks.
+
 ## 0.7.9
 
 ### Patch Changes
