@@ -63,6 +63,7 @@ export const BASIC_GAMEPLAY_ACTION_TYPES = [
   "repeat",
   "click",
   "click-by-text",
+  "set-input-value",
   "canvas-click",
   "canvas-pointer-down",
   "canvas-pointer-move",
