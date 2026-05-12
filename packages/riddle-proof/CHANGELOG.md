@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.11
+
+### Patch Changes
+
+- cb32d40: Preserve Riddle Preview mount prefixes when profile routes are resolved or matched against hosted preview URLs.
+
 ## 0.7.10
 
 ### Patch Changes
