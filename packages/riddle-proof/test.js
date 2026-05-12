@@ -35,6 +35,7 @@ import {
   isTerminalStatus,
   normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
+  resolveRiddleProofProfileRouteUrl,
   redactForProofDiagnostics,
   resolveRiddleProofProfileTargetUrl,
   extractPlayabilityEvidence,
@@ -77,7 +78,9 @@ assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
+assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
@@ -215,6 +218,32 @@ const profile = normalizeRiddleProofProfile({
   ],
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
+assert.equal(
+  resolveRiddleProofProfileRouteUrl("https://preview.riddledc.com/s/ps_1234abcd/", "/playground/"),
+  "https://preview.riddledc.com/s/ps_1234abcd/playground/",
+);
+assert.equal(
+  resolveRiddleProofProfileRouteUrl("https://preview.riddledc.com/preview/lilarcade/smoke/", "/games/luge-run"),
+  "https://preview.riddledc.com/preview/lilarcade/smoke/games/luge-run",
+);
+assert.equal(
+  resolveRiddleProofProfileRouteUrl("https://example.com/base/", "/pricing"),
+  "https://example.com/pricing",
+);
+const mountedPreviewProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "preview-playground-basic",
+  target: {
+    url: "https://preview.riddledc.com/s/ps_1234abcd/",
+    route: "/playground/",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/playground/" }],
+});
+assert.equal(
+  resolveRiddleProofProfileTargetUrl(mountedPreviewProfile),
+  "https://preview.riddledc.com/s/ps_1234abcd/playground/",
+);
 assert.equal(profile.target.setup_actions.length, 2);
 assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
 const profileScript = buildRiddleProofProfileScript(profile);
@@ -224,6 +253,7 @@ assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("setupLocatorVisible"));
 assert.ok(profileScript.includes("matching_element_not_visible"));
+assert.ok(profileScript.includes("previewMountPrefix"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -272,6 +302,35 @@ assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 6);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const mountedPreviewAssessment = assessRiddleProofProfileEvidence(mountedPreviewProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "preview-playground-basic",
+  target_url: "https://preview.riddledc.com/s/ps_1234abcd/playground/",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-12T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    route: {
+      requested: "https://preview.riddledc.com/s/ps_1234abcd/playground/",
+      observed: "/s/ps_1234abcd/playground/",
+      expected_path: "/playground/",
+      matched: false,
+      http_status: 200,
+    },
+    body_text_sample: "API Playground",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    screenshot_label: "preview-playground-basic-mobile",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+assert.equal(mountedPreviewAssessment.status, "passed");
+assert.equal(mountedPreviewAssessment.route.matched, true);
 const failedSetupProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [
