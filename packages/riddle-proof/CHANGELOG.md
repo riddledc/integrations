@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.28
+
+### Patch Changes
+
+- cd30d28: Add profile setup actions for filling inputs, setting input values, and seeding localStorage with optional reload so audit profiles can cover authenticated and form workflows without custom scripts.
+
 ## 0.7.27
 
 ### Patch Changes
