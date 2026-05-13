@@ -571,6 +571,47 @@ assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_inpu
 assert.ok(formSetupProfileScript.includes("click({ timeout, noWaitAfter: true })"));
 assert.ok(formSetupProfileScript.includes("value_length"));
 assert.ok(!formSetupProfileScript.includes("Object.prototype"));
+const routeInventoryProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "homepage-route-inventory",
+  target: {
+    route: "/",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    wait_for_selector: ".game-table",
+  },
+  checks: [
+    {
+      type: "route_inventory",
+      expected_routes: [
+        { name: "Gem Mine", path: "/games/gem-mine" },
+        { name: "Coin Clicker", path: "/games/coin-clicker" },
+      ],
+      link_selector: "a[href^='/games/']",
+      source_selector: ".game-table",
+      route_path_prefix: "/games/",
+      timeout_ms: 12000,
+    },
+    { type: "no_fatal_console_errors" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(routeInventoryProfile.checks[0].type, "route_inventory");
+assert.equal(routeInventoryProfile.checks[0].expected_routes.length, 2);
+assert.equal(routeInventoryProfile.checks[0].run_direct_routes, true);
+assert.equal(routeInventoryProfile.checks[0].run_clickthroughs, true);
+assert.equal(routeInventoryProfile.checks[0].link_selector, "a[href^='/games/']");
+assert.equal(routeInventoryProfile.checks[0].source_selector, ".game-table");
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-route-inventory",
+  target: { route: "/" },
+  checks: [{ type: "route_inventory", expected_routes: [] }],
+}, { url: "https://example.com" }), /expected_routes must be a non-empty array/);
+const routeInventoryProfileScript = buildRiddleProofProfileScript(routeInventoryProfile);
+assert.ok(routeInventoryProfileScript.includes("collectRouteInventory"));
+assert.ok(routeInventoryProfileScript.includes("riddle-proof.route-inventory.v1"));
+assert.ok(routeInventoryProfileScript.includes("source_link_clickthrough_kept_source_surface"));
+assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"));
+assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -619,6 +660,68 @@ assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 6);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const routeInventoryEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "homepage-route-inventory",
+  target_url: "https://example.com/",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-13T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/", observed: "/", expected_path: "/", matched: true, http_status: 200 },
+    body_text_sample: "Gem Mine Coin Clicker",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    route_inventory: {
+      version: "riddle-proof.route-inventory.v1",
+      viewport: "desktop",
+      expected_routes: routeInventoryProfile.checks[0].expected_routes,
+      link_selector: "a[href^='/games/']",
+      source_selector: ".game-table",
+      home_game_link_count: 2,
+      home_unique_game_link_count: 2,
+      home_links: [
+        { text: "Gem Mine", app_path: "/games/gem-mine" },
+        { text: "Coin Clicker", app_path: "/games/coin-clicker" },
+      ],
+      direct_routes: [
+        { phase: "direct", path: "/games/gem-mine", loaded: true, actual_app_path: "/games/gem-mine", source_visible: false },
+        { phase: "direct", path: "/games/coin-clicker", loaded: true, actual_app_path: "/games/coin-clicker", source_visible: false },
+      ],
+      clickthroughs: [
+        { path: "/games/gem-mine", clicked: true, snapshot: { actual_app_path: "/games/gem-mine", source_visible: false } },
+        { path: "/games/coin-clicker", clicked: true, snapshot: { actual_app_path: "/games/coin-clicker", source_visible: false } },
+      ],
+      failures: [],
+    },
+    screenshot_label: "homepage-route-inventory-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+};
+const routeInventoryAssessment = assessRiddleProofProfileEvidence(routeInventoryProfile, routeInventoryEvidence);
+assert.equal(routeInventoryAssessment.status, "passed");
+const routeInventoryCheck = routeInventoryAssessment.checks.find((check) => check.type === "route_inventory");
+assert.equal(routeInventoryCheck.status, "passed");
+assert.equal(routeInventoryCheck.evidence.expected_count, 2);
+assert.equal(routeInventoryCheck.evidence.direct_route_count, 2);
+assert.equal(routeInventoryCheck.evidence.clickthrough_count, 2);
+const failedRouteInventoryAssessment = assessRiddleProofProfileEvidence(routeInventoryProfile, {
+  ...routeInventoryEvidence,
+  viewports: [{
+    ...routeInventoryEvidence.viewports[0],
+    route_inventory: {
+      ...routeInventoryEvidence.viewports[0].route_inventory,
+      failures: [{ code: "expected_route_missing_from_source", path: "/games/coin-clicker" }],
+    },
+  }],
+});
+assert.equal(failedRouteInventoryAssessment.status, "product_regression");
+assert.equal(failedRouteInventoryAssessment.checks.find((check) => check.type === "route_inventory").status, "failed");
 const partialProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [profileEvidence.viewports[0]],

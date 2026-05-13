@@ -19,6 +19,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_count_at_least",
   "text_visible",
   "text_absent",
+  "route_inventory",
   "no_horizontal_overflow",
   "no_mobile_horizontal_overflow",
   "no_fatal_console_errors",
@@ -89,6 +90,11 @@ export interface RiddleProofProfileNetworkMock {
   required?: boolean;
 }
 
+export interface RiddleProofProfileRouteInventoryRoute {
+  name?: string;
+  path: string;
+}
+
 export interface RiddleProofProfileTarget {
   url?: string;
   route?: string;
@@ -105,12 +111,26 @@ export interface RiddleProofProfileCheck {
   type: RiddleProofProfileCheckType;
   label?: string;
   expected_path?: string;
+  expected_routes?: RiddleProofProfileRouteInventoryRoute[];
   selector?: string;
+  link_selector?: string;
+  source_selector?: string;
+  route_path_prefix?: string;
+  route_ready_selector?: string;
+  route_ready_text?: string;
+  route_ready_pattern?: string;
+  route_ready_flags?: string;
   text?: string;
   pattern?: string;
   flags?: string;
   min_count?: number;
   max_overflow_px?: number;
+  timeout_ms?: number;
+  run_direct_routes?: boolean;
+  run_clickthroughs?: boolean;
+  require_unique_routes?: boolean;
+  allow_unexpected_routes?: boolean;
+  save_route_screenshots?: boolean;
 }
 
 export interface RiddleProofProfile {
@@ -166,6 +186,7 @@ export interface RiddleProofProfileViewportEvidence {
   overflow_offenders?: RiddleProofProfileBoundsOffender[];
   selectors?: Record<string, { count: number; visible_count: number }>;
   text_matches?: Record<string, boolean>;
+  route_inventory?: Record<string, JsonValue>;
   setup_action_results?: Array<Record<string, JsonValue>>;
   screenshot_label?: string;
   navigation_error?: string;
@@ -509,6 +530,36 @@ function normalizeNetworkMocks(value: unknown): RiddleProofProfileNetworkMock[] 
   return value.map(normalizeNetworkMock);
 }
 
+function normalizeRouteInventoryPath(value: unknown, label: string): string {
+  const path = stringValue(value);
+  if (!path) throw new Error(`${label} requires path.`);
+  if (!path.startsWith("/")) throw new Error(`${label}.path must start with /.`);
+  return normalizeRoutePath(path);
+}
+
+function normalizeRouteInventoryRoute(input: unknown, index: number): RiddleProofProfileRouteInventoryRoute {
+  if (typeof input === "string") return { path: normalizeRouteInventoryPath(input, `checks route_inventory expected_routes[${index}]`) };
+  if (!isRecord(input)) throw new Error(`checks route_inventory expected_routes[${index}] must be a string or object.`);
+  return {
+    name: stringValue(input.name),
+    path: normalizeRouteInventoryPath(input.path, `checks route_inventory expected_routes[${index}]`),
+  };
+}
+
+function normalizeRouteInventoryRoutes(value: unknown, index: number): RiddleProofProfileRouteInventoryRoute[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`checks[${index}] route_inventory expected_routes must be a non-empty array.`);
+  }
+  const routes = value.map(normalizeRouteInventoryRoute);
+  const seen = new Set<string>();
+  for (const route of routes) {
+    if (seen.has(route.path)) throw new Error(`checks[${index}] route_inventory expected_routes contains duplicate path ${route.path}.`);
+    seen.add(route.path);
+  }
+  return routes;
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -525,16 +576,34 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "selector_count_at_least" && numberValue(input.min_count) === undefined) {
     throw new Error(`checks[${index}] selector_count_at_least requires min_count.`);
   }
+  const expectedRoutes = normalizeRouteInventoryRoutes(input.expected_routes ?? input.expectedRoutes, index);
+  if (type === "route_inventory" && !expectedRoutes?.length) {
+    throw new Error(`checks[${index}] route_inventory requires expected_routes.`);
+  }
   return {
     type,
     label: stringValue(input.label),
     expected_path: stringValue(input.expected_path),
+    expected_routes: expectedRoutes,
     selector: stringValue(input.selector),
+    link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
+    source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
+    route_path_prefix: stringValue(input.route_path_prefix) || stringValue(input.routePathPrefix),
+    route_ready_selector: stringValue(input.route_ready_selector) || stringValue(input.routeReadySelector),
+    route_ready_text: stringValue(input.route_ready_text) || stringValue(input.routeReadyText),
+    route_ready_pattern: stringValue(input.route_ready_pattern) || stringValue(input.routeReadyPattern),
+    route_ready_flags: stringValue(input.route_ready_flags) || stringValue(input.routeReadyFlags),
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
     min_count: numberValue(input.min_count),
     max_overflow_px: numberValue(input.max_overflow_px),
+    timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
+    run_direct_routes: input.run_direct_routes === false || input.runDirectRoutes === false ? false : true,
+    run_clickthroughs: input.run_clickthroughs === false || input.runClickthroughs === false ? false : true,
+    require_unique_routes: input.require_unique_routes === false || input.requireUniqueRoutes === false ? false : true,
+    allow_unexpected_routes: input.allow_unexpected_routes === true || input.allowUnexpectedRoutes === true,
+    save_route_screenshots: input.save_route_screenshots === true || input.saveRouteScreenshots === true,
   };
 }
 
@@ -796,6 +865,43 @@ function assessCheckFromEvidence(
         matches,
       },
       message: failed ? `Text assertion failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "route_inventory") {
+    const inventories = viewports
+      .map((viewport) => ({ viewport: viewport.name, inventory: viewport.route_inventory }))
+      .filter((item) => isRecord(item.inventory));
+    if (!inventories.length) {
+      return {
+        type: check.type,
+        label: checkLabel(check),
+        status: "failed",
+        evidence: { expected_count: check.expected_routes?.length || 0 },
+        message: "No route inventory evidence was captured.",
+      };
+    }
+    const failures = inventories.flatMap((item) => (
+      Array.isArray(item.inventory?.failures)
+        ? item.inventory.failures.map((failure) => toJsonValue({ viewport: item.viewport, failure }))
+        : []
+    ));
+    const first = inventories[0]?.inventory;
+    const directRoutes = Array.isArray(first?.direct_routes) ? first.direct_routes : [];
+    const clickthroughs = Array.isArray(first?.clickthroughs) ? first.clickthroughs : [];
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failures.length ? "failed" : "passed",
+      evidence: {
+        expected_count: check.expected_routes?.length || 0,
+        homepage_link_count: numberValue(first?.home_game_link_count) ?? null,
+        homepage_unique_link_count: numberValue(first?.home_unique_game_link_count) ?? null,
+        direct_route_count: directRoutes.length,
+        clickthrough_count: clickthroughs.length,
+        failures,
+      },
+      message: failures.length ? `Route inventory failed with ${failures.length} issue(s).` : undefined,
     };
   }
 
@@ -1362,6 +1468,45 @@ function assessProfile(profile, evidence) {
       });
       continue;
     }
+    if (check.type === "route_inventory") {
+      const inventories = viewports
+        .map((viewport) => ({ viewport: viewport.name, inventory: viewport.route_inventory }))
+        .filter((item) => item.inventory && typeof item.inventory === "object");
+      if (!inventories.length) {
+        checks.push({
+          type: check.type,
+          label: check.label || check.type,
+          status: "failed",
+          evidence: { expected_count: (check.expected_routes || []).length },
+          message: "No route inventory evidence was captured.",
+        });
+        continue;
+      }
+      const failures = [];
+      for (const item of inventories) {
+        for (const failure of Array.isArray(item.inventory.failures) ? item.inventory.failures : []) {
+          failures.push({ viewport: item.viewport, failure });
+        }
+      }
+      const first = inventories[0].inventory || {};
+      const directRoutes = Array.isArray(first.direct_routes) ? first.direct_routes : [];
+      const clickthroughs = Array.isArray(first.clickthroughs) ? first.clickthroughs : [];
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failures.length ? "failed" : "passed",
+        evidence: {
+          expected_count: (check.expected_routes || []).length,
+          homepage_link_count: typeof first.home_game_link_count === "number" ? first.home_game_link_count : null,
+          homepage_unique_link_count: typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : null,
+          direct_route_count: directRoutes.length,
+          clickthrough_count: clickthroughs.length,
+          failures,
+        },
+        message: failures.length ? "Route inventory failed with " + failures.length + " issue(s)." : undefined,
+      });
+      continue;
+    }
     if (check.type === "no_horizontal_overflow" || check.type === "no_mobile_horizontal_overflow") {
       const maxOverflow = check.max_overflow_px == null ? 4 : check.max_overflow_px;
       const applicable = check.type === "no_mobile_horizontal_overflow" ? viewports.filter((viewport) => viewport.width <= 820) : viewports;
@@ -1674,6 +1819,290 @@ async function selectorStats(selector) {
     return { count: elements.length, visible_count: elements.filter(isVisible).length };
   }).catch((error) => ({ count: 0, visible_count: 0, error: String(error && error.message ? error.message : error).slice(0, 500) }));
 }
+function inventoryAppPathFromUrl(urlLike) {
+  const url = new URL(String(urlLike), targetUrl);
+  const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+  let pathname = url.pathname || "/";
+  if (mountPrefix && (pathname === mountPrefix || pathname.startsWith(mountPrefix + "/"))) {
+    pathname = pathname.slice(mountPrefix.length) || "/";
+  }
+  return normalizeRoutePath(pathname);
+}
+function inventoryRouteUrl(expectedPath) {
+  const base = new URL(targetUrl);
+  const route = new URL(expectedPath, base.origin);
+  const mountPrefix = previewMountPrefix(base.pathname);
+  base.pathname = mountPrefix ? joinMountedRoutePath(mountPrefix, route.pathname) : route.pathname;
+  base.search = route.search;
+  base.hash = route.hash;
+  return base.href;
+}
+function inventorySlugFromPath(path) {
+  return String(path || "route").split("/").filter(Boolean).pop()?.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "route";
+}
+function inventoryCheckTimeout(check) {
+  const timeout = Number(check && check.timeout_ms);
+  return Number.isFinite(timeout) && timeout > 0 ? timeout : 45000;
+}
+async function collectInventoryHomeLinks(check) {
+  const linkSelector = check.link_selector || "a[href]";
+  const expectedPaths = (check.expected_routes || []).map((route) => route.path);
+  const routePathPrefix = check.route_path_prefix || "";
+  return await page.evaluate(({ linkSelector, expectedPaths, routePathPrefix, targetUrl }) => {
+    const previewMountPrefix = (pathname) => {
+      const value = pathname || "/";
+      const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+      if (apiPreview) return apiPreview[1];
+      const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+      return internalPreview ? internalPreview[1] : "";
+    };
+    const normalizeRoutePath = (path) => {
+      const value = path || "/";
+      if (value === "/") return "/";
+      return value.replace(/\/+$/, "") || "/";
+    };
+    const appPathFromHref = (href) => {
+      const url = new URL(href, location.href);
+      const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+      let pathname = url.pathname || "/";
+      if (mountPrefix && (pathname === mountPrefix || pathname.startsWith(mountPrefix + "/"))) {
+        pathname = pathname.slice(mountPrefix.length) || "/";
+      }
+      return normalizeRoutePath(pathname);
+    };
+    const expectedSet = new Set(expectedPaths);
+    const links = Array.from(document.querySelectorAll(linkSelector)).map((anchor) => {
+      const href = anchor.getAttribute("href") || "";
+      const appPath = appPathFromHref(href || anchor.href || location.href);
+      return {
+        text: (anchor.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240),
+        href,
+        pathname: new URL(href || anchor.href || location.href, location.href).pathname,
+        app_path: appPath,
+      };
+    });
+    return links.filter((link) => (
+      routePathPrefix ? link.app_path.startsWith(routePathPrefix) : expectedSet.has(link.app_path)
+    ));
+  }, { linkSelector, expectedPaths, routePathPrefix, targetUrl });
+}
+async function waitForInventoryRouteHealth(check, expectedPath) {
+  const timeout = inventoryCheckTimeout(check);
+  await page.waitForURL((url) => inventoryAppPathFromUrl(url.href) === normalizeRoutePath(expectedPath), { timeout: Math.min(timeout, 20000) });
+  if (check.route_ready_selector) {
+    await page.waitForSelector(check.route_ready_selector, { state: "visible", timeout });
+    return;
+  }
+  await page.waitForFunction(({ expectedPath, sourceSelector, routeReadyText, routeReadyPattern, routeReadyFlags, targetUrl }) => {
+    const previewMountPrefix = (pathname) => {
+      const value = pathname || "/";
+      const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+      if (apiPreview) return apiPreview[1];
+      const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+      return internalPreview ? internalPreview[1] : "";
+    };
+    const normalizeRoutePath = (path) => {
+      const value = path || "/";
+      if (value === "/") return "/";
+      return value.replace(/\/+$/, "") || "/";
+    };
+    const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+    let pathname = location.pathname || "/";
+    if (mountPrefix && (pathname === mountPrefix || pathname.startsWith(mountPrefix + "/"))) {
+      pathname = pathname.slice(mountPrefix.length) || "/";
+    }
+    if (normalizeRoutePath(pathname) !== normalizeRoutePath(expectedPath)) return false;
+    if (sourceSelector && document.querySelector(sourceSelector)) return false;
+    const text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    if (routeReadyPattern) {
+      try {
+        if (!new RegExp(routeReadyPattern, routeReadyFlags || "").test(text)) return false;
+      } catch {
+        return false;
+      }
+    }
+    if (routeReadyText && !text.includes(routeReadyText)) return false;
+    const loadingOnly = /^loading\.?$/i.test(text) || (/^loading/i.test(text) && text.length < 40);
+    if (document.querySelectorAll("canvas").length > 0) return true;
+    if (document.querySelectorAll("button").length > 0 && !loadingOnly) return true;
+    return text.length > 30 && !loadingOnly && !/not found|cannot get/i.test(text);
+  }, {
+    expectedPath,
+    sourceSelector: check.source_selector || "",
+    routeReadyText: check.route_ready_text || "",
+    routeReadyPattern: check.route_ready_pattern || "",
+    routeReadyFlags: check.route_ready_flags || "",
+    targetUrl,
+  }, { timeout });
+}
+async function collectInventoryRouteSnapshot(expectedRoute, phase, check, error) {
+  return await page.evaluate(({ expectedRoute, phase, sourceSelector, error, targetUrl }) => {
+    const previewMountPrefix = (pathname) => {
+      const value = pathname || "/";
+      const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+      if (apiPreview) return apiPreview[1];
+      const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+      return internalPreview ? internalPreview[1] : "";
+    };
+    const normalizeRoutePath = (path) => {
+      const value = path || "/";
+      if (value === "/") return "/";
+      return value.replace(/\/+$/, "") || "/";
+    };
+    const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+    let pathname = location.pathname || "/";
+    if (mountPrefix && (pathname === mountPrefix || pathname.startsWith(mountPrefix + "/"))) {
+      pathname = pathname.slice(mountPrefix.length) || "/";
+    }
+    const sourceCount = sourceSelector ? document.querySelectorAll(sourceSelector).length : 0;
+    const text = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    return {
+      phase,
+      name: expectedRoute.name || null,
+      path: expectedRoute.path,
+      loaded: !error,
+      error: error || null,
+      actual_path: location.pathname,
+      actual_app_path: normalizeRoutePath(pathname),
+      source_selector: sourceSelector || null,
+      source_count: sourceCount,
+      source_visible: sourceCount > 0,
+      title: document.title,
+      body_text_sample: text.slice(0, 900),
+      canvas_count: document.querySelectorAll("canvas").length,
+      button_texts: Array.from(document.querySelectorAll("button")).slice(0, 12).map((button) => (
+        (button.textContent || "").replace(/\s+/g, " ").trim()
+      )),
+      heading_texts: Array.from(document.querySelectorAll("h1,h2,h3")).slice(0, 8).map((heading) => (
+        (heading.textContent || "").replace(/\s+/g, " ").trim()
+      )),
+    };
+  }, { expectedRoute, phase, sourceSelector: check.source_selector || "", error: error || "", targetUrl });
+}
+async function findInventoryLinkIndex(check, expectedPath) {
+  const locator = page.locator(check.link_selector || "a[href]");
+  const count = await locator.count();
+  for (let index = 0; index < count; index += 1) {
+    const appPath = await locator.nth(index).evaluate((anchor, targetUrl) => {
+      const previewMountPrefix = (pathname) => {
+        const value = pathname || "/";
+        const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+        if (apiPreview) return apiPreview[1];
+        const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+        return internalPreview ? internalPreview[1] : "";
+      };
+      const normalizeRoutePath = (path) => {
+        const value = path || "/";
+        if (value === "/") return "/";
+        return value.replace(/\/+$/, "") || "/";
+      };
+      const href = anchor.getAttribute("href") || anchor.href || location.href;
+      const url = new URL(href, location.href);
+      const mountPrefix = previewMountPrefix(new URL(targetUrl).pathname);
+      let pathname = url.pathname || "/";
+      if (mountPrefix && (pathname === mountPrefix || pathname.startsWith(mountPrefix + "/"))) {
+        pathname = pathname.slice(mountPrefix.length) || "/";
+      }
+      return normalizeRoutePath(pathname);
+    }, targetUrl).catch(() => "");
+    if (appPath === normalizeRoutePath(expectedPath)) return index;
+  }
+  return -1;
+}
+async function collectRouteInventory(check, viewport) {
+  const expectedRoutes = check.expected_routes || [];
+  const expectedPaths = expectedRoutes.map((route) => normalizeRoutePath(route.path));
+  const expectedSet = new Set(expectedPaths);
+  const failures = [];
+  const homeLinks = await collectInventoryHomeLinks(check);
+  const homeLinkPaths = homeLinks.map((link) => link.app_path);
+  const uniqueHomeLinkPaths = Array.from(new Set(homeLinkPaths));
+  const duplicateHomeLinkPaths = homeLinkPaths.filter((path, index) => homeLinkPaths.indexOf(path) !== index);
+  if (check.require_unique_routes !== false && duplicateHomeLinkPaths.length) {
+    failures.push({ code: "duplicate_source_links", paths: Array.from(new Set(duplicateHomeLinkPaths)) });
+  }
+  for (const route of expectedRoutes) {
+    if (!homeLinkPaths.includes(normalizeRoutePath(route.path))) {
+      failures.push({ code: "expected_route_missing_from_source", name: route.name || null, path: route.path });
+    }
+  }
+  const unexpectedRoutes = uniqueHomeLinkPaths.filter((path) => !expectedSet.has(path));
+  if (!check.allow_unexpected_routes && unexpectedRoutes.length) {
+    failures.push({ code: "unexpected_source_links", paths: unexpectedRoutes });
+  }
+  if (!check.allow_unexpected_routes && uniqueHomeLinkPaths.length !== expectedRoutes.length) {
+    failures.push({ code: "source_link_count_mismatch", expected: expectedRoutes.length, actual_unique: uniqueHomeLinkPaths.length, actual_total: homeLinkPaths.length });
+  }
+
+  const directRoutes = [];
+  if (check.run_direct_routes !== false) {
+    for (const expectedRoute of expectedRoutes) {
+      let error = "";
+      try {
+        await page.goto(inventoryRouteUrl(expectedRoute.path), { waitUntil: "domcontentloaded", timeout: 90000 });
+        await waitForInventoryRouteHealth(check, expectedRoute.path);
+      } catch (caught) {
+        error = String(caught && caught.message ? caught.message : caught).slice(0, 1000);
+      }
+      const snapshot = await collectInventoryRouteSnapshot(expectedRoute, "direct", check, error);
+      directRoutes.push(snapshot);
+      if (check.save_route_screenshots) {
+        await saveScreenshot(profileSlug + "-direct-" + inventorySlugFromPath(expectedRoute.path)).catch(() => {});
+      }
+      if (error) failures.push({ code: "direct_route_unhealthy", name: expectedRoute.name || null, path: expectedRoute.path, error });
+      else if (snapshot.actual_app_path !== normalizeRoutePath(expectedRoute.path)) failures.push({ code: "direct_route_wrong_path", name: expectedRoute.name || null, path: expectedRoute.path, actual_app_path: snapshot.actual_app_path });
+      else if (check.source_selector && snapshot.source_visible) failures.push({ code: "direct_route_kept_source_surface", name: expectedRoute.name || null, path: expectedRoute.path, source_selector: check.source_selector });
+    }
+  }
+
+  const clickthroughs = [];
+  if (check.run_clickthroughs !== false) {
+    for (const expectedRoute of expectedRoutes) {
+      const result = { name: expectedRoute.name || null, path: expectedRoute.path, clicked: false, snapshot: null, error: null };
+      try {
+        await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
+        if (profile.target.wait_for_selector) {
+          await page.waitForSelector(profile.target.wait_for_selector, { state: "visible", timeout: 15000 }).catch(() => {});
+        }
+        const index = await findInventoryLinkIndex(check, expectedRoute.path);
+        if (index < 0) {
+          result.error = "source_link_not_found";
+          failures.push({ code: "source_link_clickthrough_missing", name: expectedRoute.name || null, path: expectedRoute.path });
+        } else {
+          const locator = page.locator(check.link_selector || "a[href]").nth(index);
+          await locator.scrollIntoViewIfNeeded();
+          await locator.click({ timeout: inventoryCheckTimeout(check), noWaitAfter: true });
+          result.clicked = true;
+          await waitForInventoryRouteHealth(check, expectedRoute.path);
+        }
+      } catch (caught) {
+        result.error = String(caught && caught.message ? caught.message : caught).slice(0, 1000);
+      }
+      result.snapshot = await collectInventoryRouteSnapshot(expectedRoute, "clickthrough", check, result.error || "");
+      clickthroughs.push(result);
+      if (check.save_route_screenshots) {
+        await saveScreenshot(profileSlug + "-click-" + inventorySlugFromPath(expectedRoute.path)).catch(() => {});
+      }
+      if (result.error && result.error !== "source_link_not_found") failures.push({ code: "source_link_clickthrough_unhealthy", name: expectedRoute.name || null, path: expectedRoute.path, error: result.error });
+      else if (result.snapshot.actual_app_path !== normalizeRoutePath(expectedRoute.path)) failures.push({ code: "source_link_clickthrough_wrong_path", name: expectedRoute.name || null, path: expectedRoute.path, actual_app_path: result.snapshot.actual_app_path });
+      else if (check.source_selector && result.snapshot.source_visible) failures.push({ code: "source_link_clickthrough_kept_source_surface", name: expectedRoute.name || null, path: expectedRoute.path, source_selector: check.source_selector });
+    }
+  }
+
+  return {
+    version: "riddle-proof.route-inventory.v1",
+    viewport: viewport.name,
+    expected_routes: expectedRoutes,
+    link_selector: check.link_selector || "a[href]",
+    source_selector: check.source_selector || null,
+    home_game_link_count: homeLinkPaths.length,
+    home_unique_game_link_count: uniqueHomeLinkPaths.length,
+    home_links: homeLinks,
+    direct_routes: directRoutes,
+    clickthroughs,
+    failures,
+  };
+}
 async function captureViewport(viewport) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   let httpStatus = null;
@@ -1796,6 +2225,31 @@ async function captureViewport(viewport) {
   } catch (error) {
     pageErrors.push({ message: "saveScreenshot failed: " + String(error && error.message ? error.message : error).slice(0, 500) });
   }
+  let routeInventory;
+  const routeInventoryCheck = (profile.checks || []).find((check) => check.type === "route_inventory");
+  const firstViewportName = (profile.target.viewports || [])[0] && (profile.target.viewports || [])[0].name;
+  if (routeInventoryCheck && (!firstViewportName || viewport.name === firstViewportName)) {
+    try {
+      routeInventory = await collectRouteInventory(routeInventoryCheck, viewport);
+    } catch (error) {
+      routeInventory = {
+        version: "riddle-proof.route-inventory.v1",
+        viewport: viewport.name,
+        expected_routes: routeInventoryCheck.expected_routes || [],
+        link_selector: routeInventoryCheck.link_selector || "a[href]",
+        source_selector: routeInventoryCheck.source_selector || null,
+        home_game_link_count: 0,
+        home_unique_game_link_count: 0,
+        home_links: [],
+        direct_routes: [],
+        clickthroughs: [],
+        failures: [{
+          code: "route_inventory_capture_failed",
+          error: String(error && error.message ? error.message : error).slice(0, 1000),
+        }],
+      };
+    }
+  }
   const expectedPath = profile.checks.find((check) => check.type === "route_loaded" && check.expected_path)?.expected_path || new URL(targetUrl).pathname || "/";
   return {
     name: viewport.name,
@@ -1820,6 +2274,7 @@ async function captureViewport(viewport) {
     overflow_offenders: dom.overflow_offenders || [],
     selectors,
     text_matches,
+    route_inventory: routeInventory,
     setup_action_results: setupActionResults,
     screenshot_label: screenshotLabel,
     navigation_error: navigationError,
@@ -1852,6 +2307,16 @@ function buildProfileEvidence(currentViewports) {
       overflow_px: currentViewports.map((viewport) => viewport.overflow_px),
       bounds_overflow_px: currentViewports.map((viewport) => viewport.bounds_overflow_px),
       overflow_offender_counts: currentViewports.map((viewport) => (viewport.overflow_offenders || []).length),
+      route_inventory: currentViewports
+        .filter((viewport) => viewport.route_inventory)
+        .map((viewport) => ({
+          viewport: viewport.name,
+          expected_count: (viewport.route_inventory.expected_routes || []).length,
+          home_unique_game_link_count: viewport.route_inventory.home_unique_game_link_count,
+          direct_route_count: (viewport.route_inventory.direct_routes || []).length,
+          clickthrough_count: (viewport.route_inventory.clickthroughs || []).length,
+          failure_count: (viewport.route_inventory.failures || []).length,
+        })),
       network_mock_count: (profile.target.network_mocks || []).length,
       network_mock_hit_count: networkMockEvents.filter((event) => event.ok !== false).length,
     },
