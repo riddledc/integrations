@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.22
+
+### Patch Changes
+
+- 6a15ba3: Assess responsive horizontal bounds offenders in profile and basic gameplay proofs, so element clipping can fail even when document scroll overflow remains zero.
+
 ## 0.7.21
 
 ### Patch Changes
