@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.29
+
+### Patch Changes
+
+- 293295b: Refresh the profile mode README docs for network mocks and the current setup actions.
+
 ## 0.7.28
 
 ### Patch Changes
