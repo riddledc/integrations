@@ -282,6 +282,8 @@ assert.ok(profileScript.includes("matching_element_not_visible"));
 assert.ok(profileScript.includes("previewMountPrefix"));
 assert.ok(profileScript.includes("saveProfileArtifacts(viewports)"));
 assert.ok(profileScript.includes("expected_viewport_count"));
+assert.ok(profileScript.includes("compactSetupResultText"));
+assert.ok(profileScript.includes("text: compactSetupResultText(text)"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
