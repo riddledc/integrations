@@ -1,0 +1,29 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "route-inventory-basic",
+  "target": {
+    "route": "/",
+    "viewports": [
+      { "name": "desktop", "width": 1280, "height": 900 },
+      { "name": "mobile", "width": 390, "height": 844 }
+    ],
+    "wait_for_selector": "[data-testid='route-list']",
+    "timeout_sec": 180
+  },
+  "checks": [
+    {
+      "type": "route_inventory",
+      "expected_routes": [
+        { "name": "Example Route", "path": "/example" }
+      ],
+      "link_selector": "a[href='/example']",
+      "source_selector": "[data-testid='route-list']",
+      "route_path_prefix": "/example",
+      "timeout_ms": 30000
+    },
+    { "type": "no_mobile_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only"
+}

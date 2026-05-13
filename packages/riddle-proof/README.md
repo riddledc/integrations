@@ -198,6 +198,33 @@ clears `local`, `session`, or `both` browser storage scopes, defaults to
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
 still overrides the profile value for one-off runs.
 
+Use the `route_inventory` check for source-page route coverage audits where a
+navigation surface must expose a known set of routes and each route must load
+both directly and through real link clicks:
+
+```json
+{
+  "type": "route_inventory",
+  "expected_routes": [
+    { "name": "Gem Mine", "path": "/games/gem-mine" },
+    { "name": "Coin Clicker", "path": "/games/coin-clicker" }
+  ],
+  "link_selector": "a[href^='/games/']",
+  "source_selector": ".game-table",
+  "route_path_prefix": "/games/",
+  "timeout_ms": 45000
+}
+```
+
+The check records discovered source links, duplicate/missing/unexpected routes,
+direct route health, real clickthrough health, wrong-path failures, and stale
+source-surface failures. It runs direct/clickthrough sweeps on the first
+viewport by default and leaves ordinary profile overflow checks to cover the
+source page across all configured viewports. Set `run_direct_routes: false`,
+`run_clickthroughs: false`, `allow_unexpected_routes: true`, or
+`save_route_screenshots: true` when a profile needs a narrower or more
+artifact-heavy audit.
+
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:
 
