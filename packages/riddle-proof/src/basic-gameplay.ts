@@ -8,6 +8,7 @@ export type BasicGameplayFailureCode =
   | "route_blank_or_thin"
   | "no_game_surface"
   | "mobile_horizontal_overflow"
+  | "responsive_bounds_clipped"
   | "primary_control_missing"
   | "primary_control_inert"
   | "progression_assertion_failed"
@@ -156,13 +157,16 @@ export interface BasicGameplayProgressionCheck {
 }
 
 export interface BasicGameplaySuiteFailure {
-  code: "progression_assertion_failed" | "responsive_setup_failed";
+  code: "progression_assertion_failed" | "responsive_setup_failed" | "responsive_bounds_clipped";
   label?: string;
   reason?: string | null;
   selector?: string | null;
   state_path?: string | null;
   state_call?: string | null;
   property_path?: string | null;
+  overflow_px?: number | null;
+  max_allowed_px?: number | null;
+  offenders?: BasicGameplayBoundsOffender[];
   viewport?: {
     label?: string | null;
     width?: number | null;
@@ -172,11 +176,30 @@ export interface BasicGameplaySuiteFailure {
   action_result?: BasicGameplayActionResult;
 }
 
+export interface BasicGameplayBoundsOffender {
+  selector?: string | null;
+  tag?: string | null;
+  overflow?: number;
+  overflow_px?: number;
+  left_overflow_px?: number;
+  right_overflow_px?: number;
+  bounds_overflow_px?: number;
+  clipped?: Record<string, unknown>;
+  rect?: Record<string, unknown>;
+  bounds?: Record<string, unknown>;
+  viewport_width?: number;
+  viewportWidth?: number;
+  [key: string]: unknown;
+}
+
 export interface BasicGameplayResponsiveViewportEvidence {
   label?: string;
   width?: number;
   height?: number;
   phase?: string;
+  overflow_px?: number;
+  bounds_overflow_px?: number;
+  overflow_offenders?: BasicGameplayBoundsOffender[];
   setup_action_results?: BasicGameplayActionResult[];
   setupActionResults?: BasicGameplayActionResult[];
   [key: string]: unknown;
@@ -184,6 +207,8 @@ export interface BasicGameplayResponsiveViewportEvidence {
 
 export interface BasicGameplayMobileEvidence {
   overflow_px?: number;
+  bounds_overflow_px?: number;
+  overflow_offenders?: BasicGameplayBoundsOffender[];
   [key: string]: unknown;
 }
 
@@ -434,6 +459,7 @@ export function assessBasicGameplayEvidence(
     .map((route) => augmentRouteAssessmentWithProgressionChecks(
       assessBasicGameplayRoute(route, options),
       route,
+      options,
     ));
   const failingRoutes = routeResults
     .filter((result) => !result.ok)
@@ -512,7 +538,7 @@ export function assessBasicGameplayRoute(
   const responseStatus = firstNumber(route.http_status, route.response_status, route.status);
   const pageErrorCount = numberValue(route.page_error_count);
   const consoleErrorCount = numberValue(route.console_error_count);
-  const mobileOverflowPx = numberValue(mobile.overflow_px);
+  const mobileOverflowPx = horizontalBoundsOverflowPx(mobile);
 
   if (responseStatus !== null && responseStatus >= 400) failures.push("route_http_error");
   if (pageErrorCount > 0) failures.push("fatal_page_error");
@@ -684,11 +710,12 @@ export function assessBasicGameplayProgressionChecks(
 export function augmentBasicGameplayAssessmentWithProgressionChecks(
   assessment: RiddleProofBasicGameplayAssessment,
   evidence: unknown,
+  options: AssessBasicGameplayOptions = {},
 ): RiddleProofBasicGameplayAssessment {
   const run = extractBasicGameplayEvidence(evidence);
   if (!run?.results?.length) return assessment;
   const routeResults = assessment.route_results.map((result, index) =>
-    augmentRouteAssessmentWithProgressionChecks(result, run.results?.[index] || {}),
+    augmentRouteAssessmentWithProgressionChecks(result, run.results?.[index] || {}, options),
   );
   const failingRoutes = routeResults
     .filter((result) => !result.ok)
@@ -766,6 +793,7 @@ export function attachBasicGameplayArtifactScreenshotHashes(
 export function createBasicGameplayCatchRecords(
   assessment: RiddleProofBasicGameplayAssessment,
   evidence: unknown,
+  options: AssessBasicGameplayOptions = {},
 ): BasicGameplayCatchRecord[] {
   const run = extractBasicGameplayEvidence(evidence);
   if (!run?.results?.length) return [];
@@ -838,6 +866,24 @@ export function createBasicGameplayCatchRecords(
         viewport: failure.viewport,
         action_result: failure.action_result,
         summary: `${route.name || route.path || "Route"}: responsive setup failed on ${failure.viewport?.label || "viewport"} (${failure.reason || "responsive_setup_failed"})`,
+      });
+    }
+    for (const failure of responsiveBoundsFailures(route, options.maxMobileOverflowPx ?? 4)) {
+      catches.push({
+        site: run.site || null,
+        route: route.name,
+        path: route.path,
+        code: failure.code,
+        label: failure.label,
+        type: "responsive_bounds",
+        selector: null,
+        reason: failure.reason || "responsive_bounds_clipped",
+        phase: failure.viewport?.phase || undefined,
+        viewport: failure.viewport,
+        overflow_px: failure.overflow_px,
+        max_allowed_px: failure.max_allowed_px,
+        offenders: failure.offenders,
+        summary: `${route.name || route.path || "Route"}: responsive bounds exceeded ${failure.max_allowed_px}px on ${failure.viewport?.label || "viewport"} (${failure.overflow_px}px)`,
       });
     }
     for (const check of assessBasicGameplayProgressionChecks(route).filter((item) => item.ok === false)) {
@@ -1036,13 +1082,16 @@ function canvasHashes(canvases: BasicGameplayCanvasState[] | undefined) {
 function augmentRouteAssessmentWithProgressionChecks(
   result: RiddleProofBasicGameplayRouteAssessment,
   route: RiddleProofBasicGameplayRouteEvidence,
+  options: AssessBasicGameplayOptions = {},
 ): RiddleProofBasicGameplayRouteAssessment {
   const progressionFailures = assessBasicGameplayProgressionChecks(route).filter((check) => check.ok === false);
   const responsiveFailures = responsiveSetupFailures(route);
-  if (!progressionFailures.length && !responsiveFailures.length) return result;
+  const responsiveBounds = responsiveBoundsFailures(route, options.maxMobileOverflowPx ?? 4);
+  if (!progressionFailures.length && !responsiveFailures.length && !responsiveBounds.length) return result;
   const failures = new Set(result.failures);
   if (progressionFailures.length) failures.add("progression_assertion_failed");
   for (const failure of responsiveFailures) failures.add(failure.code);
+  for (const failure of responsiveBounds) failures.add(failure.code);
   return {
     ...result,
     ok: false,
@@ -1059,6 +1108,7 @@ function augmentRouteAssessmentWithProgressionChecks(
         property_path: check.property_path || null,
       })),
       ...responsiveFailures,
+      ...responsiveBounds,
     ],
   };
 }
@@ -1086,6 +1136,29 @@ function responsiveSetupFailures(route: RiddleProofBasicGameplayRouteEvidence): 
   return failures;
 }
 
+function responsiveBoundsFailures(route: RiddleProofBasicGameplayRouteEvidence, maxOverflowPx: number): BasicGameplaySuiteFailure[] {
+  const failures: BasicGameplaySuiteFailure[] = [];
+  for (const viewport of responsiveViewportsForRoute(route)) {
+    const overflowPx = horizontalBoundsOverflowPx(viewport);
+    if (overflowPx <= maxOverflowPx) continue;
+    failures.push({
+      code: "responsive_bounds_clipped",
+      label: `${viewport.label || "responsive"} horizontal bounds`,
+      reason: `horizontal bounds overflow ${overflowPx}px exceeded ${maxOverflowPx}px`,
+      overflow_px: overflowPx,
+      max_allowed_px: maxOverflowPx,
+      offenders: boundsOffendersForEvidence(viewport).slice(0, 10),
+      viewport: {
+        label: viewport.label || null,
+        width: numberValue(viewport.width) || null,
+        height: numberValue(viewport.height) || null,
+        phase: viewport.phase || null,
+      },
+    });
+  }
+  return failures;
+}
+
 function responsiveViewportsForRoute(route: RiddleProofBasicGameplayRouteEvidence): BasicGameplayResponsiveViewportEvidence[] {
   return listValue(route.responsive_viewports || route.responsiveViewports)
     .filter((item): item is BasicGameplayResponsiveViewportEvidence => Boolean(recordValue(item)));
@@ -1098,6 +1171,89 @@ function progressionChecksForRoute(route: RiddleProofBasicGameplayRouteEvidence)
 
 function metricValue(value: unknown): BasicGameplayMetric | null {
   return recordValue(value) as BasicGameplayMetric | null;
+}
+
+function horizontalBoundsOverflowPx(value: unknown): number {
+  const record = recordValue(value);
+  if (!record) return 0;
+  let max = maxPositiveNumber(
+    record.overflow_px,
+    record.overflow,
+    record.bounds_overflow_px,
+    record.horizontal_overflow_px,
+    record.left_overflow_px,
+    record.right_overflow_px,
+  );
+  for (const offender of boundsOffendersForEvidence(record)) {
+    max = Math.max(max, horizontalOffenderOverflowPx(offender));
+  }
+  return roundPixels(max);
+}
+
+function horizontalOffenderOverflowPx(value: unknown): number {
+  const record = recordValue(value);
+  if (!record) return 0;
+  let max = maxPositiveNumber(
+    record.overflow,
+    record.overflow_px,
+    record.bounds_overflow_px,
+    record.horizontal_overflow_px,
+    record.left_overflow_px,
+    record.right_overflow_px,
+    record.leftOverflowPx,
+    record.rightOverflowPx,
+  );
+  const clipped = recordValue(record.clipped || record.clip || record.clipping);
+  if (clipped) {
+    max = Math.max(max, maxPositiveNumber(
+      clipped.left,
+      clipped.right,
+      clipped.left_px,
+      clipped.right_px,
+      clipped.leftPx,
+      clipped.rightPx,
+    ));
+  }
+  const rect = recordValue(record.rect || record.bounds || record.bounding_rect || record.boundingRect);
+  const viewportWidth = numericValue(record.viewport_width ?? record.viewportWidth);
+  if (rect && viewportWidth !== null) {
+    const left = numericValue(rect.left);
+    const right = numericValue(rect.right);
+    if (left !== null && left < 0) max = Math.max(max, Math.abs(left));
+    if (right !== null && right > viewportWidth) max = Math.max(max, right - viewportWidth);
+  }
+  return roundPixels(max);
+}
+
+function boundsOffendersForEvidence(value: unknown): BasicGameplayBoundsOffender[] {
+  const record = recordValue(value);
+  if (!record) return [];
+  const offenders = [
+    ...listValue(record.overflow_offenders),
+    ...listValue(record.overflowOffenders),
+    ...listValue(record.bounds_offenders),
+    ...listValue(record.boundsOffenders),
+    ...listValue(record.clipped_elements),
+    ...listValue(record.clippedElements),
+    ...listValue(record.clipping_offenders),
+    ...listValue(record.clippingOffenders),
+  ];
+  return offenders
+    .filter((item): item is BasicGameplayBoundsOffender => Boolean(recordValue(item)))
+    .sort((a, b) => horizontalOffenderOverflowPx(b) - horizontalOffenderOverflowPx(a));
+}
+
+function maxPositiveNumber(...values: unknown[]): number {
+  let max = 0;
+  for (const value of values) {
+    const number = numericValue(value);
+    if (number !== null && number > max) max = number;
+  }
+  return max;
+}
+
+function roundPixels(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function textMatches(text: unknown, pattern: unknown, flags: unknown) {

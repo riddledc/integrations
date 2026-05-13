@@ -110,6 +110,23 @@ export interface RiddleProofProfileRouteEvidence {
   error?: string;
 }
 
+export interface RiddleProofProfileBoundsOffender {
+  selector?: string | null;
+  tag?: string | null;
+  text?: string | null;
+  overflow?: number;
+  overflow_px?: number;
+  left_overflow_px?: number;
+  right_overflow_px?: number;
+  bounds_overflow_px?: number;
+  clipped?: Record<string, unknown>;
+  rect?: Record<string, unknown>;
+  bounds?: Record<string, unknown>;
+  viewport_width?: number;
+  viewportWidth?: number;
+  [key: string]: unknown;
+}
+
 export interface RiddleProofProfileViewportEvidence {
   name: string;
   width: number;
@@ -122,6 +139,8 @@ export interface RiddleProofProfileViewportEvidence {
   scroll_width?: number;
   client_width?: number;
   overflow_px?: number;
+  bounds_overflow_px?: number;
+  overflow_offenders?: RiddleProofProfileBoundsOffender[];
   selectors?: Record<string, { count: number; visible_count: number }>;
   text_matches?: Record<string, boolean>;
   setup_action_results?: Array<Record<string, JsonValue>>;
@@ -208,6 +227,88 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function horizontalBoundsOverflowPx(value: unknown): number {
+  if (!isRecord(value)) return 0;
+  let max = maxPositiveNumber(
+    value.overflow_px,
+    value.overflow,
+    value.bounds_overflow_px,
+    value.horizontal_overflow_px,
+    value.left_overflow_px,
+    value.right_overflow_px,
+  );
+  for (const offender of boundsOffendersForEvidence(value)) {
+    max = Math.max(max, horizontalOffenderOverflowPx(offender));
+  }
+  return roundPixels(max);
+}
+
+function horizontalOffenderOverflowPx(value: unknown): number {
+  if (!isRecord(value)) return 0;
+  let max = maxPositiveNumber(
+    value.overflow,
+    value.overflow_px,
+    value.bounds_overflow_px,
+    value.horizontal_overflow_px,
+    value.left_overflow_px,
+    value.right_overflow_px,
+    value.leftOverflowPx,
+    value.rightOverflowPx,
+  );
+  const clipped = isRecord(value.clipped || value.clip || value.clipping) ? value.clipped || value.clip || value.clipping : undefined;
+  if (isRecord(clipped)) {
+    max = Math.max(max, maxPositiveNumber(
+      clipped.left,
+      clipped.right,
+      clipped.left_px,
+      clipped.right_px,
+      clipped.leftPx,
+      clipped.rightPx,
+    ));
+  }
+  const rect = isRecord(value.rect || value.bounds || value.bounding_rect || value.boundingRect)
+    ? value.rect || value.bounds || value.bounding_rect || value.boundingRect
+    : undefined;
+  const viewportWidth = numberValue(value.viewport_width ?? value.viewportWidth);
+  if (isRecord(rect) && viewportWidth !== undefined) {
+    const left = numberValue(rect.left);
+    const right = numberValue(rect.right);
+    if (left !== undefined && left < 0) max = Math.max(max, Math.abs(left));
+    if (right !== undefined && right > viewportWidth) max = Math.max(max, right - viewportWidth);
+  }
+  return roundPixels(max);
+}
+
+function boundsOffendersForEvidence(value: unknown): RiddleProofProfileBoundsOffender[] {
+  if (!isRecord(value)) return [];
+  const offenders = [
+    ...(Array.isArray(value.overflow_offenders) ? value.overflow_offenders : []),
+    ...(Array.isArray(value.overflowOffenders) ? value.overflowOffenders : []),
+    ...(Array.isArray(value.bounds_offenders) ? value.bounds_offenders : []),
+    ...(Array.isArray(value.boundsOffenders) ? value.boundsOffenders : []),
+    ...(Array.isArray(value.clipped_elements) ? value.clipped_elements : []),
+    ...(Array.isArray(value.clippedElements) ? value.clippedElements : []),
+    ...(Array.isArray(value.clipping_offenders) ? value.clipping_offenders : []),
+    ...(Array.isArray(value.clippingOffenders) ? value.clippingOffenders : []),
+  ];
+  return offenders
+    .filter((item): item is RiddleProofProfileBoundsOffender => isRecord(item))
+    .sort((a, b) => horizontalOffenderOverflowPx(b) - horizontalOffenderOverflowPx(a));
+}
+
+function maxPositiveNumber(...values: unknown[]): number {
+  let max = 0;
+  for (const value of values) {
+    const number = numberValue(value);
+    if (number !== undefined && number > max) max = number;
+  }
+  return max;
+}
+
+function roundPixels(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function timeoutSecValue(value: unknown): number | undefined {
@@ -607,7 +708,7 @@ function assessCheckFromEvidence(
         message: "No applicable viewport evidence was captured for overflow check.",
       };
     }
-    const failed = applicable.filter((viewport) => (viewport.overflow_px ?? 0) > maxOverflow);
+    const failed = applicable.filter((viewport) => horizontalBoundsOverflowPx(viewport) > maxOverflow);
     return {
       type: check.type,
       label: checkLabel(check),
@@ -615,9 +716,11 @@ function assessCheckFromEvidence(
       evidence: {
         max_overflow_px: maxOverflow,
         overflow_px: applicable.map((viewport) => viewport.overflow_px ?? null),
+        bounds_overflow_px: applicable.map((viewport) => horizontalBoundsOverflowPx(viewport)),
+        overflow_offender_counts: applicable.map((viewport) => boundsOffendersForEvidence(viewport).length),
         viewports: applicable.map((viewport) => viewport.name),
       },
-      message: failed.length ? `Horizontal overflow exceeded ${maxOverflow}px in ${failed.length} viewport(s).` : undefined,
+      message: failed.length ? `Horizontal bounds overflow exceeded ${maxOverflow}px in ${failed.length} viewport(s).` : undefined,
     };
   }
 
@@ -887,6 +990,77 @@ function textMatches(sample, check) {
   }
   return String(sample || "").includes(check.text || "");
 }
+function numberValue(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+function maxPositiveNumber() {
+  let max = 0;
+  for (const value of arguments) {
+    const number = numberValue(value);
+    if (number !== undefined && number > max) max = number;
+  }
+  return max;
+}
+function roundPixels(value) {
+  return Math.round(value * 100) / 100;
+}
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function boundsOffendersForEvidence(value) {
+  if (!isRecord(value)) return [];
+  const offenders = []
+    .concat(Array.isArray(value.overflow_offenders) ? value.overflow_offenders : [])
+    .concat(Array.isArray(value.overflowOffenders) ? value.overflowOffenders : [])
+    .concat(Array.isArray(value.bounds_offenders) ? value.bounds_offenders : [])
+    .concat(Array.isArray(value.boundsOffenders) ? value.boundsOffenders : [])
+    .concat(Array.isArray(value.clipped_elements) ? value.clipped_elements : [])
+    .concat(Array.isArray(value.clippedElements) ? value.clippedElements : [])
+    .concat(Array.isArray(value.clipping_offenders) ? value.clipping_offenders : [])
+    .concat(Array.isArray(value.clippingOffenders) ? value.clippingOffenders : []);
+  return offenders.filter(isRecord).sort((a, b) => horizontalOffenderOverflowPx(b) - horizontalOffenderOverflowPx(a));
+}
+function horizontalOffenderOverflowPx(value) {
+  if (!isRecord(value)) return 0;
+  let max = maxPositiveNumber(
+    value.overflow,
+    value.overflow_px,
+    value.bounds_overflow_px,
+    value.horizontal_overflow_px,
+    value.left_overflow_px,
+    value.right_overflow_px,
+    value.leftOverflowPx,
+    value.rightOverflowPx
+  );
+  const clipped = value.clipped || value.clip || value.clipping;
+  if (isRecord(clipped)) {
+    max = Math.max(max, maxPositiveNumber(clipped.left, clipped.right, clipped.left_px, clipped.right_px, clipped.leftPx, clipped.rightPx));
+  }
+  const rect = value.rect || value.bounds || value.bounding_rect || value.boundingRect;
+  const viewportWidth = numberValue(value.viewport_width != null ? value.viewport_width : value.viewportWidth);
+  if (isRecord(rect) && viewportWidth !== undefined) {
+    const left = numberValue(rect.left);
+    const right = numberValue(rect.right);
+    if (left !== undefined && left < 0) max = Math.max(max, Math.abs(left));
+    if (right !== undefined && right > viewportWidth) max = Math.max(max, right - viewportWidth);
+  }
+  return roundPixels(max);
+}
+function horizontalBoundsOverflowPx(value) {
+  if (!isRecord(value)) return 0;
+  let max = maxPositiveNumber(
+    value.overflow_px,
+    value.overflow,
+    value.bounds_overflow_px,
+    value.horizontal_overflow_px,
+    value.left_overflow_px,
+    value.right_overflow_px
+  );
+  for (const offender of boundsOffendersForEvidence(value)) {
+    max = Math.max(max, horizontalOffenderOverflowPx(offender));
+  }
+  return roundPixels(max);
+}
 function assessProfile(profile, evidence) {
   const checks = [];
   const viewports = evidence.viewports || [];
@@ -1004,13 +1178,19 @@ function assessProfile(profile, evidence) {
         });
         continue;
       }
-      const failed = applicable.filter((viewport) => (viewport.overflow_px || 0) > maxOverflow);
+      const failed = applicable.filter((viewport) => horizontalBoundsOverflowPx(viewport) > maxOverflow);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed.length ? "failed" : "passed",
-        evidence: { max_overflow_px: maxOverflow, overflow_px: applicable.map((viewport) => viewport.overflow_px ?? null), viewports: applicable.map((viewport) => viewport.name) },
-        message: failed.length ? "Horizontal overflow exceeded " + maxOverflow + "px in " + failed.length + " viewport(s)." : undefined,
+        evidence: {
+          max_overflow_px: maxOverflow,
+          overflow_px: applicable.map((viewport) => viewport.overflow_px ?? null),
+          bounds_overflow_px: applicable.map((viewport) => horizontalBoundsOverflowPx(viewport)),
+          overflow_offender_counts: applicable.map((viewport) => boundsOffendersForEvidence(viewport).length),
+          viewports: applicable.map((viewport) => viewport.name)
+        },
+        message: failed.length ? "Horizontal bounds overflow exceeded " + maxOverflow + "px in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -1241,14 +1421,55 @@ async function captureViewport(viewport) {
     const body = document.body;
     const documentElement = document.documentElement;
     const text = (body ? body.innerText : "").replace(/\s+/g, " ").trim();
+    const clientWidth = documentElement ? documentElement.clientWidth : window.innerWidth;
+    const scrollWidth = documentElement ? documentElement.scrollWidth : 0;
+    const viewportWidth = clientWidth || window.innerWidth;
+    const overflowOffenders = [];
+    for (const element of Array.from(body ? body.querySelectorAll("*") : [])) {
+      const rect = element.getBoundingClientRect();
+      if (!rect || rect.width < 1 || rect.height < 1) continue;
+      const style = window.getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+      const leftOverflow = Math.max(0, -rect.left);
+      const rightOverflow = Math.max(0, rect.right - viewportWidth);
+      const overflow = Math.max(leftOverflow, rightOverflow);
+      if (overflow <= 0.5) continue;
+      const tag = element.tagName ? element.tagName.toLowerCase() : "element";
+      const id = element.id ? "#" + element.id : "";
+      const className = typeof element.className === "string"
+        ? element.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".")
+        : "";
+      overflowOffenders.push({
+        selector: tag + id + (className ? "." + className : ""),
+        tag,
+        text: (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        overflow,
+        left_overflow_px: leftOverflow,
+        right_overflow_px: rightOverflow,
+        viewport_width: viewportWidth,
+        rect: {
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+        },
+      });
+    }
+    overflowOffenders.sort((a, b) => b.overflow - a.overflow);
+    const boundsOverflowPx = Math.max(
+      0,
+      scrollWidth - (clientWidth || viewportWidth),
+      ...overflowOffenders.map((offender) => offender.overflow),
+    );
     return {
       url: location.href,
       pathname: location.pathname,
       title: document.title,
       body_text_length: text.length,
       body_text_sample: text.slice(0, 8000),
-      scroll_width: documentElement ? documentElement.scrollWidth : 0,
-      client_width: documentElement ? documentElement.clientWidth : window.innerWidth,
+      scroll_width: scrollWidth,
+      client_width: clientWidth,
+      bounds_overflow_px: Math.round(boundsOverflowPx * 100) / 100,
+      overflow_offenders: overflowOffenders.slice(0, 10),
     };
   }).catch((error) => ({
     url: page.url(),
@@ -1258,6 +1479,8 @@ async function captureViewport(viewport) {
     body_text_sample: "",
     scroll_width: 0,
     client_width: viewport.width,
+    bounds_overflow_px: 0,
+    overflow_offenders: [],
     evaluation_error: String(error && error.message ? error.message : error).slice(0, 1000),
   }));
   const selectors = {};
@@ -1296,6 +1519,8 @@ async function captureViewport(viewport) {
     scroll_width: dom.scroll_width,
     client_width: dom.client_width,
     overflow_px: Math.max(0, (dom.scroll_width || 0) - (dom.client_width || viewport.width)),
+    bounds_overflow_px: dom.bounds_overflow_px,
+    overflow_offenders: dom.overflow_offenders || [],
     selectors,
     text_matches,
     setup_action_results: setupActionResults,
@@ -1327,6 +1552,8 @@ function buildProfileEvidence(currentViewports) {
       routes: currentViewports.map((viewport) => viewport.route),
       titles: currentViewports.map((viewport) => viewport.title),
       overflow_px: currentViewports.map((viewport) => viewport.overflow_px),
+      bounds_overflow_px: currentViewports.map((viewport) => viewport.bounds_overflow_px),
+      overflow_offender_counts: currentViewports.map((viewport) => (viewport.overflow_offenders || []).length),
     },
   };
 }
