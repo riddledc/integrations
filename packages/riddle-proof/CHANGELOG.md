@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.26
+
+### Patch Changes
+
+- 175a926: Expose the trusted `--strict true|false` option on the `riddle-run-script` CLI so proof scripts can opt into existing Riddle API strict-validation behavior from the command line.
+
 ## 0.7.25
 
 ### Patch Changes
