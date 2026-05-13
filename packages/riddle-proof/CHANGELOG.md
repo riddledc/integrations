@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.23
+
+### Patch Changes
+
+- c2627d0: Normalize profile Riddle artifact refs so saved JSON artifacts do not appear as duplicate `.json.json` entries.
+
 ## 0.7.22
 
 ### Patch Changes
