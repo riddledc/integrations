@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.25
+
+### Patch Changes
+
+- b74d6ab: Improve `riddle-poll --wait` diagnostics for delayed-dispatch jobs by extending the default wait budget, emitting progress on stderr, and returning explicit poll timeout metadata when a job remains non-terminal with no `submitted_at`.
+
 ## 0.7.24
 
 ### Patch Changes
