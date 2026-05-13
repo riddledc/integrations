@@ -700,6 +700,73 @@ assert.equal(cleanupFailureCatches[0].code, "action_failed");
 assert.equal(cleanupFailureCatches[0].phase, "after_cleanup");
 assert.equal(cleanupFailureCatches[0].reason, "unexpected_return_value");
 
+const responsiveSetupFailureEvidence = {
+  version: "riddle-proof.basic-gameplay.v1",
+  site: "LilArcade",
+  results: [
+    {
+      name: "Projectile Game",
+      path: "/games/projectile-game",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "projectile-before",
+        body_text_hash: "projectile-before-text",
+      },
+      timed: {
+        screenshot_hash: "projectile-before",
+        body_text_hash: "projectile-before-text",
+      },
+      after_action: {
+        screenshot_hash: "projectile-after",
+        body_text_hash: "projectile-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      responsive_viewports: [
+        {
+          label: "ipad-mini",
+          width: 768,
+          height: 1024,
+          phase: "after_continue",
+          setup_action_results: [
+            {
+              ok: false,
+              action: "window-call",
+              path: "__projectileProof.waitForOutcome",
+              reason: "unexpected_return_value",
+            },
+            {
+              ok: false,
+              action: "click",
+              selector: ".launch-button",
+              reason: "no_visible_enabled_match",
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+const responsiveSetupFailureAssessment = assessBasicGameplayEvidence(responsiveSetupFailureEvidence);
+assert.equal(responsiveSetupFailureAssessment.passed, false);
+assert.equal(responsiveSetupFailureAssessment.failure_counts.responsive_setup_failed, 1);
+assert.equal(responsiveSetupFailureAssessment.failing_routes[0].suite_failures.length, 2);
+assert.equal(responsiveSetupFailureAssessment.failing_routes[0].suite_failures[0].viewport.label, "ipad-mini");
+const responsiveSetupFailureCatches = createBasicGameplayCatchRecords(
+  responsiveSetupFailureAssessment,
+  responsiveSetupFailureEvidence,
+);
+assert.equal(responsiveSetupFailureCatches.length, 2);
+assert.equal(responsiveSetupFailureCatches[0].code, "responsive_setup_failed");
+assert.equal(responsiveSetupFailureCatches[1].selector, ".launch-button");
+assert.equal(responsiveSetupFailureCatches[1].phase, "after_continue");
+
 const inertGameplayAssessment = assessBasicGameplayEvidence({
   results: [
     {

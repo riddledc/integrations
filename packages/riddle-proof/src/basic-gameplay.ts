@@ -10,7 +10,8 @@ export type BasicGameplayFailureCode =
   | "mobile_horizontal_overflow"
   | "primary_control_missing"
   | "primary_control_inert"
-  | "progression_assertion_failed";
+  | "progression_assertion_failed"
+  | "responsive_setup_failed";
 
 export type BasicGameplayWarningCode =
   | "canvas_inert"
@@ -155,13 +156,30 @@ export interface BasicGameplayProgressionCheck {
 }
 
 export interface BasicGameplaySuiteFailure {
-  code: "progression_assertion_failed";
+  code: "progression_assertion_failed" | "responsive_setup_failed";
   label?: string;
   reason?: string | null;
   selector?: string | null;
   state_path?: string | null;
   state_call?: string | null;
   property_path?: string | null;
+  viewport?: {
+    label?: string | null;
+    width?: number | null;
+    height?: number | null;
+    phase?: string | null;
+  };
+  action_result?: BasicGameplayActionResult;
+}
+
+export interface BasicGameplayResponsiveViewportEvidence {
+  label?: string;
+  width?: number;
+  height?: number;
+  phase?: string;
+  setup_action_results?: BasicGameplayActionResult[];
+  setupActionResults?: BasicGameplayActionResult[];
+  [key: string]: unknown;
 }
 
 export interface BasicGameplayMobileEvidence {
@@ -194,6 +212,8 @@ export interface RiddleProofBasicGameplayRouteEvidence {
   continuedCleanupActionResults?: BasicGameplayActionResult[];
   restart_action_results?: BasicGameplayActionResult[];
   restartActionResults?: BasicGameplayActionResult[];
+  responsive_viewports?: BasicGameplayResponsiveViewportEvidence[];
+  responsiveViewports?: BasicGameplayResponsiveViewportEvidence[];
   progression_checks?: BasicGameplayProgressionCheck[];
   progressionChecks?: BasicGameplayProgressionCheck[];
   requires_reset?: boolean;
@@ -787,6 +807,22 @@ export function createBasicGameplayCatchRecords(
         });
       }
     }
+    for (const failure of responsiveSetupFailures(route)) {
+      catches.push({
+        site: run.site || null,
+        route: route.name,
+        path: route.path,
+        code: failure.code,
+        label: failure.label,
+        type: failure.action_result?.action || "responsive_setup",
+        selector: stringValue(failure.action_result?.selector),
+        reason: failure.reason || "responsive_setup_failed",
+        phase: failure.viewport?.phase || undefined,
+        viewport: failure.viewport,
+        action_result: failure.action_result,
+        summary: `${route.name || route.path || "Route"}: responsive setup failed on ${failure.viewport?.label || "viewport"} (${failure.reason || "responsive_setup_failed"})`,
+      });
+    }
     for (const check of assessBasicGameplayProgressionChecks(route).filter((item) => item.ok === false)) {
       catches.push({
         site: run.site || null,
@@ -956,7 +992,9 @@ function hasRouteShape(record: Record<string, unknown> | null) {
     record.action_results ||
     record.actionResults ||
     record.continued_cleanup_action_results ||
-    record.continuedCleanupActionResults
+    record.continuedCleanupActionResults ||
+    record.responsive_viewports ||
+    record.responsiveViewports
   ) && (record.path || record.name));
 }
 
@@ -983,14 +1021,15 @@ function augmentRouteAssessmentWithProgressionChecks(
   route: RiddleProofBasicGameplayRouteEvidence,
 ): RiddleProofBasicGameplayRouteAssessment {
   const progressionFailures = assessBasicGameplayProgressionChecks(route).filter((check) => check.ok === false);
-  if (!progressionFailures.length) return result;
-  const failures = result.failures.includes("progression_assertion_failed")
-    ? result.failures
-    : [...result.failures, "progression_assertion_failed" as const];
+  const responsiveFailures = responsiveSetupFailures(route);
+  if (!progressionFailures.length && !responsiveFailures.length) return result;
+  const failures = new Set(result.failures);
+  if (progressionFailures.length) failures.add("progression_assertion_failed");
+  for (const failure of responsiveFailures) failures.add(failure.code);
   return {
     ...result,
     ok: false,
-    failures,
+    failures: [...failures],
     suite_failures: [
       ...(result.suite_failures || []),
       ...progressionFailures.map((check) => ({
@@ -1002,8 +1041,37 @@ function augmentRouteAssessmentWithProgressionChecks(
         state_call: check.state_call || null,
         property_path: check.property_path || null,
       })),
+      ...responsiveFailures,
     ],
   };
+}
+
+function responsiveSetupFailures(route: RiddleProofBasicGameplayRouteEvidence): BasicGameplaySuiteFailure[] {
+  const failures: BasicGameplaySuiteFailure[] = [];
+  for (const viewport of responsiveViewportsForRoute(route)) {
+    for (const actionResult of listValue(viewport.setup_action_results || viewport.setupActionResults) as BasicGameplayActionResult[]) {
+      if (!actionResult || actionResult.ok !== false) continue;
+      failures.push({
+        code: "responsive_setup_failed",
+        label: `${viewport.label || "responsive"} ${actionResult.action || "setup action"}`,
+        reason: stringValue(actionResult.reason) || "responsive_setup_failed",
+        selector: stringValue(actionResult.selector),
+        viewport: {
+          label: viewport.label || null,
+          width: numberValue(viewport.width) || null,
+          height: numberValue(viewport.height) || null,
+          phase: viewport.phase || null,
+        },
+        action_result: actionResult,
+      });
+    }
+  }
+  return failures;
+}
+
+function responsiveViewportsForRoute(route: RiddleProofBasicGameplayRouteEvidence): BasicGameplayResponsiveViewportEvidence[] {
+  return listValue(route.responsive_viewports || route.responsiveViewports)
+    .filter((item): item is BasicGameplayResponsiveViewportEvidence => Boolean(recordValue(item)));
 }
 
 function progressionChecksForRoute(route: RiddleProofBasicGameplayRouteEvidence): BasicGameplayProgressionCheck[] {
