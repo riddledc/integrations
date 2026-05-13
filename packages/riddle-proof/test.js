@@ -285,6 +285,9 @@ assert.ok(profileScript.includes("expected_viewport_count"));
 assert.ok(profileScript.includes("compactSetupResultText"));
 assert.ok(profileScript.includes("text: compactSetupResultText(text)"));
 assert.ok(profileScript.includes("overflow_offenders"));
+assert.ok(profileScript.includes("isContainedByHorizontalScroller"));
+assert.ok(profileScript.includes("body_text: text"));
+assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",

@@ -1425,6 +1425,20 @@ async function captureViewport(viewport) {
     const scrollWidth = documentElement ? documentElement.scrollWidth : 0;
     const viewportWidth = clientWidth || window.innerWidth;
     const overflowOffenders = [];
+    function isContainedByHorizontalScroller(element) {
+      let current = element.parentElement;
+      while (current && current !== body && current !== documentElement) {
+        const style = window.getComputedStyle(current);
+        const overflowX = style.overflowX || style.overflow || "";
+        if ((overflowX === "auto" || overflowX === "scroll") && current.scrollWidth > current.clientWidth + 1) {
+          const currentRect = current.getBoundingClientRect();
+          const contained = currentRect.left >= -0.5 && currentRect.right <= viewportWidth + 0.5;
+          if (contained) return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    }
     for (const element of Array.from(body ? body.querySelectorAll("*") : [])) {
       const rect = element.getBoundingClientRect();
       if (!rect || rect.width < 1 || rect.height < 1) continue;
@@ -1434,6 +1448,7 @@ async function captureViewport(viewport) {
       const rightOverflow = Math.max(0, rect.right - viewportWidth);
       const overflow = Math.max(leftOverflow, rightOverflow);
       if (overflow <= 0.5) continue;
+      if (isContainedByHorizontalScroller(element)) continue;
       const tag = element.tagName ? element.tagName.toLowerCase() : "element";
       const id = element.id ? "#" + element.id : "";
       const className = typeof element.className === "string"
@@ -1465,6 +1480,7 @@ async function captureViewport(viewport) {
       pathname: location.pathname,
       title: document.title,
       body_text_length: text.length,
+      body_text: text,
       body_text_sample: text.slice(0, 8000),
       scroll_width: scrollWidth,
       client_width: clientWidth,
@@ -1490,7 +1506,7 @@ async function captureViewport(viewport) {
       selectors[check.selector] = await selectorStats(check.selector);
     }
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
-      text_matches[textKey(check)] = textMatches(dom.body_text_sample || "", check);
+      text_matches[textKey(check)] = textMatches(dom.body_text || dom.body_text_sample || "", check);
     }
   }
   const screenshotLabel = profileSlug + "-" + viewport.name;
