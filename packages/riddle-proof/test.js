@@ -498,6 +498,8 @@ assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
 const formSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-form-storage-actions",
@@ -506,10 +508,20 @@ const formSetupProfile = normalizeRiddleProofProfile({
     viewports: [{ name: "mobile", width: 390, height: 844 }],
     setup_actions: [
       {
+        type: "clear-browser-storage",
+        storage: "both",
+        reload: true,
+      },
+      {
         type: "local-storage",
         key: "builder_tokens",
         json: { IdToken: "proof-token" },
         reload: true,
+      },
+      {
+        type: "session-storage",
+        key: "builder_session",
+        value: "proof-session",
       },
       {
         type: "fill",
@@ -528,16 +540,33 @@ const formSetupProfile = normalizeRiddleProofProfile({
     { type: "no_fatal_console_errors" },
   ],
 }, { url: "https://example.com" });
-assert.equal(formSetupProfile.target.setup_actions[0].type, "local_storage");
-assert.deepEqual(formSetupProfile.target.setup_actions[0].value_json, { IdToken: "proof-token" });
+assert.equal(formSetupProfile.target.setup_actions[0].type, "clear_storage");
+assert.equal(formSetupProfile.target.setup_actions[0].storage, "both");
 assert.equal(formSetupProfile.target.setup_actions[0].reload, true);
-assert.equal(formSetupProfile.target.setup_actions[1].value, "Build a tiny maze");
-assert.equal(formSetupProfile.target.setup_actions[2].type, "set_input_value");
-assert.equal(formSetupProfile.target.setup_actions[2].value, "Riddle Proof Maze");
+assert.equal(formSetupProfile.target.setup_actions[1].type, "local_storage");
+assert.deepEqual(formSetupProfile.target.setup_actions[1].value_json, { IdToken: "proof-token" });
+assert.equal(formSetupProfile.target.setup_actions[1].reload, true);
+assert.equal(formSetupProfile.target.setup_actions[2].type, "session_storage");
+assert.equal(formSetupProfile.target.setup_actions[2].value, "proof-session");
+assert.equal(formSetupProfile.target.setup_actions[3].value, "Build a tiny maze");
+assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
+assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-storage",
+  target: {
+    route: "/create",
+    setup_actions: [{ type: "clear-storage", storage: "cookies" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /storage cookies is not supported/);
 const formSetupProfileScript = buildRiddleProofProfileScript(formSetupProfile);
 assert.ok(formSetupProfileScript.includes("setupActionValue"));
 assert.ok(formSetupProfileScript.includes("setupHasOwn"));
-assert.ok(formSetupProfileScript.includes("window.localStorage.setItem"));
+assert.ok(formSetupProfileScript.includes("window.localStorage"));
+assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
+assert.ok(formSetupProfileScript.includes("storage.setItem"));
+assert.ok(formSetupProfileScript.includes('type === "clear_storage"'));
 assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_input_value"'));
 assert.ok(formSetupProfileScript.includes("value_length"));
 assert.ok(!formSetupProfileScript.includes("Object.prototype"));

@@ -29,6 +29,8 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "fill",
   "set_input_value",
   "local_storage",
+  "session_storage",
+  "clear_storage",
   "wait",
   "wait_for_selector",
   "wait_for_text",
@@ -71,6 +73,7 @@ export interface RiddleProofProfileSetupAction {
   timeout_ms?: number;
   after_ms?: number;
   reload?: boolean;
+  storage?: "local" | "session" | "both";
   continue_on_failure?: boolean;
 }
 
@@ -411,11 +414,21 @@ function isSupportedCheckType(value: string): value is RiddleProofProfileCheckTy
 }
 
 function normalizeSetupActionType(value: string | undefined, index: number): RiddleProofProfileSetupActionType {
-  const normalized = String(value || "").trim().replace(/-/g, "_");
+  const normalizedInput = String(value || "").trim().replace(/-/g, "_");
+  const normalized = normalizedInput === "clear_browser_storage" ? "clear_storage" : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
   }
   throw new Error(`target.setup_actions[${index}].type ${value || "(missing)"} is not supported. Supported actions: ${RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.join(", ")}`);
+}
+
+function normalizeSetupActionStorage(value: unknown, index: number): "local" | "session" | "both" | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().replace(/-/g, "_");
+  if (normalized === "local" || normalized === "local_storage") return "local";
+  if (normalized === "session" || normalized === "session_storage") return "session";
+  if (normalized === "both" || normalized === "all") return "both";
+  throw new Error(`target.setup_actions[${index}].storage ${String(value)} is not supported. Supported storage values: local, session, both.`);
 }
 
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
@@ -434,11 +447,11 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const key = stringValue(input.key);
-  if (type === "local_storage" && !key) {
-    throw new Error(`target.setup_actions[${index}] local_storage requires key.`);
+  if ((type === "local_storage" || type === "session_storage") && !key) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires key.`);
   }
-  if (type === "local_storage" && value === undefined && !hasJsonValue) {
-    throw new Error(`target.setup_actions[${index}] local_storage requires value.`);
+  if ((type === "local_storage" || type === "session_storage") && value === undefined && !hasJsonValue) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   return {
     type,
@@ -454,6 +467,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     after_ms: numberValue(input.after_ms) ?? numberValue(input.afterMs),
     reload: input.reload === true,
+    storage: normalizeSetupActionStorage(input.storage, index),
     continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
   };
 }
@@ -1549,15 +1563,27 @@ async function executeSetupAction(action, ordinal) {
       await page.waitForSelector(action.selector, { state: "visible", timeout });
       return { ...base, ok: true, timeout_ms: timeout };
     }
-    if (type === "local_storage") {
+    if (type === "local_storage" || type === "session_storage") {
       const value = setupActionValue(action);
-      await page.evaluate(({ key, value }) => {
-        window.localStorage.setItem(key, value);
-      }, { key: action.key, value });
+      await page.evaluate(({ type, key, value }) => {
+        const storage = type === "session_storage" ? window.sessionStorage : window.localStorage;
+        storage.setItem(key, value);
+      }, { type, key: action.key, value });
       if (action.reload === true) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
       return { ...base, ok: true, key: action.key, value_length: value.length, reload: action.reload === true };
+    }
+    if (type === "clear_storage") {
+      const storage = action.storage || "both";
+      await page.evaluate(({ storage }) => {
+        if (storage === "local" || storage === "both") window.localStorage.clear();
+        if (storage === "session" || storage === "both") window.sessionStorage.clear();
+      }, { storage });
+      if (action.reload === true) {
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
+      }
+      return { ...base, ok: true, storage, reload: action.reload === true };
     }
     if (type === "click") {
       const locator = page.locator(action.selector);
