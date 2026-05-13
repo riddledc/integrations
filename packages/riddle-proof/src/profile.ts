@@ -1578,24 +1578,36 @@ return result;
 
 export function collectRiddleProfileArtifactRefs(input: unknown): RiddleProofProfileArtifactRef[] {
   const refs: RiddleProofProfileArtifactRef[] = [];
-  const seen = new Set<string>();
+  const indexes = new Map<string, number>();
+  const priorities = new Map<string, number>();
   function add(item: unknown, source: string) {
     if (!isRecord(item)) return;
-    const name = stringValue(item.name) || stringValue(item.filename) || "";
     const url = stringValue(item.url);
     const path = stringValue(item.path);
+    const rawName = stringValue(item.name) || stringValue(item.filename) || artifactNameFromPath(url || path) || "";
+    const name = normalizeRiddleProfileArtifactName(rawName);
     if (!name && !url && !path) return;
-    const key = `${name}:${url || path || ""}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    refs.push({
+    const key = profileArtifactDedupeKey(name, url || path || "");
+    const priority = profileArtifactPriority(rawName, name);
+    const ref = {
       name,
       url,
       path,
       kind: stringValue(item.kind) || stringValue(item.type),
       content_type: stringValue(item.content_type) || stringValue(item.contentType),
       source,
-    });
+    };
+    const existingIndex = indexes.get(key);
+    if (existingIndex !== undefined) {
+      if (priority > (priorities.get(key) || 0)) {
+        refs[existingIndex] = ref;
+        priorities.set(key, priority);
+      }
+      return;
+    }
+    indexes.set(key, refs.length);
+    priorities.set(key, priority);
+    refs.push(ref);
   }
   function visit(value: unknown, source: string) {
     if (Array.isArray(value)) {
@@ -1610,6 +1622,36 @@ export function collectRiddleProfileArtifactRefs(input: unknown): RiddleProofPro
   visit(input, "artifacts");
   return refs;
 }
+
+function normalizeRiddleProfileArtifactName(name: string) {
+  return name.replace(/\.json\.json$/i, ".json");
+}
+
+function profileArtifactDedupeKey(name: string, location: string) {
+  if (PROFILE_SINGLETON_ARTIFACT_NAMES.has(name.toLowerCase())) return name.toLowerCase();
+  return `${name}:${location}`;
+}
+
+function profileArtifactPriority(rawName: string, normalizedName: string) {
+  const lower = normalizedName.toLowerCase();
+  if (!PROFILE_SINGLETON_ARTIFACT_NAMES.has(lower)) return 1;
+  return /\.json\.json$/i.test(rawName) ? 2 : 1;
+}
+
+function artifactNameFromPath(value: string | undefined) {
+  if (!value) return "";
+  try {
+    return new URL(value).pathname.split("/").filter(Boolean).pop() || "";
+  } catch {
+    return value.split(/[\\/]/).filter(Boolean).pop() || "";
+  }
+}
+
+const PROFILE_SINGLETON_ARTIFACT_NAMES = new Set([
+  "proof.json",
+  "console.json",
+  "dom-summary.json",
+]);
 
 export function extractRiddleProofProfileResult(input: unknown): RiddleProofProfileResult | undefined {
   if (!isRecord(input)) return undefined;

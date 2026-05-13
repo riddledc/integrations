@@ -440,6 +440,23 @@ const profileArtifacts = collectRiddleProfileArtifactRefs({
   ],
 });
 assert.equal(profileArtifacts.length, 2);
+const profileArtifactsWithSavedJsonNoise = collectRiddleProfileArtifactRefs({
+  artifacts: [
+    { name: "proof.json", url: "https://cdn.test/worker-proof.json" },
+    { name: "console.json", url: "https://cdn.test/worker-console.json" },
+    { name: "proof.json.json", url: "https://cdn.test/profile-proof.json.json" },
+    { name: "console.json.json", url: "https://cdn.test/profile-console.json.json" },
+    { name: "dom-summary.json.json", url: "https://cdn.test/dom-summary.json.json" },
+    { name: "profile-phone.png", url: "https://cdn.test/profile-phone.png" },
+    { name: "proof.json.json", url: "https://cdn.test/profile-proof.json.json" },
+  ],
+});
+assert.deepEqual(
+  profileArtifactsWithSavedJsonNoise.map((artifact) => artifact.name),
+  ["proof.json", "console.json", "dom-summary.json", "profile-phone.png"],
+);
+assert.equal(profileArtifactsWithSavedJsonNoise.find((artifact) => artifact.name === "proof.json").url, "https://cdn.test/profile-proof.json.json");
+assert.equal(profileArtifactsWithSavedJsonNoise.find((artifact) => artifact.name === "console.json").url, "https://cdn.test/profile-console.json.json");
 assert.equal(extractRiddleProofProfileResult({ value: profileAssessment })?.status, "passed");
 
 const metricWorkdir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-local-agent-metrics-"));
