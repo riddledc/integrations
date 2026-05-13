@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.21
+
+### Patch Changes
+
+- c87d177: Allow basic gameplay evidence routes to opt into audit assessment mode, so static/no-diff targets can pass without requiring an interactive game surface or primary control.
+
 ## 0.7.20
 
 ### Patch Changes
