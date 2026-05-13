@@ -67,6 +67,18 @@ export interface RiddleProofProfileSetupAction {
   continue_on_failure?: boolean;
 }
 
+export interface RiddleProofProfileNetworkMock {
+  label: string;
+  url: string;
+  method?: string;
+  status: number;
+  content_type?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  body_json?: JsonValue;
+  required?: boolean;
+}
+
 export interface RiddleProofProfileTarget {
   url?: string;
   route?: string;
@@ -76,6 +88,7 @@ export interface RiddleProofProfileTarget {
   wait_for_selector?: string;
   wait_ms?: number;
   setup_actions?: RiddleProofProfileSetupAction[];
+  network_mocks?: RiddleProofProfileNetworkMock[];
 }
 
 export interface RiddleProofProfileCheck {
@@ -161,6 +174,7 @@ export interface RiddleProofProfileEvidence {
     fatal_count: number;
   };
   page_errors: Array<{ message: string }>;
+  network_mocks?: Array<Record<string, JsonValue>>;
   dom_summary?: Record<string, JsonValue>;
 }
 
@@ -321,6 +335,14 @@ function jsonRecord(value: unknown): Record<string, JsonValue> | undefined {
   return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
 }
 
+function stringRecord(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const entries = Object.entries(value)
+    .map(([key, child]) => [key, String(child)] as const)
+    .filter(([key]) => key.trim());
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 function toJsonValue(value: unknown): JsonValue {
   if (value === null || value === undefined) return null;
   if (typeof value === "string" || typeof value === "boolean") return value;
@@ -405,6 +427,37 @@ function normalizeSetupActions(value: unknown): RiddleProofProfileSetupAction[] 
   return value.map(normalizeSetupAction);
 }
 
+function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfileNetworkMock {
+  if (!isRecord(input)) throw new Error(`target.network_mocks[${index}] must be an object.`);
+  const url = stringValue(input.url) || stringValue(input.glob) || stringValue(input.pattern);
+  if (!url) throw new Error(`target.network_mocks[${index}] requires url.`);
+  const status = numberValue(input.status) ?? 200;
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error(`target.network_mocks[${index}].status must be an HTTP status code.`);
+  }
+  const body = stringValue(input.body) ?? stringValue(input.body_text) ?? stringValue(input.bodyText);
+  const hasJsonBody = Object.prototype.hasOwnProperty.call(input, "body_json")
+    || Object.prototype.hasOwnProperty.call(input, "bodyJson")
+    || Object.prototype.hasOwnProperty.call(input, "json");
+  return {
+    label: normalizeName(input.label || input.name, `network-mock-${index + 1}`),
+    url,
+    method: stringValue(input.method)?.toUpperCase(),
+    status,
+    content_type: stringValue(input.content_type) || stringValue(input.contentType),
+    headers: stringRecord(input.headers),
+    body,
+    body_json: hasJsonBody ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : undefined,
+    required: input.required === false ? false : true,
+  };
+}
+
+function normalizeNetworkMocks(value: unknown): RiddleProofProfileNetworkMock[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("target.network_mocks must be an array.");
+  return value.map(normalizeNetworkMock);
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -483,6 +536,7 @@ export function normalizeRiddleProofProfile(
       wait_for_selector: stringValue(targetInput.wait_for_selector) || stringValue(targetInput.waitForSelector),
       wait_ms: numberValue(targetInput.wait_ms) ?? numberValue(targetInput.waitMs),
       setup_actions: normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions),
+      network_mocks: normalizeNetworkMocks(targetInput.network_mocks ?? targetInput.networkMocks),
     },
     checks,
     artifacts: Array.isArray(input.artifacts)
@@ -794,6 +848,54 @@ function assessSetupActionsFromEvidence(
   };
 }
 
+function assessNetworkMocksFromEvidence(
+  profile: RiddleProofProfile,
+  evidence: RiddleProofProfileEvidence,
+): RiddleProofProfileCheckResult | undefined {
+  const mocks = profile.target.network_mocks || [];
+  if (!mocks.length) return undefined;
+  const events = evidence.network_mocks || [];
+  const failed: Array<Record<string, JsonValue>> = [];
+  const requiredMocks = mocks.filter((mock) => mock.required !== false);
+  for (const mock of requiredMocks) {
+    const hits = events.filter((event) => event.label === mock.label && event.ok !== false).length;
+    if (hits < 1) {
+      failed.push({
+        label: mock.label,
+        url: mock.url,
+        method: mock.method || null,
+        reason: "required_mock_not_hit",
+      });
+    }
+  }
+  for (const event of events) {
+    if (event.ok === false) {
+      failed.push({
+        label: event.label ?? null,
+        url: event.url ?? null,
+        method: event.method ?? null,
+        reason: event.reason ?? event.error ?? "mock_failed",
+      });
+    }
+  }
+  return {
+    type: "network_mocks_succeeded",
+    label: "network mocks succeeded",
+    status: failed.length ? "failed" : "passed",
+    evidence: {
+      mock_count: mocks.length,
+      required_count: requiredMocks.length,
+      hit_count: events.filter((event) => event.ok !== false).length,
+      hits_by_label: Object.fromEntries(mocks.map((mock) => [
+        mock.label,
+        events.filter((event) => event.label === mock.label && event.ok !== false).length,
+      ])),
+      failed,
+    },
+    message: failed.length ? `Network mocks failed or were not hit for ${failed.length} mock(s).` : undefined,
+  };
+}
+
 function profileStatusFromEvidence(
   profile: RiddleProofProfile,
   evidence: RiddleProofProfileEvidence | undefined,
@@ -818,6 +920,7 @@ export function assessRiddleProofProfileEvidence(
   const capturedAt = evidence?.captured_at || new Date().toISOString();
   const checks = evidence
     ? [
+      assessNetworkMocksFromEvidence(profile, evidence),
       assessSetupActionsFromEvidence(profile, evidence),
       ...profile.checks.map((check) => assessCheckFromEvidence(check, evidence)),
     ].filter((check): check is RiddleProofProfileCheckResult => Boolean(check))
@@ -1064,6 +1167,49 @@ function horizontalBoundsOverflowPx(value) {
 function assessProfile(profile, evidence) {
   const checks = [];
   const viewports = evidence.viewports || [];
+  if (profile.target && Array.isArray(profile.target.network_mocks) && profile.target.network_mocks.length) {
+    const events = evidence.network_mocks || [];
+    const requiredMocks = profile.target.network_mocks.filter((mock) => mock && mock.required !== false);
+    const failed = [];
+    for (const mock of requiredMocks) {
+      const hits = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
+      if (hits < 1) {
+        failed.push({
+          label: mock.label,
+          url: mock.url,
+          method: mock.method || null,
+          reason: "required_mock_not_hit",
+        });
+      }
+    }
+    for (const event of events) {
+      if (event && event.ok === false) {
+        failed.push({
+          label: event.label || null,
+          url: event.url || null,
+          method: event.method || null,
+          reason: event.reason || event.error || "mock_failed",
+        });
+      }
+    }
+    const hitsByLabel = {};
+    for (const mock of profile.target.network_mocks) {
+      hitsByLabel[mock.label] = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
+    }
+    checks.push({
+      type: "network_mocks_succeeded",
+      label: "network mocks succeeded",
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        mock_count: profile.target.network_mocks.length,
+        required_count: requiredMocks.length,
+        hit_count: events.filter((event) => event && event.ok !== false).length,
+        hits_by_label: hitsByLabel,
+        failed,
+      },
+      message: failed.length ? "Network mocks failed or were not hit for " + failed.length + " mock(s)." : undefined,
+    });
+  }
   if (profile.target && Array.isArray(profile.target.setup_actions) && profile.target.setup_actions.length) {
     const actionCount = profile.target.setup_actions.length;
     const failed = [];
@@ -1254,6 +1400,7 @@ const profileSlug = ${serializableSlug};
 const capturedAt = new Date().toISOString();
 const consoleEvents = [];
 const pageErrors = [];
+const networkMockEvents = [];
 page.on("console", (message) => {
   const type = message.type();
   if (type === "error" || type === "warning" || type === "assert") {
@@ -1299,6 +1446,49 @@ function compactSetupResultText(value) {
 }
 async function setupLocatorVisible(locator, index) {
   return await locator.nth(index).isVisible({ timeout: 1000 }).catch(() => false);
+}
+async function registerNetworkMocks(mocks) {
+  for (const mock of mocks || []) {
+    await page.route(mock.url, async (route) => {
+      const request = route.request();
+      const method = request.method ? request.method() : "";
+      if (mock.method && method.toUpperCase() !== String(mock.method).toUpperCase()) {
+        await route.continue();
+        return;
+      }
+      try {
+        const headers = { ...(mock.headers || {}) };
+        let body = mock.body || "";
+        let contentType = mock.content_type || headers["content-type"] || headers["Content-Type"] || "text/plain";
+        if (mock.body_json !== undefined) {
+          body = JSON.stringify(mock.body_json);
+          contentType = mock.content_type || headers["content-type"] || headers["Content-Type"] || "application/json";
+        }
+        networkMockEvents.push({
+          ok: true,
+          label: mock.label,
+          url: request.url(),
+          method,
+          status: mock.status || 200,
+        });
+        await route.fulfill({
+          status: mock.status || 200,
+          headers,
+          contentType,
+          body,
+        });
+      } catch (error) {
+        networkMockEvents.push({
+          ok: false,
+          label: mock.label,
+          url: request.url(),
+          method,
+          error: String(error && error.message ? error.message : error).slice(0, 1000),
+        });
+        throw error;
+      }
+    });
+  }
 }
 async function executeSetupAction(action, ordinal) {
   const type = setupActionType(action);
@@ -1561,6 +1751,7 @@ function buildProfileEvidence(currentViewports) {
       fatal_count: consoleEvents.filter((event) => event.type === "error" || event.type === "assert").length,
     },
     page_errors: pageErrors,
+    network_mocks: networkMockEvents.slice(),
     dom_summary: {
       expected_viewport_count: expectedViewportCount,
       viewport_count: currentViewports.length,
@@ -1570,6 +1761,8 @@ function buildProfileEvidence(currentViewports) {
       overflow_px: currentViewports.map((viewport) => viewport.overflow_px),
       bounds_overflow_px: currentViewports.map((viewport) => viewport.bounds_overflow_px),
       overflow_offender_counts: currentViewports.map((viewport) => (viewport.overflow_offenders || []).length),
+      network_mock_count: (profile.target.network_mocks || []).length,
+      network_mock_hit_count: networkMockEvents.filter((event) => event.ok !== false).length,
     },
   };
 }
@@ -1583,6 +1776,9 @@ async function saveProfileArtifacts(currentViewports) {
   }
   return result;
 }
+await registerNetworkMocks(profile.target.network_mocks || []);
+consoleEvents.length = 0;
+pageErrors.length = 0;
 let result = await saveProfileArtifacts(viewports);
 for (const viewport of profile.target.viewports || []) {
   viewports.push(await captureViewport(viewport));
