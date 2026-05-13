@@ -457,6 +457,43 @@ assert.ok(profileScript.includes("overflow_offenders"));
 assert.ok(profileScript.includes("isContainedByHorizontalScroller"));
 assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
+const networkMockProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "builder-network-mocks",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [
+      {
+        label: "chat",
+        url: "**/v1/chat/completions",
+        method: "POST",
+        content_type: "text/event-stream",
+        body: "data: [DONE]\n\n",
+      },
+      {
+        label: "save",
+        url: "**/api/save",
+        method: "POST",
+        json: { gameId: "riddle-proof-mock" },
+      },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/create" },
+    { type: "no_fatal_console_errors" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(networkMockProfile.target.network_mocks.length, 2);
+assert.equal(networkMockProfile.target.network_mocks[0].required, true);
+assert.equal(networkMockProfile.target.network_mocks[0].content_type, "text/event-stream");
+assert.deepEqual(networkMockProfile.target.network_mocks[1].body_json, { gameId: "riddle-proof-mock" });
+const networkMockProfileScript = buildRiddleProofProfileScript(networkMockProfile);
+assert.ok(networkMockProfileScript.includes("registerNetworkMocks"));
+assert.ok(networkMockProfileScript.includes("networkMockEvents"));
+assert.ok(networkMockProfileScript.includes("network_mocks: networkMockEvents.slice()"));
+assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
+assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -512,6 +549,43 @@ const partialProfileAssessment = assessRiddleProofProfileEvidence(profile, {
 });
 assert.equal(partialProfileAssessment.status, "proof_insufficient");
 assert.equal(partialProfileAssessment.checks.find((check) => check.type === "route_loaded").status, "passed");
+const networkMockProfileAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "builder-network-mocks",
+  target_url: "https://example.com/create",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-13T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    route: { requested: "https://example.com/create", observed: "/create", expected_path: "/create", matched: true, http_status: 200 },
+    body_text_sample: "Game Builder",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    screenshot_label: "builder-network-mocks-mobile",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  network_mocks: [
+    { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
+    { ok: true, label: "save", url: "https://example.com/api/save", method: "POST", status: 200 },
+  ],
+  dom_summary: { viewport_count: 1, network_mock_hit_count: 2 },
+});
+assert.equal(networkMockProfileAssessment.status, "passed");
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").status, "passed");
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.hits_by_label.save, 1);
+const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  ...networkMockProfileAssessment.evidence,
+  network_mocks: [
+    { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
+  ],
+});
+assert.equal(missingNetworkMockAssessment.status, "product_regression");
+assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").status, "failed");
+assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.failed[0].label, "save");
 const mountedPreviewAssessment = assessRiddleProofProfileEvidence(mountedPreviewProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "preview-playground-basic",
