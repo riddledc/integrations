@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.27
+
+### Patch Changes
+
+- 6d52468: Add profile `target.network_mocks` so audit profiles can mock static backend responses, record mock hits in evidence, and fail required mocks that are not exercised.
+
 ## 0.7.26
 
 ### Patch Changes
