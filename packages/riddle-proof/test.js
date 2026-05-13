@@ -280,6 +280,8 @@ assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("setupLocatorVisible"));
 assert.ok(profileScript.includes("matching_element_not_visible"));
 assert.ok(profileScript.includes("previewMountPrefix"));
+assert.ok(profileScript.includes("saveProfileArtifacts(viewports)"));
+assert.ok(profileScript.includes("expected_viewport_count"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -328,6 +330,13 @@ assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 6);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const partialProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [profileEvidence.viewports[0]],
+  dom_summary: { expected_viewport_count: 2, viewport_count: 1, partial: true },
+});
+assert.equal(partialProfileAssessment.status, "proof_insufficient");
+assert.equal(partialProfileAssessment.checks.find((check) => check.type === "route_loaded").status, "passed");
 const mountedPreviewAssessment = assessRiddleProofProfileEvidence(mountedPreviewProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "preview-playground-basic",
