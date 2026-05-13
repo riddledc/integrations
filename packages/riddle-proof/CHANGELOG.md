@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.33
+
+### Patch Changes
+
+- cc11628: Emit Riddle poll progress from hosted `run-profile` runs, with `--quiet` and `--progress-every-ms` support for long profile sweeps.
+
 ## 0.7.32
 
 ### Patch Changes
