@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.24
+
+### Patch Changes
+
+- 10edf9a: Improve profile capture by matching text assertions against full page text and ignoring descendant bounds overflow that is contained inside horizontal scrollers.
+
 ## 0.7.23
 
 ### Patch Changes
