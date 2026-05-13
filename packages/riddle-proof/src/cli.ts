@@ -53,7 +53,7 @@ function usage() {
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--output <dir>]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
-    "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720]",
+    "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
     "  riddle-proof-loop riddle-poll <job-id> [--wait] [--attempts n] [--quiet]",
     "  riddle-proof-loop doctor local [--codex-command <path>]",
     "",
@@ -71,7 +71,14 @@ function parseArgs(argv: string[]) {
       positional.push(arg);
       continue;
     }
-    const key = arg.slice(2).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    const raw = arg.slice(2);
+    const equalIndex = raw.indexOf("=");
+    const rawKey = equalIndex >= 0 ? raw.slice(0, equalIndex) : raw;
+    const key = rawKey.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    if (equalIndex >= 0) {
+      options[key] = raw.slice(equalIndex + 1);
+      continue;
+    }
     const next = argv[index + 1];
     if (!next || next.startsWith("--")) {
       options[key] = true;
@@ -86,6 +93,17 @@ function parseArgs(argv: string[]) {
 function optionString(options: CliOptions, key: string) {
   const value = options[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionBoolean(options: CliOptions, key: string) {
+  const value = options[key];
+  if (typeof value === "undefined") return undefined;
+  if (typeof value === "boolean") return value;
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+  const flag = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+  throw new Error(`--${flag} must be true or false.`);
 }
 
 function readStdin() {
@@ -607,6 +625,7 @@ async function main() {
       script: readFileSync(scriptFile, "utf-8"),
       viewport: parseRiddleViewport(optionString(options, "viewport")),
       timeoutSec: optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+      strict: optionBoolean(options, "strict"),
       sync: options.sync === true ? true : undefined,
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

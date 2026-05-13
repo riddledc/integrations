@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -89,6 +91,39 @@ assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
 assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
+
+function runCli(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      new URL("./dist/cli.js", import.meta.url).pathname,
+      ...args,
+    ], {
+      cwd: options.cwd || process.cwd(),
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+      const error = new Error(`CLI exited with code ${code}: ${stderr || stdout}`);
+      error.code = code;
+      error.stdout = stdout;
+      error.stderr = stderr;
+      reject(error);
+    });
+  });
+}
 
 const riddlePreviewDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-client-preview-"));
 writeFileSync(path.join(riddlePreviewDir, "index.html"), "<!doctype html><title>Riddle Preview</title>");
@@ -281,6 +316,61 @@ assert(
   riddleClientCalls.some((call) => call.url === "https://upload.test/sp_test" && call.auth === null),
   "Riddle server-preview upload should not send API bearer auth to the signed upload URL",
 );
+
+const cliRunScriptRequests = [];
+const cliRunScriptServer = createServer((request, response) => {
+  if (request.method !== "POST" || request.url !== "/v1/run") {
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "unexpected request" }));
+    return;
+  }
+
+  let rawBody = "";
+  request.on("data", (chunk) => {
+    rawBody += chunk;
+  });
+  request.on("end", () => {
+    cliRunScriptRequests.push({
+      url: request.url,
+      method: request.method,
+      auth: request.headers.authorization || null,
+      body: JSON.parse(rawBody),
+    });
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ job_id: "job_cli_strict" }));
+  });
+});
+cliRunScriptServer.listen(0, "127.0.0.1");
+await once(cliRunScriptServer, "listening");
+try {
+  const cliScriptFile = path.join(riddlePreviewDir, "cli-strict-script.js");
+  writeFileSync(cliScriptFile, "return { ok: true };\n");
+  const address = cliRunScriptServer.address();
+  const cliRunScriptResult = await runCli([
+    "riddle-run-script",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--url",
+    "https://example.test/",
+    "--script-file",
+    cliScriptFile,
+    "--viewport=390x844",
+    "--timeout",
+    "12",
+    "--strict=false",
+  ]);
+  assert.equal(JSON.parse(cliRunScriptResult.stdout).job_id, "job_cli_strict");
+  assert.equal(cliRunScriptRequests.length, 1);
+  assert.equal(cliRunScriptRequests[0].auth, "Bearer cli-riddle-key");
+  assert.equal(cliRunScriptRequests[0].body.strict, false);
+  assert.equal(cliRunScriptRequests[0].body.timeout_sec, 12);
+  assert.deepEqual(cliRunScriptRequests[0].body.viewport, { width: 390, height: 844 });
+} finally {
+  cliRunScriptServer.close();
+  await once(cliRunScriptServer, "close");
+}
 
 const profile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
