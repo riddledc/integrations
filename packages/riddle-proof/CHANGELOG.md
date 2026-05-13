@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.20
+
+### Patch Changes
+
+- 16f0e63: Compact stored profile setup-action text so broad wait targets keep artifacts readable without changing matching behavior.
+
 ## 0.7.19
 
 ### Patch Changes
