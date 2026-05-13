@@ -190,6 +190,11 @@ export interface BasicGameplayMobileEvidence {
 export interface RiddleProofBasicGameplayRouteEvidence {
   name?: string;
   path?: string;
+  assessment_mode?: string | null;
+  assessmentMode?: string | null;
+  proof_mode?: string | null;
+  proofMode?: string | null;
+  audit?: boolean;
   http_status?: number | null;
   response_status?: number | null;
   status?: number | null;
@@ -248,6 +253,7 @@ export interface BasicGameplayChangeSummary {
 export interface RiddleProofBasicGameplayRouteAssessment {
   name?: string;
   path?: string;
+  assessment_mode?: string | null;
   ok: boolean;
   failures: BasicGameplayFailureCode[];
   warnings: BasicGameplayWarningCode[];
@@ -280,6 +286,7 @@ export interface RiddleProofBasicGameplayAssessment {
   failing_routes: Array<{
     name?: string;
     path?: string;
+    assessment_mode?: string | null;
     failures: BasicGameplayFailureCode[];
     warnings: BasicGameplayWarningCode[];
     suite_failures?: BasicGameplaySuiteFailure[];
@@ -433,6 +440,7 @@ export function assessBasicGameplayEvidence(
     .map((result) => ({
       name: result.name,
       path: result.path,
+      assessment_mode: result.assessment_mode,
       failures: result.failures,
       warnings: result.warnings,
       suite_failures: result.suite_failures,
@@ -465,6 +473,8 @@ export function assessBasicGameplayRoute(
 
   const failures: BasicGameplayFailureCode[] = [];
   const warnings: BasicGameplayWarningCode[] = [];
+  const assessmentMode = routeAssessmentMode(route);
+  const auditAssessment = isAuditAssessmentRoute(route);
   const initial = route.initial || {};
   const timed = route.timed || {};
   const afterAction = route.after_action || route.afterAction || {};
@@ -476,9 +486,14 @@ export function assessBasicGameplayRoute(
   const continuedActionChange = changed(afterAction, afterContinue);
   const cleanupBase = route.after_continue || route.afterContinue ? afterContinue : afterAction;
   const cleanupActionChange = changed(cleanupBase, afterCleanup);
-  const surfaceVisible = numberValue(initial.visible_canvas_count) > 0 ||
+  const interactiveSurfaceVisible = numberValue(initial.visible_canvas_count) > 0 ||
     numberValue(initial.enabled_clickable_count) > 0 ||
     numberValue(initial.visible_large_node_count) >= minSurfaceLargeNodes;
+  const auditSurfaceVisible = numberValue(initial.body_text_length) >= minBodyTextLength ||
+    numberValue(initial.visible_large_node_count) >= minVisibleLargeNodes ||
+    numberValue(initial.enabled_clickable_count) > 0 ||
+    numberValue(initial.visible_canvas_count) > 0;
+  const surfaceVisible = auditAssessment ? auditSurfaceVisible : interactiveSurfaceVisible;
   const actionResults = listValue(route.action_results || route.actionResults) as BasicGameplayActionResult[];
   const continuedActionResults = listValue(route.continued_action_results || route.continuedActionResults) as BasicGameplayActionResult[];
   const continuedCleanupActionResults = listValue(route.continued_cleanup_action_results || route.continuedCleanupActionResults) as BasicGameplayActionResult[];
@@ -506,15 +521,15 @@ export function assessBasicGameplayRoute(
   }
   if (!surfaceVisible) failures.push("no_game_surface");
   if (mobileOverflowPx > maxMobileOverflowPx) failures.push("mobile_horizontal_overflow");
-  if (!actionAttempted && !timedChange.changed) failures.push("primary_control_missing");
-  if (actionAttempted && !stateChangeObserved) failures.push("primary_control_inert");
+  if (!auditAssessment && !actionAttempted && !timedChange.changed) failures.push("primary_control_missing");
+  if (!auditAssessment && actionAttempted && !stateChangeObserved) failures.push("primary_control_inert");
   if (failOnConsoleError && consoleErrorCount > 0) failures.push("fatal_page_error");
 
   if (numberValue(initial.visible_canvas_count) > 0 && actionAttempted && !timedChange.canvas_changed && !actionChange.canvas_changed && !actionChange.screenshot_changed) {
     warnings.push("canvas_inert");
   }
   if (actionFailed) warnings.push("some_actions_failed");
-  if (warnOnMissingResetPath && !resetPathPresent && route.requires_reset !== false && actionAttempted && stateChangeObserved) {
+  if (!auditAssessment && warnOnMissingResetPath && !resetPathPresent && route.requires_reset !== false && actionAttempted && stateChangeObserved) {
     warnings.push("missing_reset_path");
   }
   if (warnOnConsoleError && consoleErrorCount > 0) warnings.push("critical_console_error");
@@ -522,6 +537,7 @@ export function assessBasicGameplayRoute(
   return {
     name: route.name,
     path: route.path,
+    assessment_mode: assessmentMode,
     ok: failures.length === 0,
     failures,
     warnings,
@@ -679,6 +695,7 @@ export function augmentBasicGameplayAssessmentWithProgressionChecks(
     .map((result) => ({
       name: result.name,
       path: result.path,
+      assessment_mode: result.assessment_mode,
       failures: result.failures,
       warnings: result.warnings,
       suite_failures: result.suite_failures,
@@ -1195,6 +1212,26 @@ function countCodes(codes: string[]) {
   const counts: Record<string, number> = {};
   for (const code of codes) counts[code] = (counts[code] || 0) + 1;
   return counts;
+}
+
+function routeAssessmentMode(route: RiddleProofBasicGameplayRouteEvidence) {
+  const raw = route.assessment_mode ?? route.assessmentMode ?? route.proof_mode ?? route.proofMode ?? null;
+  if (raw === null || raw === undefined) return route.audit === true ? "audit" : null;
+  const mode = String(raw).trim().toLowerCase().replace(/_/g, "-");
+  return mode || (route.audit === true ? "audit" : null);
+}
+
+function isAuditAssessmentRoute(route: RiddleProofBasicGameplayRouteEvidence) {
+  const mode = routeAssessmentMode(route);
+  return route.audit === true || [
+    "audit",
+    "audit-only",
+    "no-diff",
+    "not-required",
+    "profile",
+    "report-only",
+    "static",
+  ].includes(String(mode || ""));
 }
 
 function firstNumber(...values: unknown[]) {

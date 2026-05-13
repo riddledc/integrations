@@ -958,6 +958,55 @@ const compactedSelectorTextAssessment = assessBasicGameplayEvidence({
 });
 assert.equal(compactedSelectorTextAssessment.passed, true);
 
+const auditMarkdownAssessment = assessBasicGameplayEvidence({
+  version: "riddle-proof.basic-gameplay.v1",
+  results: [
+    {
+      name: "MCP Markdown Artifact",
+      path: "/mcp/markdown.md",
+      assessment_mode: "audit",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 2700,
+        visible_large_node_count: 1,
+        enabled_clickable_count: 0,
+        visible_canvas_count: 0,
+        screenshot_hash: "mcp-markdown-before",
+        body_text_hash: "mcp-markdown-text",
+      },
+      timed: {
+        screenshot_hash: "mcp-markdown-before",
+        body_text_hash: "mcp-markdown-text",
+      },
+      after_action: {
+        screenshot_hash: "mcp-markdown-after",
+        body_text_hash: "mcp-markdown-text",
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "wait" }],
+      progression_checks: [
+        {
+          label: "markdown includes title",
+          type: "selector_text_matches",
+          pattern: "#\\s*Riddle MCP",
+          after: {
+            phase: "initial",
+            selector: "body",
+            text: "# Riddle MCP",
+            pattern_matched: true,
+          },
+        },
+      ],
+    },
+  ],
+});
+assert.equal(auditMarkdownAssessment.passed, true);
+assert.equal(auditMarkdownAssessment.route_results[0].assessment_mode, "audit");
+assert.equal(auditMarkdownAssessment.route_results[0].signals.surface_visible, true);
+assert.equal(auditMarkdownAssessment.route_results[0].signals.action_attempted, false);
+
 const exactSelectorCountGameplayAssessment = assessBasicGameplayEvidence({
   version: "riddle-proof.basic-gameplay.v1",
   results: [
