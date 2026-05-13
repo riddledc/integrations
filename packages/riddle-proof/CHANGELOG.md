@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.30
+
+### Patch Changes
+
+- 040ae5d: Add profile setup actions for session storage seeding and browser storage cleanup.
+
 ## 0.7.29
 
 ### Patch Changes
