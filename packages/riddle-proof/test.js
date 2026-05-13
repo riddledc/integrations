@@ -51,6 +51,7 @@ import {
   createRiddleApiClient,
   deployRiddleStaticPreview,
   parseRiddleViewport,
+  RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES,
 } from "./dist/index.js";
 import {
   parseOpenClawAssertions,
@@ -494,6 +495,52 @@ assert.ok(networkMockProfileScript.includes("networkMockEvents"));
 assert.ok(networkMockProfileScript.includes("network_mocks: networkMockEvents.slice()"));
 assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
+const formSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-form-storage-actions",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    setup_actions: [
+      {
+        type: "local-storage",
+        key: "builder_tokens",
+        json: { IdToken: "proof-token" },
+        reload: true,
+      },
+      {
+        type: "fill",
+        selector: "input[name='prompt']",
+        value: "Build a tiny maze",
+      },
+      {
+        type: "set-input-value",
+        selector: "input[name='title']",
+        inputValue: "Riddle Proof Maze",
+      },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/create" },
+    { type: "no_fatal_console_errors" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(formSetupProfile.target.setup_actions[0].type, "local_storage");
+assert.deepEqual(formSetupProfile.target.setup_actions[0].value_json, { IdToken: "proof-token" });
+assert.equal(formSetupProfile.target.setup_actions[0].reload, true);
+assert.equal(formSetupProfile.target.setup_actions[1].value, "Build a tiny maze");
+assert.equal(formSetupProfile.target.setup_actions[2].type, "set_input_value");
+assert.equal(formSetupProfile.target.setup_actions[2].value, "Riddle Proof Maze");
+const formSetupProfileScript = buildRiddleProofProfileScript(formSetupProfile);
+assert.ok(formSetupProfileScript.includes("setupActionValue"));
+assert.ok(formSetupProfileScript.includes("setupHasOwn"));
+assert.ok(formSetupProfileScript.includes("window.localStorage.setItem"));
+assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_input_value"'));
+assert.ok(formSetupProfileScript.includes("value_length"));
+assert.ok(!formSetupProfileScript.includes("Object.prototype"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
