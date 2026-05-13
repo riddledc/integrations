@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.18
+
+### Patch Changes
+
+- 78ce64a: Fail basic gameplay assessments when responsive setup actions fail and emit `responsive_setup_failed` catch records.
+
 ## 0.7.17
 
 ### Patch Changes
