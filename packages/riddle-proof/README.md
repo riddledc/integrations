@@ -168,6 +168,10 @@ riddle-proof-loop run-profile \
   --output artifacts/riddle-proof/pricing
 ```
 
+Hosted profile runs emit Riddle poll progress to stderr while waiting. Use
+`--quiet` to suppress progress lines, or `--progress-every-ms` to tune the
+heartbeat cadence for long route-inventory or workflow profiles.
+
 The package includes a generic starter profile at
 `examples/profiles/page-content-basic.json`; copy that shape into a repository
 profile directory and replace the selector/text checks with app-specific
