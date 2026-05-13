@@ -692,13 +692,16 @@ function assessSetupActionsFromEvidence(
 }
 
 function profileStatusFromEvidence(
+  profile: RiddleProofProfile,
   evidence: RiddleProofProfileEvidence | undefined,
   checks: RiddleProofProfileCheckResult[],
 ): RiddleProofProfileStatus {
   if (!evidence) return "proof_insufficient";
   const viewports = evidence.viewports || [];
+  const expectedViewportCount = profile.target.viewports?.length || 0;
   if (!viewports.length || !checks.length) return "proof_insufficient";
   if (viewports.some((viewport) => viewport.navigation_error)) return "environment_blocked";
+  if (expectedViewportCount && viewports.length < expectedViewportCount) return "proof_insufficient";
   if (checks.some((check) => check.status === "needs_human_review")) return "needs_human_review";
   if (checks.some((check) => check.status === "failed")) return "product_regression";
   return "passed";
@@ -716,7 +719,7 @@ export function assessRiddleProofProfileEvidence(
       ...profile.checks.map((check) => assessCheckFromEvidence(check, evidence)),
     ].filter((check): check is RiddleProofProfileCheckResult => Boolean(check))
     : [];
-  const status = profileStatusFromEvidence(evidence, checks);
+  const status = profileStatusFromEvidence(profile, evidence, checks);
   const firstViewport = evidence?.viewports?.[0];
   const screenshots = (evidence?.viewports || [])
     .map((viewport) => viewport.screenshot_label)
@@ -1025,8 +1028,10 @@ function assessProfile(profile, evidence) {
     checks.push({ type: check.type, label: check.label || check.type, status: "needs_human_review", evidence: {}, message: "Unsupported check type." });
   }
   let status = "passed";
+  const expectedViewportCount = profile.target && Array.isArray(profile.target.viewports) ? profile.target.viewports.length : 0;
   if (!viewports.length || !checks.length) status = "proof_insufficient";
   else if (viewports.some((viewport) => viewport.navigation_error)) status = "environment_blocked";
+  else if (expectedViewportCount && viewports.length < expectedViewportCount) status = "proof_insufficient";
   else if (checks.some((check) => check.status === "needs_human_review")) status = "needs_human_review";
   else if (checks.some((check) => check.status === "failed")) status = "product_regression";
   const screenshotLabels = viewports.map((viewport) => viewport.screenshot_label).filter(Boolean);
@@ -1296,33 +1301,44 @@ async function captureViewport(viewport) {
 }
 ${runtimeScriptAssessmentSource()}
 const viewports = [];
+function buildProfileEvidence(currentViewports) {
+  const expectedViewportCount = (profile.target.viewports || []).length;
+  return {
+    version: "riddle-proof.profile-evidence.v1",
+    profile_name: profile.name,
+    target_url: targetUrl,
+    baseline_policy: profile.baseline_policy || "invariant_only",
+    captured_at: capturedAt,
+    viewports: currentViewports.slice(),
+    console: {
+      events: consoleEvents,
+      fatal_count: consoleEvents.filter((event) => event.type === "error" || event.type === "assert").length,
+    },
+    page_errors: pageErrors,
+    dom_summary: {
+      expected_viewport_count: expectedViewportCount,
+      viewport_count: currentViewports.length,
+      partial: expectedViewportCount > 0 && currentViewports.length < expectedViewportCount,
+      routes: currentViewports.map((viewport) => viewport.route),
+      titles: currentViewports.map((viewport) => viewport.title),
+      overflow_px: currentViewports.map((viewport) => viewport.overflow_px),
+    },
+  };
+}
+async function saveProfileArtifacts(currentViewports) {
+  const evidence = buildProfileEvidence(currentViewports);
+  const result = assessProfile(profile, evidence);
+  if (typeof saveJson === "function") {
+    await saveJson("proof.json", result);
+    await saveJson("console.json", { events: consoleEvents, page_errors: pageErrors });
+    await saveJson("dom-summary.json", evidence.dom_summary);
+  }
+  return result;
+}
+let result = await saveProfileArtifacts(viewports);
 for (const viewport of profile.target.viewports || []) {
   viewports.push(await captureViewport(viewport));
-}
-const evidence = {
-  version: "riddle-proof.profile-evidence.v1",
-  profile_name: profile.name,
-  target_url: targetUrl,
-  baseline_policy: profile.baseline_policy || "invariant_only",
-  captured_at: capturedAt,
-  viewports,
-  console: {
-    events: consoleEvents,
-    fatal_count: consoleEvents.filter((event) => event.type === "error" || event.type === "assert").length,
-  },
-  page_errors: pageErrors,
-  dom_summary: {
-    viewport_count: viewports.length,
-    routes: viewports.map((viewport) => viewport.route),
-    titles: viewports.map((viewport) => viewport.title),
-    overflow_px: viewports.map((viewport) => viewport.overflow_px),
-  },
-};
-const result = assessProfile(profile, evidence);
-if (typeof saveJson === "function") {
-  await saveJson("proof.json", result);
-  await saveJson("console.json", { events: consoleEvents, page_errors: pageErrors });
-  await saveJson("dom-summary.json", evidence.dom_summary);
+  result = await saveProfileArtifacts(viewports);
 }
 return result;
 `.trim();
