@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.31
+
+### Patch Changes
+
+- 8d251a0: Avoid waiting for navigation after profile setup clicks so app-state buttons do not fail after the click has already landed.
+
 ## 0.7.30
 
 ### Patch Changes
