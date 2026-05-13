@@ -568,6 +568,7 @@ assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));
 assert.ok(formSetupProfileScript.includes('type === "clear_storage"'));
 assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_input_value"'));
+assert.ok(formSetupProfileScript.includes("click({ timeout, noWaitAfter: true })"));
 assert.ok(formSetupProfileScript.includes("value_length"));
 assert.ok(!formSetupProfileScript.includes("Object.prototype"));
 const profileEvidence = {

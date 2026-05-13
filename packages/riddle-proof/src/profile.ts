@@ -1614,7 +1614,7 @@ async function executeSetupAction(action, ordinal) {
         if (targetIndex < 0) return { ...base, reason: "text_not_found", count };
       }
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
-      await locator.nth(targetIndex).click({ timeout });
+      await locator.nth(targetIndex).click({ timeout, noWaitAfter: true });
       return { ...base, ok: true, count, target_index: targetIndex, text: matchedText };
     }
     if (type === "fill" || type === "set_input_value") {
