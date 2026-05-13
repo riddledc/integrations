@@ -284,6 +284,7 @@ assert.ok(profileScript.includes("saveProfileArtifacts(viewports)"));
 assert.ok(profileScript.includes("expected_viewport_count"));
 assert.ok(profileScript.includes("compactSetupResultText"));
 assert.ok(profileScript.includes("text: compactSetupResultText(text)"));
+assert.ok(profileScript.includes("overflow_offenders"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -391,6 +392,32 @@ const overflowingProfileAssessment = assessRiddleProofProfileEvidence(profile, {
 });
 assert.equal(overflowingProfileAssessment.status, "product_regression");
 assert.equal(overflowingProfileAssessment.checks.find((check) => check.type === "no_mobile_horizontal_overflow").status, "failed");
+const boundsClippedProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [
+    {
+      ...profileEvidence.viewports[0],
+      overflow_px: 0,
+      bounds_overflow_px: 0,
+      overflow_offenders: [
+        {
+          selector: "iframe#community-game",
+          overflow: 217,
+          left_overflow_px: 217,
+          right_overflow_px: 217,
+          viewport_width: 390,
+          rect: { left: -217, right: 607, width: 824 },
+        },
+      ],
+    },
+    profileEvidence.viewports[1],
+  ],
+});
+const boundsClippedProfileCheck = boundsClippedProfileAssessment.checks.find((check) => check.type === "no_mobile_horizontal_overflow");
+assert.equal(boundsClippedProfileAssessment.status, "product_regression");
+assert.equal(boundsClippedProfileCheck.status, "failed");
+assert.equal(boundsClippedProfileCheck.evidence.bounds_overflow_px[0], 217);
+assert.equal(boundsClippedProfileCheck.evidence.overflow_offender_counts[0], 1);
 const blockedProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [
@@ -777,6 +804,69 @@ assert.equal(responsiveSetupFailureCatches.length, 2);
 assert.equal(responsiveSetupFailureCatches[0].code, "responsive_setup_failed");
 assert.equal(responsiveSetupFailureCatches[1].selector, ".launch-button");
 assert.equal(responsiveSetupFailureCatches[1].phase, "after_continue");
+
+const responsiveBoundsEvidence = {
+  version: "riddle-proof.basic-gameplay.v1",
+  site: "LilArcade",
+  results: [
+    {
+      name: "Community Player",
+      path: "/community/max-collisions",
+      http_status: 200,
+      console_error_count: 0,
+      page_error_count: 0,
+      initial: {
+        body_text_length: 120,
+        visible_large_node_count: 12,
+        enabled_clickable_count: 1,
+        screenshot_hash: "community-before",
+        body_text_hash: "community-before-text",
+      },
+      timed: {
+        screenshot_hash: "community-before",
+        body_text_hash: "community-before-text",
+      },
+      after_action: {
+        screenshot_hash: "community-after",
+        body_text_hash: "community-after-text",
+        reset_control_count: 1,
+      },
+      mobile: { overflow_px: 0 },
+      action_results: [{ ok: true, action: "click" }],
+      responsive_viewports: [
+        {
+          label: "phone",
+          width: 390,
+          height: 844,
+          phase: "after_continue",
+          overflow_px: 0,
+          overflow_offenders: [
+            {
+              selector: "iframe#community-game",
+              overflow: 217,
+              left_overflow_px: 217,
+              right_overflow_px: 217,
+              viewport_width: 390,
+              rect: { left: -217, right: 607, width: 824 },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+const responsiveBoundsAssessment = assessBasicGameplayEvidence(responsiveBoundsEvidence);
+assert.equal(responsiveBoundsAssessment.passed, false);
+assert.equal(responsiveBoundsAssessment.failure_counts.responsive_bounds_clipped, 1);
+assert.equal(responsiveBoundsAssessment.failing_routes[0].suite_failures[0].code, "responsive_bounds_clipped");
+assert.equal(responsiveBoundsAssessment.failing_routes[0].suite_failures[0].overflow_px, 217);
+const responsiveBoundsCatches = createBasicGameplayCatchRecords(
+  responsiveBoundsAssessment,
+  responsiveBoundsEvidence,
+);
+assert.equal(responsiveBoundsCatches.length, 1);
+assert.equal(responsiveBoundsCatches[0].code, "responsive_bounds_clipped");
+assert.equal(responsiveBoundsCatches[0].viewport.label, "phone");
 
 const inertGameplayAssessment = assessBasicGameplayEvidence({
   results: [
