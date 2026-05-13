@@ -109,7 +109,30 @@ or as a stronger proof base before a change loop.
       { "name": "desktop", "width": 1440, "height": 1000 }
     ],
     "auth": "none",
+    "network_mocks": [
+      {
+        "label": "plans-api",
+        "url": "**/api/plans",
+        "method": "GET",
+        "status": 200,
+        "content_type": "application/json",
+        "json": {
+          "plans": [{ "name": "Builder", "price": "$20" }]
+        }
+      }
+    ],
     "setup_actions": [
+      {
+        "type": "local_storage",
+        "key": "demo-auth",
+        "json": { "role": "tester" },
+        "reload": true
+      },
+      {
+        "type": "fill",
+        "selector": "[data-testid='email']",
+        "value": "builder@example.com"
+      },
       { "type": "click", "selector": "[data-testid='show-plans']" },
       { "type": "wait_for_text", "selector": "body", "text": "Start building" }
     ]
@@ -145,14 +168,23 @@ The package includes a generic starter profile at
 profile directory and replace the selector/text checks with app-specific
 invariants.
 
+`target.network_mocks` is optional. The Riddle runner registers these mocks
+before navigation, records each hit, and adds an implicit
+`network_mocks_succeeded` check when mocks are present. A mock supports
+`url`/`glob`/`pattern`, optional `method`, `status`, `content_type`, `headers`,
+string `body`, JSON `json` / `body_json`, and `required: false` for
+best-effort mocks.
+
 `target.setup_actions` is optional. Use it when the meaningful proof surface
-appears only after a picker, tab, login stub, transport control, or other
-bounded interaction. Supported setup actions are `click`, `wait`,
+appears only after a picker, tab, login stub, storage seed, form fill,
+transport control, or other bounded interaction. Supported setup actions are
+`click`, `fill`, `set_input_value`, `local_storage`, `wait`,
 `wait_for_selector`, and `wait_for_text`; a failed setup action is recorded as
 a failed `setup_actions_succeeded` check so the profile cannot pass without
 reaching the intended state. Text-matched `click` actions prefer visible
 matching elements, which keeps responsive layouts from selecting hidden desktop
-or mobile-only links.
+or mobile-only links. `local_storage` accepts a `key` plus string `value` or
+JSON `json` / `value_json`, and can reload the page with `reload: true`.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
