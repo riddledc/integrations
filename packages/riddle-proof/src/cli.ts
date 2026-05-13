@@ -50,7 +50,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--output <dir>]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--output <dir>] [--quiet]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
@@ -490,6 +490,12 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
     wait: true,
     attempts: optionString(options, "attempts") ? Number(optionString(options, "attempts")) : undefined,
     intervalMs: optionString(options, "intervalMs") ? Number(optionString(options, "intervalMs")) : undefined,
+    progressEveryMs: optionString(options, "progressEveryMs") ? Number(optionString(options, "progressEveryMs")) : undefined,
+    onProgress: options.quiet !== true
+      ? (snapshot) => {
+          process.stderr.write(`${riddlePollProgressLine(snapshot)}\n`);
+        }
+      : undefined,
   });
   const artifacts = collectRiddleProfileArtifactRefs(poll.artifacts);
   if (!poll.ok || !poll.terminal) {

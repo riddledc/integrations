@@ -373,6 +373,145 @@ try {
   await once(cliRunScriptServer, "close");
 }
 
+const cliRunProfileRequests = [];
+let cliRunProfilePollCount = 0;
+let cliRunProfilePort = 0;
+const cliRunProfileServer = createServer((request, response) => {
+  const sendJson = (payload, status = 200) => {
+    response.writeHead(status, { "content-type": "application/json" });
+    response.end(JSON.stringify(payload));
+  };
+
+  if (request.method === "POST" && request.url === "/v1/run") {
+    let rawBody = "";
+    request.on("data", (chunk) => {
+      rawBody += chunk;
+    });
+    request.on("end", () => {
+      cliRunProfileRequests.push({
+        url: request.url,
+        method: request.method,
+        auth: request.headers.authorization || null,
+        body: JSON.parse(rawBody),
+      });
+      sendJson({ job_id: "job_cli_profile_progress" });
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_progress") {
+    cliRunProfilePollCount += 1;
+    if (cliRunProfilePollCount === 1) {
+      sendJson({
+        job_id: "job_cli_profile_progress",
+        status: "running",
+        created_at: "2026-05-13T23:20:00.000Z",
+        submitted_at: null,
+        completed_at: null,
+      });
+      return;
+    }
+    sendJson({
+      job_id: "job_cli_profile_progress",
+      status: "completed",
+      created_at: "2026-05-13T23:20:00.000Z",
+      submitted_at: "2026-05-13T23:21:00.000Z",
+      completed_at: "2026-05-13T23:21:20.000Z",
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_progress/artifacts") {
+    sendJson({
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/proof.json`,
+        },
+      ],
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/proof.json") {
+    sendJson({
+      version: "riddle-proof.profile-result.v1",
+      profile_name: "cli-profile-progress",
+      runner: "riddle",
+      status: "passed",
+      baseline_policy: "invariant_only",
+      route: {
+        requested: "https://example.com/profile",
+        observed: "/profile",
+        expected_path: "/profile",
+        matched: true,
+        http_status: 200,
+      },
+      artifacts: { screenshots: [], proof_json: "proof.json" },
+      checks: [{
+        type: "route_loaded",
+        status: "passed",
+        evidence: { expected_path: "/profile", observed_paths: ["/profile"], http_statuses: [200] },
+      }],
+      summary: "cli-profile-progress passed.",
+      captured_at: "2026-05-13T23:21:20.000Z",
+    });
+    return;
+  }
+
+  sendJson({ error: "unexpected request", method: request.method, url: request.url }, 404);
+});
+cliRunProfileServer.listen(0, "127.0.0.1");
+await once(cliRunProfileServer, "listening");
+try {
+  const address = cliRunProfileServer.address();
+  cliRunProfilePort = address.port;
+  const profileFile = path.join(riddlePreviewDir, "cli-profile-progress.json");
+  const profileOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-output");
+  writeFileSync(profileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-progress",
+    target: {
+      route: "/profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/profile" }],
+  }));
+  const cliProfileResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    profileOutputDir,
+    "--attempts",
+    "3",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+  ]);
+  const parsedProfileResult = JSON.parse(cliProfileResult.stdout);
+  assert.equal(parsedProfileResult.status, "passed");
+  assert.equal(parsedProfileResult.riddle.job_id, "job_cli_profile_progress");
+  assert.equal(cliRunProfileRequests.length, 1);
+  assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
+  assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running/);
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed/);
+  assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
+} finally {
+  cliRunProfileServer.close();
+  await once(cliRunProfileServer, "close");
+}
+
 const profile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "pricing-page-basic",
