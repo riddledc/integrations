@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.19
+
+### Patch Changes
+
+- e50f58c: Save partial profile evidence during multi-viewport captures and treat incomplete viewport evidence as proof insufficient instead of passed.
+
 ## 0.7.18
 
 ### Patch Changes
