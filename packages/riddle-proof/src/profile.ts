@@ -1112,6 +1112,11 @@ function setupTextMatches(sample, action) {
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
 }
+function compactSetupResultText(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= 500) return text;
+  return text.slice(0, 500) + "... (" + text.length + " chars)";
+}
 async function setupLocatorVisible(locator, index) {
   return await locator.nth(index).isVisible({ timeout: 1000 }).catch(() => false);
 }
@@ -1145,12 +1150,12 @@ async function executeSetupAction(action, ordinal) {
             const visible = await setupLocatorVisible(locator, index);
             if (visible) {
               targetIndex = index;
-              matchedText = text;
+              matchedText = compactSetupResultText(text);
               break;
             }
             if (hiddenMatchIndex < 0) {
               hiddenMatchIndex = index;
-              hiddenMatchedText = text;
+              hiddenMatchedText = compactSetupResultText(text);
             }
           }
         }
@@ -1171,12 +1176,12 @@ async function executeSetupAction(action, ordinal) {
           const text = await setupLocatorText(locator, index);
           lastText = text || lastText;
           if (setupTextMatches(text, action)) {
-            return { ...base, ok: true, text, target_index: index, timeout_ms: timeout };
+            return { ...base, ok: true, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
           }
         }
         await page.waitForTimeout(100);
       }
-      return { ...base, reason: "text_not_found", text: lastText, timeout_ms: timeout };
+      return { ...base, reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
     }
     return { ...base, reason: "unsupported_action" };
   } catch (error) {
