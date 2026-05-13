@@ -186,6 +186,85 @@ const polledJob = await riddleClient.pollJob("job_test");
 assert.equal(polledJob.ok, true);
 assert.equal(polledJob.terminal, true);
 assert.equal(polledJob.artifacts.artifacts[0].name, "proof.json");
+assert.equal(polledJob.poll.timed_out, false);
+
+let delayedPollCount = 0;
+const delayedProgress = [];
+const delayedPollClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.poll.test",
+  fetchImpl: async (url) => {
+    if (String(url) === "https://api.poll.test/v1/jobs/job_delayed") {
+      delayedPollCount += 1;
+      return new Response(JSON.stringify({
+        job_id: "job_delayed",
+        status: "running",
+        created_at: new Date(Date.now() - 45_000).toISOString(),
+        submitted_at: null,
+        completed_at: null,
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const delayedPollResult = await delayedPollClient.pollJob("job_delayed", {
+  wait: true,
+  attempts: 2,
+  intervalMs: 0,
+  progressEveryMs: 0,
+  onProgress: (snapshot) => delayedProgress.push(snapshot),
+});
+assert.equal(delayedPollResult.ok, false);
+assert.equal(delayedPollResult.terminal, false);
+assert.equal(delayedPollResult.poll.timed_out, true);
+assert.equal(delayedPollResult.poll.running_without_submission, true);
+assert.equal(delayedPollResult.poll.submitted_at, null);
+assert(delayedPollResult.poll.queue_elapsed_ms >= 45_000);
+assert.match(delayedPollResult.poll.message, /not submitted/);
+assert.equal(delayedPollCount, 2);
+assert.equal(delayedProgress.length, 2);
+assert.equal(delayedProgress[0].running_without_submission, true);
+
+let recoveredPollCount = 0;
+const recoveredPollClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.recovered.test",
+  fetchImpl: async (url) => {
+    if (String(url) === "https://api.recovered.test/v1/jobs/job_recovered") {
+      recoveredPollCount += 1;
+      if (recoveredPollCount === 1) {
+        return new Response(JSON.stringify({
+          job_id: "job_recovered",
+          status: "running",
+          created_at: "2026-05-13T15:40:00.000Z",
+          submitted_at: null,
+          completed_at: null,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        job_id: "job_recovered",
+        status: "completed",
+        created_at: "2026-05-13T15:40:00.000Z",
+        submitted_at: "2026-05-13T15:43:00.000Z",
+        completed_at: "2026-05-13T15:43:30.000Z",
+      }), { status: 200 });
+    }
+    if (String(url) === "https://api.recovered.test/v1/jobs/job_recovered/artifacts") {
+      return new Response(JSON.stringify({ artifacts: [{ name: "proof.json", url: "https://cdn.test/proof.json" }] }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const recoveredPollResult = await recoveredPollClient.pollJob("job_recovered", {
+  wait: true,
+  attempts: 3,
+  intervalMs: 0,
+});
+assert.equal(recoveredPollResult.ok, true);
+assert.equal(recoveredPollResult.terminal, true);
+assert.equal(recoveredPollResult.poll.timed_out, false);
+assert.equal(recoveredPollResult.poll.attempt, 2);
+assert.equal(recoveredPollResult.poll.queue_elapsed_ms, 180_000);
 assert(
   riddleClientCalls.some((call) => call.auth === "Bearer test-riddle-key"),
   "Riddle client should send bearer auth to API calls",

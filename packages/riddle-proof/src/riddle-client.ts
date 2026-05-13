@@ -15,6 +15,34 @@ export interface RiddleClientConfig {
   fetchImpl?: RiddleFetch;
 }
 
+export interface RiddlePollProgressSnapshot {
+  job_id: string;
+  status: string | null;
+  terminal: boolean;
+  attempt: number;
+  attempts: number;
+  elapsed_ms: number;
+  created_at: string | null;
+  submitted_at: string | null;
+  completed_at: string | null;
+  queue_elapsed_ms: number | null;
+  running_without_submission: boolean;
+}
+
+export interface RiddlePollSummary extends RiddlePollProgressSnapshot {
+  timed_out: boolean;
+  interval_ms: number;
+  message?: string;
+}
+
+export interface RiddlePollJobOptions {
+  wait?: boolean;
+  attempts?: number;
+  intervalMs?: number;
+  progressEveryMs?: number;
+  onProgress?: (snapshot: RiddlePollProgressSnapshot) => void | Promise<void>;
+}
+
 export interface RiddlePreviewDeployResult {
   ok: true;
   id: string;
@@ -63,6 +91,7 @@ export interface RiddlePollJobResult {
   terminal: boolean;
   job: Record<string, unknown> | null;
   artifacts?: Record<string, unknown> | null;
+  poll?: RiddlePollSummary;
 }
 
 export interface RiddleServerPreviewResult {
@@ -309,27 +338,128 @@ export function isTerminalRiddleJobStatus(status: unknown) {
   return ["completed", "complete", "completed_error", "completed_timeout", "failed"].includes(String(status || ""));
 }
 
+function stringField(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseTimestampMs(value: string | null) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildPollSnapshot(
+  jobId: string,
+  job: Record<string, unknown> | null,
+  input: { attempt: number; attempts: number; startedAt: number; observedAt: number },
+): RiddlePollProgressSnapshot {
+  const status = job?.status ? String(job.status) : null;
+  const terminal = isTerminalRiddleJobStatus(status);
+  const createdAt = stringField(job, "created_at");
+  const submittedAt = stringField(job, "submitted_at");
+  const completedAt = stringField(job, "completed_at");
+  const createdMs = parseTimestampMs(createdAt);
+  const submittedMs = parseTimestampMs(submittedAt);
+  let queueElapsedMs: number | null = null;
+  if (createdMs !== null && submittedMs !== null) {
+    queueElapsedMs = Math.max(0, submittedMs - createdMs);
+  } else if (createdMs !== null && !submittedAt && !terminal) {
+    queueElapsedMs = Math.max(0, input.observedAt - createdMs);
+  }
+  return {
+    job_id: jobId,
+    status,
+    terminal,
+    attempt: input.attempt,
+    attempts: input.attempts,
+    elapsed_ms: Math.max(0, input.observedAt - input.startedAt),
+    created_at: createdAt,
+    submitted_at: submittedAt,
+    completed_at: completedAt,
+    queue_elapsed_ms: queueElapsedMs,
+    running_without_submission: Boolean(status && !terminal && !submittedAt),
+  };
+}
+
+function pollMessage(snapshot: RiddlePollProgressSnapshot, timedOut: boolean) {
+  if (!timedOut) return undefined;
+  const submitted = snapshot.submitted_at || "not submitted";
+  const queue = snapshot.queue_elapsed_ms !== null
+    ? ` queue_elapsed_ms=${snapshot.queue_elapsed_ms}`
+    : "";
+  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${queue}`;
+}
+
 export async function pollRiddleJob(
   config: RiddleClientConfig,
   jobId: string,
-  options: { wait?: boolean; attempts?: number; intervalMs?: number } = {},
+  options: RiddlePollJobOptions = {},
 ): Promise<RiddlePollJobResult> {
   if (!jobId?.trim()) throw new Error("jobId is required");
-  const attempts = options.attempts || (options.wait ? 60 : 1);
-  const intervalMs = options.intervalMs || 2000;
+  const attempts = Math.max(1, Math.floor(options.attempts ?? (options.wait ? 300 : 1)));
+  const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? 2000));
+  const progressEveryMs = Math.max(0, Math.floor(options.progressEveryMs ?? 10000));
+  const startedAt = Date.now();
   let job: Record<string, unknown> | null = null;
+  let lastSnapshot: RiddlePollProgressSnapshot | null = null;
+  let lastProgressAt = 0;
+  let lastProgressKey = "";
 
   for (let index = 0; index < attempts; index += 1) {
     job = await riddleRequestJson<Record<string, unknown>>(config, `/v1/jobs/${jobId}`);
-    if (isTerminalRiddleJobStatus(job.status)) break;
+    const observedAt = Date.now();
+    lastSnapshot = buildPollSnapshot(jobId, job, {
+      attempt: index + 1,
+      attempts,
+      startedAt,
+      observedAt,
+    });
+    const progressKey = [
+      lastSnapshot.status || "unknown",
+      lastSnapshot.terminal ? "terminal" : "nonterminal",
+      lastSnapshot.submitted_at ? "submitted" : "unsubmitted",
+    ].join(":");
+    if (options.onProgress) {
+      const shouldReport = index === 0 ||
+        lastSnapshot.terminal ||
+        progressKey !== lastProgressKey ||
+        observedAt - lastProgressAt >= progressEveryMs;
+      if (shouldReport) {
+        lastProgressAt = observedAt;
+        lastProgressKey = progressKey;
+        await options.onProgress(lastSnapshot);
+      }
+    }
+    if (lastSnapshot.terminal) break;
     if (index + 1 < attempts) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
   }
 
   const status = job?.status ? String(job.status) : null;
+  const fallbackObservedAt = Date.now();
+  const snapshot = lastSnapshot || buildPollSnapshot(jobId, job, {
+    attempt: 0,
+    attempts,
+    startedAt,
+    observedAt: fallbackObservedAt,
+  });
   if (!isTerminalRiddleJobStatus(status)) {
-    return { ok: true, job_id: jobId, status, terminal: false, job };
+    const timedOut = Boolean(options.wait);
+    return {
+      ok: !timedOut,
+      job_id: jobId,
+      status,
+      terminal: false,
+      job,
+      poll: {
+        ...snapshot,
+        timed_out: timedOut,
+        interval_ms: intervalMs,
+        message: pollMessage(snapshot, timedOut),
+      },
+    };
   }
 
   const artifacts = await riddleRequestJson<Record<string, unknown>>(config, `/v1/jobs/${jobId}/artifacts`);
@@ -340,6 +470,11 @@ export async function pollRiddleJob(
     terminal: true,
     job,
     artifacts,
+    poll: {
+      ...snapshot,
+      timed_out: false,
+      interval_ms: intervalMs,
+    },
   };
 }
 
@@ -353,7 +488,7 @@ export function createRiddleApiClient(config: RiddleClientConfig = {}) {
       runRiddleScript(config, input),
     runServerPreview: (input: RiddleServerPreviewInput) =>
       runRiddleServerPreview(config, input),
-    pollJob: (jobId: string, options?: { wait?: boolean; attempts?: number; intervalMs?: number }) =>
+    pollJob: (jobId: string, options?: RiddlePollJobOptions) =>
       pollRiddleJob(config, jobId, options),
   };
 }
