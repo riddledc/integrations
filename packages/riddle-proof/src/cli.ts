@@ -17,6 +17,7 @@ import {
 import {
   createRiddleApiClient,
   parseRiddleViewport,
+  type RiddlePollProgressSnapshot,
   type RiddleClientConfig,
 } from "./riddle-client";
 import {
@@ -53,7 +54,7 @@ function usage() {
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720]",
-    "  riddle-proof-loop riddle-poll <job-id> [--wait]",
+    "  riddle-proof-loop riddle-poll <job-id> [--wait] [--attempts n] [--quiet]",
     "  riddle-proof-loop doctor local [--codex-command <path>]",
     "",
     "The default CLI run mode is checkpoint-mode=yield unless --agent local is used.",
@@ -89,6 +90,32 @@ function optionString(options: CliOptions, key: string) {
 
 function readStdin() {
   return readFileSync(0, "utf-8");
+}
+
+function formatPollDuration(ms: number | null | undefined) {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "n/a";
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m${String(remainder).padStart(2, "0")}s` : `${seconds}s`;
+}
+
+function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
+  const submittedAt = snapshot.submitted_at || "not-submitted";
+  const queuePart = snapshot.running_without_submission
+    ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}`
+    : snapshot.queue_elapsed_ms !== null
+      ? ` queue=${formatPollDuration(snapshot.queue_elapsed_ms)}`
+      : "";
+  const terminalPart = snapshot.terminal ? " terminal=true" : "";
+  return [
+    "[riddle-poll]",
+    snapshot.job_id,
+    `status=${snapshot.status || "unknown"}`,
+    `attempt=${snapshot.attempt}/${snapshot.attempts}`,
+    `elapsed=${formatPollDuration(snapshot.elapsed_ms)}`,
+    `submitted_at=${submittedAt}${queuePart}${terminalPart}`,
+  ].join(" ");
 }
 
 function readJsonValue(value: string | undefined, label: string): Record<string, unknown> {
@@ -589,10 +616,17 @@ async function main() {
   if (command === "riddle-poll") {
     const jobId = positional[1];
     if (!jobId) throw new Error("riddle-poll requires <job-id>.");
+    const wait = options.wait === true;
     const result = await createRiddleApiClient(riddleClientConfig(options)).pollJob(jobId, {
-      wait: options.wait === true,
+      wait,
       attempts: optionString(options, "attempts") ? Number(optionString(options, "attempts")) : undefined,
       intervalMs: optionString(options, "intervalMs") ? Number(optionString(options, "intervalMs")) : undefined,
+      progressEveryMs: optionString(options, "progressEveryMs") ? Number(optionString(options, "progressEveryMs")) : undefined,
+      onProgress: wait && options.quiet !== true
+        ? (snapshot) => {
+            process.stderr.write(`${riddlePollProgressLine(snapshot)}\n`);
+          }
+        : undefined,
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = result.ok ? 0 : 1;

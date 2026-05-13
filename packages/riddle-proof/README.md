@@ -339,6 +339,16 @@ that performs the interaction. If proof is weak, keep the diagnostics history in
 the run state so the next agent can see the last route, tool status, artifact
 shape, and errors without rerunning blind.
 
+### Riddle Job Polling
+
+`riddle-proof-loop riddle-poll <job-id> --wait` keeps stdout as JSON and writes
+human progress lines to stderr while waiting. The JSON result includes
+`poll.timed_out`, `poll.elapsed_ms`, `poll.queue_elapsed_ms`, and
+`poll.running_without_submission` so delayed dispatch is distinguishable from a
+terminal proof failure. If `--wait` exhausts its attempts before a terminal job
+status, the command exits non-zero and the result explains the last observed
+status and `submitted_at` state.
+
 ## OpenClaw Adapter Boundary
 
 `@riddledc/riddle-proof/openclaw` translates OpenClaw Riddle Proof tool params
