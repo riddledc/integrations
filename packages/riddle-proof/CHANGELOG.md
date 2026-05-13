@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.32
+
+### Patch Changes
+
+- 1cb093c: Add a reusable profile `route_inventory` check for expected-route source audits, direct route health, real clickthrough health, stale source-surface guards, and compact route inventory evidence.
+
 ## 0.7.31
 
 ### Patch Changes
