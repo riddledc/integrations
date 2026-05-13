@@ -26,6 +26,9 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
 
 export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "click",
+  "fill",
+  "set_input_value",
+  "local_storage",
   "wait",
   "wait_for_selector",
   "wait_for_text",
@@ -57,6 +60,9 @@ export interface RiddleProofProfileViewport {
 export interface RiddleProofProfileSetupAction {
   type: RiddleProofProfileSetupActionType;
   selector?: string;
+  key?: string;
+  value?: string;
+  value_json?: JsonValue;
   text?: string;
   pattern?: string;
   flags?: string;
@@ -64,6 +70,7 @@ export interface RiddleProofProfileSetupAction {
   ms?: number;
   timeout_ms?: number;
   after_ms?: number;
+  reload?: boolean;
   continue_on_failure?: boolean;
 }
 
@@ -239,6 +246,20 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function hasOwn(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function stringFromOwn(input: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    if (hasOwn(input, key)) {
+      const value = input[key];
+      if (value !== undefined && value !== null) return String(value);
+    }
+  }
+  return undefined;
+}
+
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -401,15 +422,30 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
   const selector = stringValue(input.selector);
-  if ((type === "click" || type === "wait_for_selector" || type === "wait_for_text") && !selector) {
+  if ((type === "click" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
   if (type === "wait_for_text" && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`target.setup_actions[${index}] wait_for_text requires text or pattern.`);
   }
+  const value = stringFromOwn(input, "value", "input_value", "inputValue");
+  const hasJsonValue = hasOwn(input, "value_json") || hasOwn(input, "valueJson") || hasOwn(input, "json");
+  if ((type === "fill" || type === "set_input_value") && value === undefined && !hasJsonValue) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
+  }
+  const key = stringValue(input.key);
+  if (type === "local_storage" && !key) {
+    throw new Error(`target.setup_actions[${index}] local_storage requires key.`);
+  }
+  if (type === "local_storage" && value === undefined && !hasJsonValue) {
+    throw new Error(`target.setup_actions[${index}] local_storage requires value.`);
+  }
   return {
     type,
     selector,
+    key,
+    value,
+    value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
@@ -417,6 +453,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     after_ms: numberValue(input.after_ms) ?? numberValue(input.afterMs),
+    reload: input.reload === true,
     continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
   };
 }
@@ -1436,6 +1473,14 @@ function setupTextMatches(sample, action) {
   }
   return String(sample || "").includes(action.text || "");
 }
+function setupHasOwn(action, key) {
+  return Boolean(action) && Object.keys(action).includes(key);
+}
+function setupActionValue(action) {
+  if (setupHasOwn(action, "value_json")) return JSON.stringify(action.value_json);
+  if (setupHasOwn(action, "value")) return String(action.value ?? "");
+  return "";
+}
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
 }
@@ -1504,6 +1549,16 @@ async function executeSetupAction(action, ordinal) {
       await page.waitForSelector(action.selector, { state: "visible", timeout });
       return { ...base, ok: true, timeout_ms: timeout };
     }
+    if (type === "local_storage") {
+      const value = setupActionValue(action);
+      await page.evaluate(({ key, value }) => {
+        window.localStorage.setItem(key, value);
+      }, { key: action.key, value });
+      if (action.reload === true) {
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
+      }
+      return { ...base, ok: true, key: action.key, value_length: value.length, reload: action.reload === true };
+    }
     if (type === "click") {
       const locator = page.locator(action.selector);
       const count = await locator.count();
@@ -1535,6 +1590,16 @@ async function executeSetupAction(action, ordinal) {
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
       await locator.nth(targetIndex).click({ timeout });
       return { ...base, ok: true, count, target_index: targetIndex, text: matchedText };
+    }
+    if (type === "fill" || type === "set_input_value") {
+      const locator = page.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, reason: "selector_not_found", count };
+      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
+      const value = setupActionValue(action);
+      await locator.nth(targetIndex).fill(value, { timeout });
+      return { ...base, ok: true, count, target_index: targetIndex, value_length: value.length };
     }
     if (type === "wait_for_text") {
       const locator = page.locator(action.selector);
