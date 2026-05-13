@@ -123,6 +123,11 @@ or as a stronger proof base before a change loop.
     ],
     "setup_actions": [
       {
+        "type": "clear_storage",
+        "storage": "both",
+        "reload": true
+      },
+      {
         "type": "local_storage",
         "key": "demo-auth",
         "json": { "role": "tester" },
@@ -178,13 +183,16 @@ best-effort mocks.
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
-`click`, `fill`, `set_input_value`, `local_storage`, `wait`,
-`wait_for_selector`, and `wait_for_text`; a failed setup action is recorded as
-a failed `setup_actions_succeeded` check so the profile cannot pass without
-reaching the intended state. Text-matched `click` actions prefer visible
-matching elements, which keeps responsive layouts from selecting hidden desktop
-or mobile-only links. `local_storage` accepts a `key` plus string `value` or
-JSON `json` / `value_json`, and can reload the page with `reload: true`.
+`click`, `fill`, `set_input_value`, `local_storage`, `session_storage`,
+`clear_storage`, `wait`, `wait_for_selector`, and `wait_for_text`; a failed
+setup action is recorded as a failed `setup_actions_succeeded` check so the
+profile cannot pass without reaching the intended state. Text-matched `click`
+actions prefer visible matching elements, which keeps responsive layouts from
+selecting hidden desktop or mobile-only links. `local_storage` and
+`session_storage` accept a `key` plus string `value` or JSON `json` /
+`value_json`, and can reload the page with `reload: true`. `clear_storage`
+clears `local`, `session`, or `both` browser storage scopes, defaults to
+`both`, and can also reload with `reload: true`.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
