@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.44
+
+### Patch Changes
+
+- cc109ba: Support viewport-scoped profile checks with `viewports` / `viewport_names`.
+
 ## 0.7.43
 
 ### Patch Changes
