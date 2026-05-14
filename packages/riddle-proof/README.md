@@ -240,7 +240,9 @@ source-link counts, missing/unexpected routes, direct route health, real
 clickthrough health, wrong-path failures, and stale source-surface failures. It
 runs direct/clickthrough sweeps on the first viewport by default and leaves
 ordinary profile overflow checks to cover the source page across all configured
-viewports. Set `run_direct_routes: false`, `run_clickthroughs: false`,
+viewports. Set `run_all_viewports: true` when desktop and mobile navigation
+surfaces both need direct/clickthrough inventory evidence in one profile result.
+Set `run_direct_routes: false`, `run_clickthroughs: false`,
 `allow_unexpected_routes: true`, `require_unique_routes: false`, or
 `save_route_screenshots: true` when a profile needs a narrower or more
 artifact-heavy audit. `require_unique_routes: false` is useful when a navigation
