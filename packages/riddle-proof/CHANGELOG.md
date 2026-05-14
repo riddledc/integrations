@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.54
+
+### Patch Changes
+
+- f8f5400: Ignore bounds overflow from elements clipped by overflow-hidden ancestors in profile overflow checks.
+
 ## 0.7.53
 
 ### Patch Changes
