@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.38
+
+### Patch Changes
+
+- 41b6f25: Add profile checks for iframe text visibility and iframe horizontal overflow evidence.
+
 ## 0.7.37
 
 ### Patch Changes
