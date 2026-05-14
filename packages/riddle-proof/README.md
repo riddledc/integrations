@@ -148,6 +148,7 @@ or as a stronger proof base before a change loop.
     { "type": "selector_absent", "selector": "[data-testid='loading-spinner']" },
     { "type": "selector_count_equals", "selector": "[data-testid='pricing-card']", "expected_count": 3 },
     { "type": "text_visible", "text": "Start building" },
+    { "type": "text_visible", "text": "Compare plans", "viewports": ["desktop"] },
     { "type": "no_mobile_horizontal_overflow" },
     { "type": "no_fatal_console_errors" }
   ],
@@ -178,6 +179,11 @@ The package includes a generic starter profile at
 `examples/profiles/page-content-basic.json`; copy that shape into a repository
 profile directory and replace the selector/text checks with app-specific
 invariants.
+
+Checks normally apply to every captured viewport. Add `viewports` (or
+`viewport_names`) to a check when responsive UI intentionally exposes an
+invariant only on named viewports, such as desktop-only helper copy while phone
+layouts keep the same route, link, and overflow contracts.
 
 `target.network_mocks` is optional. The Riddle runner registers these mocks
 before navigation, records each hit, and adds an implicit
