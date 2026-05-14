@@ -989,6 +989,11 @@ const setupAssertionProfile = normalizeRiddleProofProfile({
         selector: "a[href='/play/fresh-row']",
         expectedCount: 1,
       },
+      {
+        type: "assert-window-value",
+        state_path: "__proofState.ready",
+        expected: true,
+      },
     ],
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
@@ -997,11 +1002,17 @@ assert.equal(setupAssertionProfile.target.setup_actions[0].type, "assert_text_vi
 assert.equal(setupAssertionProfile.target.setup_actions[1].type, "assert_text_absent");
 assert.equal(setupAssertionProfile.target.setup_actions[2].type, "assert_selector_count");
 assert.equal(setupAssertionProfile.target.setup_actions[2].expected_count, 1);
+assert.equal(setupAssertionProfile.target.setup_actions[3].type, "assert_window_value");
+assert.equal(setupAssertionProfile.target.setup_actions[3].path, "__proofState.ready");
+assert.equal(setupAssertionProfile.target.setup_actions[3].expected_value, true);
 const setupAssertionProfileScript = buildRiddleProofProfileScript(setupAssertionProfile);
 assert.ok(setupAssertionProfileScript.includes('type === "assert_selector_count"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_text_visible" || type === "assert_text_absent"'));
+assert.ok(setupAssertionProfileScript.includes('type === "assert_window_value"'));
+assert.ok(setupAssertionProfileScript.includes("setupReadWindowValue"));
 assert.ok(setupAssertionProfileScript.includes("selector_count_mismatch"));
 assert.ok(setupAssertionProfileScript.includes("text_still_present"));
+assert.ok(setupAssertionProfileScript.includes("unexpected_value"));
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-setup-assertion",
@@ -1011,6 +1022,15 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /assert_selector_count requires non-negative integer expected_count/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-value",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "assert-window-value", path: "__proofState.ready" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /assert_window_value requires expected_value/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-storage",

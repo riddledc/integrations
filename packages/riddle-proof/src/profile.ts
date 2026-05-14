@@ -39,6 +39,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "assert_text_visible",
   "assert_text_absent",
   "assert_selector_count",
+  "assert_window_value",
   "local_storage",
   "session_storage",
   "clear_storage",
@@ -81,6 +82,7 @@ export interface RiddleProofProfileSetupAction {
   path?: string;
   args?: JsonValue[];
   expect_return?: JsonValue;
+  expected_value?: JsonValue;
   text?: string;
   pattern?: string;
   flags?: string;
@@ -541,11 +543,20 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if ((type === "local_storage" || type === "session_storage") && value === undefined && !hasJsonValue) {
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
-  const path = stringFromOwn(input, "path", "function_path", "functionPath", "window_path", "windowPath");
-  if (type === "window_call" && !path) {
+  const path = stringFromOwn(input, "path", "function_path", "functionPath", "window_path", "windowPath", "state_path", "statePath");
+  if ((type === "window_call" || type === "assert_window_value") && !path) {
     throw new Error(`target.setup_actions[${index}] ${type} requires path.`);
   }
   const args = type === "window_call" ? normalizeSetupActionArgs(input, index) : undefined;
+  const hasExpectedValue = hasOwn(input, "expected_value")
+    || hasOwn(input, "expectedValue")
+    || hasOwn(input, "expected")
+    || hasOwn(input, "expect_value")
+    || hasOwn(input, "expectValue")
+    || hasOwn(input, "expect");
+  if (type === "assert_window_value" && !hasExpectedValue) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires expected_value.`);
+  }
   const hasExpectedReturn = hasOwn(input, "expect_return")
     || hasOwn(input, "expectReturn")
     || hasOwn(input, "expected_return")
@@ -564,6 +575,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
+    expected_value: hasExpectedValue ? toJsonValue(valueFromOwn(input, "expected_value", "expectedValue", "expected", "expect_value", "expectValue", "expect")) : undefined,
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
@@ -2497,6 +2509,29 @@ function setupJsonValue(value) {
 function setupValuesEqual(left, right) {
   return JSON.stringify(setupJsonValue(left)) === JSON.stringify(setupJsonValue(right));
 }
+async function setupReadWindowValue(path) {
+  return await page.evaluate(({ path }) => {
+    const toJsonValue = (value) => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string" || typeof value === "boolean") return value;
+      if (typeof value === "number") return Number.isFinite(value) ? value : null;
+      if (Array.isArray(value)) return value.map(toJsonValue);
+      if (typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
+      }
+      return String(value);
+    };
+    const pathParts = String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
+    if (!pathParts.length) return { ok: false, reason: "missing_path" };
+    let current = window;
+    for (const part of pathParts) {
+      if (current === null || current === undefined) return { ok: false, reason: "path_not_found", missing_part: part };
+      current = current[part];
+      if (current === undefined) return { ok: false, reason: "path_not_found", missing_part: part };
+    }
+    return { ok: true, value: toJsonValue(current) };
+  }, { path });
+}
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
 }
@@ -2743,6 +2778,53 @@ async function executeSetupAction(action, ordinal) {
         expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
         reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
         error: result.error || undefined,
+      };
+    }
+    if (type === "assert_window_value") {
+      const path = String(action.path || action.window_path || action.windowPath || "");
+      const hasExpected = setupHasOwn(action, "expected_value")
+        || setupHasOwn(action, "expectedValue")
+        || setupHasOwn(action, "expected")
+        || setupHasOwn(action, "expect_value")
+        || setupHasOwn(action, "expectValue")
+        || setupHasOwn(action, "expect");
+      const expected = setupHasOwn(action, "expected_value")
+        ? action.expected_value
+        : setupHasOwn(action, "expectedValue")
+          ? action.expectedValue
+          : setupHasOwn(action, "expected")
+            ? action.expected
+            : setupHasOwn(action, "expect_value")
+              ? action.expect_value
+              : setupHasOwn(action, "expectValue")
+                ? action.expectValue
+                : action.expect;
+      if (!path) return { ...base, path, reason: "missing_path" };
+      if (!hasExpected) return { ...base, path, reason: "missing_expected_value" };
+      const startedAt = Date.now();
+      let result = null;
+      while (Date.now() - startedAt <= timeout) {
+        result = await setupReadWindowValue(path);
+        if (result.ok && setupValuesEqual(result.value, expected)) {
+          return {
+            ...base,
+            ok: true,
+            path,
+            value: setupJsonValue(result.value),
+            expected_value: setupJsonValue(expected),
+            timeout_ms: timeout,
+          };
+        }
+        await page.waitForTimeout(100);
+      }
+      return {
+        ...base,
+        path,
+        reason: result?.ok ? "unexpected_value" : result?.reason || "path_not_found",
+        missing_part: result?.missing_part || undefined,
+        value: setupJsonValue(result?.value),
+        expected_value: setupJsonValue(expected),
+        timeout_ms: timeout,
       };
     }
     if (type === "click") {
