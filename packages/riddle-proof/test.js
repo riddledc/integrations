@@ -596,6 +596,7 @@ assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("profileSetupSummary"));
 assert.ok(profileScript.includes("setup_summary"));
+assert.ok(profileScript.includes("sampleProfileSetupSummaryItems"));
 assert.ok(profileScript.includes("setupLocatorVisible"));
 assert.ok(profileScript.includes("matching_element_not_visible"));
 assert.ok(profileScript.includes("previewMountPrefix"));
@@ -1440,8 +1441,38 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].name, "mobile
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].observed_path, "/pricing/");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.click, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.wait_for_text, 1);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_total, 1);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_truncated, false);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].selector, "[data-testid='open-pricing']");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const longClickProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    setup_action_results: Array.from({ length: 10 }, (_, index) => ({
+      ok: true,
+      action: "click",
+      ordinal: index,
+      selector: `[data-click='${index}']`,
+      text: `Click ${index}`,
+    })),
+  }, profileEvidence.viewports[1]],
+});
+const longClickSummary = longClickProfileAssessment.checks
+  .find((check) => check.type === "setup_actions_succeeded")
+  .evidence.setup_summary.viewports[0];
+assert.equal(longClickSummary.clicked_total, 10);
+assert.equal(longClickSummary.clicked_truncated, true);
+assert.deepEqual(longClickSummary.clicked.map((item) => item.selector), [
+  "[data-click='0']",
+  "[data-click='1']",
+  "[data-click='2']",
+  "[data-click='3']",
+  "[data-click='6']",
+  "[data-click='7']",
+  "[data-click='8']",
+  "[data-click='9']",
+]);
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
 const desktopOnlyAssessment = profileAssessment.checks.find((check) => check.evidence?.text === "Desktop-only copy");
