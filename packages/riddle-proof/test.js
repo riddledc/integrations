@@ -531,6 +531,8 @@ const profile = normalizeRiddleProofProfile({
   checks: [
     { type: "route_loaded", expected_path: "/pricing" },
     { type: "selector_visible", selector: "[data-testid='pricing-cards']" },
+    { type: "selector_absent", selector: ".game-player-root iframe" },
+    { type: "selector_count_equals", selector: "[data-testid='pricing-cards']", expected_count: 1 },
     { type: "text_visible", text: "Start building" },
     { type: "no_mobile_horizontal_overflow" },
     { type: "no_fatal_console_errors" },
@@ -598,6 +600,8 @@ assert.ok(profileScript.includes("overflow_offenders"));
 assert.ok(profileScript.includes("isContainedByHorizontalScroller"));
 assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
+assert.ok(profileScript.includes('check.type === "selector_absent"'));
+assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
 const networkMockProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "builder-network-mocks",
@@ -893,7 +897,10 @@ const profileEvidence = {
       route: { requested: "https://example.com/pricing", observed: "/pricing/", expected_path: "/pricing", matched: false, http_status: 200 },
       body_text_sample: "Pricing Start building",
       overflow_px: 0,
-      selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
+      selectors: {
+        "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
+        ".game-player-root iframe": { count: 0, visible_count: 0 },
+      },
       text_matches: { "text:Start building": true },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
@@ -908,7 +915,10 @@ const profileEvidence = {
       route: { requested: "https://example.com/pricing", observed: "/pricing", expected_path: "/pricing", matched: true, http_status: 200 },
       body_text_sample: "Pricing Start building",
       overflow_px: 0,
-      selectors: { "[data-testid='pricing-cards']": { count: 1, visible_count: 1 } },
+      selectors: {
+        "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
+        ".game-player-root iframe": { count: 0, visible_count: 0 },
+      },
       text_matches: { "text:Start building": true },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
@@ -924,9 +934,42 @@ const profileEvidence = {
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
-assert.equal(profileAssessment.checks.length, 6);
+assert.equal(profileAssessment.checks.length, 8);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
+assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
+assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+const failedSelectorAbsentAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    selectors: {
+      ...profileEvidence.viewports[0].selectors,
+      ".game-player-root iframe": { count: 1, visible_count: 1 },
+    },
+  }, profileEvidence.viewports[1]],
+});
+assert.equal(failedSelectorAbsentAssessment.status, "product_regression");
+assert.equal(failedSelectorAbsentAssessment.checks.find((check) => check.type === "selector_absent").status, "failed");
+const failedSelectorExactCountAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    selectors: {
+      ...profileEvidence.viewports[0].selectors,
+      "[data-testid='pricing-cards']": { count: 2, visible_count: 2 },
+    },
+  }, profileEvidence.viewports[1]],
+});
+assert.equal(failedSelectorExactCountAssessment.status, "product_regression");
+assert.equal(failedSelectorExactCountAssessment.checks.find((check) => check.type === "selector_count_equals").status, "failed");
+const selectorCountAliasProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "selector-count-alias",
+  target: { route: "/pricing" },
+  checks: [{ type: "selector_count_eq", selector: "[data-testid='pricing-cards']", count: 1 }],
+}, { url: "https://example.com" });
+assert.equal(selectorCountAliasProfile.checks[0].expected_count, 1);
 const routeInventoryEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "homepage-route-inventory",
