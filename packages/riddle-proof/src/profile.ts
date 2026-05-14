@@ -25,6 +25,8 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_count_eq",
   "selector_text_order",
   "frame_text_visible",
+  "frame_url_equals",
+  "frame_url_matches",
   "frame_no_horizontal_overflow",
   "text_visible",
   "text_absent",
@@ -158,6 +160,7 @@ export interface RiddleProofProfileCheck {
   expected_path?: string;
   param?: string;
   expected_value?: string;
+  expected_url?: string;
   expected_routes?: RiddleProofProfileRouteInventoryRoute[];
   selector?: string;
   expected_texts?: string[];
@@ -909,11 +912,18 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   ) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
   }
-  if ((type === "frame_text_visible" || type === "frame_no_horizontal_overflow") && !stringValue(input.selector)) {
+  if ((type === "frame_text_visible" || type === "frame_url_equals" || type === "frame_url_matches" || type === "frame_no_horizontal_overflow") && !stringValue(input.selector)) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
   }
   if (type === "frame_text_visible" && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`checks[${index}] frame_text_visible requires text or pattern.`);
+  }
+  const expectedUrl = stringFromOwn(input, "expected_url", "expectedUrl", "url", "expected_value", "expectedValue", "value");
+  if (type === "frame_url_equals" && expectedUrl === undefined) {
+    throw new Error(`checks[${index}] frame_url_equals requires expected_url.`);
+  }
+  if (type === "frame_url_matches" && !stringValue(input.pattern)) {
+    throw new Error(`checks[${index}] frame_url_matches requires pattern.`);
   }
   if ((type === "text_visible" || type === "text_absent") && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`checks[${index}] ${type} requires text or pattern.`);
@@ -953,6 +963,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     expected_path: stringValue(input.expected_path),
     param: stringValue(input.param) || stringValue(input.search_param) || stringValue(input.searchParam) || stringValue(input.key),
     expected_value: expectedValue,
+    expected_url: expectedUrl,
     expected_routes: expectedRoutes,
     selector: stringValue(input.selector),
     expected_texts: expectedTexts,
@@ -1489,6 +1500,40 @@ function assessCheckFromEvidence(
         viewports: results.map((result) => toJsonValue(result)),
       },
       message: failed ? `Frame selector ${key} did not contain expected text in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "frame_url_equals" || check.type === "frame_url_matches") {
+    const key = selectorKey(check);
+    const expectedUrl = check.expected_url || check.expected_value || "";
+    const results = viewports.map((viewport) => {
+      const frames = frameEvidenceForSelector(viewport, key);
+      const urls = frames.map((frame) => String(frame.url || "")).filter(Boolean);
+      const matches = urls.filter((url) => (
+        check.type === "frame_url_equals"
+          ? url === expectedUrl
+          : matchText(url, check)
+      ));
+      return {
+        viewport: viewport.name,
+        frame_count: frames.length,
+        matched_count: matches.length,
+        matched: matches.length > 0,
+        urls: urls.slice(0, 10),
+      };
+    });
+    const failed = results.filter((result) => !result.matched).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        expected_url: check.type === "frame_url_equals" ? expectedUrl : null,
+        pattern: check.type === "frame_url_matches" ? check.pattern || null : null,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Frame selector ${key} URL assertion failed in ${failed} viewport(s).` : undefined,
     };
   }
 
@@ -2451,6 +2496,36 @@ function assessProfile(profile, evidence) {
         status: failed ? "failed" : "passed",
         evidence: { selector, text: check.text || null, pattern: check.pattern || null, viewports: results },
         message: failed ? "Frame selector " + selector + " did not contain expected text in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "frame_url_equals" || check.type === "frame_url_matches") {
+      const selector = check.selector || "";
+      const expectedUrl = check.expected_url || check.expected_value || "";
+      const results = checkViewports.map((viewport) => {
+        const frames = frameEvidenceForSelector(viewport, selector);
+        const urls = frames.map((frame) => String(frame.url || "")).filter(Boolean);
+        const matches = urls.filter((url) => check.type === "frame_url_equals" ? url === expectedUrl : textMatches(url, check));
+        return {
+          viewport: viewport.name,
+          frame_count: frames.length,
+          matched_count: matches.length,
+          matched: matches.length > 0,
+          urls: urls.slice(0, 10),
+        };
+      });
+      const failed = results.filter((result) => !result.matched).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: {
+          selector,
+          expected_url: check.type === "frame_url_equals" ? expectedUrl : null,
+          pattern: check.type === "frame_url_matches" ? check.pattern || null : null,
+          viewports: results,
+        },
+        message: failed ? "Frame selector " + selector + " URL assertion failed in " + failed + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -3926,7 +4001,7 @@ async function captureViewport(viewport) {
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
       text_matches[textKey(check)] = textMatches(dom.body_text || dom.body_text_sample || "", check);
     }
-    if ((check.type === "frame_text_visible" || check.type === "frame_no_horizontal_overflow") && check.selector) {
+    if ((check.type === "frame_text_visible" || check.type === "frame_url_equals" || check.type === "frame_url_matches" || check.type === "frame_no_horizontal_overflow") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
       frames[check.selector] = frames[check.selector] || await frameEvidence(check.selector);
     }

@@ -356,6 +356,11 @@ game, or preview surfaces that render inside iframes:
 ```json
 [
   {
+    "type": "frame_url_matches",
+    "selector": ".game-player-root iframe",
+    "pattern": "/saved/hot-path-.+/index\\.html$"
+  },
+  {
     "type": "frame_text_visible",
     "selector": ".game-player-root iframe",
     "text": "Start Game"
@@ -367,6 +372,11 @@ game, or preview surfaces that render inside iframes:
   }
 ]
 ```
+
+Use `frame_url_equals` when the iframe must resolve to one exact embedded
+resource, or `frame_url_matches` when a preview/job/saved-game URL has a stable
+shape but a generated ID. URL checks fail when the frame is missing, just like
+frame text and overflow checks.
 
 Frame checks capture each matching iframe's URL, title, compact text sample,
 scroll width, client width, measured horizontal overflow, and top visible
