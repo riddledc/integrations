@@ -174,6 +174,9 @@ riddle-proof-loop run-profile \
 Hosted profile runs emit Riddle poll progress to stderr while waiting. Use
 `--quiet` to suppress progress lines, or `--progress-every-ms` to tune the
 heartbeat cadence for long route-inventory or workflow profiles.
+Strict Riddle script validation remains on by default; use `--strict=false`
+only for trusted profile-generated scripts when the validator blocks a large
+workflow profile.
 
 The package includes a generic starter profile at
 `examples/profiles/page-content-basic.json`; copy that shape into a repository

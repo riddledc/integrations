@@ -498,6 +498,7 @@ try {
     "0",
     "--progress-every-ms",
     "0",
+    "--strict=false",
   ]);
   const parsedProfileResult = JSON.parse(cliProfileResult.stdout);
   assert.equal(parsedProfileResult.status, "passed");
@@ -505,6 +506,7 @@ try {
   assert.equal(cliRunProfileRequests.length, 1);
   assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
   assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
+  assert.equal(cliRunProfileRequests[0].body.strict, false);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running/);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed/);
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
