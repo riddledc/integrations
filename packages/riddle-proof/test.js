@@ -625,6 +625,8 @@ const networkMockProfile = normalizeRiddleProofProfile({
         capture_request_body: true,
         request_body_contains: ["build-riddle-proof-v238"],
         request_body_patterns: ["\\\"buildId\\\"\\s*:"],
+        request_body_not_contains: ["build-riddle-proof-v237"],
+        request_body_not_patterns: ["\\\"legacyBuildId\\\"\\s*:"],
         json: { gameId: "riddle-proof-mock" },
       },
       {
@@ -660,6 +662,8 @@ assert.deepEqual(networkMockProfile.target.network_mocks[1].body_json, { gameId:
 assert.equal(networkMockProfile.target.network_mocks[1].capture_request_body, true);
 assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_contains, ["build-riddle-proof-v238"]);
 assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_patterns, ["\\\"buildId\\\"\\s*:"]);
+assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_not_contains, ["build-riddle-proof-v237"]);
+assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_not_patterns, ["\\\"legacyBuildId\\\"\\s*:"]);
 assert.equal(networkMockProfile.target.network_mocks[2].responses.length, 2);
 assert.equal(networkMockProfile.target.network_mocks[2].repeat_responses, true);
 assert.equal(networkMockProfile.target.network_mocks[2].required_hit_count, 4);
@@ -676,6 +680,8 @@ assert.ok(networkMockProfileScript.includes("sequence_cycle"));
 assert.ok(networkMockProfileScript.includes("compactNetworkMockRequestBody"));
 assert.ok(networkMockProfileScript.includes("request_body_matches"));
 assert.ok(networkMockProfileScript.includes("request_body_sample"));
+assert.ok(networkMockProfileScript.includes("request_body_forbidden_text"));
+assert.ok(networkMockProfileScript.includes("request_body_forbidden_pattern_matched"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 const networkMockMismatchResult = assessRiddleProofProfileEvidence(networkMockProfile, {
   version: "riddle-proof.profile-evidence.v1",
@@ -707,7 +713,10 @@ const networkMockMismatchResult = assessRiddleProofProfileEvidence(networkMockPr
       method: "POST",
       status: 200,
       request_body_matches: false,
-      request_body_failures: [{ type: "request_body_missing_text", text: "build-riddle-proof-v238" }],
+      request_body_failures: [
+        { type: "request_body_missing_text", text: "build-riddle-proof-v238" },
+        { type: "request_body_forbidden_text", text: "build-riddle-proof-v237" },
+      ],
       request_body_length: 2,
       request_body_sample: "{}",
     },
@@ -736,6 +745,20 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/create" }],
 }, { url: "https://example.com" }), /request_body_patterns contains invalid regex/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "invalid-network-mock-not-pattern",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "save",
+      url: "**/api/save",
+      request_body_not_patterns: ["["],
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /request_body_not_patterns contains invalid regex/);
 const consoleAllowedProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "expected-negative-console-profile",

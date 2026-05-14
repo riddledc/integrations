@@ -105,6 +105,8 @@ export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetwork
   capture_request_body?: boolean;
   request_body_contains?: string[];
   request_body_patterns?: string[];
+  request_body_not_contains?: string[];
+  request_body_not_patterns?: string[];
 }
 
 export interface RiddleProofProfileRouteInventoryRoute {
@@ -548,6 +550,29 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
     `target.network_mocks[${index}].request_body_patterns`,
   );
   validateRegexPatterns(requestBodyPatterns, `target.network_mocks[${index}].request_body_patterns`);
+  const requestBodyNotContains = normalizeStringList(
+    input.request_body_not_contains
+    ?? input.requestBodyNotContains
+    ?? input.request_body_absent
+    ?? input.requestBodyAbsent
+    ?? input.body_not_contains
+    ?? input.bodyNotContains
+    ?? input.body_absent
+    ?? input.bodyAbsent,
+    `target.network_mocks[${index}].request_body_not_contains`,
+  );
+  const requestBodyNotPatterns = normalizeStringList(
+    input.request_body_not_patterns
+    ?? input.requestBodyNotPatterns
+    ?? input.request_body_forbidden_patterns
+    ?? input.requestBodyForbiddenPatterns
+    ?? input.body_not_patterns
+    ?? input.bodyNotPatterns
+    ?? input.body_forbidden_patterns
+    ?? input.bodyForbiddenPatterns,
+    `target.network_mocks[${index}].request_body_not_patterns`,
+  );
+  validateRegexPatterns(requestBodyNotPatterns, `target.network_mocks[${index}].request_body_not_patterns`);
   const requiredHitCount = numberValue(
     input.required_hit_count
     ?? input.requiredHitCount
@@ -574,9 +599,13 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
     capture_request_body: input.capture_request_body === true
       || input.captureRequestBody === true
       || Boolean(requestBodyContains?.length)
-      || Boolean(requestBodyPatterns?.length),
+      || Boolean(requestBodyPatterns?.length)
+      || Boolean(requestBodyNotContains?.length)
+      || Boolean(requestBodyNotPatterns?.length),
     request_body_contains: requestBodyContains,
     request_body_patterns: requestBodyPatterns,
+    request_body_not_contains: requestBodyNotContains,
+    request_body_not_patterns: requestBodyNotPatterns,
   };
 }
 
@@ -2358,6 +2387,8 @@ function networkMockShouldCaptureRequestBody(mock) {
     mock.capture_request_body === true
     || networkMockStringList(mock.request_body_contains).length > 0
     || networkMockStringList(mock.request_body_patterns).length > 0
+    || networkMockStringList(mock.request_body_not_contains).length > 0
+    || networkMockStringList(mock.request_body_not_patterns).length > 0
   );
 }
 function networkMockRequestBodyFailures(body, mock) {
@@ -2378,6 +2409,31 @@ function networkMockRequestBodyFailures(body, mock) {
       if (!regex.test(rawBody) && !regex.test(compactBody)) {
         failures.push({
           type: "request_body_pattern_not_matched",
+          pattern: String(pattern).slice(0, 200),
+        });
+      }
+    } catch (error) {
+      failures.push({
+        type: "request_body_invalid_pattern",
+        pattern: String(pattern).slice(0, 200),
+        error: String(error && error.message ? error.message : error).slice(0, 500),
+      });
+    }
+  }
+  for (const forbidden of networkMockStringList(mock.request_body_not_contains)) {
+    if (rawBody.includes(forbidden) || compactBody.includes(forbidden)) {
+      failures.push({
+        type: "request_body_forbidden_text",
+        text: String(forbidden).slice(0, 200),
+      });
+    }
+  }
+  for (const pattern of networkMockStringList(mock.request_body_not_patterns)) {
+    try {
+      const regex = new RegExp(pattern);
+      if (regex.test(rawBody) || regex.test(compactBody)) {
+        failures.push({
+          type: "request_body_forbidden_pattern_matched",
           pattern: String(pattern).slice(0, 200),
         });
       }
