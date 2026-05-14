@@ -888,6 +888,7 @@ const consoleAllowedProfileScript = buildRiddleProofProfileScript(consoleAllowed
 assert.ok(consoleAllowedProfileScript.includes("matchesAllowedMessage"));
 assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
@@ -930,6 +931,10 @@ const formSetupProfile = normalizeRiddleProofProfile({
         selector: "input[name='title']",
         inputValue: "Riddle Proof Maze",
       },
+      {
+        type: "keyboard-press",
+        key: "Enter",
+      },
     ],
   },
   checks: [
@@ -948,6 +953,8 @@ assert.equal(formSetupProfile.target.setup_actions[2].value, "proof-session");
 assert.equal(formSetupProfile.target.setup_actions[3].value, "Build a tiny maze");
 assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
+assert.equal(formSetupProfile.target.setup_actions[5].type, "press");
+assert.equal(formSetupProfile.target.setup_actions[5].key, "Enter");
 const windowCallSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-window-call-action",
@@ -1101,6 +1108,15 @@ assert.throws(() => normalizeRiddleProofProfile({
 }, { url: "https://example.com" }), /assert_window_number expected_value must be a finite number/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
+  name: "bad-press",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "press" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /press requires key/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
   name: "bad-storage",
   target: {
     route: "/create",
@@ -1111,6 +1127,7 @@ assert.throws(() => normalizeRiddleProofProfile({
 const formSetupProfileScript = buildRiddleProofProfileScript(formSetupProfile);
 assert.ok(formSetupProfileScript.includes("setupActionValue"));
 assert.ok(formSetupProfileScript.includes("setupHasOwn"));
+assert.ok(formSetupProfileScript.includes("page.keyboard.press"));
 assert.ok(formSetupProfileScript.includes("window.localStorage"));
 assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));

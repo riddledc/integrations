@@ -36,6 +36,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
 
 export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "click",
+  "press",
   "fill",
   "set_input_value",
   "assert_text_visible",
@@ -497,7 +498,11 @@ function isSupportedCheckType(value: string): value is RiddleProofProfileCheckTy
 
 function normalizeSetupActionType(value: string | undefined, index: number): RiddleProofProfileSetupActionType {
   const normalizedInput = String(value || "").trim().replace(/-/g, "_");
-  const normalized = normalizedInput === "clear_browser_storage" ? "clear_storage" : normalizedInput;
+  const normalized = normalizedInput === "clear_browser_storage"
+    ? "clear_storage"
+    : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
+      ? "press"
+      : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
   }
@@ -554,6 +559,9 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const key = stringValue(input.key);
+  if (type === "press" && !key) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires key.`);
+  }
   if ((type === "local_storage" || type === "session_storage") && !key) {
     throw new Error(`target.setup_actions[${index}] ${type} requires key.`);
   }
@@ -2890,6 +2898,21 @@ async function executeSetupAction(action, ordinal) {
     if (type === "wait_for_selector") {
       await page.waitForSelector(action.selector, { state: "visible", timeout });
       return { ...base, ok: true, timeout_ms: timeout };
+    }
+    if (type === "press") {
+      const key = String(action.key || "").trim();
+      if (!key) return { ...base, reason: "missing_key" };
+      if (!action.selector) {
+        await page.keyboard.press(key);
+        return { ...base, ok: true, key };
+      }
+      const locator = page.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, reason: "selector_not_found", count, key };
+      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex, key };
+      await locator.nth(targetIndex).press(key, { timeout });
+      return { ...base, ok: true, count, target_index: targetIndex, key };
     }
     if (type === "local_storage" || type === "session_storage") {
       const value = setupActionValue(action);

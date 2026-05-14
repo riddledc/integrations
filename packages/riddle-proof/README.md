@@ -240,7 +240,7 @@ where the second request must carry newer state.
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
-`click`, `fill`, `set_input_value`, `assert_text_visible`,
+`click`, `press`, `fill`, `set_input_value`, `assert_text_visible`,
 `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
 `assert_window_number`, `local_storage`, `session_storage`, `clear_storage`, `wait`,
 `wait_for_selector`, `wait_for_text`, and `window_call`; a failed setup action
@@ -249,8 +249,11 @@ pass without reaching the intended state. Text-matched `click` actions prefer
 visible matching elements, which keeps responsive layouts from selecting hidden
 desktop or mobile-only links. Add `force: true` to a click action only when the
 matched visible element is intentionally animated or otherwise never becomes
-stable enough for Playwright's default click actionability checks. Use setup
-assertions when the pre-click or pre-navigation state is part of the contract,
+stable enough for Playwright's default click actionability checks. Use `press`
+with a Playwright key name, such as `Enter`, `Space`, or `ArrowLeft`,
+when a route's intended browser control is keyboard-driven; omit `selector` for
+a page-level key press, or provide `selector` to press against a focused element.
+Use setup assertions when the pre-click or pre-navigation state is part of the contract,
 for example a fresh row must be present, stale copy must be absent, exactly one
 source link must exist before clicking into the final route, or a canvas app's
 proof state must expose a terminal flag. `assert_selector_count` accepts
