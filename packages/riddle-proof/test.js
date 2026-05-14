@@ -678,6 +678,7 @@ const consoleAllowedProfile = normalizeRiddleProofProfile({
     allowed_console_patterns: [
       "Failed to load resource: the server responded with a status of 503",
       "Build failed: Error: Synthetic build outage",
+      "expected-negative-console-profile/resource\\.js",
     ],
     allowed_page_error_texts: ["Known app-level page error"],
   }],
@@ -685,6 +686,7 @@ const consoleAllowedProfile = normalizeRiddleProofProfile({
 assert.deepEqual(consoleAllowedProfile.checks[0].allowed_console_patterns, [
   "Failed to load resource: the server responded with a status of 503",
   "Build failed: Error: Synthetic build outage",
+  "expected-negative-console-profile/resource\\.js",
 ]);
 assert.deepEqual(consoleAllowedProfile.checks[0].allowed_page_error_texts, ["Known app-level page error"]);
 assert.throws(() => normalizeRiddleProofProfile({
@@ -1403,9 +1405,14 @@ const allowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowed
     events: [
       { type: "error", text: "Failed to load resource: the server responded with a status of 503 (Service Unavailable)" },
       { type: "error", text: "Build failed: Error: Synthetic build outage" },
+      {
+        type: "error",
+        text: "Failed to load resource: the server responded with a status of 404 (Not Found)",
+        location: { url: "https://cdn.example.com/expected-negative-console-profile/resource.js" },
+      },
       { type: "warning", text: "Non-fatal warning" },
     ],
-    fatal_count: 2,
+    fatal_count: 3,
   },
   page_errors: [{ message: "Known app-level page error while testing recovery" }],
   dom_summary: { viewport_count: 1 },
@@ -1413,8 +1420,8 @@ const allowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowed
 const allowedConsoleCheck = allowedConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
 assert.equal(allowedConsoleAssessment.status, "passed");
 assert.equal(allowedConsoleCheck.status, "passed");
-assert.equal(allowedConsoleCheck.evidence.total_console_fatal_count, 2);
-assert.equal(allowedConsoleCheck.evidence.allowed_console_fatal_count, 2);
+assert.equal(allowedConsoleCheck.evidence.total_console_fatal_count, 3);
+assert.equal(allowedConsoleCheck.evidence.allowed_console_fatal_count, 3);
 assert.equal(allowedConsoleCheck.evidence.console_fatal_count, 0);
 assert.equal(allowedConsoleCheck.evidence.allowed_page_error_count, 1);
 const unallowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {

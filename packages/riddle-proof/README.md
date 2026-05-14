@@ -252,7 +252,10 @@ known browser console error, such as a mocked `503` that the app recovers from:
 Allowed console events and page errors are still counted in check evidence, but
 only unallowed `error` / `assert` console events and page errors fail the check.
 Use `allowed_page_error_patterns`, `allowed_console_texts`, or
-`allowed_page_error_texts` for narrower matching when needed.
+`allowed_page_error_texts` for narrower matching when needed. Console allowlists
+match both the console text and the event location URL, which is useful for
+expected resource probes where the browser message is generic but the URL is
+specific.
 
 Use `selector_absent` when a forbidden element must not render, and
 `selector_count_equals` / `selector_count_equal` / `selector_count_eq` when a

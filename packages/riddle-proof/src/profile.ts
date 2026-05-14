@@ -917,8 +917,18 @@ function matchText(sample: string, check: RiddleProofProfileCheck) {
   return sample.includes(check.text || "");
 }
 
-function matchesAllowedMessage(message: string, texts?: string[], patterns?: string[]): boolean {
-  const sample = String(message || "");
+function allowedMessageSample(input: unknown): string {
+  if (!isRecord(input)) return String(input || "");
+  const parts = [
+    input.text,
+    input.message,
+    isRecord(input.location) ? input.location.url : undefined,
+  ];
+  return parts.map((part) => String(part || "")).filter(Boolean).join(" ");
+}
+
+function matchesAllowedMessage(input: unknown, texts?: string[], patterns?: string[]): boolean {
+  const sample = allowedMessageSample(input);
   if (texts?.some((text) => sample.includes(text))) return true;
   for (const pattern of patterns || []) {
     try {
@@ -1286,11 +1296,11 @@ function assessCheckFromEvidence(
 
   if (check.type === "no_fatal_console_errors") {
     const fatalConsoleEvents = (evidence.console?.events || []).filter((event) => event.type === "error" || event.type === "assert");
-    const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
-    const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+    const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+    const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
     const pageErrors = evidence.page_errors || [];
-    const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
-    const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+    const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+    const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
     const fatalCount = unallowedConsoleEvents.length + unallowedPageErrors.length;
     return {
       type: check.type,
@@ -1627,8 +1637,17 @@ function textMatches(sample, check) {
   }
   return String(sample || "").includes(check.text || "");
 }
-function matchesAllowedMessage(message, texts, patterns) {
-  const sample = String(message || "");
+function allowedMessageSample(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return String(input || "");
+  const parts = [
+    input.text,
+    input.message,
+    input.location && typeof input.location === "object" ? input.location.url : undefined,
+  ];
+  return parts.map((part) => String(part || "")).filter(Boolean).join(" ");
+}
+function matchesAllowedMessage(input, texts, patterns) {
+  const sample = allowedMessageSample(input);
   if ((texts || []).some((text) => sample.includes(text))) return true;
   for (const pattern of patterns || []) {
     try {
@@ -2109,11 +2128,11 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "no_fatal_console_errors") {
       const fatalConsoleEvents = ((evidence.console && evidence.console.events) || []).filter((event) => event && (event.type === "error" || event.type === "assert"));
-      const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
-      const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+      const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+      const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
       const pageErrors = evidence.page_errors || [];
-      const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error && error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
-      const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error && error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+      const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+      const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
       const fatalCount = unallowedConsoleEvents.length + unallowedPageErrors.length;
       checks.push({
         type: check.type,
