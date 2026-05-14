@@ -15,6 +15,8 @@ export const RIDDLE_PROOF_PROFILE_STATUSES = [
 
 export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "route_loaded",
+  "url_search_param_equals",
+  "url_search_param_absent",
   "selector_visible",
   "selector_absent",
   "selector_count_at_least",
@@ -148,6 +150,8 @@ export interface RiddleProofProfileCheck {
   type: RiddleProofProfileCheckType;
   label?: string;
   expected_path?: string;
+  param?: string;
+  expected_value?: string;
   expected_routes?: RiddleProofProfileRouteInventoryRoute[];
   selector?: string;
   expected_texts?: string[];
@@ -881,6 +885,13 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if ((type === "text_visible" || type === "text_absent") && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`checks[${index}] ${type} requires text or pattern.`);
   }
+  if ((type === "url_search_param_equals" || type === "url_search_param_absent") && !stringValue(input.param) && !stringValue(input.search_param) && !stringValue(input.searchParam) && !stringValue(input.key)) {
+    throw new Error(`checks[${index}] ${type} requires param.`);
+  }
+  const expectedValue = stringFromOwn(input, "expected_value", "expectedValue", "value");
+  if (type === "url_search_param_equals" && expectedValue === undefined) {
+    throw new Error(`checks[${index}] url_search_param_equals requires expected_value.`);
+  }
   if (type === "selector_count_at_least" && numberValue(input.min_count) === undefined) {
     throw new Error(`checks[${index}] selector_count_at_least requires min_count.`);
   }
@@ -907,6 +918,8 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     type,
     label: stringValue(input.label),
     expected_path: stringValue(input.expected_path),
+    param: stringValue(input.param) || stringValue(input.search_param) || stringValue(input.searchParam) || stringValue(input.key),
+    expected_value: expectedValue,
     expected_routes: expectedRoutes,
     selector: stringValue(input.selector),
     expected_texts: expectedTexts,
@@ -1197,6 +1210,45 @@ function successfulRoute(route: RiddleProofProfileRouteEvidence, targetUrl?: str
   return matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
 }
 
+function parseEvidenceUrl(value: string | undefined, targetUrl: string | undefined): URL | undefined {
+  if (!value) return undefined;
+  try {
+    return targetUrl ? new URL(value, targetUrl) : new URL(value);
+  } catch {
+    try {
+      return new URL(value);
+    } catch {
+      return undefined;
+    }
+  }
+}
+
+function observedUrlForViewport(
+  viewport: RiddleProofProfileViewportEvidence,
+  targetUrl: string | undefined,
+): URL | undefined {
+  return parseEvidenceUrl(viewport.url, targetUrl)
+    || parseEvidenceUrl(viewport.route?.observed, targetUrl)
+    || parseEvidenceUrl(viewport.route?.requested, targetUrl)
+    || parseEvidenceUrl(targetUrl, undefined);
+}
+
+function searchParamObservation(
+  viewport: RiddleProofProfileViewportEvidence,
+  targetUrl: string | undefined,
+  param: string,
+) {
+  const url = observedUrlForViewport(viewport, targetUrl);
+  const values = url ? url.searchParams.getAll(param) : [];
+  return {
+    viewport: viewport.name,
+    url: url?.href || null,
+    value: values.length ? values[0] : null,
+    values,
+    present: values.length > 0,
+  };
+}
+
 function viewportsForCheck(
   check: RiddleProofProfileCheck,
   viewports: RiddleProofProfileViewportEvidence[],
@@ -1242,6 +1294,46 @@ function assessCheckFromEvidence(
         http_statuses: viewports.map((viewport) => viewport.route.http_status ?? null),
       },
       message: failed.length ? `Route did not load as ${expectedPath} in ${failed.length} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "url_search_param_equals") {
+    const param = check.param || "";
+    const expectedValue = check.expected_value ?? "";
+    const observations = viewports.map((viewport) => searchParamObservation(viewport, evidence.target_url, param));
+    const failed = observations.filter((observation) => observation.value !== expectedValue);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        param,
+        expected_value: expectedValue,
+        observed_values: observations.map((observation) => observation.value),
+        observed_all_values: observations.map((observation) => observation.values),
+        observed_urls: observations.map((observation) => observation.url),
+        viewports: observations.map((observation) => toJsonValue(observation)),
+      },
+      message: failed.length ? `URL search param ${param} did not equal ${JSON.stringify(expectedValue)} in ${failed.length} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "url_search_param_absent") {
+    const param = check.param || "";
+    const observations = viewports.map((viewport) => searchParamObservation(viewport, evidence.target_url, param));
+    const failed = observations.filter((observation) => observation.present);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        param,
+        observed_values: observations.map((observation) => observation.value),
+        observed_all_values: observations.map((observation) => observation.values),
+        observed_urls: observations.map((observation) => observation.url),
+        viewports: observations.map((observation) => toJsonValue(observation)),
+      },
+      message: failed.length ? `URL search param ${param} was present in ${failed.length} viewport(s).` : undefined,
     };
   }
 
@@ -1859,6 +1951,29 @@ function routePathMatches(observed, expected, targetUrl) {
 function routeOk(route, targetUrl) {
   return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path, targetUrl)) && !route.error && (route.http_status == null || route.http_status < 400));
 }
+function parseEvidenceUrl(value, targetUrl) {
+  if (!value) return null;
+  try { return targetUrl ? new URL(value, targetUrl) : new URL(value); } catch {}
+  try { return new URL(value); } catch {}
+  return null;
+}
+function observedUrlForViewport(viewport, targetUrl) {
+  return parseEvidenceUrl(viewport && viewport.url, targetUrl)
+    || parseEvidenceUrl(viewport && viewport.route && viewport.route.observed, targetUrl)
+    || parseEvidenceUrl(viewport && viewport.route && viewport.route.requested, targetUrl)
+    || parseEvidenceUrl(targetUrl, null);
+}
+function searchParamObservation(viewport, targetUrl, param) {
+  const url = observedUrlForViewport(viewport, targetUrl);
+  const values = url ? url.searchParams.getAll(param) : [];
+  return {
+    viewport: viewport && viewport.name,
+    url: url ? url.href : null,
+    value: values.length ? values[0] : null,
+    values,
+    present: values.length > 0,
+  };
+}
 function textMatches(sample, check) {
   if (check.pattern) {
     try { return new RegExp(check.pattern, check.flags || "").test(sample || ""); } catch { return false; }
@@ -2160,6 +2275,46 @@ function assessProfile(profile, evidence) {
           http_statuses: checkViewports.map((viewport) => viewport.route ? viewport.route.http_status ?? null : null),
         },
         message: failed.length ? "Route did not load as " + expectedPath + " in " + failed.length + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "url_search_param_equals") {
+      const param = check.param || "";
+      const expectedValue = check.expected_value == null ? "" : String(check.expected_value);
+      const observations = checkViewports.map((viewport) => searchParamObservation(viewport, evidence.target_url, param));
+      const failed = observations.filter((observation) => observation.value !== expectedValue);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: {
+          param,
+          expected_value: expectedValue,
+          observed_values: observations.map((observation) => observation.value),
+          observed_all_values: observations.map((observation) => observation.values),
+          observed_urls: observations.map((observation) => observation.url),
+          viewports: observations,
+        },
+        message: failed.length ? "URL search param " + param + " did not equal " + JSON.stringify(expectedValue) + " in " + failed.length + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "url_search_param_absent") {
+      const param = check.param || "";
+      const observations = checkViewports.map((viewport) => searchParamObservation(viewport, evidence.target_url, param));
+      const failed = observations.filter((observation) => observation.present);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: {
+          param,
+          observed_values: observations.map((observation) => observation.value),
+          observed_all_values: observations.map((observation) => observation.values),
+          observed_urls: observations.map((observation) => observation.url),
+          viewports: observations,
+        },
+        message: failed.length ? "URL search param " + param + " was present in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }

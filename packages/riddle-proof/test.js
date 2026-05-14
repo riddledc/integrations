@@ -606,7 +606,28 @@ assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
 assert.ok(profileScript.includes('check.type === "selector_absent"'));
 assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
+assert.ok(profileScript.includes('check.type === "url_search_param_equals"'));
+assert.ok(profileScript.includes('check.type === "url_search_param_absent"'));
 assert.ok(profileScript.includes("force: true"));
+const urlParamProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "deep-link-url-profile",
+  target: {
+    route: "/games/drum-sequencer?seq=stale-local&song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    viewports: [
+      { name: "phone", width: 390, height: 844 },
+      { name: "desktop", width: 1280, height: 900 },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/games/drum-sequencer" },
+    { type: "url_search_param_absent", param: "seq" },
+    { type: "url_search_param_equals", search_param: "song", expected_value: "monkberry-moon-delight-tab" },
+    { type: "url_search_param_equals", key: "view", value: "trainer" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(urlParamProfile.checks[2].param, "song");
+assert.equal(urlParamProfile.checks[3].expected_value, "trainer");
 const networkMockProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "builder-network-mocks",
@@ -1158,6 +1179,8 @@ const frameProfile = normalizeRiddleProofProfile({
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_no_horizontal_overflow"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("url_search_param_equals"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("url_search_param_absent"));
 assert.equal(frameProfile.checks[2].type, "frame_text_visible");
 assert.equal(frameProfile.checks[3].max_overflow_px, 1);
 assert.throws(() => normalizeRiddleProofProfile({
@@ -1260,6 +1283,70 @@ const failedSelectorExactCountAssessment = assessRiddleProofProfileEvidence(prof
 });
 assert.equal(failedSelectorExactCountAssessment.status, "product_regression");
 assert.equal(failedSelectorExactCountAssessment.checks.find((check) => check.type === "selector_count_equals").status, "failed");
+const urlParamEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "deep-link-url-profile",
+  target_url: "https://example.com/games/drum-sequencer?seq=stale-local&song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-10T00:00:00.000Z",
+  viewports: [
+    {
+      name: "phone",
+      width: 390,
+      height: 844,
+      url: "https://example.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+      route: {
+        requested: "https://example.com/games/drum-sequencer?seq=stale-local&song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+        observed: "/games/drum-sequencer",
+        expected_path: "/games/drum-sequencer",
+        matched: true,
+        http_status: 200,
+      },
+      body_text_sample: "Vocal Melody",
+      overflow_px: 0,
+      screenshot_label: "deep-link-url-profile-phone",
+    },
+    {
+      name: "desktop",
+      width: 1280,
+      height: 900,
+      url: "https://example.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+      route: {
+        requested: "https://example.com/games/drum-sequencer?seq=stale-local&song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+        observed: "/games/drum-sequencer",
+        expected_path: "/games/drum-sequencer",
+        matched: true,
+        http_status: 200,
+      },
+      body_text_sample: "Vocal Melody",
+      overflow_px: 0,
+      screenshot_label: "deep-link-url-profile-desktop",
+    },
+  ],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 2 },
+};
+const urlParamAssessment = assessRiddleProofProfileEvidence(urlParamProfile, urlParamEvidence);
+assert.equal(urlParamAssessment.status, "passed");
+assert.equal(urlParamAssessment.checks.find((check) => check.type === "url_search_param_absent").status, "passed");
+assert.deepEqual(
+  urlParamAssessment.checks.find((check) => check.type === "url_search_param_equals" && check.evidence.param === "song").evidence.observed_values,
+  ["monkberry-moon-delight-tab", "monkberry-moon-delight-tab"],
+);
+const staleSeqAssessment = assessRiddleProofProfileEvidence(urlParamProfile, {
+  ...urlParamEvidence,
+  viewports: [
+    {
+      ...urlParamEvidence.viewports[0],
+      url: "https://example.com/games/drum-sequencer?seq=stale-local&song=monkberry-moon-delight-tab&mix=profile&view=perform&instrument=bass",
+    },
+    urlParamEvidence.viewports[1],
+  ],
+});
+assert.equal(staleSeqAssessment.status, "product_regression");
+assert.equal(staleSeqAssessment.checks.find((check) => check.type === "url_search_param_absent").status, "failed");
+assert.equal(staleSeqAssessment.checks.find((check) => check.type === "url_search_param_equals" && check.evidence.param === "view").status, "failed");
 const selectorCountAliasProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "selector-count-alias",
