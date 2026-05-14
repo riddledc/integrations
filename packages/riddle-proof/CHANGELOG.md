@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.50
+
+### Patch Changes
+
+- 3b54d45: Add profile setup `window-call` actions for named browser proof hooks.
+
 ## 0.7.49
 
 ### Patch Changes
