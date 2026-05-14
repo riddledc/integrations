@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.62
+
+### Patch Changes
+
+- acd883b: Add compact setup summaries to profile setup-action assessment evidence so setup-heavy clickthrough and iframe proofs expose per-viewport routes, action counts, clicked targets, frame URLs, text samples, and failures without requiring consumers to inspect every raw setup-action result.
+
 ## 0.7.61
 
 ### Patch Changes
