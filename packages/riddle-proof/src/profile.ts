@@ -96,6 +96,7 @@ export interface RiddleProofProfileNetworkMockResponse {
   headers?: Record<string, string>;
   body?: string;
   body_json?: JsonValue;
+  delay_ms?: number;
   capture_request_body?: boolean;
   request_body_contains?: string[];
   request_body_patterns?: string[];
@@ -668,12 +669,33 @@ function normalizeNetworkMockResponsePayload(
     headers: stringRecord(input.headers) || defaults.headers,
     body,
     body_json: hasJsonBody ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : defaults.body_json,
+    delay_ms: normalizeNetworkMockDelay(input, label, defaults.delay_ms),
     capture_request_body: requestBody.capture_request_body,
     request_body_contains: requestBody.request_body_contains,
     request_body_patterns: requestBody.request_body_patterns,
     request_body_not_contains: requestBody.request_body_not_contains,
     request_body_not_patterns: requestBody.request_body_not_patterns,
   };
+}
+
+function normalizeNetworkMockDelay(
+  input: Record<string, unknown>,
+  label: string,
+  defaultValue?: number,
+): number | undefined {
+  const value = numberValue(
+    input.delay_ms
+    ?? input.delayMs
+    ?? input.wait_ms
+    ?? input.waitMs
+    ?? input.latency_ms
+    ?? input.latencyMs,
+  ) ?? defaultValue;
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value < 0 || value > 60000) {
+    throw new Error(`${label}.delay_ms must be an integer from 0 to 60000.`);
+  }
+  return value;
 }
 
 function normalizeNetworkMockResponses(
@@ -691,6 +713,7 @@ function normalizeNetworkMockResponses(
     headers: defaults.headers,
     body: defaults.body,
     body_json: defaults.body_json,
+    delay_ms: defaults.delay_ms,
   };
   return value.map((response, responseIndex) => {
     if (!isRecord(response)) {
@@ -2541,6 +2564,7 @@ async function registerNetworkMocks(mocks) {
         const requestBody = shouldCaptureRequestBody && request.postData ? request.postData() || "" : "";
         const requestBodyFailures = shouldCaptureRequestBody ? networkMockRequestBodyFailures(requestBody, mock, responseBodyContract) : [];
         const status = response.status || mock.status || 200;
+        const delayMs = numberValue(response.delay_ms) || 0;
         const event = {
           ok: true,
           label: mock.label,
@@ -2553,6 +2577,7 @@ async function registerNetworkMocks(mocks) {
           method,
           status,
         };
+        if (delayMs) event.delay_ms = delayMs;
         if (shouldCaptureRequestBody) {
           event.request_body_matches = requestBodyFailures.length === 0;
           event.request_body_failures = requestBodyFailures;
@@ -2560,6 +2585,7 @@ async function registerNetworkMocks(mocks) {
           event.request_body_sample = compactNetworkMockRequestBody(requestBody);
         }
         networkMockEvents.push(event);
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
         await route.fulfill({
           status,
           headers,
