@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.56
+
+### Patch Changes
+
+- 4fb15f0: Allow `run-profile` to pass the explicit Riddle `strict` override through to hosted profile runs.
+
 ## 0.7.55
 
 ### Patch Changes
