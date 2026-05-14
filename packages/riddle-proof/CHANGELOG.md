@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.35
+
+### Patch Changes
+
+- dff5143: Add a profile `selector_text_order` check for proving visible table, list, or card text appears in an expected order without broad body-text regexes.
+
 ## 0.7.34
 
 ### Patch Changes
