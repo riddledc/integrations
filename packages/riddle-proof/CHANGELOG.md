@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.53
+
+### Patch Changes
+
+- ab00b86: Add setup action repeat support for profile workflows that need bounded repeated clicks, waits, or window calls.
+
 ## 0.7.52
 
 ### Patch Changes
