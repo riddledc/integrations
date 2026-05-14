@@ -38,6 +38,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
 
 export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "click",
+  "drag",
   "press",
   "fill",
   "set_input_value",
@@ -84,6 +85,13 @@ export interface RiddleProofProfileSetupAction {
   frame_selector?: string;
   frame_index?: number;
   force?: boolean;
+  coordinate_mode?: "pixels" | "ratio";
+  from_x?: number;
+  from_y?: number;
+  to_x?: number;
+  to_y?: number;
+  duration_ms?: number;
+  steps?: number;
   key?: string;
   value?: string;
   value_json?: JsonValue;
@@ -505,6 +513,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
   const normalizedInput = String(value || "").trim().replace(/-/g, "_");
   const normalized = normalizedInput === "clear_browser_storage"
     ? "clear_storage"
+    : normalizedInput === "pointer_drag" || normalizedInput === "mouse_drag" || normalizedInput === "drag_to"
+      ? "drag"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
       ? "press"
       : normalizedInput;
@@ -541,6 +551,14 @@ function normalizeSetupActionRepeat(input: Record<string, unknown>, index: numbe
   return repeat;
 }
 
+function normalizeSetupActionCoordinateMode(value: unknown, index: number): "pixels" | "ratio" | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().replace(/-/g, "_").toLowerCase();
+  if (normalized === "pixels" || normalized === "pixel" || normalized === "px") return "pixels";
+  if (normalized === "ratio" || normalized === "relative" || normalized === "fraction") return "ratio";
+  throw new Error(`target.setup_actions[${index}].coordinate_mode ${String(value)} is not supported. Supported coordinate modes: pixels, ratio.`);
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -550,8 +568,24 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (frameIndex !== undefined && (!Number.isInteger(frameIndex) || frameIndex < 0)) {
     throw new Error(`target.setup_actions[${index}].frame_index must be a non-negative integer.`);
   }
-  if ((type === "click" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
+  if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
+  }
+  const fromX = numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
+  const fromY = numberValue(valueFromOwn(input, "from_y", "fromY", "start_y", "startY", "y1"));
+  const toX = numberValue(valueFromOwn(input, "to_x", "toX", "end_x", "endX", "x2"));
+  const toY = numberValue(valueFromOwn(input, "to_y", "toY", "end_y", "endY", "y2"));
+  const coordinateMode = normalizeSetupActionCoordinateMode(valueFromOwn(input, "coordinate_mode", "coordinateMode", "coords", "units"), index);
+  if (type === "drag") {
+    if (fromX === undefined || fromY === undefined || toX === undefined || toY === undefined) {
+      throw new Error(`target.setup_actions[${index}] drag requires from_x, from_y, to_x, and to_y.`);
+    }
+    if (coordinateMode === "ratio" && [fromX, fromY, toX, toY].some((value) => value < 0 || value > 1)) {
+      throw new Error(`target.setup_actions[${index}] drag ratio coordinates must be between 0 and 1.`);
+    }
+    if ((coordinateMode === undefined || coordinateMode === "pixels") && [fromX, fromY, toX, toY].some((value) => value < 0)) {
+      throw new Error(`target.setup_actions[${index}] drag pixel coordinates must be non-negative.`);
+    }
   }
   if (type === "wait_for_text" && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`target.setup_actions[${index}] wait_for_text requires text or pattern.`);
@@ -607,6 +641,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     || hasOwn(input, "expectReturn")
     || hasOwn(input, "expected_return")
     || hasOwn(input, "expectedReturn");
+  const steps = numberValue(input.steps);
+  if (type === "drag" && steps !== undefined && (!Number.isInteger(steps) || steps < 1 || steps > 100)) {
+    throw new Error(`target.setup_actions[${index}].steps must be an integer from 1 to 100.`);
+  }
   return {
     type,
     selector,
@@ -617,6 +655,13 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       || input.force_click === true
       || input.forceClick === true
     ),
+    coordinate_mode: coordinateMode,
+    from_x: fromX,
+    from_y: fromY,
+    to_x: toX,
+    to_y: toY,
+    duration_ms: numberValue(input.duration_ms) ?? numberValue(input.durationMs),
+    steps,
     key,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
@@ -3063,6 +3108,71 @@ async function executeSetupAction(action, ordinal) {
       if (!scope.ok) return setupScopeFailure(base, scope);
       await scope.context.waitForSelector(action.selector, { state: "visible", timeout });
       return { ...base, ...setupScopeEvidence(scope), ok: true, timeout_ms: timeout };
+    }
+    if (type === "drag") {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, ...setupScopeEvidence(scope), reason: "selector_not_found", count };
+      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, ...setupScopeEvidence(scope), reason: "index_out_of_range", count, target_index: targetIndex };
+      const target = locator.nth(targetIndex);
+      await target.waitFor({ state: "visible", timeout });
+      const box = await target.boundingBox();
+      if (!box) return { ...base, ...setupScopeEvidence(scope), reason: "bounding_box_unavailable", count, target_index: targetIndex };
+      const mode = String(action.coordinate_mode || action.coordinateMode || "pixels").trim();
+      const coordinate = (value, size) => mode === "ratio" ? value * size : value;
+      const fromX = setupFiniteNumber(action.from_x ?? action.fromX ?? action.start_x ?? action.startX ?? action.x1);
+      const fromY = setupFiniteNumber(action.from_y ?? action.fromY ?? action.start_y ?? action.startY ?? action.y1);
+      const toX = setupFiniteNumber(action.to_x ?? action.toX ?? action.end_x ?? action.endX ?? action.x2);
+      const toY = setupFiniteNumber(action.to_y ?? action.toY ?? action.end_y ?? action.endY ?? action.y2);
+      if (fromX === undefined || fromY === undefined || toX === undefined || toY === undefined) return { ...base, ...setupScopeEvidence(scope), reason: "missing_drag_coordinates", count, target_index: targetIndex };
+      if (mode === "ratio" && [fromX, fromY, toX, toY].some((value) => value < 0 || value > 1)) return { ...base, ...setupScopeEvidence(scope), reason: "invalid_ratio_coordinates", count, target_index: targetIndex };
+      if (mode !== "ratio" && [fromX, fromY, toX, toY].some((value) => value < 0)) return { ...base, ...setupScopeEvidence(scope), reason: "invalid_pixel_coordinates", count, target_index: targetIndex };
+      const start = {
+        x: box.x + coordinate(fromX, box.width),
+        y: box.y + coordinate(fromY, box.height),
+      };
+      const end = {
+        x: box.x + coordinate(toX, box.width),
+        y: box.y + coordinate(toY, box.height),
+      };
+      const requestedSteps = setupNumber(action.steps, 8);
+      const steps = Math.min(100, Math.max(1, Math.floor(requestedSteps || 8)));
+      const durationMs = setupNumber(action.duration_ms ?? action.durationMs, 0);
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      try {
+        if (durationMs && steps > 1) {
+          for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            await page.mouse.move(
+              start.x + (end.x - start.x) * progress,
+              start.y + (end.y - start.y) * progress,
+            );
+            await page.waitForTimeout(durationMs / steps);
+          }
+        } else {
+          await page.mouse.move(end.x, end.y, { steps });
+        }
+      } finally {
+        await page.mouse.up().catch(() => {});
+      }
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: true,
+        count,
+        target_index: targetIndex,
+        coordinate_mode: mode,
+        from_x: fromX,
+        from_y: fromY,
+        to_x: toX,
+        to_y: toY,
+        steps,
+        duration_ms: durationMs || undefined,
+      };
     }
     if (type === "press") {
       const key = String(action.key || "").trim();

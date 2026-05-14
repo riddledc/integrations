@@ -898,6 +898,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("drag"));
 const formSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-form-storage-actions",
@@ -955,6 +956,40 @@ assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
 assert.equal(formSetupProfile.target.setup_actions[5].type, "press");
 assert.equal(formSetupProfile.target.setup_actions[5].key, "Enter");
+const dragSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-drag-action",
+  target: {
+    route: "/play/max-collisions",
+    setup_actions: [
+      {
+        type: "pointer-drag",
+        frame_selector: ".game-player-root iframe",
+        selector: ".game-area",
+        coordinate_mode: "ratio",
+        from_x: 0.5,
+        from_y: 0.5,
+        to_x: 0.2,
+        to_y: 0.5,
+        duration_ms: 120,
+        steps: 6,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/play/max-collisions" }],
+}, { url: "https://example.com" });
+assert.equal(dragSetupProfile.target.setup_actions[0].type, "drag");
+assert.equal(dragSetupProfile.target.setup_actions[0].frame_selector, ".game-player-root iframe");
+assert.equal(dragSetupProfile.target.setup_actions[0].coordinate_mode, "ratio");
+assert.equal(dragSetupProfile.target.setup_actions[0].from_x, 0.5);
+assert.equal(dragSetupProfile.target.setup_actions[0].to_x, 0.2);
+assert.equal(dragSetupProfile.target.setup_actions[0].steps, 6);
+const dragSetupProfileScript = buildRiddleProofProfileScript(dragSetupProfile);
+assert.ok(dragSetupProfileScript.includes('type === "drag"'));
+assert.ok(dragSetupProfileScript.includes("page.mouse.down"));
+assert.ok(dragSetupProfileScript.includes("page.mouse.up"));
+assert.ok(dragSetupProfileScript.includes("bounding_box_unavailable"));
+assert.ok(dragSetupProfileScript.includes("coordinate_mode"));
 const windowCallSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-window-call-action",
@@ -1012,6 +1047,33 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /repeat must be an integer from 1 to 100/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-drag-coordinates",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "drag", selector: ".game-area", from_x: 0, from_y: 0, to_x: 1 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /drag requires from_x, from_y, to_x, and to_y/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-drag-ratio",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "drag", selector: ".game-area", coordinate_mode: "ratio", from_x: 0, from_y: 0, to_x: 2, to_y: 1 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /drag ratio coordinates must be between 0 and 1/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-drag-steps",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "drag", selector: ".game-area", from_x: 0, from_y: 0, to_x: 20, to_y: 20, steps: 0 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /steps must be an integer from 1 to 100/);
 const setupAssertionProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-setup-assertions",
