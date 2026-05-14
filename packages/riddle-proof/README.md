@@ -220,14 +220,17 @@ both directly and through real link clicks:
 }
 ```
 
-The check records discovered source links, duplicate/missing/unexpected routes,
-direct route health, real clickthrough health, wrong-path failures, and stale
-source-surface failures. It runs direct/clickthrough sweeps on the first
-viewport by default and leaves ordinary profile overflow checks to cover the
-source page across all configured viewports. Set `run_direct_routes: false`,
-`run_clickthroughs: false`, `allow_unexpected_routes: true`, or
+The check records discovered source links, unique source-link counts, duplicate
+source-link counts, missing/unexpected routes, direct route health, real
+clickthrough health, wrong-path failures, and stale source-surface failures. It
+runs direct/clickthrough sweeps on the first viewport by default and leaves
+ordinary profile overflow checks to cover the source page across all configured
+viewports. Set `run_direct_routes: false`, `run_clickthroughs: false`,
+`allow_unexpected_routes: true`, `require_unique_routes: false`, or
 `save_route_screenshots: true` when a profile needs a narrower or more
-artifact-heavy audit.
+artifact-heavy audit. `require_unique_routes: false` is useful when a navigation
+surface intentionally links to the same route from multiple cards or anchors,
+while still proving the unique expected route set.
 
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:

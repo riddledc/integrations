@@ -889,14 +889,26 @@ function assessCheckFromEvidence(
     const first = inventories[0]?.inventory;
     const directRoutes = Array.isArray(first?.direct_routes) ? first.direct_routes : [];
     const clickthroughs = Array.isArray(first?.clickthroughs) ? first.clickthroughs : [];
+    const sourceLinkCount = numberValue(first?.source_link_count) ?? numberValue(first?.home_game_link_count) ?? null;
+    const sourceUniqueLinkCount = numberValue(first?.source_unique_link_count) ?? numberValue(first?.home_unique_game_link_count) ?? null;
+    const duplicateSourceLinks = Array.isArray(first?.duplicate_source_link_paths)
+      ? first.duplicate_source_link_paths.map((path) => String(path))
+      : [];
+    const duplicateSourceLinkCount = numberValue(first?.duplicate_source_link_count)
+      ?? (sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null);
     return {
       type: check.type,
       label: checkLabel(check),
       status: failures.length ? "failed" : "passed",
       evidence: {
         expected_count: check.expected_routes?.length || 0,
-        homepage_link_count: numberValue(first?.home_game_link_count) ?? null,
-        homepage_unique_link_count: numberValue(first?.home_unique_game_link_count) ?? null,
+        source_link_count: sourceLinkCount,
+        source_unique_link_count: sourceUniqueLinkCount,
+        duplicate_source_link_count: duplicateSourceLinkCount,
+        duplicate_source_links: duplicateSourceLinks,
+        duplicates_allowed: check.require_unique_routes === false,
+        homepage_link_count: numberValue(first?.home_game_link_count) ?? sourceLinkCount,
+        homepage_unique_link_count: numberValue(first?.home_unique_game_link_count) ?? sourceUniqueLinkCount,
         direct_route_count: directRoutes.length,
         clickthrough_count: clickthroughs.length,
         failures,
@@ -1491,14 +1503,23 @@ function assessProfile(profile, evidence) {
       const first = inventories[0].inventory || {};
       const directRoutes = Array.isArray(first.direct_routes) ? first.direct_routes : [];
       const clickthroughs = Array.isArray(first.clickthroughs) ? first.clickthroughs : [];
+      const sourceLinkCount = typeof first.source_link_count === "number" ? first.source_link_count : typeof first.home_game_link_count === "number" ? first.home_game_link_count : null;
+      const sourceUniqueLinkCount = typeof first.source_unique_link_count === "number" ? first.source_unique_link_count : typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : null;
+      const duplicateSourceLinks = Array.isArray(first.duplicate_source_link_paths) ? first.duplicate_source_link_paths.map((path) => String(path)) : [];
+      const duplicateSourceLinkCount = typeof first.duplicate_source_link_count === "number" ? first.duplicate_source_link_count : sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null;
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failures.length ? "failed" : "passed",
         evidence: {
           expected_count: (check.expected_routes || []).length,
-          homepage_link_count: typeof first.home_game_link_count === "number" ? first.home_game_link_count : null,
-          homepage_unique_link_count: typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : null,
+          source_link_count: sourceLinkCount,
+          source_unique_link_count: sourceUniqueLinkCount,
+          duplicate_source_link_count: duplicateSourceLinkCount,
+          duplicate_source_links: duplicateSourceLinks,
+          duplicates_allowed: check.require_unique_routes === false,
+          homepage_link_count: typeof first.home_game_link_count === "number" ? first.home_game_link_count : sourceLinkCount,
+          homepage_unique_link_count: typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : sourceUniqueLinkCount,
           direct_route_count: directRoutes.length,
           clickthrough_count: clickthroughs.length,
           failures,
@@ -2018,8 +2039,9 @@ async function collectRouteInventory(check, viewport) {
   const homeLinkPaths = homeLinks.map((link) => link.app_path);
   const uniqueHomeLinkPaths = Array.from(new Set(homeLinkPaths));
   const duplicateHomeLinkPaths = homeLinkPaths.filter((path, index) => homeLinkPaths.indexOf(path) !== index);
+  const duplicateHomeLinkPathSet = Array.from(new Set(duplicateHomeLinkPaths));
   if (check.require_unique_routes !== false && duplicateHomeLinkPaths.length) {
-    failures.push({ code: "duplicate_source_links", paths: Array.from(new Set(duplicateHomeLinkPaths)) });
+    failures.push({ code: "duplicate_source_links", paths: duplicateHomeLinkPathSet });
   }
   for (const route of expectedRoutes) {
     if (!homeLinkPaths.includes(normalizeRoutePath(route.path))) {
@@ -2095,6 +2117,11 @@ async function collectRouteInventory(check, viewport) {
     expected_routes: expectedRoutes,
     link_selector: check.link_selector || "a[href]",
     source_selector: check.source_selector || null,
+    source_link_count: homeLinkPaths.length,
+    source_unique_link_count: uniqueHomeLinkPaths.length,
+    duplicate_source_link_count: duplicateHomeLinkPaths.length,
+    duplicate_source_link_paths: duplicateHomeLinkPathSet,
+    duplicates_allowed: check.require_unique_routes === false,
     home_game_link_count: homeLinkPaths.length,
     home_unique_game_link_count: uniqueHomeLinkPaths.length,
     home_links: homeLinks,
@@ -2238,6 +2265,11 @@ async function captureViewport(viewport) {
         expected_routes: routeInventoryCheck.expected_routes || [],
         link_selector: routeInventoryCheck.link_selector || "a[href]",
         source_selector: routeInventoryCheck.source_selector || null,
+        source_link_count: 0,
+        source_unique_link_count: 0,
+        duplicate_source_link_count: 0,
+        duplicate_source_link_paths: [],
+        duplicates_allowed: routeInventoryCheck.require_unique_routes === false,
         home_game_link_count: 0,
         home_unique_game_link_count: 0,
         home_links: [],
@@ -2312,6 +2344,9 @@ function buildProfileEvidence(currentViewports) {
         .map((viewport) => ({
           viewport: viewport.name,
           expected_count: (viewport.route_inventory.expected_routes || []).length,
+          source_link_count: viewport.route_inventory.source_link_count == null ? viewport.route_inventory.home_game_link_count : viewport.route_inventory.source_link_count,
+          source_unique_link_count: viewport.route_inventory.source_unique_link_count == null ? viewport.route_inventory.home_unique_game_link_count : viewport.route_inventory.source_unique_link_count,
+          duplicate_source_link_count: viewport.route_inventory.duplicate_source_link_count,
           home_unique_game_link_count: viewport.route_inventory.home_unique_game_link_count,
           direct_route_count: (viewport.route_inventory.direct_routes || []).length,
           clickthrough_count: (viewport.route_inventory.clickthroughs || []).length,
