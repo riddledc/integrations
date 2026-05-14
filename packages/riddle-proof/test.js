@@ -534,12 +534,14 @@ const profile = normalizeRiddleProofProfile({
     { type: "selector_absent", selector: ".game-player-root iframe" },
     { type: "selector_count_equals", selector: "[data-testid='pricing-cards']", expected_count: 1 },
     { type: "text_visible", text: "Start building" },
+    { type: "text_visible", text: "Desktop-only copy", viewports: ["desktop"] },
     { type: "no_mobile_horizontal_overflow" },
     { type: "no_fatal_console_errors" },
   ],
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
 assert.equal(profile.target.timeout_sec, 420);
+assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
@@ -903,7 +905,7 @@ const profileEvidence = {
         "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
         ".game-player-root iframe": { count: 0, visible_count: 0 },
       },
-      text_matches: { "text:Start building": true },
+      text_matches: { "text:Start building": true, "text:Desktop-only copy": false },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
@@ -915,13 +917,13 @@ const profileEvidence = {
       width: 1440,
       height: 1000,
       route: { requested: "https://example.com/pricing", observed: "/pricing", expected_path: "/pricing", matched: true, http_status: 200 },
-      body_text_sample: "Pricing Start building",
+      body_text_sample: "Pricing Start building Desktop-only copy",
       overflow_px: 0,
       selectors: {
         "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
         ".game-player-root iframe": { count: 0, visible_count: 0 },
       },
-      text_matches: { "text:Start building": true },
+      text_matches: { "text:Start building": true, "text:Desktop-only copy": true },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
@@ -936,10 +938,13 @@ const profileEvidence = {
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
-assert.equal(profileAssessment.checks.length, 8);
+assert.equal(profileAssessment.checks.length, 9);
 assert.equal(profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
+const desktopOnlyAssessment = profileAssessment.checks.find((check) => check.evidence?.text === "Desktop-only copy");
+assert.equal(desktopOnlyAssessment.status, "passed");
+assert.deepEqual(desktopOnlyAssessment.evidence.matches, [true]);
 assert.equal(profileAssessment.artifacts.screenshots.length, 2);
 const failedSelectorAbsentAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,

@@ -138,6 +138,7 @@ export interface RiddleProofProfileCheck {
   text?: string;
   pattern?: string;
   flags?: string;
+  viewports?: string[];
   allowed_console_texts?: string[];
   allowed_console_patterns?: string[];
   allowed_page_error_texts?: string[];
@@ -720,6 +721,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
+    viewports: normalizeStringList(input.viewports ?? input.viewport_names ?? input.viewportNames, `checks[${index}] viewports`),
     allowed_console_texts: normalizeStringList(input.allowed_console_texts ?? input.allowedConsoleTexts ?? input.allow_console_texts ?? input.allowConsoleTexts, `checks[${index}] allowed_console_texts`),
     allowed_console_patterns: normalizeStringList(input.allowed_console_patterns ?? input.allowedConsolePatterns ?? input.allow_console_patterns ?? input.allowConsolePatterns, `checks[${index}] allowed_console_patterns`),
     allowed_page_error_texts: normalizeStringList(input.allowed_page_error_texts ?? input.allowedPageErrorTexts ?? input.allow_page_error_texts ?? input.allowPageErrorTexts, `checks[${index}] allowed_page_error_texts`),
@@ -996,18 +998,31 @@ function successfulRoute(route: RiddleProofProfileRouteEvidence, targetUrl?: str
   return matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
 }
 
+function viewportsForCheck(
+  check: RiddleProofProfileCheck,
+  viewports: RiddleProofProfileViewportEvidence[],
+): RiddleProofProfileViewportEvidence[] {
+  if (!check.viewports?.length) return viewports;
+  const names = new Set(check.viewports);
+  return viewports.filter((viewport) => names.has(viewport.name));
+}
+
 function assessCheckFromEvidence(
   check: RiddleProofProfileCheck,
   evidence: RiddleProofProfileEvidence,
 ): RiddleProofProfileCheckResult {
-  const viewports = evidence.viewports || [];
+  const viewports = viewportsForCheck(check, evidence.viewports || []);
   if (!viewports.length) {
     return {
       type: check.type,
       label: checkLabel(check),
       status: "failed",
-      evidence: {},
-      message: "No viewport evidence was captured.",
+      evidence: {
+        expected_viewports: check.viewports || [],
+      },
+      message: check.viewports?.length
+        ? `No matching viewport evidence was captured for ${check.viewports.join(", ")}.`
+        : "No viewport evidence was captured.",
     };
   }
 
@@ -1693,6 +1708,11 @@ function frameTextSample(frame) {
     frame && frame.text,
   ].map((part) => String(part || "")).filter(Boolean).join(" ");
 }
+function viewportsForCheck(check, viewports) {
+  if (!Array.isArray(check.viewports) || !check.viewports.length) return viewports;
+  const names = new Set(check.viewports);
+  return viewports.filter((viewport) => names.has(viewport.name));
+}
 function summarizeRouteInventory(viewport, inventory) {
   const directRoutes = Array.isArray(inventory.direct_routes) ? inventory.direct_routes : [];
   const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
@@ -1883,9 +1903,22 @@ function assessProfile(profile, evidence) {
     });
   }
   for (const check of profile.checks || []) {
+    const checkViewports = viewportsForCheck(check, viewports);
+    if (!checkViewports.length) {
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: "failed",
+        evidence: { expected_viewports: check.viewports || [] },
+        message: Array.isArray(check.viewports) && check.viewports.length
+          ? "No matching viewport evidence was captured for " + check.viewports.join(", ") + "."
+          : "No viewport evidence was captured.",
+      });
+      continue;
+    }
     if (check.type === "route_loaded") {
       const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
-      const failed = viewports.filter((viewport) => {
+      const failed = checkViewports.filter((viewport) => {
         const route = { ...(viewport.route || {}), expected_path: expectedPath };
         route.matched = routePathMatches(route.observed, expectedPath, evidence.target_url) || route.matched;
         return !routeOk(route, evidence.target_url);
@@ -1896,8 +1929,8 @@ function assessProfile(profile, evidence) {
         status: failed.length ? "failed" : "passed",
         evidence: {
           expected_path: expectedPath,
-          observed_paths: viewports.map((viewport) => viewport.route && viewport.route.observed),
-          http_statuses: viewports.map((viewport) => viewport.route ? viewport.route.http_status ?? null : null),
+          observed_paths: checkViewports.map((viewport) => viewport.route && viewport.route.observed),
+          http_statuses: checkViewports.map((viewport) => viewport.route ? viewport.route.http_status ?? null : null),
         },
         message: failed.length ? "Route did not load as " + expectedPath + " in " + failed.length + " viewport(s)." : undefined,
       });
@@ -1905,24 +1938,24 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "selector_visible") {
       const selector = check.selector || "";
-      const failed = viewports.filter((viewport) => !viewport.selectors || !viewport.selectors[selector] || viewport.selectors[selector].visible_count < 1);
+      const failed = checkViewports.filter((viewport) => !viewport.selectors || !viewport.selectors[selector] || viewport.selectors[selector].visible_count < 1);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed.length ? "failed" : "passed",
-        evidence: { selector, visible_counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].visible_count : 0) },
+        evidence: { selector, visible_counts: checkViewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].visible_count : 0) },
         message: failed.length ? "Selector " + selector + " was not visible in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }
     if (check.type === "selector_absent") {
       const selector = check.selector || "";
-      const failed = viewports.filter((viewport) => viewport.selectors && viewport.selectors[selector] && viewport.selectors[selector].count > 0);
+      const failed = checkViewports.filter((viewport) => viewport.selectors && viewport.selectors[selector] && viewport.selectors[selector].count > 0);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed.length ? "failed" : "passed",
-        evidence: { selector, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
+        evidence: { selector, counts: checkViewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
         message: failed.length ? "Selector " + selector + " was present in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
@@ -1930,12 +1963,12 @@ function assessProfile(profile, evidence) {
     if (check.type === "selector_count_at_least") {
       const selector = check.selector || "";
       const minCount = check.min_count == null ? 1 : check.min_count;
-      const failed = viewports.filter((viewport) => !viewport.selectors || !viewport.selectors[selector] || viewport.selectors[selector].count < minCount);
+      const failed = checkViewports.filter((viewport) => !viewport.selectors || !viewport.selectors[selector] || viewport.selectors[selector].count < minCount);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed.length ? "failed" : "passed",
-        evidence: { selector, min_count: minCount, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
+        evidence: { selector, min_count: minCount, counts: checkViewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
         message: failed.length ? "Selector " + selector + " count was below " + minCount + " in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
@@ -1943,12 +1976,12 @@ function assessProfile(profile, evidence) {
     if (check.type === "selector_count_equals" || check.type === "selector_count_equal" || check.type === "selector_count_eq") {
       const selector = check.selector || "";
       const expectedCount = check.expected_count == null ? 0 : check.expected_count;
-      const failed = viewports.filter((viewport) => (viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) !== expectedCount);
+      const failed = checkViewports.filter((viewport) => (viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) !== expectedCount);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed.length ? "failed" : "passed",
-        evidence: { selector, expected_count: expectedCount, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
+        evidence: { selector, expected_count: expectedCount, counts: checkViewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
         message: failed.length ? "Selector " + selector + " count did not equal " + expectedCount + " in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
@@ -1956,7 +1989,7 @@ function assessProfile(profile, evidence) {
     if (check.type === "selector_text_order") {
       const selector = check.selector || "";
       const expectedTexts = check.expected_texts || [];
-      const results = viewports.map((viewport) => {
+      const results = checkViewports.map((viewport) => {
         const texts = textSequenceForCheck(viewport, check);
         const match = textOrderMatch(texts, expectedTexts);
         return {
@@ -1978,7 +2011,7 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "frame_text_visible") {
       const selector = check.selector || "";
-      const results = viewports.map((viewport) => {
+      const results = checkViewports.map((viewport) => {
         const frames = frameEvidenceForSelector(viewport, selector);
         const matches = frames
           .map((frame, index) => ({ index, frame, matched: textMatches(frameTextSample(frame), check) }))
@@ -2005,7 +2038,7 @@ function assessProfile(profile, evidence) {
     if (check.type === "frame_no_horizontal_overflow") {
       const selector = check.selector || "";
       const maxOverflow = check.max_overflow_px == null ? 4 : check.max_overflow_px;
-      const results = viewports.map((viewport) => {
+      const results = checkViewports.map((viewport) => {
         const frames = frameEvidenceForSelector(viewport, selector);
         const frameOverflows = frames.map((frame, index) => ({
           index,
@@ -2035,7 +2068,7 @@ function assessProfile(profile, evidence) {
     if (check.type === "text_visible" || check.type === "text_absent") {
       const key = check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
       const expectedVisible = check.type === "text_visible";
-      const matches = viewports.map((viewport) => viewport.text_matches && typeof viewport.text_matches[key] === "boolean" ? viewport.text_matches[key] : textMatches(viewport.body_text_sample || "", check));
+      const matches = checkViewports.map((viewport) => viewport.text_matches && typeof viewport.text_matches[key] === "boolean" ? viewport.text_matches[key] : textMatches(viewport.body_text_sample || "", check));
       const failed = matches.filter((matched) => matched !== expectedVisible).length;
       checks.push({
         type: check.type,
@@ -2047,7 +2080,7 @@ function assessProfile(profile, evidence) {
       continue;
     }
     if (check.type === "route_inventory") {
-      const inventories = viewports
+      const inventories = checkViewports
         .map((viewport) => ({ viewport: viewport.name, inventory: viewport.route_inventory }))
         .filter((item) => item.inventory && typeof item.inventory === "object");
       if (!inventories.length) {
@@ -2099,7 +2132,7 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "no_horizontal_overflow" || check.type === "no_mobile_horizontal_overflow") {
       const maxOverflow = check.max_overflow_px == null ? 4 : check.max_overflow_px;
-      const applicable = check.type === "no_mobile_horizontal_overflow" ? viewports.filter((viewport) => viewport.width <= 820) : viewports;
+      const applicable = check.type === "no_mobile_horizontal_overflow" ? checkViewports.filter((viewport) => viewport.width <= 820) : checkViewports;
       if (!applicable.length) {
         checks.push({
           type: check.type,
