@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.46
+
+### Patch Changes
+
+- 160b26b: Add negative profile network mock request-body constraints.
+
 ## 0.7.45
 
 ### Patch Changes
