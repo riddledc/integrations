@@ -130,6 +130,7 @@ export interface RiddleProofProfileCheck {
   timeout_ms?: number;
   run_direct_routes?: boolean;
   run_clickthroughs?: boolean;
+  run_all_viewports?: boolean;
   require_unique_routes?: boolean;
   allow_unexpected_routes?: boolean;
   save_route_screenshots?: boolean;
@@ -620,6 +621,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     run_direct_routes: input.run_direct_routes === false || input.runDirectRoutes === false ? false : true,
     run_clickthroughs: input.run_clickthroughs === false || input.runClickthroughs === false ? false : true,
+    run_all_viewports: input.run_all_viewports === true || input.runAllViewports === true,
     require_unique_routes: input.require_unique_routes === false || input.requireUniqueRoutes === false ? false : true,
     allow_unexpected_routes: input.allow_unexpected_routes === true || input.allowUnexpectedRoutes === true,
     save_route_screenshots: input.save_route_screenshots === true || input.saveRouteScreenshots === true,
@@ -752,6 +754,29 @@ function textOrderMatch(texts: string[], expectedTexts: string[]) {
     startAt = index + 1;
   }
   return { matched: true, positions };
+}
+
+function summarizeRouteInventory(viewport: string, inventory: Record<string, unknown>) {
+  const directRoutes = Array.isArray(inventory.direct_routes) ? inventory.direct_routes : [];
+  const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
+  const sourceLinkCount = numberValue(inventory.source_link_count) ?? numberValue(inventory.home_game_link_count) ?? null;
+  const sourceUniqueLinkCount = numberValue(inventory.source_unique_link_count) ?? numberValue(inventory.home_unique_game_link_count) ?? null;
+  const duplicateSourceLinks = Array.isArray(inventory.duplicate_source_link_paths)
+    ? inventory.duplicate_source_link_paths.map((path) => String(path))
+    : [];
+  const duplicateSourceLinkCount = numberValue(inventory.duplicate_source_link_count)
+    ?? (sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null);
+  const failures = Array.isArray(inventory.failures) ? inventory.failures : [];
+  return {
+    viewport,
+    source_link_count: sourceLinkCount,
+    source_unique_link_count: sourceUniqueLinkCount,
+    duplicate_source_link_count: duplicateSourceLinkCount,
+    duplicate_source_links: duplicateSourceLinks,
+    direct_route_count: directRoutes.length,
+    clickthrough_count: clickthroughs.length,
+    failure_count: failures.length,
+  };
 }
 
 function matchText(sample: string, check: RiddleProofProfileCheck) {
@@ -951,6 +976,9 @@ function assessCheckFromEvidence(
         message: "No route inventory evidence was captured.",
       };
     }
+    const viewportSummaries = inventories.map((item) => (
+      summarizeRouteInventory(item.viewport, item.inventory as Record<string, unknown>)
+    ));
     const failures = inventories.flatMap((item) => (
       Array.isArray(item.inventory?.failures)
         ? item.inventory.failures.map((failure) => toJsonValue({ viewport: item.viewport, failure }))
@@ -981,6 +1009,8 @@ function assessCheckFromEvidence(
         homepage_unique_link_count: numberValue(first?.home_unique_game_link_count) ?? sourceUniqueLinkCount,
         direct_route_count: directRoutes.length,
         clickthrough_count: clickthroughs.length,
+        viewport_count: inventories.length,
+        viewports: viewportSummaries.map((summary) => toJsonValue(summary)),
         failures,
       },
       message: failures.length ? `Route inventory failed with ${failures.length} issue(s).` : undefined,
@@ -1354,6 +1384,25 @@ function textOrderMatch(texts, expectedTexts) {
   }
   return { matched: true, positions };
 }
+function summarizeRouteInventory(viewport, inventory) {
+  const directRoutes = Array.isArray(inventory.direct_routes) ? inventory.direct_routes : [];
+  const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
+  const sourceLinkCount = typeof inventory.source_link_count === "number" ? inventory.source_link_count : typeof inventory.home_game_link_count === "number" ? inventory.home_game_link_count : null;
+  const sourceUniqueLinkCount = typeof inventory.source_unique_link_count === "number" ? inventory.source_unique_link_count : typeof inventory.home_unique_game_link_count === "number" ? inventory.home_unique_game_link_count : null;
+  const duplicateSourceLinks = Array.isArray(inventory.duplicate_source_link_paths) ? inventory.duplicate_source_link_paths.map((path) => String(path)) : [];
+  const duplicateSourceLinkCount = typeof inventory.duplicate_source_link_count === "number" ? inventory.duplicate_source_link_count : sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null;
+  const failures = Array.isArray(inventory.failures) ? inventory.failures : [];
+  return {
+    viewport,
+    source_link_count: sourceLinkCount,
+    source_unique_link_count: sourceUniqueLinkCount,
+    duplicate_source_link_count: duplicateSourceLinkCount,
+    duplicate_source_links: duplicateSourceLinks,
+    direct_route_count: directRoutes.length,
+    clickthrough_count: clickthroughs.length,
+    failure_count: failures.length,
+  };
+}
 function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -1609,6 +1658,7 @@ function assessProfile(profile, evidence) {
         });
         continue;
       }
+      const viewportSummaries = inventories.map((item) => summarizeRouteInventory(item.viewport, item.inventory || {}));
       const failures = [];
       for (const item of inventories) {
         for (const failure of Array.isArray(item.inventory.failures) ? item.inventory.failures : []) {
@@ -1637,6 +1687,8 @@ function assessProfile(profile, evidence) {
           homepage_unique_link_count: typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : sourceUniqueLinkCount,
           direct_route_count: directRoutes.length,
           clickthrough_count: clickthroughs.length,
+          viewport_count: inventories.length,
+          viewports: viewportSummaries,
           failures,
         },
         message: failures.length ? "Route inventory failed with " + failures.length + " issue(s)." : undefined,
@@ -2396,7 +2448,7 @@ async function captureViewport(viewport) {
   let routeInventory;
   const routeInventoryCheck = (profile.checks || []).find((check) => check.type === "route_inventory");
   const firstViewportName = (profile.target.viewports || [])[0] && (profile.target.viewports || [])[0].name;
-  if (routeInventoryCheck && (!firstViewportName || viewport.name === firstViewportName)) {
+  if (routeInventoryCheck && (routeInventoryCheck.run_all_viewports || !firstViewportName || viewport.name === firstViewportName)) {
     try {
       routeInventory = await collectRouteInventory(routeInventoryCheck, viewport);
     } catch (error) {

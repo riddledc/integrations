@@ -729,6 +729,7 @@ const routeInventoryProfile = normalizeRiddleProofProfile({
       source_selector: ".game-table",
       route_path_prefix: "/games/",
       timeout_ms: 12000,
+      run_all_viewports: true,
     },
     { type: "no_fatal_console_errors" },
   ],
@@ -737,6 +738,7 @@ assert.equal(routeInventoryProfile.checks[0].type, "route_inventory");
 assert.equal(routeInventoryProfile.checks[0].expected_routes.length, 2);
 assert.equal(routeInventoryProfile.checks[0].run_direct_routes, true);
 assert.equal(routeInventoryProfile.checks[0].run_clickthroughs, true);
+assert.equal(routeInventoryProfile.checks[0].run_all_viewports, true);
 assert.equal(routeInventoryProfile.checks[0].link_selector, "a[href^='/games/']");
 assert.equal(routeInventoryProfile.checks[0].source_selector, ".game-table");
 assert.throws(() => normalizeRiddleProofProfile({
@@ -753,6 +755,8 @@ assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"
 assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
 assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));
 assert.ok(routeInventoryProfileScript.includes("duplicate_source_link_count"));
+assert.ok(routeInventoryProfileScript.includes("routeInventoryCheck.run_all_viewports"));
+assert.ok(routeInventoryProfileScript.includes("viewport_count: inventories.length"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
@@ -885,6 +889,40 @@ assert.deepEqual(routeInventoryCheck.evidence.duplicate_source_links, []);
 assert.equal(routeInventoryCheck.evidence.duplicates_allowed, false);
 assert.equal(routeInventoryCheck.evidence.direct_route_count, 2);
 assert.equal(routeInventoryCheck.evidence.clickthrough_count, 2);
+assert.equal(routeInventoryCheck.evidence.viewport_count, 1);
+assert.deepEqual(routeInventoryCheck.evidence.viewports[0], {
+  viewport: "desktop",
+  source_link_count: 2,
+  source_unique_link_count: 2,
+  duplicate_source_link_count: 0,
+  duplicate_source_links: [],
+  direct_route_count: 2,
+  clickthrough_count: 2,
+  failure_count: 0,
+});
+const multiViewportRouteInventoryAssessment = assessRiddleProofProfileEvidence(routeInventoryProfile, {
+  ...routeInventoryEvidence,
+  viewports: [
+    routeInventoryEvidence.viewports[0],
+    {
+      ...routeInventoryEvidence.viewports[0],
+      name: "phone",
+      width: 390,
+      height: 844,
+      route_inventory: {
+        ...routeInventoryEvidence.viewports[0].route_inventory,
+        viewport: "phone",
+        failures: [],
+      },
+      screenshot_label: "homepage-route-inventory-phone",
+    },
+  ],
+  dom_summary: { viewport_count: 2 },
+});
+const multiViewportRouteInventoryCheck = multiViewportRouteInventoryAssessment.checks.find((check) => check.type === "route_inventory");
+assert.equal(multiViewportRouteInventoryAssessment.status, "passed");
+assert.equal(multiViewportRouteInventoryCheck.evidence.viewport_count, 2);
+assert.deepEqual(multiViewportRouteInventoryCheck.evidence.viewports.map((viewport) => viewport.viewport), ["desktop", "phone"]);
 const selectorTextOrderEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "table-order-profile",
