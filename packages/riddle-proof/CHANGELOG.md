@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.57
+
+### Patch Changes
+
+- 8a5aa78: Add profile setup assertions for numeric window proof-state values.
+
 ## 0.7.56
 
 ### Patch Changes
