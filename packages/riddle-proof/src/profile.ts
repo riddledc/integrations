@@ -16,7 +16,11 @@ export const RIDDLE_PROOF_PROFILE_STATUSES = [
 export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "route_loaded",
   "selector_visible",
+  "selector_absent",
   "selector_count_at_least",
+  "selector_count_equals",
+  "selector_count_equal",
+  "selector_count_eq",
   "selector_text_order",
   "frame_text_visible",
   "frame_no_horizontal_overflow",
@@ -139,6 +143,7 @@ export interface RiddleProofProfileCheck {
   allowed_page_error_texts?: string[];
   allowed_page_error_patterns?: string[];
   min_count?: number;
+  expected_count?: number;
   max_overflow_px?: number;
   timeout_ms?: number;
   run_direct_routes?: boolean;
@@ -655,7 +660,16 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (!isSupportedCheckType(type)) {
     throw new Error(`checks[${index}].type ${type} is not supported. Supported checks: ${RIDDLE_PROOF_PROFILE_CHECK_TYPES.join(", ")}`);
   }
-  if ((type === "selector_visible" || type === "selector_count_at_least") && !stringValue(input.selector)) {
+  if (
+    (
+      type === "selector_visible"
+      || type === "selector_absent"
+      || type === "selector_count_at_least"
+      || type === "selector_count_equals"
+      || type === "selector_count_equal"
+      || type === "selector_count_eq"
+    ) && !stringValue(input.selector)
+  ) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
   }
   if ((type === "frame_text_visible" || type === "frame_no_horizontal_overflow") && !stringValue(input.selector)) {
@@ -669,6 +683,16 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   }
   if (type === "selector_count_at_least" && numberValue(input.min_count) === undefined) {
     throw new Error(`checks[${index}] selector_count_at_least requires min_count.`);
+  }
+  const expectedCount = numberValue(input.expected_count) ?? numberValue(input.expectedCount) ?? numberValue(input.count);
+  if (
+    (
+      type === "selector_count_equals"
+      || type === "selector_count_equal"
+      || type === "selector_count_eq"
+    ) && expectedCount === undefined
+  ) {
+    throw new Error(`checks[${index}] ${type} requires expected_count.`);
   }
   const expectedTexts = normalizeExpectedTexts(input.expected_texts ?? input.expectedTexts, index);
   if (type === "selector_text_order") {
@@ -701,6 +725,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     allowed_page_error_texts: normalizeStringList(input.allowed_page_error_texts ?? input.allowedPageErrorTexts ?? input.allow_page_error_texts ?? input.allowPageErrorTexts, `checks[${index}] allowed_page_error_texts`),
     allowed_page_error_patterns: normalizeStringList(input.allowed_page_error_patterns ?? input.allowedPageErrorPatterns ?? input.allow_page_error_patterns ?? input.allowPageErrorPatterns, `checks[${index}] allowed_page_error_patterns`),
     min_count: numberValue(input.min_count),
+    expected_count: expectedCount,
     max_overflow_px: numberValue(input.max_overflow_px),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     run_direct_routes: input.run_direct_routes === false || input.runDirectRoutes === false ? false : true,
@@ -1011,6 +1036,21 @@ function assessCheckFromEvidence(
     };
   }
 
+  if (check.type === "selector_absent") {
+    const key = selectorKey(check);
+    const failed = viewports.filter((viewport) => (viewport.selectors?.[key]?.count || 0) > 0);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        counts: viewports.map((viewport) => viewport.selectors?.[key]?.count || 0),
+      },
+      message: failed.length ? `Selector ${key} was present in ${failed.length} viewport(s).` : undefined,
+    };
+  }
+
   if (check.type === "selector_count_at_least") {
     const key = selectorKey(check);
     const minCount = check.min_count ?? 1;
@@ -1025,6 +1065,23 @@ function assessCheckFromEvidence(
         counts: viewports.map((viewport) => viewport.selectors?.[key]?.count || 0),
       },
       message: failed.length ? `Selector ${key} count was below ${minCount} in ${failed.length} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "selector_count_equals" || check.type === "selector_count_equal" || check.type === "selector_count_eq") {
+    const key = selectorKey(check);
+    const expectedCount = check.expected_count ?? 0;
+    const failed = viewports.filter((viewport) => (viewport.selectors?.[key]?.count || 0) !== expectedCount);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        expected_count: expectedCount,
+        counts: viewports.map((viewport) => viewport.selectors?.[key]?.count || 0),
+      },
+      message: failed.length ? `Selector ${key} count did not equal ${expectedCount} in ${failed.length} viewport(s).` : undefined,
     };
   }
 
@@ -1839,6 +1896,18 @@ function assessProfile(profile, evidence) {
       });
       continue;
     }
+    if (check.type === "selector_absent") {
+      const selector = check.selector || "";
+      const failed = viewports.filter((viewport) => viewport.selectors && viewport.selectors[selector] && viewport.selectors[selector].count > 0);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: { selector, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
+        message: failed.length ? "Selector " + selector + " was present in " + failed.length + " viewport(s)." : undefined,
+      });
+      continue;
+    }
     if (check.type === "selector_count_at_least") {
       const selector = check.selector || "";
       const minCount = check.min_count == null ? 1 : check.min_count;
@@ -1849,6 +1918,19 @@ function assessProfile(profile, evidence) {
         status: failed.length ? "failed" : "passed",
         evidence: { selector, min_count: minCount, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
         message: failed.length ? "Selector " + selector + " count was below " + minCount + " in " + failed.length + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "selector_count_equals" || check.type === "selector_count_equal" || check.type === "selector_count_eq") {
+      const selector = check.selector || "";
+      const expectedCount = check.expected_count == null ? 0 : check.expected_count;
+      const failed = viewports.filter((viewport) => (viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) !== expectedCount);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: { selector, expected_count: expectedCount, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
+        message: failed.length ? "Selector " + selector + " count did not equal " + expectedCount + " in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -2869,7 +2951,16 @@ async function captureViewport(viewport) {
   const text_sequences = {};
   const text_matches = {};
   for (const check of profile.checks || []) {
-    if ((check.type === "selector_visible" || check.type === "selector_count_at_least") && check.selector) {
+    if (
+      (
+        check.type === "selector_visible"
+        || check.type === "selector_absent"
+        || check.type === "selector_count_at_least"
+        || check.type === "selector_count_equals"
+        || check.type === "selector_count_equal"
+        || check.type === "selector_count_eq"
+      ) && check.selector
+    ) {
       selectors[check.selector] = await selectorStats(check.selector);
     }
     if (check.type === "selector_text_order" && check.selector) {

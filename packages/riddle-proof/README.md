@@ -145,6 +145,8 @@ or as a stronger proof base before a change loop.
   "checks": [
     { "type": "route_loaded", "expected_path": "/pricing" },
     { "type": "selector_visible", "selector": "[data-testid='pricing-cards']" },
+    { "type": "selector_absent", "selector": "[data-testid='loading-spinner']" },
+    { "type": "selector_count_equals", "selector": "[data-testid='pricing-card']", "expected_count": 3 },
     { "type": "text_visible", "text": "Start building" },
     { "type": "no_mobile_horizontal_overflow" },
     { "type": "no_fatal_console_errors" }
@@ -251,6 +253,21 @@ Allowed console events and page errors are still counted in check evidence, but
 only unallowed `error` / `assert` console events and page errors fail the check.
 Use `allowed_page_error_patterns`, `allowed_console_texts`, or
 `allowed_page_error_texts` for narrower matching when needed.
+
+Use `selector_absent` when a forbidden element must not render, and
+`selector_count_equals` / `selector_count_equal` / `selector_count_eq` when a
+profile needs an exact DOM count rather than a lower bound:
+
+```json
+[
+  { "type": "selector_absent", "selector": ".game-player-root iframe" },
+  { "type": "selector_count_equals", "selector": ".pricing-card", "expected_count": 3 }
+]
+```
+
+These checks are useful for audit/no-diff profiles where the product should
+show a fallback state and avoid rendering stale loaders, duplicate rows, or
+missing-resource iframes.
 
 Use `selector_text_order` when a table, list, or card group must show visible
 items in a specific order after setup actions such as sorting or filtering:
