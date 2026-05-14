@@ -256,7 +256,11 @@ proof state must expose a terminal flag. `assert_selector_count` accepts
 `local_storage` and `session_storage` accept a `key` plus string `value` or
 JSON `json` / `value_json`, and can reload the page with `reload: true`.
 `clear_storage` clears `local`, `session`, or `both` browser storage scopes,
-defaults to `both`, and can also reload with `reload: true`.
+defaults to `both`, and can also reload with `reload: true`. Any setup action
+can include `repeat` / `repeat_count` / `times` from 1 to 100; each repetition
+is recorded with `repeat_index` and `repeat_count`, and `after_ms` runs after
+each repetition. Use it for bounded game proof helpers, retry controls, or other
+workflows where one declarative action needs to advance the app several times.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
