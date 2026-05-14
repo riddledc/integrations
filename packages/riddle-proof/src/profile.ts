@@ -2049,6 +2049,13 @@ function inventoryRouteUrl(expectedPath) {
 function inventorySlugFromPath(path) {
   return String(path || "route").split("/").filter(Boolean).pop()?.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "route";
 }
+function inventorySlugFromViewport(viewport) {
+  return String(viewport && viewport.name || "viewport").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "viewport";
+}
+function inventoryScreenshotLabel(check, viewport, phase, path) {
+  const viewportPart = check.run_all_viewports ? "-" + inventorySlugFromViewport(viewport) : "";
+  return profileSlug + viewportPart + "-" + phase + "-" + inventorySlugFromPath(path);
+}
 function inventoryCheckTimeout(check) {
   const timeout = Number(check && check.timeout_ms);
   return Number.isFinite(timeout) && timeout > 0 ? timeout : 45000;
@@ -2257,7 +2264,7 @@ async function collectRouteInventory(check, viewport) {
       const snapshot = await collectInventoryRouteSnapshot(expectedRoute, "direct", check, error);
       directRoutes.push(snapshot);
       if (check.save_route_screenshots) {
-        await saveScreenshot(profileSlug + "-direct-" + inventorySlugFromPath(expectedRoute.path)).catch(() => {});
+        await saveScreenshot(inventoryScreenshotLabel(check, viewport, "direct", expectedRoute.path)).catch(() => {});
       }
       if (error) failures.push({ code: "direct_route_unhealthy", name: expectedRoute.name || null, path: expectedRoute.path, error });
       else if (snapshot.actual_app_path !== normalizeRoutePath(expectedRoute.path)) failures.push({ code: "direct_route_wrong_path", name: expectedRoute.name || null, path: expectedRoute.path, actual_app_path: snapshot.actual_app_path });
@@ -2291,7 +2298,7 @@ async function collectRouteInventory(check, viewport) {
       result.snapshot = await collectInventoryRouteSnapshot(expectedRoute, "clickthrough", check, result.error || "");
       clickthroughs.push(result);
       if (check.save_route_screenshots) {
-        await saveScreenshot(profileSlug + "-click-" + inventorySlugFromPath(expectedRoute.path)).catch(() => {});
+        await saveScreenshot(inventoryScreenshotLabel(check, viewport, "click", expectedRoute.path)).catch(() => {});
       }
       if (result.error && result.error !== "source_link_not_found") failures.push({ code: "source_link_clickthrough_unhealthy", name: expectedRoute.name || null, path: expectedRoute.path, error: result.error });
       else if (result.snapshot.actual_app_path !== normalizeRoutePath(expectedRoute.path)) failures.push({ code: "source_link_clickthrough_wrong_path", name: expectedRoute.name || null, path: expectedRoute.path, actual_app_path: result.snapshot.actual_app_path });

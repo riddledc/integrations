@@ -247,7 +247,9 @@ Set `run_direct_routes: false`, `run_clickthroughs: false`,
 `save_route_screenshots: true` when a profile needs a narrower or more
 artifact-heavy audit. `require_unique_routes: false` is useful when a navigation
 surface intentionally links to the same route from multiple cards or anchors,
-while still proving the unique expected route set.
+while still proving the unique expected route set. When `run_all_viewports` and
+`save_route_screenshots` are both enabled, route screenshot artifact labels
+include the viewport name so desktop and mobile route artifacts remain distinct.
 
 The result uses `riddle-proof.profile-result.v1` and separates product failures
 from weak proof and environment blockers:

@@ -757,6 +757,8 @@ assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));
 assert.ok(routeInventoryProfileScript.includes("duplicate_source_link_count"));
 assert.ok(routeInventoryProfileScript.includes("routeInventoryCheck.run_all_viewports"));
 assert.ok(routeInventoryProfileScript.includes("viewport_count: inventories.length"));
+assert.ok(routeInventoryProfileScript.includes("inventoryScreenshotLabel"));
+assert.ok(routeInventoryProfileScript.includes('check.run_all_viewports ? "-" + inventorySlugFromViewport(viewport) : ""'));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
