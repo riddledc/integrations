@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.63
+
+### Patch Changes
+
+- 7c145f7: Improve compact profile setup summaries for long click sequences by recording click totals and truncation state while sampling the first and last clicked targets.
+
 ## 0.7.62
 
 ### Patch Changes
