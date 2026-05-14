@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.37
+
+### Patch Changes
+
+- e46b9cb: Include viewport names in saved route-inventory screenshot labels when all-viewport sweeps save per-route artifacts.
+
 ## 0.7.36
 
 ### Patch Changes
