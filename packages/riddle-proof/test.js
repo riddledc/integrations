@@ -1270,21 +1270,39 @@ const frameProfile = normalizeRiddleProofProfile({
     { type: "route_loaded", expected_path: "/play/hot-path" },
     { type: "selector_count_at_least", selector: ".game-player-root iframe", min_count: 1 },
     { type: "frame_text_visible", selector: ".game-player-root iframe", text: "Hot Path" },
+    { type: "frame_url_equals", selector: ".game-player-root iframe", expected_url: "https://example.com/embed/hot-path" },
+    { type: "frame_url_matches", selector: ".game-player-root iframe", pattern: "/embed/hot-path$" },
     { type: "frame_no_horizontal_overflow", selector: ".game-player-root iframe", max_overflow_px: 1 },
   ],
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_text_visible"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_url_equals"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_url_matches"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_no_horizontal_overflow"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("url_search_param_equals"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("url_search_param_absent"));
 assert.equal(frameProfile.checks[2].type, "frame_text_visible");
-assert.equal(frameProfile.checks[3].max_overflow_px, 1);
+assert.equal(frameProfile.checks[3].type, "frame_url_equals");
+assert.equal(frameProfile.checks[3].expected_url, "https://example.com/embed/hot-path");
+assert.equal(frameProfile.checks[5].max_overflow_px, 1);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-frame-profile",
   target: { route: "/play/hot-path" },
   checks: [{ type: "frame_text_visible", selector: ".game-player-root iframe" }],
 }, { url: "https://example.com" }), /frame_text_visible requires text or pattern/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-frame-url-equals-profile",
+  target: { route: "/play/hot-path" },
+  checks: [{ type: "frame_url_equals", selector: ".game-player-root iframe" }],
+}, { url: "https://example.com" }), /frame_url_equals requires expected_url/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-frame-url-matches-profile",
+  target: { route: "/play/hot-path" },
+  checks: [{ type: "frame_url_matches", selector: ".game-player-root iframe" }],
+}, { url: "https://example.com" }), /frame_url_matches requires pattern/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-frame-overflow-profile",
@@ -1295,6 +1313,8 @@ const frameProfileScript = buildRiddleProofProfileScript(frameProfile);
 assert.ok(frameProfileScript.includes("frameEvidence"));
 assert.ok(frameProfileScript.includes("contentFrame"));
 assert.ok(frameProfileScript.includes("frames[check.selector]"));
+assert.ok(frameProfileScript.includes("frame_url_equals"));
+assert.ok(frameProfileScript.includes("frame_url_matches"));
 assert.ok(frameProfileScript.includes("frame_no_horizontal_overflow"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
@@ -1670,6 +1690,8 @@ const frameProfileEvidence = {
 const frameProfileAssessment = assessRiddleProofProfileEvidence(frameProfile, frameProfileEvidence);
 assert.equal(frameProfileAssessment.status, "passed");
 assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_text_visible").status, "passed");
+assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_url_equals").status, "passed");
+assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_url_matches").status, "passed");
 assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_no_horizontal_overflow").status, "passed");
 const overflowingFrameProfileAssessment = assessRiddleProofProfileEvidence(frameProfile, {
   ...frameProfileEvidence,
@@ -1720,6 +1742,24 @@ const missingFrameTextAssessment = assessRiddleProofProfileEvidence(frameProfile
 });
 assert.equal(missingFrameTextAssessment.status, "product_regression");
 assert.equal(missingFrameTextAssessment.checks.find((check) => check.type === "frame_text_visible").status, "failed");
+const wrongFrameUrlAssessment = assessRiddleProofProfileEvidence(frameProfile, {
+  ...frameProfileEvidence,
+  viewports: [{
+    ...frameProfileEvidence.viewports[0],
+    frames: {
+      ".game-player-root iframe": {
+        ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"],
+        frames: [{
+          ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"].frames[0],
+          url: "https://example.com/embed/other-game",
+        }],
+      },
+    },
+  }, frameProfileEvidence.viewports[1]],
+});
+assert.equal(wrongFrameUrlAssessment.status, "product_regression");
+assert.equal(wrongFrameUrlAssessment.checks.find((check) => check.type === "frame_url_equals").status, "failed");
+assert.equal(wrongFrameUrlAssessment.checks.find((check) => check.type === "frame_url_matches").status, "failed");
 const duplicateRouteInventoryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "docs-route-inventory",
