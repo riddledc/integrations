@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.39
+
+### Patch Changes
+
+- 75e5bd1: Allow profile no-fatal-console checks to declare expected console and page-error patterns.
+
 ## 0.7.38
 
 ### Patch Changes
