@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.45
+
+### Patch Changes
+
+- accb429: Add profile network mock request-body evidence and opt-in body match constraints.
+
 ## 0.7.44
 
 ### Patch Changes
