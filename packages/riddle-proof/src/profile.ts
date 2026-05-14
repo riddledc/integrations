@@ -472,6 +472,94 @@ function toJsonValue(value: unknown): JsonValue {
   return String(value);
 }
 
+function compactProfileSetupSummaryText(value: unknown, limit = 160): string | undefined {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (!text) return undefined;
+  if (text.length <= limit) return text;
+  return `${text.slice(0, Math.max(0, limit - 15)).trimEnd()}... (${text.length} chars)`;
+}
+
+function profileSetupResultAction(value: Record<string, JsonValue>): string {
+  const action = value.action ?? value.type;
+  return typeof action === "string" && action ? action : "unknown";
+}
+
+function profileSetupFrameUrls(viewport: RiddleProofProfileViewportEvidence): string[] {
+  const urls: string[] = [];
+  const frames = viewport.frames || {};
+  for (const container of Object.values(frames)) {
+    if (!isRecord(container) || !Array.isArray(container.frames)) continue;
+    for (const frame of container.frames) {
+      if (!isRecord(frame)) continue;
+      const url = typeof frame.url === "string" ? frame.url : undefined;
+      if (url && !urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls.slice(0, 10);
+}
+
+function profileSetupActionCounts(results: Array<Record<string, JsonValue>>): Record<string, JsonValue> {
+  const counts: Record<string, number> = {};
+  for (const result of results) {
+    const action = profileSetupResultAction(result);
+    counts[action] = (counts[action] || 0) + 1;
+  }
+  return toJsonValue(counts) as Record<string, JsonValue>;
+}
+
+function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], actionCount?: number): JsonValue {
+  return toJsonValue({
+    viewport_count: viewports.length,
+    action_count: actionCount ?? null,
+    viewports: viewports.map((viewport) => {
+      const results = viewport.setup_action_results || [];
+      const failed = results.filter((result) => result.ok === false);
+      const clicked = results
+        .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
+        .map((result) => ({
+          ordinal: result.ordinal ?? null,
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          text: compactProfileSetupSummaryText(result.text),
+        }))
+        .slice(0, 8);
+      const text_samples = results
+        .filter((result) => result.ok !== false && typeof result.text === "string" && (
+          profileSetupResultAction(result) === "assert_text_visible"
+          || profileSetupResultAction(result) === "assert_text_absent"
+          || profileSetupResultAction(result) === "wait_for_text"
+        ))
+        .map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          frame_selector: result.frame_selector ?? null,
+          text: compactProfileSetupSummaryText(result.text),
+        }))
+        .filter((item) => item.text)
+        .slice(-6);
+      return {
+        name: viewport.name,
+        ok: (actionCount === undefined ? results.length > 0 : results.length >= actionCount) && failed.length === 0,
+        result_count: results.length,
+        observed_path: viewport.route?.observed ?? null,
+        final_url: viewport.url ?? null,
+        action_counts: profileSetupActionCounts(results),
+        frame_action_count: results.filter((result) => result.frame_selector).length,
+        frame_urls: profileSetupFrameUrls(viewport),
+        clicked,
+        text_samples,
+        failed: failed.map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          reason: result.reason ?? result.error ?? null,
+        })),
+      };
+    }),
+  });
+}
+
 function normalizeName(value: unknown, fallback: string): string {
   const name = stringValue(value) || fallback;
   return name.replace(/\s+/g, " ").trim();
@@ -1803,6 +1891,7 @@ function assessSetupActionsFromEvidence(
           && (viewport.setup_action_results || []).every((result) => result.ok !== false),
         result_count: (viewport.setup_action_results || []).length,
       })),
+      setup_summary: profileSetupSummary(viewports, actionCount),
       failed,
     },
     message: failed.length ? `Setup actions failed in ${failed.length} viewport action(s).` : undefined,
@@ -2262,6 +2351,90 @@ function requiredNetworkMockHitCount(mock) {
   if (Array.isArray(mock.responses) && mock.responses.length) return mock.responses.length;
   return 1;
 }
+function compactProfileSetupSummaryText(value, limit) {
+  limit = limit || 160;
+  const text = typeof value === "string" ? value.replace(/\\s+/g, " ").trim() : "";
+  if (!text) return undefined;
+  if (text.length <= limit) return text;
+  return text.slice(0, Math.max(0, limit - 15)).trimEnd() + "... (" + text.length + " chars)";
+}
+function profileSetupResultAction(result) {
+  const action = result && (result.action || result.type);
+  return typeof action === "string" && action ? action : "unknown";
+}
+function profileSetupFrameUrls(viewport) {
+  const urls = [];
+  const frames = viewport && viewport.frames || {};
+  for (const container of Object.values(frames)) {
+    if (!container || typeof container !== "object" || Array.isArray(container) || !Array.isArray(container.frames)) continue;
+    for (const frame of container.frames) {
+      if (!frame || typeof frame !== "object" || Array.isArray(frame)) continue;
+      const url = typeof frame.url === "string" ? frame.url : null;
+      if (url && !urls.includes(url)) urls.push(url);
+    }
+  }
+  return urls.slice(0, 10);
+}
+function profileSetupActionCounts(results) {
+  const counts = {};
+  for (const result of results || []) {
+    const action = profileSetupResultAction(result);
+    counts[action] = (counts[action] || 0) + 1;
+  }
+  return counts;
+}
+function profileSetupSummary(viewports, actionCount) {
+  return {
+    viewport_count: (viewports || []).length,
+    action_count: actionCount ?? null,
+    viewports: (viewports || []).map((viewport) => {
+      const results = viewport.setup_action_results || [];
+      const failed = results.filter((result) => result && result.ok === false);
+      const clicked = results
+        .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
+        .map((result) => ({
+          ordinal: result.ordinal ?? null,
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          text: compactProfileSetupSummaryText(result.text),
+        }))
+        .slice(0, 8);
+      const textSamples = results
+        .filter((result) => result && result.ok !== false && typeof result.text === "string" && (
+          profileSetupResultAction(result) === "assert_text_visible"
+          || profileSetupResultAction(result) === "assert_text_absent"
+          || profileSetupResultAction(result) === "wait_for_text"
+        ))
+        .map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          frame_selector: result.frame_selector ?? null,
+          text: compactProfileSetupSummaryText(result.text),
+        }))
+        .filter((item) => item.text)
+        .slice(-6);
+      return {
+        name: viewport.name,
+        ok: (actionCount === undefined ? results.length > 0 : results.length >= actionCount) && failed.length === 0,
+        result_count: results.length,
+        observed_path: viewport.route && viewport.route.observed || null,
+        final_url: viewport.url || null,
+        action_counts: profileSetupActionCounts(results),
+        frame_action_count: results.filter((result) => result && result.frame_selector).length,
+        frame_urls: profileSetupFrameUrls(viewport),
+        clicked,
+        text_samples: textSamples,
+        failed: failed.map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          reason: result.reason || result.error || null,
+        })),
+      };
+    }),
+  };
+}
 function assessProfile(profile, evidence) {
   const checks = [];
   const viewports = evidence.viewports || [];
@@ -2366,6 +2539,7 @@ function assessProfile(profile, evidence) {
             && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false),
           result_count: (viewport.setup_action_results || []).length,
         })),
+        setup_summary: profileSetupSummary(viewports, actionCount),
         failed,
       },
       message: failed.length ? "Setup actions failed in " + failed.length + " viewport action(s)." : undefined,
