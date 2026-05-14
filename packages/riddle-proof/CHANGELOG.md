@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.51
+
+### Patch Changes
+
+- ee70b70: Add an opt-in `force` flag for profile click setup actions so profiles can click intentionally animated controls after matching the intended visible element.
+
 ## 0.7.50
 
 ### Patch Changes
