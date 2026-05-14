@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.58
+
+### Patch Changes
+
+- 555e675: Add a profile setup action for keyboard key presses.
+
 ## 0.7.57
 
 ### Patch Changes
