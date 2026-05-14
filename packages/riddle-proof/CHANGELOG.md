@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.47
+
+### Patch Changes
+
+- 0c8f97c: Support request-body assertions on sequenced profile network mock responses.
+
 ## 0.7.46
 
 ### Patch Changes
