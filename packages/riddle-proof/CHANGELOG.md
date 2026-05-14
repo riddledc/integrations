@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.36
+
+### Patch Changes
+
+- aefccd8: Add opt-in `route_inventory` multi-viewport sweeps with per-viewport source, direct-route, clickthrough, and failure-count evidence.
+
 ## 0.7.35
 
 ### Patch Changes
