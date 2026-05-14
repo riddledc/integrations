@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.42
+
+### Patch Changes
+
+- bfdffba: Add profile `selector_absent` and exact selector-count checks for audit profiles that need to prove forbidden elements or exact DOM counts.
+
 ## 0.7.41
 
 ### Patch Changes
