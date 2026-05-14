@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.43
+
+### Patch Changes
+
+- 107c6d7: Match profile expected-console allowlists against console event location URLs as well as message text.
+
 ## 0.7.42
 
 ### Patch Changes
