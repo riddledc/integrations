@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.59
+
+### Patch Changes
+
+- 9281ea1: Allow profile setup actions to target iframe contexts with `frame_selector`.
+
 ## 0.7.58
 
 ### Patch Changes
