@@ -223,6 +223,13 @@ cycle instead of reusing the final response, for example to repeat a fail-then-
 success pair across multiple viewports. Repeated sequences also record
 `sequence_cycle: true` after the first cycle.
 
+Set `capture_request_body: true` to include compact request-body evidence on
+mock hits. Add `request_body_contains` or `request_body_patterns` when the
+request body is part of the contract, such as proving that a save request
+references the build ID returned by a prior mocked build response. Body
+assertions use the full request body for matching and store only length plus a
+compact sample in the proof evidence.
+
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are

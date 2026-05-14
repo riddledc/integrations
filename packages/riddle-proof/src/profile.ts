@@ -102,6 +102,9 @@ export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetwork
   repeat_responses?: boolean;
   required_hit_count?: number;
   required?: boolean;
+  capture_request_body?: boolean;
+  request_body_contains?: string[];
+  request_body_patterns?: string[];
 }
 
 export interface RiddleProofProfileRouteInventoryRoute {
@@ -530,6 +533,21 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
   const payload = normalizeNetworkMockResponsePayload(input, `target.network_mocks[${index}]`);
   const responsesInput = input.responses ?? input.sequence;
   const responses = normalizeNetworkMockResponses(responsesInput, index, payload);
+  const requestBodyContains = normalizeStringList(
+    input.request_body_contains
+    ?? input.requestBodyContains
+    ?? input.body_contains
+    ?? input.bodyContains,
+    `target.network_mocks[${index}].request_body_contains`,
+  );
+  const requestBodyPatterns = normalizeStringList(
+    input.request_body_patterns
+    ?? input.requestBodyPatterns
+    ?? input.body_patterns
+    ?? input.bodyPatterns,
+    `target.network_mocks[${index}].request_body_patterns`,
+  );
+  validateRegexPatterns(requestBodyPatterns, `target.network_mocks[${index}].request_body_patterns`);
   const requiredHitCount = numberValue(
     input.required_hit_count
     ?? input.requiredHitCount
@@ -553,6 +571,12 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
       || input.cycleResponses === true,
     required_hit_count: requiredHitCount,
     required: input.required === false ? false : true,
+    capture_request_body: input.capture_request_body === true
+      || input.captureRequestBody === true
+      || Boolean(requestBodyContains?.length)
+      || Boolean(requestBodyPatterns?.length),
+    request_body_contains: requestBodyContains,
+    request_body_patterns: requestBodyPatterns,
   };
 }
 
@@ -652,6 +676,17 @@ function normalizeStringList(value: unknown, label: string): string[] | undefine
   const values = value.map((item) => String(item).replace(/\s+/g, " ").trim()).filter(Boolean);
   if (!values.length) throw new Error(`${label} must contain non-empty strings.`);
   return values;
+}
+
+function validateRegexPatterns(patterns: string[] | undefined, label: string): void {
+  for (const pattern of patterns || []) {
+    try {
+      new RegExp(pattern);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${label} contains invalid regex ${JSON.stringify(pattern)}: ${message}`);
+    }
+  }
 }
 
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
@@ -1425,6 +1460,17 @@ function assessNetworkMocksFromEvidence(
         reason: event.reason ?? event.error ?? "mock_failed",
       });
     }
+    if (event.request_body_matches === false) {
+      failed.push({
+        label: event.label ?? null,
+        url: event.url ?? null,
+        method: event.method ?? null,
+        reason: "request_body_mismatch",
+        request_body_failures: event.request_body_failures ?? [],
+        request_body_length: event.request_body_length ?? null,
+        request_body_sample: event.request_body_sample ?? null,
+      });
+    }
   }
   return {
     type: "network_mocks_succeeded",
@@ -1837,6 +1883,17 @@ function assessProfile(profile, evidence) {
           url: event.url || null,
           method: event.method || null,
           reason: event.reason || event.error || "mock_failed",
+        });
+      }
+      if (event && event.request_body_matches === false) {
+        failed.push({
+          label: event.label || null,
+          url: event.url || null,
+          method: event.method || null,
+          reason: "request_body_mismatch",
+          request_body_failures: event.request_body_failures || [],
+          request_body_length: event.request_body_length || null,
+          request_body_sample: event.request_body_sample || null,
         });
       }
     }
@@ -2288,6 +2345,52 @@ function compactSetupResultText(value) {
   if (text.length <= 500) return text;
   return text.slice(0, 500) + "... (" + text.length + " chars)";
 }
+function compactNetworkMockRequestBody(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= 1000) return text;
+  return text.slice(0, 1000) + "... (" + text.length + " chars)";
+}
+function networkMockStringList(value) {
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+function networkMockShouldCaptureRequestBody(mock) {
+  return mock && (
+    mock.capture_request_body === true
+    || networkMockStringList(mock.request_body_contains).length > 0
+    || networkMockStringList(mock.request_body_patterns).length > 0
+  );
+}
+function networkMockRequestBodyFailures(body, mock) {
+  const failures = [];
+  const rawBody = String(body || "");
+  const compactBody = compactNetworkMockRequestBody(rawBody);
+  for (const expected of networkMockStringList(mock.request_body_contains)) {
+    if (!rawBody.includes(expected) && !compactBody.includes(expected)) {
+      failures.push({
+        type: "request_body_missing_text",
+        text: String(expected).slice(0, 200),
+      });
+    }
+  }
+  for (const pattern of networkMockStringList(mock.request_body_patterns)) {
+    try {
+      const regex = new RegExp(pattern);
+      if (!regex.test(rawBody) && !regex.test(compactBody)) {
+        failures.push({
+          type: "request_body_pattern_not_matched",
+          pattern: String(pattern).slice(0, 200),
+        });
+      }
+    } catch (error) {
+      failures.push({
+        type: "request_body_invalid_pattern",
+        pattern: String(pattern).slice(0, 200),
+        error: String(error && error.message ? error.message : error).slice(0, 500),
+      });
+    }
+  }
+  return failures;
+}
 async function setupLocatorVisible(locator, index) {
   return await locator.nth(index).isVisible({ timeout: 1000 }).catch(() => false);
 }
@@ -2316,7 +2419,11 @@ async function registerNetworkMocks(mocks) {
           body = JSON.stringify(response.body_json);
           contentType = response.content_type || headers["content-type"] || headers["Content-Type"] || "application/json";
         }
-        networkMockEvents.push({
+        const shouldCaptureRequestBody = networkMockShouldCaptureRequestBody(mock);
+        const requestBody = shouldCaptureRequestBody && request.postData ? request.postData() || "" : "";
+        const requestBodyFailures = shouldCaptureRequestBody ? networkMockRequestBodyFailures(requestBody, mock) : [];
+        const status = response.status || mock.status || 200;
+        const event = {
           ok: true,
           label: mock.label,
           response_label: response.label || null,
@@ -2326,10 +2433,17 @@ async function registerNetworkMocks(mocks) {
           sequence_cycle: responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
           url: request.url(),
           method,
-          status: response.status || mock.status || 200,
-        });
+          status,
+        };
+        if (shouldCaptureRequestBody) {
+          event.request_body_matches = requestBodyFailures.length === 0;
+          event.request_body_failures = requestBodyFailures;
+          event.request_body_length = requestBody.length;
+          event.request_body_sample = compactNetworkMockRequestBody(requestBody);
+        }
+        networkMockEvents.push(event);
         await route.fulfill({
-          status: response.status || mock.status || 200,
+          status,
           headers,
           contentType,
           body,

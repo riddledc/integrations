@@ -622,6 +622,9 @@ const networkMockProfile = normalizeRiddleProofProfile({
         label: "save",
         url: "**/api/save",
         method: "POST",
+        capture_request_body: true,
+        request_body_contains: ["build-riddle-proof-v238"],
+        request_body_patterns: ["\\\"buildId\\\"\\s*:"],
         json: { gameId: "riddle-proof-mock" },
       },
       {
@@ -654,6 +657,9 @@ assert.equal(networkMockProfile.target.network_mocks.length, 3);
 assert.equal(networkMockProfile.target.network_mocks[0].required, true);
 assert.equal(networkMockProfile.target.network_mocks[0].content_type, "text/event-stream");
 assert.deepEqual(networkMockProfile.target.network_mocks[1].body_json, { gameId: "riddle-proof-mock" });
+assert.equal(networkMockProfile.target.network_mocks[1].capture_request_body, true);
+assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_contains, ["build-riddle-proof-v238"]);
+assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_patterns, ["\\\"buildId\\\"\\s*:"]);
 assert.equal(networkMockProfile.target.network_mocks[2].responses.length, 2);
 assert.equal(networkMockProfile.target.network_mocks[2].repeat_responses, true);
 assert.equal(networkMockProfile.target.network_mocks[2].required_hit_count, 4);
@@ -667,7 +673,69 @@ assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
 assert.ok(networkMockProfileScript.includes("response_index"));
 assert.ok(networkMockProfileScript.includes("sequence_reused"));
 assert.ok(networkMockProfileScript.includes("sequence_cycle"));
+assert.ok(networkMockProfileScript.includes("compactNetworkMockRequestBody"));
+assert.ok(networkMockProfileScript.includes("request_body_matches"));
+assert.ok(networkMockProfileScript.includes("request_body_sample"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+const networkMockMismatchResult = assessRiddleProofProfileEvidence(networkMockProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: networkMockProfile.name,
+  target_url: "https://example.com/create",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-14T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    url: "https://example.com/create",
+    route: {
+      requested: "https://example.com/create",
+      observed: "/create",
+      expected_path: "/create",
+      matched: true,
+      http_status: 200,
+    },
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  network_mocks: [
+    { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
+    {
+      ok: true,
+      label: "save",
+      url: "https://example.com/api/save",
+      method: "POST",
+      status: 200,
+      request_body_matches: false,
+      request_body_failures: [{ type: "request_body_missing_text", text: "build-riddle-proof-v238" }],
+      request_body_length: 2,
+      request_body_sample: "{}",
+    },
+    { ok: true, label: "build-retry", url: "https://example.com/api/build", method: "POST", status: 503 },
+    { ok: true, label: "build-retry", url: "https://example.com/api/build", method: "POST", status: 200 },
+    { ok: true, label: "build-retry", url: "https://example.com/api/build", method: "POST", status: 503 },
+    { ok: true, label: "build-retry", url: "https://example.com/api/build", method: "POST", status: 200 },
+  ],
+});
+const networkMockMismatchCheck = networkMockMismatchResult.checks.find((check) => check.type === "network_mocks_succeeded");
+assert.equal(networkMockMismatchResult.status, "product_regression");
+assert.equal(networkMockMismatchCheck.status, "failed");
+assert.equal(networkMockMismatchCheck.evidence.failed[0].reason, "request_body_mismatch");
+assert.equal(networkMockMismatchCheck.evidence.failed[0].request_body_sample, "{}");
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "invalid-network-mock-pattern",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "save",
+      url: "**/api/save",
+      request_body_patterns: ["["],
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /request_body_patterns contains invalid regex/);
 const consoleAllowedProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "expected-negative-console-profile",
