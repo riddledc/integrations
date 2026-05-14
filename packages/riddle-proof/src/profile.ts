@@ -18,6 +18,8 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_visible",
   "selector_count_at_least",
   "selector_text_order",
+  "frame_text_visible",
+  "frame_no_horizontal_overflow",
   "text_visible",
   "text_absent",
   "route_inventory",
@@ -188,6 +190,7 @@ export interface RiddleProofProfileViewportEvidence {
   bounds_overflow_px?: number;
   overflow_offenders?: RiddleProofProfileBoundsOffender[];
   selectors?: Record<string, { count: number; visible_count: number }>;
+  frames?: Record<string, Record<string, JsonValue>>;
   text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
   route_inventory?: Record<string, JsonValue>;
@@ -584,6 +587,12 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if ((type === "selector_visible" || type === "selector_count_at_least") && !stringValue(input.selector)) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
   }
+  if ((type === "frame_text_visible" || type === "frame_no_horizontal_overflow") && !stringValue(input.selector)) {
+    throw new Error(`checks[${index}] ${type} requires selector.`);
+  }
+  if (type === "frame_text_visible" && !stringValue(input.text) && !stringValue(input.pattern)) {
+    throw new Error(`checks[${index}] frame_text_visible requires text or pattern.`);
+  }
   if ((type === "text_visible" || type === "text_absent") && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`checks[${index}] ${type} requires text or pattern.`);
   }
@@ -754,6 +763,24 @@ function textOrderMatch(texts: string[], expectedTexts: string[]) {
     startAt = index + 1;
   }
   return { matched: true, positions };
+}
+
+function frameEvidenceForSelector(viewport: RiddleProofProfileViewportEvidence, selector: string): Record<string, unknown>[] {
+  const container = viewport.frames?.[selector];
+  if (!isRecord(container)) return [];
+  const frames: unknown[] = Array.isArray(container.frames) ? container.frames : [];
+  return frames.filter((frame): frame is Record<string, unknown> => isRecord(frame));
+}
+
+function frameTextSample(frame: Record<string, unknown>): string {
+  const parts = [
+    frame.title,
+    frame.text_sample,
+    frame.body_text_sample,
+    frame.body_text,
+    frame.text,
+  ];
+  return parts.map((part) => String(part || "")).filter(Boolean).join(" ");
 }
 
 function summarizeRouteInventory(viewport: string, inventory: Record<string, unknown>) {
@@ -937,6 +964,71 @@ function assessCheckFromEvidence(
         viewports: results.map((result) => toJsonValue(result)),
       },
       message: failed ? `Selector ${key} text order failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "frame_text_visible") {
+    const key = selectorKey(check);
+    const results = viewports.map((viewport) => {
+      const frames = frameEvidenceForSelector(viewport, key);
+      const matches = frames
+        .map((frame, index) => ({ index, frame, matched: matchText(frameTextSample(frame), check) }))
+        .filter((item) => item.matched);
+      return {
+        viewport: viewport.name,
+        frame_count: frames.length,
+        matched_count: matches.length,
+        matched: matches.length > 0,
+        urls: frames.map((frame) => String(frame.url || "")).filter(Boolean).slice(0, 10),
+        samples: matches.map((item) => frameTextSample(item.frame).replace(/\s+/g, " ").trim().slice(0, 240)).slice(0, 3),
+      };
+    });
+    const failed = results.filter((result) => !result.matched).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        text: check.text || null,
+        pattern: check.pattern || null,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Frame selector ${key} did not contain expected text in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "frame_no_horizontal_overflow") {
+    const key = selectorKey(check);
+    const maxOverflow = check.max_overflow_px ?? 4;
+    const results = viewports.map((viewport) => {
+      const frames = frameEvidenceForSelector(viewport, key);
+      const frameOverflows = frames.map((frame, index) => ({
+        index,
+        url: String(frame.url || ""),
+        overflow_px: horizontalBoundsOverflowPx(frame),
+        offender_count: boundsOffendersForEvidence(frame).length,
+      }));
+      const maxFrameOverflow = frameOverflows.reduce((max, frame) => Math.max(max, frame.overflow_px), 0);
+      return {
+        viewport: viewport.name,
+        frame_count: frames.length,
+        max_overflow_px: roundPixels(maxFrameOverflow),
+        failed_frame_count: frameOverflows.filter((frame) => frame.overflow_px > maxOverflow).length,
+        frames: frameOverflows.map((frame) => toJsonValue(frame)),
+      };
+    });
+    const failed = results.filter((result) => result.frame_count < 1 || result.failed_frame_count > 0).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        max_overflow_px: maxOverflow,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Frame selector ${key} overflow exceeded ${maxOverflow}px or was missing in ${failed} viewport(s).` : undefined,
     };
   }
 
@@ -1384,6 +1476,21 @@ function textOrderMatch(texts, expectedTexts) {
   }
   return { matched: true, positions };
 }
+function frameEvidenceForSelector(viewport, selector) {
+  const container = viewport.frames && viewport.frames[selector || ""];
+  if (!container || typeof container !== "object" || Array.isArray(container)) return [];
+  const frames = Array.isArray(container.frames) ? container.frames : [];
+  return frames.filter((frame) => frame && typeof frame === "object" && !Array.isArray(frame));
+}
+function frameTextSample(frame) {
+  return [
+    frame && frame.title,
+    frame && frame.text_sample,
+    frame && frame.body_text_sample,
+    frame && frame.body_text,
+    frame && frame.text,
+  ].map((part) => String(part || "")).filter(Boolean).join(" ");
+}
 function summarizeRouteInventory(viewport, inventory) {
   const directRoutes = Array.isArray(inventory.direct_routes) ? inventory.direct_routes : [];
   const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
@@ -1627,6 +1734,62 @@ function assessProfile(profile, evidence) {
         status: failed ? "failed" : "passed",
         evidence: { selector, expected_texts: expectedTexts, viewports: results },
         message: failed ? "Selector " + selector + " text order failed in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "frame_text_visible") {
+      const selector = check.selector || "";
+      const results = viewports.map((viewport) => {
+        const frames = frameEvidenceForSelector(viewport, selector);
+        const matches = frames
+          .map((frame, index) => ({ index, frame, matched: textMatches(frameTextSample(frame), check) }))
+          .filter((item) => item.matched);
+        return {
+          viewport: viewport.name,
+          frame_count: frames.length,
+          matched_count: matches.length,
+          matched: matches.length > 0,
+          urls: frames.map((frame) => String(frame.url || "")).filter(Boolean).slice(0, 10),
+          samples: matches.map((item) => frameTextSample(item.frame).replace(/\s+/g, " ").trim().slice(0, 240)).slice(0, 3),
+        };
+      });
+      const failed = results.filter((result) => !result.matched).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: { selector, text: check.text || null, pattern: check.pattern || null, viewports: results },
+        message: failed ? "Frame selector " + selector + " did not contain expected text in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "frame_no_horizontal_overflow") {
+      const selector = check.selector || "";
+      const maxOverflow = check.max_overflow_px == null ? 4 : check.max_overflow_px;
+      const results = viewports.map((viewport) => {
+        const frames = frameEvidenceForSelector(viewport, selector);
+        const frameOverflows = frames.map((frame, index) => ({
+          index,
+          url: String(frame.url || ""),
+          overflow_px: horizontalBoundsOverflowPx(frame),
+          offender_count: boundsOffendersForEvidence(frame).length,
+        }));
+        const maxFrameOverflow = frameOverflows.reduce((max, frame) => Math.max(max, frame.overflow_px), 0);
+        return {
+          viewport: viewport.name,
+          frame_count: frames.length,
+          max_overflow_px: roundPixels(maxFrameOverflow),
+          failed_frame_count: frameOverflows.filter((frame) => frame.overflow_px > maxOverflow).length,
+          frames: frameOverflows,
+        };
+      });
+      const failed = results.filter((result) => result.frame_count < 1 || result.failed_frame_count > 0).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: { selector, max_overflow_px: maxOverflow, viewports: results },
+        message: failed ? "Frame selector " + selector + " overflow exceeded " + maxOverflow + "px or was missing in " + failed + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -2027,6 +2190,108 @@ async function selectorTextSequence(selector) {
       visible_texts: rows.filter((row) => row.visible).map((row) => row.text).filter(Boolean).slice(0, 40),
     };
   }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
+}
+async function frameEvidence(selector) {
+  const result = { selector, count: 0, frame_count: 0, frames: [], errors: [] };
+  let handles = [];
+  try {
+    const locator = page.locator(selector);
+    result.count = await locator.count();
+    handles = await locator.elementHandles();
+  } catch (error) {
+    result.errors.push(String(error && error.message ? error.message : error).slice(0, 500));
+    return result;
+  }
+  for (let index = 0; index < handles.length; index += 1) {
+    const handle = handles[index];
+    try {
+      const frame = typeof handle.contentFrame === "function" ? await handle.contentFrame() : null;
+      if (!frame) {
+        result.frames.push({ index, attached: false, error: "content_frame_unavailable" });
+        continue;
+      }
+      const snapshot = await frame.evaluate(() => {
+        const body = document.body;
+        const documentElement = document.documentElement;
+        const text = (body ? body.innerText : "").replace(/\s+/g, " ").trim();
+        const clientWidth = documentElement ? documentElement.clientWidth : window.innerWidth;
+        const clientHeight = documentElement ? documentElement.clientHeight : window.innerHeight;
+        const scrollWidth = documentElement ? documentElement.scrollWidth : 0;
+        const viewportWidth = clientWidth || window.innerWidth;
+        const overflowOffenders = [];
+        function isContainedByHorizontalScroller(element) {
+          let current = element.parentElement;
+          while (current && current !== body && current !== documentElement) {
+            const style = window.getComputedStyle(current);
+            const overflowX = style.overflowX || style.overflow || "";
+            if ((overflowX === "auto" || overflowX === "scroll") && current.scrollWidth > current.clientWidth + 1) {
+              const currentRect = current.getBoundingClientRect();
+              const contained = currentRect.left >= -0.5 && currentRect.right <= viewportWidth + 0.5;
+              if (contained) return true;
+            }
+            current = current.parentElement;
+          }
+          return false;
+        }
+        for (const element of Array.from(body ? body.querySelectorAll("*") : [])) {
+          const rect = element.getBoundingClientRect();
+          if (!rect || rect.width < 1 || rect.height < 1) continue;
+          const style = window.getComputedStyle(element);
+          if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
+          const leftOverflow = Math.max(0, -rect.left);
+          const rightOverflow = Math.max(0, rect.right - viewportWidth);
+          const overflow = Math.max(leftOverflow, rightOverflow);
+          if (overflow <= 0.5) continue;
+          if (isContainedByHorizontalScroller(element)) continue;
+          const tag = element.tagName ? element.tagName.toLowerCase() : "element";
+          const id = element.id ? "#" + element.id : "";
+          const className = typeof element.className === "string"
+            ? element.className.trim().split(/\s+/).filter(Boolean).slice(0, 2).join(".")
+            : "";
+          overflowOffenders.push({
+            selector: tag + id + (className ? "." + className : ""),
+            tag,
+            text: (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+            overflow,
+            left_overflow_px: leftOverflow,
+            right_overflow_px: rightOverflow,
+            viewport_width: viewportWidth,
+            rect: {
+              left: rect.left,
+              right: rect.right,
+              width: rect.width,
+            },
+          });
+        }
+        overflowOffenders.sort((a, b) => b.overflow - a.overflow);
+        const boundsOverflowPx = Math.max(
+          0,
+          scrollWidth - (clientWidth || viewportWidth),
+          ...overflowOffenders.map((offender) => offender.overflow),
+        );
+        return {
+          url: location.href,
+          title: document.title,
+          text_length: text.length,
+          text_sample: text.slice(0, 8000),
+          body_text_sample: text.slice(0, 8000),
+          viewport_width: viewportWidth,
+          viewport_height: clientHeight || window.innerHeight,
+          scroll_width: scrollWidth,
+          client_width: clientWidth,
+          overflow_px: Math.max(0, scrollWidth - (clientWidth || viewportWidth)),
+          bounds_overflow_px: Math.round(boundsOverflowPx * 100) / 100,
+          overflow_offender_count: overflowOffenders.length,
+          overflow_offenders: overflowOffenders.slice(0, 10),
+        };
+      });
+      result.frames.push({ index, attached: true, ...snapshot });
+    } catch (error) {
+      result.frames.push({ index, attached: false, error: String(error && error.message ? error.message : error).slice(0, 1000) });
+    }
+  }
+  result.frame_count = result.frames.filter((frame) => frame && frame.attached !== false && !frame.error).length;
+  return result;
 }
 function inventoryAppPathFromUrl(urlLike) {
   const url = new URL(String(urlLike), targetUrl);
@@ -2432,6 +2697,7 @@ async function captureViewport(viewport) {
     evaluation_error: String(error && error.message ? error.message : error).slice(0, 1000),
   }));
   const selectors = {};
+  const frames = {};
   const text_sequences = {};
   const text_matches = {};
   for (const check of profile.checks || []) {
@@ -2444,6 +2710,10 @@ async function captureViewport(viewport) {
     }
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
       text_matches[textKey(check)] = textMatches(dom.body_text || dom.body_text_sample || "", check);
+    }
+    if ((check.type === "frame_text_visible" || check.type === "frame_no_horizontal_overflow") && check.selector) {
+      selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
+      frames[check.selector] = frames[check.selector] || await frameEvidence(check.selector);
     }
   }
   const screenshotLabel = profileSlug + "-" + viewport.name;
@@ -2505,6 +2775,7 @@ async function captureViewport(viewport) {
     bounds_overflow_px: dom.bounds_overflow_px,
     overflow_offenders: dom.overflow_offenders || [],
     selectors,
+    frames,
     text_sequences,
     text_matches,
     route_inventory: routeInventory,
@@ -2540,6 +2811,20 @@ function buildProfileEvidence(currentViewports) {
       overflow_px: currentViewports.map((viewport) => viewport.overflow_px),
       bounds_overflow_px: currentViewports.map((viewport) => viewport.bounds_overflow_px),
       overflow_offender_counts: currentViewports.map((viewport) => (viewport.overflow_offenders || []).length),
+      frames: currentViewports
+        .filter((viewport) => viewport.frames)
+        .map((viewport) => ({
+          viewport: viewport.name,
+          selectors: Object.entries(viewport.frames || {}).map(([selector, frameSet]) => ({
+            selector,
+            count: frameSet && frameSet.count,
+            frame_count: frameSet && frameSet.frame_count,
+            max_bounds_overflow_px: Math.max(
+              0,
+              ...((frameSet && Array.isArray(frameSet.frames) ? frameSet.frames : [])).map((frame) => horizontalBoundsOverflowPx(frame)),
+            ),
+          })),
+        })),
       route_inventory: currentViewports
         .filter((viewport) => viewport.route_inventory)
         .map((viewport) => ({

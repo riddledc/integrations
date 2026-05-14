@@ -51,6 +51,7 @@ import {
   createRiddleApiClient,
   deployRiddleStaticPreview,
   parseRiddleViewport,
+  RIDDLE_PROOF_PROFILE_CHECK_TYPES,
   RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES,
 } from "./dist/index.js";
 import {
@@ -783,6 +784,44 @@ assert.throws(() => normalizeRiddleProofProfile({
 const selectorTextOrderScript = buildRiddleProofProfileScript(selectorTextOrderProfile);
 assert.ok(selectorTextOrderScript.includes("selectorTextSequence"));
 assert.ok(selectorTextOrderScript.includes("text_sequences"));
+const frameProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "community-frame-profile",
+  target: {
+    route: "/play/hot-path",
+    viewports: [
+      { name: "phone", width: 390, height: 844 },
+      { name: "desktop", width: 1280, height: 900 },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/play/hot-path" },
+    { type: "selector_count_at_least", selector: ".game-player-root iframe", min_count: 1 },
+    { type: "frame_text_visible", selector: ".game-player-root iframe", text: "Hot Path" },
+    { type: "frame_no_horizontal_overflow", selector: ".game-player-root iframe", max_overflow_px: 1 },
+  ],
+}, { url: "https://example.com" });
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_text_visible"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("frame_no_horizontal_overflow"));
+assert.equal(frameProfile.checks[2].type, "frame_text_visible");
+assert.equal(frameProfile.checks[3].max_overflow_px, 1);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-frame-profile",
+  target: { route: "/play/hot-path" },
+  checks: [{ type: "frame_text_visible", selector: ".game-player-root iframe" }],
+}, { url: "https://example.com" }), /frame_text_visible requires text or pattern/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-frame-overflow-profile",
+  target: { route: "/play/hot-path" },
+  checks: [{ type: "frame_no_horizontal_overflow" }],
+}, { url: "https://example.com" }), /frame_no_horizontal_overflow requires selector/);
+const frameProfileScript = buildRiddleProofProfileScript(frameProfile);
+assert.ok(frameProfileScript.includes("frameEvidence"));
+assert.ok(frameProfileScript.includes("contentFrame"));
+assert.ok(frameProfileScript.includes("frames[check.selector]"));
+assert.ok(frameProfileScript.includes("frame_no_horizontal_overflow"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -976,6 +1015,131 @@ const failedSelectorTextOrderAssessment = assessRiddleProofProfileEvidence(selec
 });
 assert.equal(failedSelectorTextOrderAssessment.status, "product_regression");
 assert.equal(failedSelectorTextOrderAssessment.checks.find((check) => check.type === "selector_text_order").status, "failed");
+const frameProfileEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "community-frame-profile",
+  target_url: "https://example.com/play/hot-path",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-14T00:00:00.000Z",
+  viewports: [
+    {
+      name: "phone",
+      width: 390,
+      height: 844,
+      route: { requested: "https://example.com/play/hot-path", observed: "/play/hot-path", expected_path: "/play/hot-path", matched: true, http_status: 200 },
+      body_text_sample: "Hot Path",
+      overflow_px: 0,
+      selectors: { ".game-player-root iframe": { count: 1, visible_count: 1 } },
+      frames: {
+        ".game-player-root iframe": {
+          selector: ".game-player-root iframe",
+          count: 1,
+          frame_count: 1,
+          frames: [{
+            index: 0,
+            attached: true,
+            url: "https://example.com/embed/hot-path",
+            title: "Hot Path",
+            text_sample: "Hot Path Score 0",
+            scroll_width: 390,
+            client_width: 390,
+            overflow_px: 0,
+            bounds_overflow_px: 0,
+            overflow_offenders: [],
+          }],
+        },
+      },
+      text_matches: {},
+      screenshot_label: "community-frame-profile-phone",
+    },
+    {
+      name: "desktop",
+      width: 1280,
+      height: 900,
+      route: { requested: "https://example.com/play/hot-path", observed: "/play/hot-path", expected_path: "/play/hot-path", matched: true, http_status: 200 },
+      body_text_sample: "Hot Path",
+      overflow_px: 0,
+      selectors: { ".game-player-root iframe": { count: 1, visible_count: 1 } },
+      frames: {
+        ".game-player-root iframe": {
+          selector: ".game-player-root iframe",
+          count: 1,
+          frame_count: 1,
+          frames: [{
+            index: 0,
+            attached: true,
+            url: "https://example.com/embed/hot-path",
+            title: "Hot Path",
+            text_sample: "Hot Path Score 0",
+            scroll_width: 800,
+            client_width: 800,
+            overflow_px: 0,
+            bounds_overflow_px: 0,
+            overflow_offenders: [],
+          }],
+        },
+      },
+      text_matches: {},
+      screenshot_label: "community-frame-profile-desktop",
+    },
+  ],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 2 },
+};
+const frameProfileAssessment = assessRiddleProofProfileEvidence(frameProfile, frameProfileEvidence);
+assert.equal(frameProfileAssessment.status, "passed");
+assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_text_visible").status, "passed");
+assert.equal(frameProfileAssessment.checks.find((check) => check.type === "frame_no_horizontal_overflow").status, "passed");
+const overflowingFrameProfileAssessment = assessRiddleProofProfileEvidence(frameProfile, {
+  ...frameProfileEvidence,
+  viewports: [
+    {
+      ...frameProfileEvidence.viewports[0],
+      frames: {
+        ".game-player-root iframe": {
+          ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"],
+          frames: [{
+            ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"].frames[0],
+            overflow_px: 0,
+            bounds_overflow_px: 132,
+            overflow_offenders: [{
+              selector: "canvas",
+              overflow: 132,
+              left_overflow_px: 0,
+              right_overflow_px: 132,
+              viewport_width: 390,
+              rect: { left: 0, right: 522, width: 522 },
+            }],
+          }],
+        },
+      },
+    },
+    frameProfileEvidence.viewports[1],
+  ],
+});
+const overflowingFrameCheck = overflowingFrameProfileAssessment.checks.find((check) => check.type === "frame_no_horizontal_overflow");
+assert.equal(overflowingFrameProfileAssessment.status, "product_regression");
+assert.equal(overflowingFrameCheck.status, "failed");
+assert.equal(overflowingFrameCheck.evidence.viewports[0].max_overflow_px, 132);
+const missingFrameTextAssessment = assessRiddleProofProfileEvidence(frameProfile, {
+  ...frameProfileEvidence,
+  viewports: [{
+    ...frameProfileEvidence.viewports[0],
+    frames: {
+      ".game-player-root iframe": {
+        ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"],
+        frames: [{
+          ...frameProfileEvidence.viewports[0].frames[".game-player-root iframe"].frames[0],
+          title: "Other Game",
+          text_sample: "Other Game Score 0",
+        }],
+      },
+    },
+  }, frameProfileEvidence.viewports[1]],
+});
+assert.equal(missingFrameTextAssessment.status, "product_regression");
+assert.equal(missingFrameTextAssessment.checks.find((check) => check.type === "frame_text_visible").status, "failed");
 const duplicateRouteInventoryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "docs-route-inventory",
