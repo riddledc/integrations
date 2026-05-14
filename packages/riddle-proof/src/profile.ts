@@ -17,6 +17,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "route_loaded",
   "selector_visible",
   "selector_count_at_least",
+  "selector_text_order",
   "text_visible",
   "text_absent",
   "route_inventory",
@@ -113,6 +114,7 @@ export interface RiddleProofProfileCheck {
   expected_path?: string;
   expected_routes?: RiddleProofProfileRouteInventoryRoute[];
   selector?: string;
+  expected_texts?: string[];
   link_selector?: string;
   source_selector?: string;
   route_path_prefix?: string;
@@ -185,6 +187,7 @@ export interface RiddleProofProfileViewportEvidence {
   bounds_overflow_px?: number;
   overflow_offenders?: RiddleProofProfileBoundsOffender[];
   selectors?: Record<string, { count: number; visible_count: number }>;
+  text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
   route_inventory?: Record<string, JsonValue>;
   setup_action_results?: Array<Record<string, JsonValue>>;
@@ -560,6 +563,16 @@ function normalizeRouteInventoryRoutes(value: unknown, index: number): RiddlePro
   return routes;
 }
 
+function normalizeExpectedTexts(value: unknown, index: number): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`checks[${index}] selector_text_order expected_texts must be a non-empty array.`);
+  }
+  const texts = value.map((item) => String(item).replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!texts.length) throw new Error(`checks[${index}] selector_text_order expected_texts must contain non-empty strings.`);
+  return texts;
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -576,6 +589,11 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "selector_count_at_least" && numberValue(input.min_count) === undefined) {
     throw new Error(`checks[${index}] selector_count_at_least requires min_count.`);
   }
+  const expectedTexts = normalizeExpectedTexts(input.expected_texts ?? input.expectedTexts, index);
+  if (type === "selector_text_order") {
+    if (!stringValue(input.selector)) throw new Error(`checks[${index}] selector_text_order requires selector.`);
+    if (!expectedTexts?.length) throw new Error(`checks[${index}] selector_text_order requires expected_texts.`);
+  }
   const expectedRoutes = normalizeRouteInventoryRoutes(input.expected_routes ?? input.expectedRoutes, index);
   if (type === "route_inventory" && !expectedRoutes?.length) {
     throw new Error(`checks[${index}] route_inventory requires expected_routes.`);
@@ -586,6 +604,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     expected_path: stringValue(input.expected_path),
     expected_routes: expectedRoutes,
     selector: stringValue(input.selector),
+    expected_texts: expectedTexts,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
     route_path_prefix: stringValue(input.route_path_prefix) || stringValue(input.routePathPrefix),
@@ -709,6 +728,30 @@ function selectorKey(check: RiddleProofProfileCheck) {
 
 function textKey(check: RiddleProofProfileCheck) {
   return check.pattern ? `pattern:${check.pattern}/${check.flags || ""}` : `text:${check.text || ""}`;
+}
+
+function textSequenceForCheck(viewport: RiddleProofProfileViewportEvidence, check: RiddleProofProfileCheck): string[] {
+  const key = selectorKey(check);
+  const sequence = viewport.text_sequences?.[key];
+  if (isRecord(sequence)) {
+    const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
+    const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
+    const candidates = visibleTexts.length ? visibleTexts : texts;
+    return candidates.map((text) => String(text).replace(/\s+/g, " ").trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function textOrderMatch(texts: string[], expectedTexts: string[]) {
+  const positions: number[] = [];
+  let startAt = 0;
+  for (const expected of expectedTexts) {
+    const index = texts.findIndex((text, offset) => offset >= startAt && text.includes(expected));
+    if (index < 0) return { matched: false, positions };
+    positions.push(index);
+    startAt = index + 1;
+  }
+  return { matched: true, positions };
 }
 
 function matchText(sample: string, check: RiddleProofProfileCheck) {
@@ -842,6 +885,33 @@ function assessCheckFromEvidence(
         counts: viewports.map((viewport) => viewport.selectors?.[key]?.count || 0),
       },
       message: failed.length ? `Selector ${key} count was below ${minCount} in ${failed.length} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "selector_text_order") {
+    const key = selectorKey(check);
+    const expectedTexts = check.expected_texts || [];
+    const results = viewports.map((viewport) => {
+      const texts = textSequenceForCheck(viewport, check);
+      const match = textOrderMatch(texts, expectedTexts);
+      return {
+        viewport: viewport.name,
+        matched: match.matched,
+        matched_positions: match.positions,
+        visible_texts: texts.slice(0, 20),
+      };
+    });
+    const failed = results.filter((result) => !result.matched).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        expected_texts: expectedTexts,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Selector ${key} text order failed in ${failed} viewport(s).` : undefined,
     };
   }
 
@@ -1262,6 +1332,28 @@ function textMatches(sample, check) {
   }
   return String(sample || "").includes(check.text || "");
 }
+function textSequenceForCheck(viewport, check) {
+  const key = check.selector || "";
+  const sequence = viewport.text_sequences && viewport.text_sequences[key];
+  if (sequence && typeof sequence === "object") {
+    const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
+    const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
+    const candidates = visibleTexts.length ? visibleTexts : texts;
+    return candidates.map((text) => String(text || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+  }
+  return [];
+}
+function textOrderMatch(texts, expectedTexts) {
+  const positions = [];
+  let startAt = 0;
+  for (const expected of expectedTexts || []) {
+    const index = texts.findIndex((text, offset) => offset >= startAt && text.includes(expected));
+    if (index < 0) return { matched: false, positions };
+    positions.push(index);
+    startAt = index + 1;
+  }
+  return { matched: true, positions };
+}
 function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -1463,6 +1555,29 @@ function assessProfile(profile, evidence) {
         status: failed.length ? "failed" : "passed",
         evidence: { selector, min_count: minCount, counts: viewports.map((viewport) => viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0) },
         message: failed.length ? "Selector " + selector + " count was below " + minCount + " in " + failed.length + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "selector_text_order") {
+      const selector = check.selector || "";
+      const expectedTexts = check.expected_texts || [];
+      const results = viewports.map((viewport) => {
+        const texts = textSequenceForCheck(viewport, check);
+        const match = textOrderMatch(texts, expectedTexts);
+        return {
+          viewport: viewport.name,
+          matched: match.matched,
+          matched_positions: match.positions,
+          visible_texts: texts.slice(0, 20),
+        };
+      });
+      const failed = results.filter((result) => !result.matched).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: { selector, expected_texts: expectedTexts, viewports: results },
+        message: failed ? "Selector " + selector + " text order failed in " + failed + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -1839,6 +1954,27 @@ async function selectorStats(selector) {
     };
     return { count: elements.length, visible_count: elements.filter(isVisible).length };
   }).catch((error) => ({ count: 0, visible_count: 0, error: String(error && error.message ? error.message : error).slice(0, 500) }));
+}
+async function selectorTextSequence(selector) {
+  return page.locator(selector).evaluateAll((elements) => {
+    const compact = (value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style && style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+    };
+    const rows = elements.map((element, index) => ({
+      index,
+      text: compact(element.innerText || element.textContent || ""),
+      visible: isVisible(element),
+    }));
+    return {
+      count: rows.length,
+      visible_count: rows.filter((row) => row.visible).length,
+      texts: rows.map((row) => row.text).filter(Boolean).slice(0, 40),
+      visible_texts: rows.filter((row) => row.visible).map((row) => row.text).filter(Boolean).slice(0, 40),
+    };
+  }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
 }
 function inventoryAppPathFromUrl(urlLike) {
   const url = new URL(String(urlLike), targetUrl);
@@ -2237,10 +2373,15 @@ async function captureViewport(viewport) {
     evaluation_error: String(error && error.message ? error.message : error).slice(0, 1000),
   }));
   const selectors = {};
+  const text_sequences = {};
   const text_matches = {};
   for (const check of profile.checks || []) {
     if ((check.type === "selector_visible" || check.type === "selector_count_at_least") && check.selector) {
       selectors[check.selector] = await selectorStats(check.selector);
+    }
+    if (check.type === "selector_text_order" && check.selector) {
+      selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
+      text_sequences[check.selector] = await selectorTextSequence(check.selector);
     }
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
       text_matches[textKey(check)] = textMatches(dom.body_text || dom.body_text_sample || "", check);
@@ -2305,6 +2446,7 @@ async function captureViewport(viewport) {
     bounds_overflow_px: dom.bounds_overflow_px,
     overflow_offenders: dom.overflow_offenders || [],
     selectors,
+    text_sequences,
     text_matches,
     route_inventory: routeInventory,
     setup_action_results: setupActionResults,

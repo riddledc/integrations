@@ -202,6 +202,21 @@ clears `local`, `session`, or `both` browser storage scopes, defaults to
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
 still overrides the profile value for one-off runs.
 
+Use `selector_text_order` when a table, list, or card group must show visible
+items in a specific order after setup actions such as sorting or filtering:
+
+```json
+{
+  "type": "selector_text_order",
+  "selector": ".game-table tbody tr",
+  "expected_texts": ["AAA Alpha", "MMM Middle", "ZZZ Omega"]
+}
+```
+
+The check records the visible text sequence for the selector and passes when
+the expected texts appear in that order as a subsequence. This is less brittle
+than matching one large body-text regex when only row or card order matters.
+
 Use the `route_inventory` check for source-page route coverage audits where a
 navigation surface must expose a known set of routes and each route must load
 both directly and through real link clicks:
