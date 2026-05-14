@@ -229,7 +229,10 @@ mock hits. Add `request_body_contains` / `request_body_patterns` or
 is part of the contract, such as proving that a save request references the
 current build ID returned by a prior mocked build response and not a stale one.
 Body assertions use the full request body for matching and store only length
-plus a compact sample in the proof evidence.
+plus a compact sample in the proof evidence. For sequenced mocks, the same
+request-body fields may also be placed on individual `responses[]` entries when
+each step has a different request contract, such as a fail-then-success retry
+where the second request must carry newer state.
 
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
