@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.52
+
+### Patch Changes
+
+- ca4df18: Add profile `assert_window_value` setup actions for exact JSON-safe assertions against browser state paths exposed by canvas apps and other proof hooks.
+
 ## 0.7.51
 
 ### Patch Changes
