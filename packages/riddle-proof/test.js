@@ -753,6 +753,30 @@ assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"
 assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
 assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));
 assert.ok(routeInventoryProfileScript.includes("duplicate_source_link_count"));
+const selectorTextOrderProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "table-order-profile",
+  target: {
+    route: "/",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "selector_text_order",
+    selector: ".game-table tbody tr",
+    expected_texts: ["AAA Alpha", "MMM Middle", "ZZZ Omega"],
+  }],
+}, { url: "https://example.com" });
+assert.equal(selectorTextOrderProfile.checks[0].type, "selector_text_order");
+assert.deepEqual(selectorTextOrderProfile.checks[0].expected_texts, ["AAA Alpha", "MMM Middle", "ZZZ Omega"]);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-table-order-profile",
+  target: { route: "/" },
+  checks: [{ type: "selector_text_order", selector: ".rows", expected_texts: [] }],
+}, { url: "https://example.com" }), /expected_texts must be a non-empty array/);
+const selectorTextOrderScript = buildRiddleProofProfileScript(selectorTextOrderProfile);
+assert.ok(selectorTextOrderScript.includes("selectorTextSequence"));
+assert.ok(selectorTextOrderScript.includes("text_sequences"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -861,6 +885,57 @@ assert.deepEqual(routeInventoryCheck.evidence.duplicate_source_links, []);
 assert.equal(routeInventoryCheck.evidence.duplicates_allowed, false);
 assert.equal(routeInventoryCheck.evidence.direct_route_count, 2);
 assert.equal(routeInventoryCheck.evidence.clickthrough_count, 2);
+const selectorTextOrderEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "table-order-profile",
+  target_url: "https://example.com/",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-14T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/", observed: "/", expected_path: "/", matched: true, http_status: 200 },
+    body_text_sample: "AAA Alpha MMM Middle ZZZ Omega",
+    overflow_px: 0,
+    selectors: { ".game-table tbody tr": { count: 3, visible_count: 3 } },
+    text_sequences: {
+      ".game-table tbody tr": {
+        count: 3,
+        visible_count: 3,
+        texts: ["AAA Alpha row", "MMM Middle row", "ZZZ Omega row"],
+        visible_texts: ["AAA Alpha row", "MMM Middle row", "ZZZ Omega row"],
+      },
+    },
+    text_matches: {},
+    screenshot_label: "table-order-profile-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+};
+const selectorTextOrderAssessment = assessRiddleProofProfileEvidence(selectorTextOrderProfile, selectorTextOrderEvidence);
+const selectorTextOrderCheck = selectorTextOrderAssessment.checks.find((check) => check.type === "selector_text_order");
+assert.equal(selectorTextOrderAssessment.status, "passed");
+assert.equal(selectorTextOrderCheck.status, "passed");
+assert.deepEqual(selectorTextOrderCheck.evidence.expected_texts, ["AAA Alpha", "MMM Middle", "ZZZ Omega"]);
+assert.deepEqual(selectorTextOrderCheck.evidence.viewports[0].matched_positions, [0, 1, 2]);
+const failedSelectorTextOrderAssessment = assessRiddleProofProfileEvidence(selectorTextOrderProfile, {
+  ...selectorTextOrderEvidence,
+  viewports: [{
+    ...selectorTextOrderEvidence.viewports[0],
+    text_sequences: {
+      ".game-table tbody tr": {
+        count: 3,
+        visible_count: 3,
+        texts: ["ZZZ Omega row", "MMM Middle row", "AAA Alpha row"],
+        visible_texts: ["ZZZ Omega row", "MMM Middle row", "AAA Alpha row"],
+      },
+    },
+  }],
+});
+assert.equal(failedSelectorTextOrderAssessment.status, "product_regression");
+assert.equal(failedSelectorTextOrderAssessment.checks.find((check) => check.type === "selector_text_order").status, "failed");
 const duplicateRouteInventoryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "docs-route-inventory",
