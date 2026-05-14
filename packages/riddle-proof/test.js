@@ -524,7 +524,7 @@ const profile = normalizeRiddleProofProfile({
       { name: "desktop", width: 1440, height: 1000 },
     ],
     setup_actions: [
-      { type: "click", selector: "[data-testid='open-pricing']", after_ms: 50 },
+      { type: "click", selector: "[data-testid='open-pricing']", force: true, after_ms: 50 },
       { type: "wait-for-text", selector: "body", text: "Start building", timeout_ms: 1500 },
     ],
   },
@@ -585,6 +585,7 @@ const riddleAliasTimeoutProfile = normalizeRiddleProofProfile({
 }, { url: "https://example.com" });
 assert.equal(riddleAliasTimeoutProfile.target.timeout_sec, 95);
 assert.equal(profile.target.setup_actions.length, 2);
+assert.equal(profile.target.setup_actions[0].force, true);
 assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
@@ -604,6 +605,7 @@ assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
 assert.ok(profileScript.includes('check.type === "selector_absent"'));
 assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
+assert.ok(profileScript.includes("force: true"));
 const networkMockProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "builder-network-mocks",
@@ -1026,7 +1028,8 @@ assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));
 assert.ok(formSetupProfileScript.includes('type === "clear_storage"'));
 assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_input_value"'));
-assert.ok(formSetupProfileScript.includes("click({ timeout, noWaitAfter: true })"));
+assert.ok(formSetupProfileScript.includes("click(clickOptions)"));
+assert.ok(formSetupProfileScript.includes("noWaitAfter: true"));
 assert.ok(formSetupProfileScript.includes("value_length"));
 assert.ok(!formSetupProfileScript.includes("Object.prototype"));
 const routeInventoryProfile = normalizeRiddleProofProfile({
