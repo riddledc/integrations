@@ -507,6 +507,13 @@ function profileSetupActionCounts(results: Array<Record<string, JsonValue>>): Re
   return toJsonValue(counts) as Record<string, JsonValue>;
 }
 
+function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
+  if (items.length <= limit) return items;
+  const firstCount = Math.floor(limit / 2);
+  const lastCount = limit - firstCount;
+  return [...items.slice(0, firstCount), ...items.slice(-lastCount)];
+}
+
 function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], actionCount?: number): JsonValue {
   return toJsonValue({
     viewport_count: viewports.length,
@@ -514,15 +521,15 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
     viewports: viewports.map((viewport) => {
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result.ok === false);
-      const clicked = results
+      const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => ({
           ordinal: result.ordinal ?? null,
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           text: compactProfileSetupSummaryText(result.text),
-        }))
-        .slice(0, 8);
+        }));
+      const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
       const text_samples = results
         .filter((result) => result.ok !== false && typeof result.text === "string" && (
           profileSetupResultAction(result) === "assert_text_visible"
@@ -546,6 +553,8 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        clicked_total: clickedItems.length,
+        clicked_truncated: clickedItems.length > clicked.length,
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -2383,6 +2392,12 @@ function profileSetupActionCounts(results) {
   }
   return counts;
 }
+function sampleProfileSetupSummaryItems(items, limit) {
+  if ((items || []).length <= limit) return items || [];
+  const firstCount = Math.floor(limit / 2);
+  const lastCount = limit - firstCount;
+  return [...items.slice(0, firstCount), ...items.slice(-lastCount)];
+}
 function profileSetupSummary(viewports, actionCount) {
   return {
     viewport_count: (viewports || []).length,
@@ -2390,15 +2405,15 @@ function profileSetupSummary(viewports, actionCount) {
     viewports: (viewports || []).map((viewport) => {
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result && result.ok === false);
-      const clicked = results
+      const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => ({
           ordinal: result.ordinal ?? null,
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           text: compactProfileSetupSummaryText(result.text),
-        }))
-        .slice(0, 8);
+        }));
+      const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
       const textSamples = results
         .filter((result) => result && result.ok !== false && typeof result.text === "string" && (
           profileSetupResultAction(result) === "assert_text_visible"
@@ -2422,6 +2437,8 @@ function profileSetupSummary(viewports, actionCount) {
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result && result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        clicked_total: clickedItems.length,
+        clicked_truncated: clickedItems.length > clicked.length,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({

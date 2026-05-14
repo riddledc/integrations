@@ -288,7 +288,10 @@ Profiles with setup actions also include a compact
 `setup_actions_succeeded.evidence.setup_summary`. The summary groups each
 viewport's final route, final URL, action counts, clicked targets, iframe URLs,
 compact text samples, and failures so setup-heavy clickthrough or iframe proofs
-can be reviewed without reading every raw setup-action result.
+can be reviewed without reading every raw setup-action result. Long click
+sequences include `clicked_total` and `clicked_truncated`; the compact `clicked`
+list keeps the first and last clicked targets so later route switches and reset
+actions stay visible.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
