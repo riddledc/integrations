@@ -869,6 +869,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_selector_coun
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
 const formSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-form-storage-actions",
@@ -920,6 +921,50 @@ assert.equal(formSetupProfile.target.setup_actions[2].value, "proof-session");
 assert.equal(formSetupProfile.target.setup_actions[3].value, "Build a tiny maze");
 assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
+const windowCallSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-window-call-action",
+  target: {
+    route: "/games/gem-mine",
+    setup_actions: [
+      {
+        type: "window-call",
+        path: "__gemMineProofForceEscape",
+        args: [true, { source: "profile" }],
+        expectReturn: true,
+        after_ms: 250,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/gem-mine" }],
+}, { url: "https://example.com" });
+assert.equal(windowCallSetupProfile.target.setup_actions[0].type, "window_call");
+assert.equal(windowCallSetupProfile.target.setup_actions[0].path, "__gemMineProofForceEscape");
+assert.deepEqual(windowCallSetupProfile.target.setup_actions[0].args, [true, { source: "profile" }]);
+assert.equal(windowCallSetupProfile.target.setup_actions[0].expect_return, true);
+const windowCallSetupProfileScript = buildRiddleProofProfileScript(windowCallSetupProfile);
+assert.ok(windowCallSetupProfileScript.includes('type === "window_call"'));
+assert.ok(windowCallSetupProfileScript.includes("missing_function"));
+assert.ok(windowCallSetupProfileScript.includes("unexpected_return_value"));
+assert.ok(windowCallSetupProfileScript.includes("setupValuesEqual"));
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-call",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-call" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_call requires path/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-call-args",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-call", path: "__proof.force", args: "bad" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_call args must be an array/);
 const setupAssertionProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-setup-assertions",
