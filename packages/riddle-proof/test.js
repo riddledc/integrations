@@ -892,6 +892,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_selector_count"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_window_number"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
@@ -1031,6 +1032,12 @@ const setupAssertionProfile = normalizeRiddleProofProfile({
         state_path: "__proofState.ready",
         expected: true,
       },
+      {
+        type: "assert-window-number",
+        state_path: "__proofState.distance",
+        min_value: 1,
+        max_value: 100,
+      },
     ],
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
@@ -1042,11 +1049,17 @@ assert.equal(setupAssertionProfile.target.setup_actions[2].expected_count, 1);
 assert.equal(setupAssertionProfile.target.setup_actions[3].type, "assert_window_value");
 assert.equal(setupAssertionProfile.target.setup_actions[3].path, "__proofState.ready");
 assert.equal(setupAssertionProfile.target.setup_actions[3].expected_value, true);
+assert.equal(setupAssertionProfile.target.setup_actions[4].type, "assert_window_number");
+assert.equal(setupAssertionProfile.target.setup_actions[4].path, "__proofState.distance");
+assert.equal(setupAssertionProfile.target.setup_actions[4].min_value, 1);
+assert.equal(setupAssertionProfile.target.setup_actions[4].max_value, 100);
 const setupAssertionProfileScript = buildRiddleProofProfileScript(setupAssertionProfile);
 assert.ok(setupAssertionProfileScript.includes('type === "assert_selector_count"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_text_visible" || type === "assert_text_absent"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_window_value"'));
+assert.ok(setupAssertionProfileScript.includes('type === "assert_window_number"'));
 assert.ok(setupAssertionProfileScript.includes("setupReadWindowValue"));
+assert.ok(setupAssertionProfileScript.includes("number_below_min"));
 assert.ok(setupAssertionProfileScript.includes("selector_count_mismatch"));
 assert.ok(setupAssertionProfileScript.includes("text_still_present"));
 assert.ok(setupAssertionProfileScript.includes("unexpected_value"));
@@ -1068,6 +1081,24 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /assert_window_value requires expected_value/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-number",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "assert-window-number", path: "__proofState.distance" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /assert_window_number requires expected_value, min_value, or max_value/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-number-expected",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "assert-window-number", path: "__proofState.distance", expected: "far" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /assert_window_number expected_value must be a finite number/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-storage",

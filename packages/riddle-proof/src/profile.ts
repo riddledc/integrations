@@ -42,6 +42,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "assert_text_absent",
   "assert_selector_count",
   "assert_window_value",
+  "assert_window_number",
   "local_storage",
   "session_storage",
   "clear_storage",
@@ -85,6 +86,8 @@ export interface RiddleProofProfileSetupAction {
   args?: JsonValue[];
   expect_return?: JsonValue;
   expected_value?: JsonValue;
+  min_value?: number;
+  max_value?: number;
   text?: string;
   pattern?: string;
   flags?: string;
@@ -558,7 +561,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const path = stringFromOwn(input, "path", "function_path", "functionPath", "window_path", "windowPath", "state_path", "statePath");
-  if ((type === "window_call" || type === "assert_window_value") && !path) {
+  if ((type === "window_call" || type === "assert_window_value" || type === "assert_window_number") && !path) {
     throw new Error(`target.setup_actions[${index}] ${type} requires path.`);
   }
   const args = type === "window_call" ? normalizeSetupActionArgs(input, index) : undefined;
@@ -570,6 +573,17 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     || hasOwn(input, "expect");
   if (type === "assert_window_value" && !hasExpectedValue) {
     throw new Error(`target.setup_actions[${index}] ${type} requires expected_value.`);
+  }
+  const rawExpectedValue = valueFromOwn(input, "expected_value", "expectedValue", "expected", "expect_value", "expectValue", "expect");
+  const minValue = numberValue(valueFromOwn(input, "min_value", "minValue", "minimum", "min", "at_least", "atLeast", "gte"));
+  const maxValue = numberValue(valueFromOwn(input, "max_value", "maxValue", "maximum", "max", "at_most", "atMost", "lte"));
+  if (type === "assert_window_number") {
+    if (!hasExpectedValue && minValue === undefined && maxValue === undefined) {
+      throw new Error(`target.setup_actions[${index}] ${type} requires expected_value, min_value, or max_value.`);
+    }
+    if (hasExpectedValue && numberValue(rawExpectedValue) === undefined) {
+      throw new Error(`target.setup_actions[${index}] ${type} expected_value must be a finite number.`);
+    }
   }
   const hasExpectedReturn = hasOwn(input, "expect_return")
     || hasOwn(input, "expectReturn")
@@ -589,7 +603,9 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
-    expected_value: hasExpectedValue ? toJsonValue(valueFromOwn(input, "expected_value", "expectedValue", "expected", "expect_value", "expectValue", "expect")) : undefined,
+    expected_value: hasExpectedValue ? toJsonValue(rawExpectedValue) : undefined,
+    min_value: minValue,
+    max_value: maxValue,
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
@@ -2648,6 +2664,10 @@ function setupNumber(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : fallback;
 }
+function setupFiniteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
 function setupTextMatches(sample, action) {
   if (action.pattern) {
     try { return new RegExp(action.pattern, action.flags || "").test(sample || ""); } catch { return false; }
@@ -2990,6 +3010,58 @@ async function executeSetupAction(action, ordinal) {
         missing_part: result?.missing_part || undefined,
         value: setupJsonValue(result?.value),
         expected_value: setupJsonValue(expected),
+        timeout_ms: timeout,
+      };
+    }
+    if (type === "assert_window_number") {
+      const path = String(action.path || action.window_path || action.windowPath || "");
+      const expected = setupFiniteNumber(action.expected_value ?? action.expectedValue ?? action.expected ?? action.expect_value ?? action.expectValue ?? action.expect);
+      const minValue = setupFiniteNumber(action.min_value ?? action.minValue ?? action.minimum ?? action.min ?? action.at_least ?? action.atLeast ?? action.gte);
+      const maxValue = setupFiniteNumber(action.max_value ?? action.maxValue ?? action.maximum ?? action.max ?? action.at_most ?? action.atMost ?? action.lte);
+      const hasExpected = expected !== undefined;
+      if (!path) return { ...base, path, reason: "missing_path" };
+      if (!hasExpected && minValue === undefined && maxValue === undefined) return { ...base, path, reason: "missing_number_expectation" };
+      const startedAt = Date.now();
+      let result = null;
+      let lastReason = "path_not_found";
+      while (Date.now() - startedAt <= timeout) {
+        result = await setupReadWindowValue(path);
+        if (result.ok) {
+          const actual = setupFiniteNumber(result.value);
+          if (actual === undefined) {
+            lastReason = "non_numeric_value";
+          } else if (hasExpected && actual !== expected) {
+            lastReason = "unexpected_number";
+          } else if (minValue !== undefined && actual < minValue) {
+            lastReason = "number_below_min";
+          } else if (maxValue !== undefined && actual > maxValue) {
+            lastReason = "number_above_max";
+          } else {
+            return {
+              ...base,
+              ok: true,
+              path,
+              value: actual,
+              expected_value: hasExpected ? expected : undefined,
+              min_value: minValue,
+              max_value: maxValue,
+              timeout_ms: timeout,
+            };
+          }
+        } else {
+          lastReason = result.reason || "path_not_found";
+        }
+        await page.waitForTimeout(100);
+      }
+      return {
+        ...base,
+        path,
+        reason: lastReason,
+        missing_part: result?.missing_part || undefined,
+        value: setupJsonValue(result?.value),
+        expected_value: hasExpected ? expected : undefined,
+        min_value: minValue,
+        max_value: maxValue,
         timeout_ms: timeout,
       };
     }

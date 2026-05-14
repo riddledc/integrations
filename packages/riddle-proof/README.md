@@ -242,7 +242,7 @@ appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
 `click`, `fill`, `set_input_value`, `assert_text_visible`,
 `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
-`local_storage`, `session_storage`, `clear_storage`, `wait`,
+`assert_window_number`, `local_storage`, `session_storage`, `clear_storage`, `wait`,
 `wait_for_selector`, `wait_for_text`, and `window_call`; a failed setup action
 is recorded as a failed `setup_actions_succeeded` check so the profile cannot
 pass without reaching the intended state. Text-matched `click` actions prefer
@@ -256,6 +256,9 @@ source link must exist before clicking into the final route, or a canvas app's
 proof state must expose a terminal flag. `assert_selector_count` accepts
 `expected_count`; `assert_window_value` accepts `path` / `state_path` plus
 `expected_value` / `expected` and compares JSON-safe values exactly.
+`assert_window_number` accepts `path` / `state_path` plus `expected_value`,
+`min_value`, or `max_value`, and is useful for canvas-only proof state such as
+distance, elapsed time, score, or retry counters.
 `local_storage` and `session_storage` accept a `key` plus string `value` or
 JSON `json` / `value_json`, and can reload the page with `reload: true`.
 `clear_storage` clears `local`, `session`, or `both` browser storage scopes,
