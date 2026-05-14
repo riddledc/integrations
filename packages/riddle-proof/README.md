@@ -210,7 +210,10 @@ When `responses` is present, `network_mocks_succeeded` requires each configured
 response to be hit at least once by default and records `hit_index`,
 `response_index`, and `response_label` for each request. Set
 `required_hit_count` / `min_hits` or `required: false` when a different
-contract is intentional.
+contract is intentional. Set `repeat_responses: true` when the sequence should
+cycle instead of reusing the final response, for example to repeat a fail-then-
+success pair across multiple viewports. Repeated sequences also record
+`sequence_cycle: true` after the first cycle.
 
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
