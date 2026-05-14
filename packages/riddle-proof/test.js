@@ -635,6 +635,36 @@ assert.ok(networkMockProfileScript.includes("networkMockEvents"));
 assert.ok(networkMockProfileScript.includes("network_mocks: networkMockEvents.slice()"));
 assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+const consoleAllowedProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "expected-negative-console-profile",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+  },
+  checks: [{
+    type: "no_fatal_console_errors",
+    allowed_console_patterns: [
+      "Failed to load resource: the server responded with a status of 503",
+      "Build failed: Error: Synthetic build outage",
+    ],
+    allowed_page_error_texts: ["Known app-level page error"],
+  }],
+}, { url: "https://example.com" });
+assert.deepEqual(consoleAllowedProfile.checks[0].allowed_console_patterns, [
+  "Failed to load resource: the server responded with a status of 503",
+  "Build failed: Error: Synthetic build outage",
+]);
+assert.deepEqual(consoleAllowedProfile.checks[0].allowed_page_error_texts, ["Known app-level page error"]);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-console-allowlist",
+  target: { route: "/create" },
+  checks: [{ type: "no_fatal_console_errors", allowed_console_patterns: [] }],
+}, { url: "https://example.com" }), /allowed_console_patterns must contain non-empty strings/);
+const consoleAllowedProfileScript = buildRiddleProofProfileScript(consoleAllowedProfile);
+assert.ok(consoleAllowedProfileScript.includes("matchesAllowedMessage"));
+assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
@@ -1259,6 +1289,55 @@ const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMoc
 assert.equal(missingNetworkMockAssessment.status, "product_regression");
 assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").status, "failed");
 assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.failed[0].label, "save");
+const allowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "expected-negative-console-profile",
+  target_url: "https://example.com/create",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-14T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    route: { requested: "https://example.com/create", observed: "/create", expected_path: "/create", matched: true, http_status: 200 },
+    body_text_sample: "Build failed",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    screenshot_label: "expected-negative-console-profile-mobile",
+  }],
+  console: {
+    events: [
+      { type: "error", text: "Failed to load resource: the server responded with a status of 503 (Service Unavailable)" },
+      { type: "error", text: "Build failed: Error: Synthetic build outage" },
+      { type: "warning", text: "Non-fatal warning" },
+    ],
+    fatal_count: 2,
+  },
+  page_errors: [{ message: "Known app-level page error while testing recovery" }],
+  dom_summary: { viewport_count: 1 },
+});
+const allowedConsoleCheck = allowedConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(allowedConsoleAssessment.status, "passed");
+assert.equal(allowedConsoleCheck.status, "passed");
+assert.equal(allowedConsoleCheck.evidence.total_console_fatal_count, 2);
+assert.equal(allowedConsoleCheck.evidence.allowed_console_fatal_count, 2);
+assert.equal(allowedConsoleCheck.evidence.console_fatal_count, 0);
+assert.equal(allowedConsoleCheck.evidence.allowed_page_error_count, 1);
+const unallowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {
+  ...allowedConsoleAssessment.evidence,
+  console: {
+    events: [
+      { type: "error", text: "Unexpected runtime exception" },
+    ],
+    fatal_count: 1,
+  },
+  page_errors: [],
+});
+const unallowedConsoleCheck = unallowedConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(unallowedConsoleAssessment.status, "product_regression");
+assert.equal(unallowedConsoleCheck.status, "failed");
+assert.equal(unallowedConsoleCheck.evidence.console_fatal_count, 1);
 const mountedPreviewAssessment = assessRiddleProofProfileEvidence(mountedPreviewProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "preview-playground-basic",

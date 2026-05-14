@@ -127,6 +127,10 @@ export interface RiddleProofProfileCheck {
   text?: string;
   pattern?: string;
   flags?: string;
+  allowed_console_texts?: string[];
+  allowed_console_patterns?: string[];
+  allowed_page_error_texts?: string[];
+  allowed_page_error_patterns?: string[];
   min_count?: number;
   max_overflow_px?: number;
   timeout_ms?: number;
@@ -577,6 +581,14 @@ function normalizeExpectedTexts(value: unknown, index: number): string[] | undef
   return texts;
 }
 
+function normalizeStringList(value: unknown, label: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
+  const values = value.map((item) => String(item).replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (!values.length) throw new Error(`${label} must contain non-empty strings.`);
+  return values;
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -625,6 +637,10 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
+    allowed_console_texts: normalizeStringList(input.allowed_console_texts ?? input.allowedConsoleTexts ?? input.allow_console_texts ?? input.allowConsoleTexts, `checks[${index}] allowed_console_texts`),
+    allowed_console_patterns: normalizeStringList(input.allowed_console_patterns ?? input.allowedConsolePatterns ?? input.allow_console_patterns ?? input.allowConsolePatterns, `checks[${index}] allowed_console_patterns`),
+    allowed_page_error_texts: normalizeStringList(input.allowed_page_error_texts ?? input.allowedPageErrorTexts ?? input.allow_page_error_texts ?? input.allowPageErrorTexts, `checks[${index}] allowed_page_error_texts`),
+    allowed_page_error_patterns: normalizeStringList(input.allowed_page_error_patterns ?? input.allowedPageErrorPatterns ?? input.allow_page_error_patterns ?? input.allowPageErrorPatterns, `checks[${index}] allowed_page_error_patterns`),
     min_count: numberValue(input.min_count),
     max_overflow_px: numberValue(input.max_overflow_px),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
@@ -815,6 +831,19 @@ function matchText(sample: string, check: RiddleProofProfileCheck) {
     }
   }
   return sample.includes(check.text || "");
+}
+
+function matchesAllowedMessage(message: string, texts?: string[], patterns?: string[]): boolean {
+  const sample = String(message || "");
+  if (texts?.some((text) => sample.includes(text))) return true;
+  for (const pattern of patterns || []) {
+    try {
+      if (new RegExp(pattern).test(sample)) return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
 }
 
 function normalizeRoutePath(path: string | undefined) {
@@ -1140,14 +1169,28 @@ function assessCheckFromEvidence(
   }
 
   if (check.type === "no_fatal_console_errors") {
-    const fatalCount = (evidence.console?.fatal_count || 0) + (evidence.page_errors?.length || 0);
+    const fatalConsoleEvents = (evidence.console?.events || []).filter((event) => event.type === "error" || event.type === "assert");
+    const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+    const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+    const pageErrors = evidence.page_errors || [];
+    const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+    const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+    const fatalCount = unallowedConsoleEvents.length + unallowedPageErrors.length;
     return {
       type: check.type,
       label: checkLabel(check),
       status: fatalCount ? "failed" : "passed",
       evidence: {
-        console_fatal_count: evidence.console?.fatal_count || 0,
-        page_error_count: evidence.page_errors?.length || 0,
+        console_fatal_count: unallowedConsoleEvents.length,
+        page_error_count: unallowedPageErrors.length,
+        total_console_fatal_count: fatalConsoleEvents.length,
+        total_page_error_count: pageErrors.length,
+        allowed_console_fatal_count: allowedConsoleEvents.length,
+        allowed_page_error_count: allowedPageErrors.length,
+        allowed_console_texts: check.allowed_console_texts || [],
+        allowed_console_patterns: check.allowed_console_patterns || [],
+        allowed_page_error_texts: check.allowed_page_error_texts || [],
+        allowed_page_error_patterns: check.allowed_page_error_patterns || [],
       },
       message: fatalCount ? `${fatalCount} fatal browser error(s) were captured.` : undefined,
     };
@@ -1453,6 +1496,16 @@ function textMatches(sample, check) {
     try { return new RegExp(check.pattern, check.flags || "").test(sample || ""); } catch { return false; }
   }
   return String(sample || "").includes(check.text || "");
+}
+function matchesAllowedMessage(message, texts, patterns) {
+  const sample = String(message || "");
+  if ((texts || []).some((text) => sample.includes(text))) return true;
+  for (const pattern of patterns || []) {
+    try {
+      if (new RegExp(pattern).test(sample)) return true;
+    } catch {}
+  }
+  return false;
 }
 function textSequenceForCheck(viewport, check) {
   const key = check.selector || "";
@@ -1888,12 +1941,29 @@ function assessProfile(profile, evidence) {
       continue;
     }
     if (check.type === "no_fatal_console_errors") {
-      const fatalCount = ((evidence.console && evidence.console.fatal_count) || 0) + ((evidence.page_errors || []).length);
+      const fatalConsoleEvents = ((evidence.console && evidence.console.events) || []).filter((event) => event && (event.type === "error" || event.type === "assert"));
+      const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+      const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event.text, check.allowed_console_texts, check.allowed_console_patterns));
+      const pageErrors = evidence.page_errors || [];
+      const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error && error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+      const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error && error.message, check.allowed_page_error_texts, check.allowed_page_error_patterns));
+      const fatalCount = unallowedConsoleEvents.length + unallowedPageErrors.length;
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: fatalCount ? "failed" : "passed",
-        evidence: { console_fatal_count: (evidence.console && evidence.console.fatal_count) || 0, page_error_count: (evidence.page_errors || []).length },
+        evidence: {
+          console_fatal_count: unallowedConsoleEvents.length,
+          page_error_count: unallowedPageErrors.length,
+          total_console_fatal_count: fatalConsoleEvents.length,
+          total_page_error_count: pageErrors.length,
+          allowed_console_fatal_count: allowedConsoleEvents.length,
+          allowed_page_error_count: allowedPageErrors.length,
+          allowed_console_texts: check.allowed_console_texts || [],
+          allowed_console_patterns: check.allowed_console_patterns || [],
+          allowed_page_error_texts: check.allowed_page_error_texts || [],
+          allowed_page_error_patterns: check.allowed_page_error_patterns || [],
+        },
         message: fatalCount ? String(fatalCount) + " fatal browser error(s) were captured." : undefined,
       });
       continue;
