@@ -616,6 +616,7 @@ const networkMockProfile = normalizeRiddleProofProfile({
         url: "**/v1/chat/completions",
         method: "POST",
         content_type: "text/event-stream",
+        delay_ms: 250,
         body: "data: [DONE]\n\n",
       },
       {
@@ -633,6 +634,7 @@ const networkMockProfile = normalizeRiddleProofProfile({
         label: "build-retry",
         url: "**/api/build",
         method: "POST",
+        delay_ms: 75,
         repeat_responses: true,
         required_hit_count: 4,
         responses: [
@@ -646,6 +648,7 @@ const networkMockProfile = normalizeRiddleProofProfile({
           {
             label: "second-build-succeeds",
             status: 200,
+            delay_ms: 125,
             request_body_contains: ["second-build-request"],
             request_body_not_contains: ["first-build-request"],
             json: { previewUrl: "https://cdn.test/retry-game/index.html" },
@@ -662,6 +665,7 @@ const networkMockProfile = normalizeRiddleProofProfile({
 assert.equal(networkMockProfile.target.network_mocks.length, 3);
 assert.equal(networkMockProfile.target.network_mocks[0].required, true);
 assert.equal(networkMockProfile.target.network_mocks[0].content_type, "text/event-stream");
+assert.equal(networkMockProfile.target.network_mocks[0].delay_ms, 250);
 assert.deepEqual(networkMockProfile.target.network_mocks[1].body_json, { gameId: "riddle-proof-mock" });
 assert.equal(networkMockProfile.target.network_mocks[1].capture_request_body, true);
 assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_contains, ["build-riddle-proof-v238"]);
@@ -672,10 +676,12 @@ assert.equal(networkMockProfile.target.network_mocks[2].responses.length, 2);
 assert.equal(networkMockProfile.target.network_mocks[2].repeat_responses, true);
 assert.equal(networkMockProfile.target.network_mocks[2].required_hit_count, 4);
 assert.equal(networkMockProfile.target.network_mocks[2].responses[0].status, 503);
+assert.equal(networkMockProfile.target.network_mocks[2].responses[0].delay_ms, 75);
 assert.equal(networkMockProfile.target.network_mocks[2].responses[0].capture_request_body, true);
 assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[0].request_body_contains, ["first-build-request"]);
 assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[0].request_body_not_contains, ["second-build-request"]);
 assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[1].body_json, { previewUrl: "https://cdn.test/retry-game/index.html" });
+assert.equal(networkMockProfile.target.network_mocks[2].responses[1].delay_ms, 125);
 assert.equal(networkMockProfile.target.network_mocks[2].responses[1].capture_request_body, true);
 assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[1].request_body_contains, ["second-build-request"]);
 assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[1].request_body_not_contains, ["first-build-request"]);
@@ -693,6 +699,8 @@ assert.ok(networkMockProfileScript.includes("request_body_matches"));
 assert.ok(networkMockProfileScript.includes("request_body_sample"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_text"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_pattern_matched"));
+assert.ok(networkMockProfileScript.includes("delay_ms"));
+assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 const networkMockMismatchResult = assessRiddleProofProfileEvidence(networkMockProfile, {
   version: "riddle-proof.profile-evidence.v1",
@@ -789,6 +797,20 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/create" }],
 }, { url: "https://example.com" }), /request_body_not_patterns contains invalid regex/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "invalid-network-mock-delay",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "save",
+      url: "**/api/save",
+      delay_ms: 60001,
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /delay_ms must be an integer from 0 to 60000/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "invalid-network-mock-response-pattern",
