@@ -751,6 +751,8 @@ assert.ok(routeInventoryProfileScript.includes("riddle-proof.route-inventory.v1"
 assert.ok(routeInventoryProfileScript.includes("source_link_clickthrough_kept_source_surface"));
 assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"));
 assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
+assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));
+assert.ok(routeInventoryProfileScript.includes("duplicate_source_link_count"));
 const profileEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "pricing-page-basic",
@@ -820,6 +822,11 @@ const routeInventoryEvidence = {
       expected_routes: routeInventoryProfile.checks[0].expected_routes,
       link_selector: "a[href^='/games/']",
       source_selector: ".game-table",
+      source_link_count: 2,
+      source_unique_link_count: 2,
+      duplicate_source_link_count: 0,
+      duplicate_source_link_paths: [],
+      duplicates_allowed: false,
       home_game_link_count: 2,
       home_unique_game_link_count: 2,
       home_links: [
@@ -847,8 +854,76 @@ assert.equal(routeInventoryAssessment.status, "passed");
 const routeInventoryCheck = routeInventoryAssessment.checks.find((check) => check.type === "route_inventory");
 assert.equal(routeInventoryCheck.status, "passed");
 assert.equal(routeInventoryCheck.evidence.expected_count, 2);
+assert.equal(routeInventoryCheck.evidence.source_link_count, 2);
+assert.equal(routeInventoryCheck.evidence.source_unique_link_count, 2);
+assert.equal(routeInventoryCheck.evidence.duplicate_source_link_count, 0);
+assert.deepEqual(routeInventoryCheck.evidence.duplicate_source_links, []);
+assert.equal(routeInventoryCheck.evidence.duplicates_allowed, false);
 assert.equal(routeInventoryCheck.evidence.direct_route_count, 2);
 assert.equal(routeInventoryCheck.evidence.clickthrough_count, 2);
+const duplicateRouteInventoryProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "docs-route-inventory",
+  target: {
+    route: "/docs/",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "route_inventory",
+    expected_routes: [
+      { name: "Preview", path: "/docs/preview" },
+      { name: "Scrape", path: "/docs/scrape" },
+    ],
+    link_selector: "main a.tool-card[href^='/docs/']",
+    source_selector: "main .tools-grid",
+    route_path_prefix: "/docs/",
+    require_unique_routes: false,
+  }],
+}, { url: "https://example.com" });
+const duplicateRouteInventoryAssessment = assessRiddleProofProfileEvidence(duplicateRouteInventoryProfile, {
+  ...routeInventoryEvidence,
+  profile_name: "docs-route-inventory",
+  target_url: "https://example.com/docs/",
+  viewports: [{
+    ...routeInventoryEvidence.viewports[0],
+    route: { requested: "https://example.com/docs/", observed: "/docs/", expected_path: "/docs/", matched: true, http_status: 200 },
+    route_inventory: {
+      ...routeInventoryEvidence.viewports[0].route_inventory,
+      expected_routes: duplicateRouteInventoryProfile.checks[0].expected_routes,
+      link_selector: "main a.tool-card[href^='/docs/']",
+      source_selector: "main .tools-grid",
+      source_link_count: 3,
+      source_unique_link_count: 2,
+      duplicate_source_link_count: 1,
+      duplicate_source_link_paths: ["/docs/preview"],
+      duplicates_allowed: true,
+      home_game_link_count: 3,
+      home_unique_game_link_count: 2,
+      home_links: [
+        { text: "Preview", app_path: "/docs/preview" },
+        { text: "Server Preview", app_path: "/docs/preview" },
+        { text: "Scrape", app_path: "/docs/scrape" },
+      ],
+      direct_routes: [
+        { phase: "direct", path: "/docs/preview", loaded: true, actual_app_path: "/docs/preview", source_visible: false },
+        { phase: "direct", path: "/docs/scrape", loaded: true, actual_app_path: "/docs/scrape", source_visible: false },
+      ],
+      clickthroughs: [
+        { path: "/docs/preview", clicked: true, snapshot: { actual_app_path: "/docs/preview", source_visible: false } },
+        { path: "/docs/scrape", clicked: true, snapshot: { actual_app_path: "/docs/scrape", source_visible: false } },
+      ],
+      failures: [],
+    },
+  }],
+});
+const duplicateRouteInventoryCheck = duplicateRouteInventoryAssessment.checks.find((check) => check.type === "route_inventory");
+assert.equal(duplicateRouteInventoryAssessment.status, "passed");
+assert.equal(duplicateRouteInventoryCheck.status, "passed");
+assert.equal(duplicateRouteInventoryCheck.evidence.source_link_count, 3);
+assert.equal(duplicateRouteInventoryCheck.evidence.source_unique_link_count, 2);
+assert.equal(duplicateRouteInventoryCheck.evidence.duplicate_source_link_count, 1);
+assert.deepEqual(duplicateRouteInventoryCheck.evidence.duplicate_source_links, ["/docs/preview"]);
+assert.equal(duplicateRouteInventoryCheck.evidence.duplicates_allowed, true);
 const failedRouteInventoryAssessment = assessRiddleProofProfileEvidence(routeInventoryProfile, {
   ...routeInventoryEvidence,
   viewports: [{
