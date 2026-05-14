@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.34
+
+### Patch Changes
+
+- 5468fa1: Add generic source-link and duplicate-source-link counts to profile route-inventory evidence while preserving the existing homepage count fields.
+
 ## 0.7.33
 
 ### Patch Changes
