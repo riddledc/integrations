@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.40
+
+### Patch Changes
+
+- 1012d4a: Add sequenced profile network mock responses for retry/recovery proofs.
+
 ## 0.7.39
 
 ### Patch Changes
