@@ -91,6 +91,7 @@ export interface RiddleProofProfileSetupAction {
   ms?: number;
   timeout_ms?: number;
   after_ms?: number;
+  repeat?: number;
   reload?: boolean;
   storage?: "local" | "session" | "both";
   continue_on_failure?: boolean;
@@ -514,6 +515,15 @@ function normalizeSetupActionArgs(input: Record<string, unknown>, index: number)
   return argsInput.map(toJsonValue);
 }
 
+function normalizeSetupActionRepeat(input: Record<string, unknown>, index: number): number | undefined {
+  const repeat = numberValue(valueFromOwn(input, "repeat", "repeat_count", "repeatCount", "times"));
+  if (repeat === undefined) return undefined;
+  if (!Number.isInteger(repeat) || repeat < 1 || repeat > 100) {
+    throw new Error(`target.setup_actions[${index}].repeat must be an integer from 1 to 100.`);
+  }
+  return repeat;
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -584,6 +594,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     after_ms: numberValue(input.after_ms) ?? numberValue(input.afterMs),
+    repeat: normalizeSetupActionRepeat(input, index),
     reload: input.reload === true,
     storage: normalizeSetupActionStorage(input.storage, index),
     continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
@@ -2952,11 +2963,22 @@ async function executeSetupActions(actions) {
   const results = [];
   for (let index = 0; index < (actions || []).length; index += 1) {
     const action = actions[index] || {};
-    const result = await executeSetupAction(action, index);
-    results.push(result);
-    const afterMs = setupNumber(action.after_ms, 0);
-    if (afterMs) await page.waitForTimeout(afterMs);
-    if (result.ok === false && action.continue_on_failure !== true) break;
+    const requestedRepeat = setupNumber(action.repeat, 1);
+    const repeatCount = Math.min(100, Math.max(1, Math.floor(requestedRepeat || 1)));
+    let shouldStop = false;
+    for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
+      const result = await executeSetupAction(action, index);
+      results.push(repeatCount > 1
+        ? { ...result, repeat_index: repeatIndex, repeat_count: repeatCount }
+        : result);
+      const afterMs = setupNumber(action.after_ms, 0);
+      if (afterMs) await page.waitForTimeout(afterMs);
+      if (result.ok === false && action.continue_on_failure !== true) {
+        shouldStop = true;
+        break;
+      }
+    }
+    if (shouldStop) break;
   }
   return results;
 }

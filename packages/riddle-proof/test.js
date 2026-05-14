@@ -935,6 +935,7 @@ const windowCallSetupProfile = normalizeRiddleProofProfile({
         args: [true, { source: "profile" }],
         expectReturn: true,
         after_ms: 250,
+        repeat: 3,
       },
     ],
   },
@@ -944,11 +945,14 @@ assert.equal(windowCallSetupProfile.target.setup_actions[0].type, "window_call")
 assert.equal(windowCallSetupProfile.target.setup_actions[0].path, "__gemMineProofForceEscape");
 assert.deepEqual(windowCallSetupProfile.target.setup_actions[0].args, [true, { source: "profile" }]);
 assert.equal(windowCallSetupProfile.target.setup_actions[0].expect_return, true);
+assert.equal(windowCallSetupProfile.target.setup_actions[0].repeat, 3);
 const windowCallSetupProfileScript = buildRiddleProofProfileScript(windowCallSetupProfile);
 assert.ok(windowCallSetupProfileScript.includes('type === "window_call"'));
 assert.ok(windowCallSetupProfileScript.includes("missing_function"));
 assert.ok(windowCallSetupProfileScript.includes("unexpected_return_value"));
 assert.ok(windowCallSetupProfileScript.includes("setupValuesEqual"));
+assert.ok(windowCallSetupProfileScript.includes("repeat_index"));
+assert.ok(windowCallSetupProfileScript.includes("repeat_count"));
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-window-call",
@@ -967,6 +971,15 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /window_call args must be an array/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-repeat",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "wait", ms: 10, repeat: 101 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /repeat must be an integer from 1 to 100/);
 const setupAssertionProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-setup-assertions",
