@@ -303,6 +303,22 @@ These checks are useful for audit/no-diff profiles where the product should
 show a fallback state and avoid rendering stale loaders, duplicate rows, or
 missing-resource iframes.
 
+Use `url_search_param_equals` and `url_search_param_absent` when the final URL
+is part of the contract, such as deep-link recovery that must drop a stale
+local identifier while preserving shareable query state:
+
+```json
+[
+  { "type": "url_search_param_absent", "param": "seq" },
+  { "type": "url_search_param_equals", "param": "song", "expected_value": "monkberry-moon-delight-tab" },
+  { "type": "url_search_param_equals", "param": "view", "expected_value": "trainer" }
+]
+```
+
+The check uses the captured browser URL for each viewport after setup actions
+and waits have completed. `search_param` and `key` are accepted as aliases for
+`param`; `value` is accepted as an alias for `expected_value`.
+
 Use `selector_text_order` when a table, list, or card group must show visible
 items in a specific order after setup actions such as sorting or filtering:
 
