@@ -45,6 +45,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "wait",
   "wait_for_selector",
   "wait_for_text",
+  "window_call",
 ] as const;
 
 export type RiddleProofProfileStatus = typeof RIDDLE_PROOF_PROFILE_STATUSES[number];
@@ -76,6 +77,9 @@ export interface RiddleProofProfileSetupAction {
   key?: string;
   value?: string;
   value_json?: JsonValue;
+  path?: string;
+  args?: JsonValue[];
+  expect_return?: JsonValue;
   text?: string;
   pattern?: string;
   flags?: string;
@@ -323,6 +327,13 @@ function stringFromOwn(input: Record<string, unknown>, ...keys: string[]): strin
   return undefined;
 }
 
+function valueFromOwn(input: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (hasOwn(input, key)) return input[key];
+  }
+  return undefined;
+}
+
 function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -491,6 +502,15 @@ function normalizeSetupActionStorage(value: unknown, index: number): "local" | "
   throw new Error(`target.setup_actions[${index}].storage ${String(value)} is not supported. Supported storage values: local, session, both.`);
 }
 
+function normalizeSetupActionArgs(input: Record<string, unknown>, index: number): JsonValue[] | undefined {
+  const argsInput = valueFromOwn(input, "args", "arguments", "args_json", "argsJson");
+  if (argsInput === undefined) return undefined;
+  if (!Array.isArray(argsInput)) {
+    throw new Error(`target.setup_actions[${index}] window_call args must be an array.`);
+  }
+  return argsInput.map(toJsonValue);
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -520,12 +540,24 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if ((type === "local_storage" || type === "session_storage") && value === undefined && !hasJsonValue) {
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
+  const path = stringFromOwn(input, "path", "function_path", "functionPath", "window_path", "windowPath");
+  if (type === "window_call" && !path) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires path.`);
+  }
+  const args = type === "window_call" ? normalizeSetupActionArgs(input, index) : undefined;
+  const hasExpectedReturn = hasOwn(input, "expect_return")
+    || hasOwn(input, "expectReturn")
+    || hasOwn(input, "expected_return")
+    || hasOwn(input, "expectedReturn");
   return {
     type,
     selector,
     key,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
+    path,
+    args,
+    expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
@@ -2446,6 +2478,19 @@ function setupActionValue(action) {
   if (setupHasOwn(action, "value")) return String(action.value ?? "");
   return "";
 }
+function setupJsonValue(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.map(setupJsonValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, setupJsonValue(child)]));
+  }
+  return String(value);
+}
+function setupValuesEqual(left, right) {
+  return JSON.stringify(setupJsonValue(left)) === JSON.stringify(setupJsonValue(right));
+}
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
 }
@@ -2640,6 +2685,59 @@ async function executeSetupAction(action, ordinal) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
       return { ...base, ok: true, storage, reload: action.reload === true };
+    }
+    if (type === "window_call") {
+      const path = String(action.path || action.function_path || action.functionPath || "");
+      const args = Array.isArray(action.args) ? action.args : [];
+      if (!path) return { ...base, path, reason: "missing_path" };
+      const result = await page.evaluate(async ({ path, args }) => {
+        const toJsonValue = (value) => {
+          if (value === null || value === undefined) return null;
+          if (typeof value === "string" || typeof value === "boolean") return value;
+          if (typeof value === "number") return Number.isFinite(value) ? value : null;
+          if (Array.isArray(value)) return value.map(toJsonValue);
+          if (typeof value === "object") {
+            return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
+          }
+          return String(value);
+        };
+        const pathParts = String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
+        let parent = window;
+        let current = window;
+        for (const part of pathParts) {
+          parent = current;
+          current = current?.[part];
+        }
+        if (typeof current !== "function") return { ok: false, reason: "missing_function" };
+        try {
+          const returned = await current.apply(parent, Array.isArray(args) ? args : []);
+          return { ok: true, returned: toJsonValue(returned) };
+        } catch (error) {
+          return { ok: false, reason: "function_threw", error: String(error && error.message ? error.message : error).slice(0, 1000) };
+        }
+      }, { path, args });
+      const hasExpectation = setupHasOwn(action, "expect_return")
+        || setupHasOwn(action, "expectReturn")
+        || setupHasOwn(action, "expected_return")
+        || setupHasOwn(action, "expectedReturn");
+      const expected = setupHasOwn(action, "expect_return")
+        ? action.expect_return
+        : setupHasOwn(action, "expectReturn")
+          ? action.expectReturn
+          : setupHasOwn(action, "expected_return")
+            ? action.expected_return
+            : action.expectedReturn;
+      const expectationMet = !hasExpectation || setupValuesEqual(result.returned, expected);
+      return {
+        ...base,
+        ok: Boolean(result.ok && expectationMet),
+        path,
+        arg_count: args.length,
+        returned: setupJsonValue(result.returned),
+        expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
+        reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
+        error: result.error || undefined,
+      };
     }
     if (type === "click") {
       const locator = page.locator(action.selector);
