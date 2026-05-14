@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.60
+
+### Patch Changes
+
+- dc71d5f: Add profile checks for iframe URLs.
+
 ## 0.7.59
 
 ### Patch Changes
