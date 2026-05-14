@@ -182,7 +182,35 @@ before navigation, records each hit, and adds an implicit
 `network_mocks_succeeded` check when mocks are present. A mock supports
 `url`/`glob`/`pattern`, optional `method`, `status`, `content_type`, `headers`,
 string `body`, JSON `json` / `body_json`, and `required: false` for
-best-effort mocks.
+best-effort mocks. Use `responses` for retry or recovery profiles where the
+same endpoint should return a sequence, such as first `503` and then `200`.
+Each response accepts the same payload fields plus an optional label:
+
+```json
+{
+  "label": "builder-build",
+  "url": "**/api/build",
+  "method": "POST",
+  "responses": [
+    {
+      "label": "first-build-fails",
+      "status": 503,
+      "json": { "error": "Synthetic build outage" }
+    },
+    {
+      "label": "second-build-succeeds",
+      "status": 200,
+      "json": { "previewUrl": "https://cdn.example/game/index.html" }
+    }
+  ]
+}
+```
+
+When `responses` is present, `network_mocks_succeeded` requires each configured
+response to be hit at least once by default and records `hit_index`,
+`response_index`, and `response_label` for each request. Set
+`required_hit_count` / `min_hits` or `required: false` when a different
+contract is intentional.
 
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,

@@ -81,15 +81,21 @@ export interface RiddleProofProfileSetupAction {
   continue_on_failure?: boolean;
 }
 
-export interface RiddleProofProfileNetworkMock {
-  label: string;
-  url: string;
-  method?: string;
+export interface RiddleProofProfileNetworkMockResponse {
+  label?: string;
   status: number;
   content_type?: string;
   headers?: Record<string, string>;
   body?: string;
   body_json?: JsonValue;
+}
+
+export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetworkMockResponse {
+  label: string;
+  url: string;
+  method?: string;
+  responses?: RiddleProofProfileNetworkMockResponse[];
+  required_hit_count?: number;
   required?: boolean;
 }
 
@@ -514,25 +520,73 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
   if (!isRecord(input)) throw new Error(`target.network_mocks[${index}] must be an object.`);
   const url = stringValue(input.url) || stringValue(input.glob) || stringValue(input.pattern);
   if (!url) throw new Error(`target.network_mocks[${index}] requires url.`);
-  const status = numberValue(input.status) ?? 200;
-  if (!Number.isInteger(status) || status < 100 || status > 599) {
-    throw new Error(`target.network_mocks[${index}].status must be an HTTP status code.`);
+  const payload = normalizeNetworkMockResponsePayload(input, `target.network_mocks[${index}]`);
+  const responsesInput = input.responses ?? input.sequence;
+  const responses = normalizeNetworkMockResponses(responsesInput, index, payload);
+  const requiredHitCount = numberValue(
+    input.required_hit_count
+    ?? input.requiredHitCount
+    ?? input.required_hits
+    ?? input.requiredHits
+    ?? input.min_hits
+    ?? input.minHits,
+  );
+  if (requiredHitCount !== undefined && (!Number.isInteger(requiredHitCount) || requiredHitCount < 1)) {
+    throw new Error(`target.network_mocks[${index}].required_hit_count must be a positive integer.`);
   }
-  const body = stringValue(input.body) ?? stringValue(input.body_text) ?? stringValue(input.bodyText);
+  return {
+    ...payload,
+    label: normalizeName(input.label || input.name, `network-mock-${index + 1}`),
+    url,
+    method: stringValue(input.method)?.toUpperCase(),
+    responses,
+    required_hit_count: requiredHitCount,
+    required: input.required === false ? false : true,
+  };
+}
+
+function normalizeNetworkMockResponsePayload(
+  input: Record<string, unknown>,
+  label: string,
+  defaults: Partial<RiddleProofProfileNetworkMockResponse> = {},
+): RiddleProofProfileNetworkMockResponse {
+  const status = numberValue(input.status) ?? defaults.status ?? 200;
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error(`${label}.status must be an HTTP status code.`);
+  }
+  const body = stringValue(input.body) ?? stringValue(input.body_text) ?? stringValue(input.bodyText) ?? defaults.body;
   const hasJsonBody = Object.prototype.hasOwnProperty.call(input, "body_json")
     || Object.prototype.hasOwnProperty.call(input, "bodyJson")
     || Object.prototype.hasOwnProperty.call(input, "json");
   return {
-    label: normalizeName(input.label || input.name, `network-mock-${index + 1}`),
-    url,
-    method: stringValue(input.method)?.toUpperCase(),
+    label: stringValue(input.label) || stringValue(input.name) || defaults.label,
     status,
-    content_type: stringValue(input.content_type) || stringValue(input.contentType),
-    headers: stringRecord(input.headers),
+    content_type: stringValue(input.content_type) || stringValue(input.contentType) || defaults.content_type,
+    headers: stringRecord(input.headers) || defaults.headers,
     body,
-    body_json: hasJsonBody ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : undefined,
-    required: input.required === false ? false : true,
+    body_json: hasJsonBody ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : defaults.body_json,
   };
+}
+
+function normalizeNetworkMockResponses(
+  value: unknown,
+  mockIndex: number,
+  defaults: RiddleProofProfileNetworkMockResponse,
+): RiddleProofProfileNetworkMockResponse[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`target.network_mocks[${mockIndex}].responses must be an array.`);
+  if (!value.length) throw new Error(`target.network_mocks[${mockIndex}].responses must not be empty.`);
+  const responseDefaults = { ...defaults, label: undefined };
+  return value.map((response, responseIndex) => {
+    if (!isRecord(response)) {
+      throw new Error(`target.network_mocks[${mockIndex}].responses[${responseIndex}] must be an object.`);
+    }
+    return normalizeNetworkMockResponsePayload(
+      response,
+      `target.network_mocks[${mockIndex}].responses[${responseIndex}]`,
+      responseDefaults,
+    );
+  });
 }
 
 function normalizeNetworkMocks(value: unknown): RiddleProofProfileNetworkMock[] | undefined {
@@ -1263,12 +1317,15 @@ function assessNetworkMocksFromEvidence(
   const requiredMocks = mocks.filter((mock) => mock.required !== false);
   for (const mock of requiredMocks) {
     const hits = events.filter((event) => event.label === mock.label && event.ok !== false).length;
-    if (hits < 1) {
+    const requiredHitCount = requiredNetworkMockHitCount(mock);
+    if (hits < requiredHitCount) {
       failed.push({
         label: mock.label,
         url: mock.url,
         method: mock.method || null,
-        reason: "required_mock_not_hit",
+        reason: hits < 1 ? "required_mock_not_hit" : "required_mock_hit_count_not_met",
+        required_hit_count: requiredHitCount,
+        hit_count: hits,
       });
     }
   }
@@ -1294,10 +1351,21 @@ function assessNetworkMocksFromEvidence(
         mock.label,
         events.filter((event) => event.label === mock.label && event.ok !== false).length,
       ])),
+      required_hits_by_label: Object.fromEntries(requiredMocks.map((mock) => [
+        mock.label,
+        requiredNetworkMockHitCount(mock),
+      ])),
       failed,
     },
     message: failed.length ? `Network mocks failed or were not hit for ${failed.length} mock(s).` : undefined,
   };
+}
+
+function requiredNetworkMockHitCount(mock: RiddleProofProfileNetworkMock): number {
+  if (mock.required === false) return 0;
+  if (mock.required_hit_count !== undefined) return mock.required_hit_count;
+  if (Array.isArray(mock.responses) && mock.responses.length) return mock.responses.length;
+  return 1;
 }
 
 function profileStatusFromEvidence(
@@ -1634,6 +1702,12 @@ function horizontalBoundsOverflowPx(value) {
   }
   return roundPixels(max);
 }
+function requiredNetworkMockHitCount(mock) {
+  if (!mock || mock.required === false) return 0;
+  if (Number.isInteger(mock.required_hit_count) && mock.required_hit_count > 0) return mock.required_hit_count;
+  if (Array.isArray(mock.responses) && mock.responses.length) return mock.responses.length;
+  return 1;
+}
 function assessProfile(profile, evidence) {
   const checks = [];
   const viewports = evidence.viewports || [];
@@ -1643,12 +1717,15 @@ function assessProfile(profile, evidence) {
     const failed = [];
     for (const mock of requiredMocks) {
       const hits = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
-      if (hits < 1) {
+      const requiredHitCount = requiredNetworkMockHitCount(mock);
+      if (hits < requiredHitCount) {
         failed.push({
           label: mock.label,
           url: mock.url,
           method: mock.method || null,
-          reason: "required_mock_not_hit",
+          reason: hits < 1 ? "required_mock_not_hit" : "required_mock_hit_count_not_met",
+          required_hit_count: requiredHitCount,
+          hit_count: hits,
         });
       }
     }
@@ -1663,8 +1740,10 @@ function assessProfile(profile, evidence) {
       }
     }
     const hitsByLabel = {};
+    const requiredHitsByLabel = {};
     for (const mock of profile.target.network_mocks) {
       hitsByLabel[mock.label] = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
+      if (mock && mock.required !== false) requiredHitsByLabel[mock.label] = requiredNetworkMockHitCount(mock);
     }
     checks.push({
       type: "network_mocks_succeeded",
@@ -1675,6 +1754,7 @@ function assessProfile(profile, evidence) {
         required_count: requiredMocks.length,
         hit_count: events.filter((event) => event && event.ok !== false).length,
         hits_by_label: hitsByLabel,
+        required_hits_by_label: requiredHitsByLabel,
         failed,
       },
       message: failed.length ? "Network mocks failed or were not hit for " + failed.length + " mock(s)." : undefined,
@@ -2074,6 +2154,7 @@ async function setupLocatorVisible(locator, index) {
 }
 async function registerNetworkMocks(mocks) {
   for (const mock of mocks || []) {
+    let hitCount = 0;
     await page.route(mock.url, async (route) => {
       const request = route.request();
       const method = request.method ? request.method() : "";
@@ -2082,22 +2163,31 @@ async function registerNetworkMocks(mocks) {
         return;
       }
       try {
-        const headers = { ...(mock.headers || {}) };
-        let body = mock.body || "";
-        let contentType = mock.content_type || headers["content-type"] || headers["Content-Type"] || "text/plain";
-        if (mock.body_json !== undefined) {
-          body = JSON.stringify(mock.body_json);
-          contentType = mock.content_type || headers["content-type"] || headers["Content-Type"] || "application/json";
+        const responses = Array.isArray(mock.responses) ? mock.responses : [];
+        const hitIndex = hitCount;
+        hitCount += 1;
+        const responseIndex = responses.length ? Math.min(hitIndex, responses.length - 1) : null;
+        const response = responseIndex === null ? mock : responses[responseIndex];
+        const headers = { ...(response.headers || mock.headers || {}) };
+        let body = response.body || "";
+        let contentType = response.content_type || headers["content-type"] || headers["Content-Type"] || "text/plain";
+        if (response.body_json !== undefined) {
+          body = JSON.stringify(response.body_json);
+          contentType = response.content_type || headers["content-type"] || headers["Content-Type"] || "application/json";
         }
         networkMockEvents.push({
           ok: true,
           label: mock.label,
+          response_label: response.label || null,
+          hit_index: hitIndex,
+          response_index: responseIndex,
+          sequence_reused: responseIndex !== null && hitIndex >= responses.length,
           url: request.url(),
           method,
-          status: mock.status || 200,
+          status: response.status || mock.status || 200,
         });
         await route.fulfill({
-          status: mock.status || 200,
+          status: response.status || mock.status || 200,
           headers,
           contentType,
           body,
