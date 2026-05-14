@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.41
+
+### Patch Changes
+
+- 94116bf: Add repeatable profile network mock response sequences.
+
 ## 0.7.40
 
 ### Patch Changes
