@@ -202,6 +202,25 @@ clears `local`, `session`, or `both` browser storage scopes, defaults to
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
 still overrides the profile value for one-off runs.
 
+Use `allowed_console_patterns` / `allowed_console_texts` on
+`no_fatal_console_errors` when a negative-path profile intentionally triggers a
+known browser console error, such as a mocked `503` that the app recovers from:
+
+```json
+{
+  "type": "no_fatal_console_errors",
+  "allowed_console_patterns": [
+    "Failed to load resource: the server responded with a status of 503",
+    "Build failed: Error: Synthetic build outage"
+  ]
+}
+```
+
+Allowed console events and page errors are still counted in check evidence, but
+only unallowed `error` / `assert` console events and page errors fail the check.
+Use `allowed_page_error_patterns`, `allowed_console_texts`, or
+`allowed_page_error_texts` for narrower matching when needed.
+
 Use `selector_text_order` when a table, list, or card group must show visible
 items in a specific order after setup actions such as sorting or filtering:
 
