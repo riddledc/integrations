@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.48
+
+### Patch Changes
+
+- aa2b94b: Add profile setup assertion actions for text visibility, text absence, and exact selector counts so pre-navigation setup contracts can fail profiles directly.
+
 ## 0.7.47
 
 ### Patch Changes
