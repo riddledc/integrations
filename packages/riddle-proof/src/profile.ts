@@ -3044,7 +3044,7 @@ async function frameEvidence(selector) {
         const scrollWidth = documentElement ? documentElement.scrollWidth : 0;
         const viewportWidth = clientWidth || window.innerWidth;
         const overflowOffenders = [];
-        function isContainedByHorizontalScroller(element) {
+        function isHandledByHorizontalOverflowAncestor(element, rect) {
           let current = element.parentElement;
           while (current && current !== body && current !== documentElement) {
             const style = window.getComputedStyle(current);
@@ -3053,6 +3053,11 @@ async function frameEvidence(selector) {
               const currentRect = current.getBoundingClientRect();
               const contained = currentRect.left >= -0.5 && currentRect.right <= viewportWidth + 0.5;
               if (contained) return true;
+            }
+            if (overflowX === "hidden" || overflowX === "clip" || style.overflow === "hidden" || style.overflow === "clip") {
+              const currentRect = current.getBoundingClientRect();
+              const clippedByAncestor = rect.left < currentRect.left - 0.5 || rect.right > currentRect.right + 0.5;
+              if (clippedByAncestor) return true;
             }
             current = current.parentElement;
           }
@@ -3067,7 +3072,7 @@ async function frameEvidence(selector) {
           const rightOverflow = Math.max(0, rect.right - viewportWidth);
           const overflow = Math.max(leftOverflow, rightOverflow);
           if (overflow <= 0.5) continue;
-          if (isContainedByHorizontalScroller(element)) continue;
+          if (isHandledByHorizontalOverflowAncestor(element, rect)) continue;
           const tag = element.tagName ? element.tagName.toLowerCase() : "element";
           const id = element.id ? "#" + element.id : "";
           const className = typeof element.className === "string"
@@ -3447,7 +3452,7 @@ async function captureViewport(viewport) {
     const scrollWidth = documentElement ? documentElement.scrollWidth : 0;
     const viewportWidth = clientWidth || window.innerWidth;
     const overflowOffenders = [];
-    function isContainedByHorizontalScroller(element) {
+    function isHandledByHorizontalOverflowAncestor(element, rect) {
       let current = element.parentElement;
       while (current && current !== body && current !== documentElement) {
         const style = window.getComputedStyle(current);
@@ -3456,6 +3461,11 @@ async function captureViewport(viewport) {
           const currentRect = current.getBoundingClientRect();
           const contained = currentRect.left >= -0.5 && currentRect.right <= viewportWidth + 0.5;
           if (contained) return true;
+        }
+        if (overflowX === "hidden" || overflowX === "clip" || style.overflow === "hidden" || style.overflow === "clip") {
+          const currentRect = current.getBoundingClientRect();
+          const clippedByAncestor = rect.left < currentRect.left - 0.5 || rect.right > currentRect.right + 0.5;
+          if (clippedByAncestor) return true;
         }
         current = current.parentElement;
       }
@@ -3470,7 +3480,7 @@ async function captureViewport(viewport) {
       const rightOverflow = Math.max(0, rect.right - viewportWidth);
       const overflow = Math.max(leftOverflow, rightOverflow);
       if (overflow <= 0.5) continue;
-      if (isContainedByHorizontalScroller(element)) continue;
+      if (isHandledByHorizontalOverflowAncestor(element, rect)) continue;
       const tag = element.tagName ? element.tagName.toLowerCase() : "element";
       const id = element.id ? "#" + element.id : "";
       const className = typeof element.className === "string"
