@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.61
+
+### Patch Changes
+
+- 1699a24: Add a profile setup drag action for pointer-driven proof flows.
+
 ## 0.7.60
 
 ### Patch Changes
