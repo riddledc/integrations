@@ -284,6 +284,12 @@ and setup assertions then execute in that frame context and record
 Use `frame_index` / `frameIndex` when more than one matching iframe is present;
 it defaults to the first frame.
 
+Profiles with setup actions also include a compact
+`setup_actions_succeeded.evidence.setup_summary`. The summary groups each
+viewport's final route, final URL, action counts, clicked targets, iframe URLs,
+compact text samples, and failures so setup-heavy clickthrough or iframe proofs
+can be reviewed without reading every raw setup-action result.
+
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
 still overrides the profile value for one-off runs.
