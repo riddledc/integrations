@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.55
+
+### Patch Changes
+
+- 21d3c3d: Add profile checks for final URL search parameter equality and absence.
+
 ## 0.7.54
 
 ### Patch Changes
