@@ -270,6 +270,13 @@ can include `repeat` / `repeat_count` / `times` from 1 to 100; each repetition
 is recorded with `repeat_index` and `repeat_count`, and `after_ms` runs after
 each repetition. Use it for bounded game proof helpers, retry controls, or other
 workflows where one declarative action needs to advance the app several times.
+Add `frame_selector` / `frameSelector` to a setup action when the interaction
+target lives inside an embedded iframe, such as a community game player or
+hosted preview surface. Selector-based actions, storage actions, window calls,
+and setup assertions then execute in that frame context and record
+`frame_selector`, `frame_index`, and `frame_count` in setup-action evidence.
+Use `frame_index` / `frameIndex` when more than one matching iframe is present;
+it defaults to the first frame.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
