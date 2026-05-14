@@ -95,6 +95,7 @@ export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetwork
   url: string;
   method?: string;
   responses?: RiddleProofProfileNetworkMockResponse[];
+  repeat_responses?: boolean;
   required_hit_count?: number;
   required?: boolean;
 }
@@ -540,6 +541,10 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
     url,
     method: stringValue(input.method)?.toUpperCase(),
     responses,
+    repeat_responses: input.repeat_responses === true
+      || input.repeatResponses === true
+      || input.cycle_responses === true
+      || input.cycleResponses === true,
     required_hit_count: requiredHitCount,
     required: input.required === false ? false : true,
   };
@@ -2166,7 +2171,9 @@ async function registerNetworkMocks(mocks) {
         const responses = Array.isArray(mock.responses) ? mock.responses : [];
         const hitIndex = hitCount;
         hitCount += 1;
-        const responseIndex = responses.length ? Math.min(hitIndex, responses.length - 1) : null;
+        const responseIndex = responses.length
+          ? (mock.repeat_responses ? hitIndex % responses.length : Math.min(hitIndex, responses.length - 1))
+          : null;
         const response = responseIndex === null ? mock : responses[responseIndex];
         const headers = { ...(response.headers || mock.headers || {}) };
         let body = response.body || "";
@@ -2181,7 +2188,8 @@ async function registerNetworkMocks(mocks) {
           response_label: response.label || null,
           hit_index: hitIndex,
           response_index: responseIndex,
-          sequence_reused: responseIndex !== null && hitIndex >= responses.length,
+          sequence_reused: responseIndex !== null && !mock.repeat_responses && hitIndex >= responses.length,
+          sequence_cycle: responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
           url: request.url(),
           method,
           status: response.status || mock.status || 200,
