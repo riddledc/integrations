@@ -217,6 +217,29 @@ The check records the visible text sequence for the selector and passes when
 the expected texts appear in that order as a subsequence. This is less brittle
 than matching one large body-text regex when only row or card order matters.
 
+Use `frame_text_visible` and `frame_no_horizontal_overflow` for embedded app,
+game, or preview surfaces that render inside iframes:
+
+```json
+[
+  {
+    "type": "frame_text_visible",
+    "selector": ".game-player-root iframe",
+    "text": "Start Game"
+  },
+  {
+    "type": "frame_no_horizontal_overflow",
+    "selector": ".game-player-root iframe",
+    "max_overflow_px": 1
+  }
+]
+```
+
+Frame checks capture each matching iframe's URL, title, compact text sample,
+scroll width, client width, measured horizontal overflow, and top visible
+overflow offenders. This keeps embedded-player audits in profile mode instead
+of requiring bespoke iframe inspection scripts.
+
 Use the `route_inventory` check for source-page route coverage audits where a
 navigation surface must expose a known set of routes and each route must load
 both directly and through real link clicks:
