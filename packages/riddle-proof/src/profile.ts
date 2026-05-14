@@ -74,6 +74,7 @@ export interface RiddleProofProfileViewport {
 export interface RiddleProofProfileSetupAction {
   type: RiddleProofProfileSetupActionType;
   selector?: string;
+  force?: boolean;
   key?: string;
   value?: string;
   value_json?: JsonValue;
@@ -552,6 +553,11 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   return {
     type,
     selector,
+    force: type === "click" && (
+      input.force === true
+      || input.force_click === true
+      || input.forceClick === true
+    ),
     key,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
@@ -2768,8 +2774,11 @@ async function executeSetupAction(action, ordinal) {
         if (targetIndex < 0) return { ...base, reason: "text_not_found", count };
       }
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
-      await locator.nth(targetIndex).click({ timeout, noWaitAfter: true });
-      return { ...base, ok: true, count, target_index: targetIndex, text: matchedText };
+      const clickOptions = action.force === true
+        ? { timeout, noWaitAfter: true, force: true }
+        : { timeout, noWaitAfter: true };
+      await locator.nth(targetIndex).click(clickOptions);
+      return { ...base, ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined };
     }
     if (type === "fill" || type === "set_input_value") {
       const locator = page.locator(action.selector);
