@@ -1070,6 +1070,43 @@ assert.ok(setupAssertionProfileScript.includes("number_below_min"));
 assert.ok(setupAssertionProfileScript.includes("selector_count_mismatch"));
 assert.ok(setupAssertionProfileScript.includes("text_still_present"));
 assert.ok(setupAssertionProfileScript.includes("unexpected_value"));
+const frameSetupActionProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-frame-setup-actions",
+  target: {
+    route: "/play/hot-path",
+    setup_actions: [
+      {
+        type: "wait_for_selector",
+        frameSelector: ".game-player-root iframe",
+        selector: ".start-btn",
+      },
+      {
+        type: "click",
+        frame_selector: ".game-player-root iframe",
+        frameIndex: 0,
+        selector: ".start-btn",
+        text: "Start Game",
+      },
+      {
+        type: "assert_text_visible",
+        frame_selector: ".game-player-root iframe",
+        selector: "body",
+        text: "Player 1's Turn",
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/play/hot-path" }],
+}, { url: "https://example.com" });
+assert.equal(frameSetupActionProfile.target.setup_actions[0].frame_selector, ".game-player-root iframe");
+assert.equal(frameSetupActionProfile.target.setup_actions[1].frame_selector, ".game-player-root iframe");
+assert.equal(frameSetupActionProfile.target.setup_actions[1].frame_index, 0);
+const frameSetupActionProfileScript = buildRiddleProofProfileScript(frameSetupActionProfile);
+assert.ok(frameSetupActionProfileScript.includes("setupActionScope"));
+assert.ok(frameSetupActionProfileScript.includes("setupFrameSelector"));
+assert.ok(frameSetupActionProfileScript.includes("contentFrame"));
+assert.ok(frameSetupActionProfileScript.includes("frame_selector_not_found"));
+assert.ok(frameSetupActionProfileScript.includes("scope.context.locator"));
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-setup-assertion",
@@ -1106,6 +1143,15 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /assert_window_number expected_value must be a finite number/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-frame-index",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", frame_selector: ".embed iframe", frame_index: -1, selector: "button" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /frame_index must be a non-negative integer/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-press",

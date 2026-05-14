@@ -79,6 +79,8 @@ export interface RiddleProofProfileViewport {
 export interface RiddleProofProfileSetupAction {
   type: RiddleProofProfileSetupActionType;
   selector?: string;
+  frame_selector?: string;
+  frame_index?: number;
   force?: boolean;
   key?: string;
   value?: string;
@@ -540,6 +542,11 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
   const selector = stringValue(input.selector);
+  const frameSelector = stringFromOwn(input, "frame_selector", "frameSelector", "iframe_selector", "iframeSelector");
+  const frameIndex = numberValue(valueFromOwn(input, "frame_index", "frameIndex", "iframe_index", "iframeIndex"));
+  if (frameIndex !== undefined && (!Number.isInteger(frameIndex) || frameIndex < 0)) {
+    throw new Error(`target.setup_actions[${index}].frame_index must be a non-negative integer.`);
+  }
   if ((type === "click" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
@@ -600,6 +607,8 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   return {
     type,
     selector,
+    frame_selector: frameSelector,
+    frame_index: frameIndex,
     force: type === "click" && (
       input.force === true
       || input.force_click === true
@@ -1677,6 +1686,8 @@ function assessSetupActionsFromEvidence(
           viewport: viewport.name,
           action: result.action ?? result.type ?? null,
           selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          frame_index: result.frame_index ?? null,
           reason: result.reason ?? result.error ?? null,
         });
       }
@@ -2236,10 +2247,12 @@ function assessProfile(profile, evidence) {
         if (result && result.ok === false) {
           failed.push({
             viewport: viewport.name,
-            action: result.action || result.type || null,
-            selector: result.selector || null,
-            reason: result.reason || result.error || null,
-          });
+          action: result.action || result.type || null,
+          selector: result.selector || null,
+          frame_selector: result.frame_selector || null,
+          frame_index: result.frame_index ?? null,
+          reason: result.reason || result.error || null,
+        });
         }
       }
       if (results.length < actionCount && results.every((result) => !result || result.ok !== false)) {
@@ -2703,8 +2716,8 @@ function setupJsonValue(value) {
 function setupValuesEqual(left, right) {
   return JSON.stringify(setupJsonValue(left)) === JSON.stringify(setupJsonValue(right));
 }
-async function setupReadWindowValue(path) {
-  return await page.evaluate(({ path }) => {
+async function setupReadWindowValue(context, path) {
+  return await context.evaluate(({ path }) => {
     const toJsonValue = (value) => {
       if (value === null || value === undefined) return null;
       if (typeof value === "string" || typeof value === "boolean") return value;
@@ -2725,6 +2738,80 @@ async function setupReadWindowValue(path) {
     }
     return { ok: true, value: toJsonValue(current) };
   }, { path });
+}
+function setupFrameSelector(action) {
+  return String(action?.frame_selector || action?.frameSelector || action?.iframe_selector || action?.iframeSelector || "").trim();
+}
+function setupFrameIndex(action) {
+  const raw = action?.frame_index ?? action?.frameIndex ?? action?.iframe_index ?? action?.iframeIndex ?? 0;
+  const number = Number(raw);
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+function setupScopeEvidence(scope) {
+  if (!scope || !scope.frame_selector) return {};
+  return {
+    frame_selector: scope.frame_selector,
+    frame_index: scope.frame_index,
+    frame_count: scope.frame_count,
+  };
+}
+function setupScopeFailure(base, scope) {
+  return {
+    ...base,
+    ...setupScopeEvidence(scope),
+    reason: scope?.reason || "frame_scope_unavailable",
+    error: scope?.error || undefined,
+  };
+}
+async function setupActionScope(action, timeout) {
+  const frameSelector = setupFrameSelector(action);
+  if (!frameSelector) return { ok: true, context: page };
+  const frameIndex = setupFrameIndex(action);
+  let frameCount = 0;
+  let locator = null;
+  try {
+    await page.waitForSelector(frameSelector, { state: "attached", timeout });
+    locator = page.locator(frameSelector);
+    frameCount = await locator.count();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "frame_selector_not_found",
+      frame_selector: frameSelector,
+      frame_index: frameIndex,
+      frame_count: frameCount,
+      error: String(error && error.message ? error.message : error).slice(0, 1000),
+    };
+  }
+  if (!frameCount) {
+    return { ok: false, reason: "frame_selector_not_found", frame_selector: frameSelector, frame_index: frameIndex, frame_count: frameCount };
+  }
+  if (frameIndex >= frameCount) {
+    return { ok: false, reason: "frame_index_out_of_range", frame_selector: frameSelector, frame_index: frameIndex, frame_count: frameCount };
+  }
+  const handle = await locator.nth(frameIndex).elementHandle({ timeout }).catch((error) => ({ __riddle_error: error }));
+  if (!handle || handle.__riddle_error) {
+    return {
+      ok: false,
+      reason: "frame_element_unavailable",
+      frame_selector: frameSelector,
+      frame_index: frameIndex,
+      frame_count: frameCount,
+      error: handle?.__riddle_error ? String(handle.__riddle_error && handle.__riddle_error.message ? handle.__riddle_error.message : handle.__riddle_error).slice(0, 1000) : undefined,
+    };
+  }
+  const frame = typeof handle.contentFrame === "function" ? await handle.contentFrame().catch((error) => ({ __riddle_error: error })) : null;
+  if (!frame || frame.__riddle_error) {
+    return {
+      ok: false,
+      reason: "content_frame_unavailable",
+      frame_selector: frameSelector,
+      frame_index: frameIndex,
+      frame_count: frameCount,
+      error: frame?.__riddle_error ? String(frame.__riddle_error && frame.__riddle_error.message ? frame.__riddle_error.message : frame.__riddle_error).slice(0, 1000) : undefined,
+    };
+  }
+  return { ok: true, context: frame, frame_selector: frameSelector, frame_index: frameIndex, frame_count: frameCount };
 }
 async function setupLocatorText(locator, index) {
   return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
@@ -2887,7 +2974,8 @@ async function registerNetworkMocks(mocks) {
 }
 async function executeSetupAction(action, ordinal) {
   const type = setupActionType(action);
-  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null };
+  const frameSelector = setupFrameSelector(action);
+  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null, frame_selector: frameSelector || null };
   const timeout = setupNumber(action.timeout_ms, 5000);
   try {
     if (type === "wait") {
@@ -2896,51 +2984,65 @@ async function executeSetupAction(action, ordinal) {
       return { ...base, ok: true, ms };
     }
     if (type === "wait_for_selector") {
-      await page.waitForSelector(action.selector, { state: "visible", timeout });
-      return { ...base, ok: true, timeout_ms: timeout };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      await scope.context.waitForSelector(action.selector, { state: "visible", timeout });
+      return { ...base, ...setupScopeEvidence(scope), ok: true, timeout_ms: timeout };
     }
     if (type === "press") {
       const key = String(action.key || "").trim();
       if (!key) return { ...base, reason: "missing_key" };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
       if (!action.selector) {
-        await page.keyboard.press(key);
-        return { ...base, ok: true, key };
+        if (scope.frame_selector) {
+          await scope.context.locator("body").press(key, { timeout });
+        } else {
+          await page.keyboard.press(key);
+        }
+        return { ...base, ...setupScopeEvidence(scope), ok: true, key };
       }
-      const locator = page.locator(action.selector);
+      const locator = scope.context.locator(action.selector);
       const count = await locator.count();
       if (!count) return { ...base, reason: "selector_not_found", count, key };
       const targetIndex = Number.isInteger(action.index) ? action.index : 0;
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex, key };
       await locator.nth(targetIndex).press(key, { timeout });
-      return { ...base, ok: true, count, target_index: targetIndex, key };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, key };
     }
     if (type === "local_storage" || type === "session_storage") {
       const value = setupActionValue(action);
-      await page.evaluate(({ type, key, value }) => {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      await scope.context.evaluate(({ type, key, value }) => {
         const storage = type === "session_storage" ? window.sessionStorage : window.localStorage;
         storage.setItem(key, value);
       }, { type, key: action.key, value });
       if (action.reload === true) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
-      return { ...base, ok: true, key: action.key, value_length: value.length, reload: action.reload === true };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, key: action.key, value_length: value.length, reload: action.reload === true };
     }
     if (type === "clear_storage") {
       const storage = action.storage || "both";
-      await page.evaluate(({ storage }) => {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      await scope.context.evaluate(({ storage }) => {
         if (storage === "local" || storage === "both") window.localStorage.clear();
         if (storage === "session" || storage === "both") window.sessionStorage.clear();
       }, { storage });
       if (action.reload === true) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
-      return { ...base, ok: true, storage, reload: action.reload === true };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, storage, reload: action.reload === true };
     }
     if (type === "window_call") {
       const path = String(action.path || action.function_path || action.functionPath || "");
       const args = Array.isArray(action.args) ? action.args : [];
       if (!path) return { ...base, path, reason: "missing_path" };
-      const result = await page.evaluate(async ({ path, args }) => {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const result = await scope.context.evaluate(async ({ path, args }) => {
         const toJsonValue = (value) => {
           if (value === null || value === undefined) return null;
           if (typeof value === "string" || typeof value === "boolean") return value;
@@ -2980,6 +3082,7 @@ async function executeSetupAction(action, ordinal) {
       const expectationMet = !hasExpectation || setupValuesEqual(result.returned, expected);
       return {
         ...base,
+        ...setupScopeEvidence(scope),
         ok: Boolean(result.ok && expectationMet),
         path,
         arg_count: args.length,
@@ -3010,13 +3113,16 @@ async function executeSetupAction(action, ordinal) {
                 : action.expect;
       if (!path) return { ...base, path, reason: "missing_path" };
       if (!hasExpected) return { ...base, path, reason: "missing_expected_value" };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
       const startedAt = Date.now();
       let result = null;
       while (Date.now() - startedAt <= timeout) {
-        result = await setupReadWindowValue(path);
+        result = await setupReadWindowValue(scope.context, path);
         if (result.ok && setupValuesEqual(result.value, expected)) {
           return {
             ...base,
+            ...setupScopeEvidence(scope),
             ok: true,
             path,
             value: setupJsonValue(result.value),
@@ -3028,6 +3134,7 @@ async function executeSetupAction(action, ordinal) {
       }
       return {
         ...base,
+        ...setupScopeEvidence(scope),
         path,
         reason: result?.ok ? "unexpected_value" : result?.reason || "path_not_found",
         missing_part: result?.missing_part || undefined,
@@ -3044,11 +3151,13 @@ async function executeSetupAction(action, ordinal) {
       const hasExpected = expected !== undefined;
       if (!path) return { ...base, path, reason: "missing_path" };
       if (!hasExpected && minValue === undefined && maxValue === undefined) return { ...base, path, reason: "missing_number_expectation" };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
       const startedAt = Date.now();
       let result = null;
       let lastReason = "path_not_found";
       while (Date.now() - startedAt <= timeout) {
-        result = await setupReadWindowValue(path);
+        result = await setupReadWindowValue(scope.context, path);
         if (result.ok) {
           const actual = setupFiniteNumber(result.value);
           if (actual === undefined) {
@@ -3062,6 +3171,7 @@ async function executeSetupAction(action, ordinal) {
           } else {
             return {
               ...base,
+              ...setupScopeEvidence(scope),
               ok: true,
               path,
               value: actual,
@@ -3078,6 +3188,7 @@ async function executeSetupAction(action, ordinal) {
       }
       return {
         ...base,
+        ...setupScopeEvidence(scope),
         path,
         reason: lastReason,
         missing_part: result?.missing_part || undefined,
@@ -3089,7 +3200,9 @@ async function executeSetupAction(action, ordinal) {
       };
     }
     if (type === "click") {
-      const locator = page.locator(action.selector);
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
       const count = await locator.count();
       if (!count) return { ...base, reason: "selector_not_found", count };
       let targetIndex = Number.isInteger(action.index) ? action.index : 0;
@@ -3121,33 +3234,39 @@ async function executeSetupAction(action, ordinal) {
         ? { timeout, noWaitAfter: true, force: true }
         : { timeout, noWaitAfter: true };
       await locator.nth(targetIndex).click(clickOptions);
-      return { ...base, ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined };
     }
     if (type === "fill" || type === "set_input_value") {
-      const locator = page.locator(action.selector);
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
       const count = await locator.count();
       if (!count) return { ...base, reason: "selector_not_found", count };
       const targetIndex = Number.isInteger(action.index) ? action.index : 0;
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
       const value = setupActionValue(action);
       await locator.nth(targetIndex).fill(value, { timeout });
-      return { ...base, ok: true, count, target_index: targetIndex, value_length: value.length };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, value_length: value.length };
     }
     if (type === "assert_selector_count") {
-      const locator = page.locator(action.selector);
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
       const expectedCount = setupNumber(action.expected_count, -1);
       if (!Number.isInteger(expectedCount) || expectedCount < 0) return { ...base, reason: "invalid_expected_count", expected_count: action.expected_count };
       const startedAt = Date.now();
       let count = 0;
       while (Date.now() - startedAt <= timeout) {
         count = await locator.count().catch(() => 0);
-        if (count === expectedCount) return { ...base, ok: true, count, expected_count: expectedCount, timeout_ms: timeout };
+        if (count === expectedCount) return { ...base, ...setupScopeEvidence(scope), ok: true, count, expected_count: expectedCount, timeout_ms: timeout };
         await page.waitForTimeout(100);
       }
-      return { ...base, reason: "selector_count_mismatch", count, expected_count: expectedCount, timeout_ms: timeout };
+      return { ...base, ...setupScopeEvidence(scope), reason: "selector_count_mismatch", count, expected_count: expectedCount, timeout_ms: timeout };
     }
     if (type === "wait_for_text") {
-      const locator = page.locator(action.selector);
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
       const startedAt = Date.now();
       let lastText = "";
       while (Date.now() - startedAt <= timeout) {
@@ -3156,15 +3275,17 @@ async function executeSetupAction(action, ordinal) {
           const text = await setupLocatorText(locator, index);
           lastText = text || lastText;
           if (setupTextMatches(text, action)) {
-            return { ...base, ok: true, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
+            return { ...base, ...setupScopeEvidence(scope), ok: true, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
           }
         }
         await page.waitForTimeout(100);
       }
-      return { ...base, reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+      return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
     }
     if (type === "assert_text_visible" || type === "assert_text_absent") {
-      const locator = page.locator(action.selector);
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
       const startedAt = Date.now();
       let lastText = "";
       let matchedText = "";
@@ -3183,7 +3304,7 @@ async function executeSetupAction(action, ordinal) {
             if (type === "assert_text_visible") {
               const visible = await setupLocatorVisible(locator, index);
               if (visible) {
-                return { ...base, ok: true, count, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
+                return { ...base, ...setupScopeEvidence(scope), ok: true, count, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
               }
               hiddenMatch = true;
               break;
@@ -3192,17 +3313,17 @@ async function executeSetupAction(action, ordinal) {
           }
         }
         if (type === "assert_text_absent" && !matched) {
-          return { ...base, ok: true, count, timeout_ms: timeout };
+          return { ...base, ...setupScopeEvidence(scope), ok: true, count, timeout_ms: timeout };
         }
         await page.waitForTimeout(100);
       }
       if (type === "assert_text_visible") {
         if (hiddenMatch) {
-          return { ...base, reason: "matching_element_not_visible", text: compactSetupResultText(matchedText), timeout_ms: timeout };
+          return { ...base, ...setupScopeEvidence(scope), reason: "matching_element_not_visible", text: compactSetupResultText(matchedText), timeout_ms: timeout };
         }
-        return { ...base, reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+        return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
       }
-      return { ...base, reason: "text_still_present", text: compactSetupResultText(matchedText || lastText), timeout_ms: timeout };
+      return { ...base, ...setupScopeEvidence(scope), reason: "text_still_present", text: compactSetupResultText(matchedText || lastText), timeout_ms: timeout };
     }
     return { ...base, reason: "unsupported_action" };
   } catch (error) {
