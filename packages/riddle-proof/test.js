@@ -841,6 +841,9 @@ assert.ok(consoleAllowedProfileScript.includes("matchesAllowedMessage"));
 assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_selector_count"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
@@ -895,6 +898,50 @@ assert.equal(formSetupProfile.target.setup_actions[2].value, "proof-session");
 assert.equal(formSetupProfile.target.setup_actions[3].value, "Build a tiny maze");
 assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
+const setupAssertionProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-setup-assertions",
+  target: {
+    route: "/",
+    setup_actions: [
+      {
+        type: "assert-text-visible",
+        selector: "body",
+        text: "Fresh Row",
+      },
+      {
+        type: "assert-text-absent",
+        selector: "body",
+        text: "Stale Row",
+        timeout_ms: 1000,
+      },
+      {
+        type: "assert-selector-count",
+        selector: "a[href='/play/fresh-row']",
+        expectedCount: 1,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" });
+assert.equal(setupAssertionProfile.target.setup_actions[0].type, "assert_text_visible");
+assert.equal(setupAssertionProfile.target.setup_actions[1].type, "assert_text_absent");
+assert.equal(setupAssertionProfile.target.setup_actions[2].type, "assert_selector_count");
+assert.equal(setupAssertionProfile.target.setup_actions[2].expected_count, 1);
+const setupAssertionProfileScript = buildRiddleProofProfileScript(setupAssertionProfile);
+assert.ok(setupAssertionProfileScript.includes('type === "assert_selector_count"'));
+assert.ok(setupAssertionProfileScript.includes('type === "assert_text_visible" || type === "assert_text_absent"'));
+assert.ok(setupAssertionProfileScript.includes("selector_count_mismatch"));
+assert.ok(setupAssertionProfileScript.includes("text_still_present"));
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-assertion",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "assert-selector-count", selector: "a" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /assert_selector_count requires non-negative integer expected_count/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-storage",

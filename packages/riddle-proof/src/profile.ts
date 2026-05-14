@@ -36,6 +36,9 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "click",
   "fill",
   "set_input_value",
+  "assert_text_visible",
+  "assert_text_absent",
+  "assert_selector_count",
   "local_storage",
   "session_storage",
   "clear_storage",
@@ -77,6 +80,7 @@ export interface RiddleProofProfileSetupAction {
   pattern?: string;
   flags?: string;
   index?: number;
+  expected_count?: number;
   ms?: number;
   timeout_ms?: number;
   after_ms?: number;
@@ -490,11 +494,18 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
   const selector = stringValue(input.selector);
-  if ((type === "click" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text") && !selector) {
+  if ((type === "click" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
   if (type === "wait_for_text" && !stringValue(input.text) && !stringValue(input.pattern)) {
     throw new Error(`target.setup_actions[${index}] wait_for_text requires text or pattern.`);
+  }
+  if ((type === "assert_text_visible" || type === "assert_text_absent") && !stringValue(input.text) && !stringValue(input.pattern)) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires text or pattern.`);
+  }
+  const expectedCount = numberValue(input.expected_count ?? input.expectedCount ?? input.count);
+  if (type === "assert_selector_count" && (expectedCount === undefined || !Number.isInteger(expectedCount) || expectedCount < 0)) {
+    throw new Error(`target.setup_actions[${index}] ${type} requires non-negative integer expected_count.`);
   }
   const value = stringFromOwn(input, "value", "input_value", "inputValue");
   const hasJsonValue = hasOwn(input, "value_json") || hasOwn(input, "valueJson") || hasOwn(input, "json");
@@ -518,6 +529,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
     index: numberValue(input.index),
+    expected_count: expectedCount,
     ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     after_ms: numberValue(input.after_ms) ?? numberValue(input.afterMs),
@@ -2645,6 +2657,19 @@ async function executeSetupAction(action, ordinal) {
       await locator.nth(targetIndex).fill(value, { timeout });
       return { ...base, ok: true, count, target_index: targetIndex, value_length: value.length };
     }
+    if (type === "assert_selector_count") {
+      const locator = page.locator(action.selector);
+      const expectedCount = setupNumber(action.expected_count, -1);
+      if (!Number.isInteger(expectedCount) || expectedCount < 0) return { ...base, reason: "invalid_expected_count", expected_count: action.expected_count };
+      const startedAt = Date.now();
+      let count = 0;
+      while (Date.now() - startedAt <= timeout) {
+        count = await locator.count().catch(() => 0);
+        if (count === expectedCount) return { ...base, ok: true, count, expected_count: expectedCount, timeout_ms: timeout };
+        await page.waitForTimeout(100);
+      }
+      return { ...base, reason: "selector_count_mismatch", count, expected_count: expectedCount, timeout_ms: timeout };
+    }
     if (type === "wait_for_text") {
       const locator = page.locator(action.selector);
       const startedAt = Date.now();
@@ -2661,6 +2686,47 @@ async function executeSetupAction(action, ordinal) {
         await page.waitForTimeout(100);
       }
       return { ...base, reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+    }
+    if (type === "assert_text_visible" || type === "assert_text_absent") {
+      const locator = page.locator(action.selector);
+      const startedAt = Date.now();
+      let lastText = "";
+      let matchedText = "";
+      let hiddenMatch = false;
+      while (Date.now() - startedAt <= timeout) {
+        const count = await locator.count().catch(() => 0);
+        let matched = false;
+        matchedText = "";
+        hiddenMatch = false;
+        for (let index = 0; index < count; index += 1) {
+          const text = await setupLocatorText(locator, index);
+          lastText = text || lastText;
+          if (setupTextMatches(text, action)) {
+            matched = true;
+            matchedText = text;
+            if (type === "assert_text_visible") {
+              const visible = await setupLocatorVisible(locator, index);
+              if (visible) {
+                return { ...base, ok: true, count, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
+              }
+              hiddenMatch = true;
+              break;
+            }
+            break;
+          }
+        }
+        if (type === "assert_text_absent" && !matched) {
+          return { ...base, ok: true, count, timeout_ms: timeout };
+        }
+        await page.waitForTimeout(100);
+      }
+      if (type === "assert_text_visible") {
+        if (hiddenMatch) {
+          return { ...base, reason: "matching_element_not_visible", text: compactSetupResultText(matchedText), timeout_ms: timeout };
+        }
+        return { ...base, reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+      }
+      return { ...base, reason: "text_still_present", text: compactSetupResultText(matchedText || lastText), timeout_ms: timeout };
     }
     return { ...base, reason: "unsupported_action" };
   } catch (error) {
