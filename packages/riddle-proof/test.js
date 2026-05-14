@@ -618,6 +618,23 @@ const networkMockProfile = normalizeRiddleProofProfile({
         method: "POST",
         json: { gameId: "riddle-proof-mock" },
       },
+      {
+        label: "build-retry",
+        url: "**/api/build",
+        method: "POST",
+        responses: [
+          {
+            label: "first-build-fails",
+            status: 503,
+            json: { error: "Synthetic build outage" },
+          },
+          {
+            label: "second-build-succeeds",
+            status: 200,
+            json: { previewUrl: "https://cdn.test/retry-game/index.html" },
+          },
+        ],
+      },
     ],
   },
   checks: [
@@ -625,15 +642,20 @@ const networkMockProfile = normalizeRiddleProofProfile({
     { type: "no_fatal_console_errors" },
   ],
 }, { url: "https://example.com" });
-assert.equal(networkMockProfile.target.network_mocks.length, 2);
+assert.equal(networkMockProfile.target.network_mocks.length, 3);
 assert.equal(networkMockProfile.target.network_mocks[0].required, true);
 assert.equal(networkMockProfile.target.network_mocks[0].content_type, "text/event-stream");
 assert.deepEqual(networkMockProfile.target.network_mocks[1].body_json, { gameId: "riddle-proof-mock" });
+assert.equal(networkMockProfile.target.network_mocks[2].responses.length, 2);
+assert.equal(networkMockProfile.target.network_mocks[2].responses[0].status, 503);
+assert.deepEqual(networkMockProfile.target.network_mocks[2].responses[1].body_json, { previewUrl: "https://cdn.test/retry-game/index.html" });
 const networkMockProfileScript = buildRiddleProofProfileScript(networkMockProfile);
 assert.ok(networkMockProfileScript.includes("registerNetworkMocks"));
 assert.ok(networkMockProfileScript.includes("networkMockEvents"));
 assert.ok(networkMockProfileScript.includes("network_mocks: networkMockEvents.slice()"));
 assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
+assert.ok(networkMockProfileScript.includes("response_index"));
+assert.ok(networkMockProfileScript.includes("sequence_reused"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 const consoleAllowedProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
@@ -1274,12 +1296,16 @@ const networkMockProfileAssessment = assessRiddleProofProfileEvidence(networkMoc
   network_mocks: [
     { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
     { ok: true, label: "save", url: "https://example.com/api/save", method: "POST", status: 200 },
+    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 0, response_index: 0, url: "https://example.com/api/build", method: "POST", status: 503 },
+    { ok: true, label: "build-retry", response_label: "second-build-succeeds", hit_index: 1, response_index: 1, url: "https://example.com/api/build", method: "POST", status: 200 },
   ],
-  dom_summary: { viewport_count: 1, network_mock_hit_count: 2 },
+  dom_summary: { viewport_count: 1, network_mock_hit_count: 4 },
 });
 assert.equal(networkMockProfileAssessment.status, "passed");
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").status, "passed");
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.hits_by_label.save, 1);
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.hits_by_label["build-retry"], 2);
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.required_hits_by_label["build-retry"], 2);
 const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
   ...networkMockProfileAssessment.evidence,
   network_mocks: [
@@ -1289,6 +1315,21 @@ const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMoc
 assert.equal(missingNetworkMockAssessment.status, "product_regression");
 assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").status, "failed");
 assert.equal(missingNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.failed[0].label, "save");
+const partialSequenceNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  ...networkMockProfileAssessment.evidence,
+  network_mocks: [
+    { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
+    { ok: true, label: "save", url: "https://example.com/api/save", method: "POST", status: 200 },
+    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 0, response_index: 0, url: "https://example.com/api/build", method: "POST", status: 503 },
+  ],
+});
+const partialSequenceNetworkMockCheck = partialSequenceNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded");
+assert.equal(partialSequenceNetworkMockAssessment.status, "product_regression");
+assert.equal(partialSequenceNetworkMockCheck.status, "failed");
+assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].label, "build-retry");
+assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].reason, "required_mock_hit_count_not_met");
+assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].required_hit_count, 2);
+assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].hit_count, 1);
 const allowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "expected-negative-console-profile",
