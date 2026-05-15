@@ -657,6 +657,29 @@ const setupScreenshotProfile = normalizeRiddleProofProfile({
 }, { url: "https://example.com" });
 assert.equal(setupScreenshotProfile.target.setup_actions[0].type, "screenshot");
 assert.equal(setupScreenshotProfile.target.setup_actions[0].label, "After Pricing Click");
+const clickCountSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-count-profile",
+  target: {
+    route: "/checkout",
+    setup_actions: [{ type: "click", selector: "button[type='submit']", click_count: 2 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/checkout" }],
+}, { url: "https://example.com" });
+assert.equal(clickCountSetupProfile.target.setup_actions[0].click_count, 2);
+const clickCountAliasProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-count-alias-profile",
+  target: {
+    route: "/checkout",
+    setup_actions: [{ type: "click", selector: "button[type='submit']", clicks: 3 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/checkout" }],
+}, { url: "https://example.com" });
+assert.equal(clickCountAliasProfile.target.setup_actions[0].click_count, 3);
+const clickCountProfileScript = buildRiddleProofProfileScript(clickCountSetupProfile);
+assert.ok(clickCountProfileScript.includes("action.click_count"));
+assert.ok(clickCountProfileScript.includes("clickOptions.clickCount = clickCount"));
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
@@ -1186,6 +1209,24 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /repeat must be an integer from 1 to 100/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-click-count",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", selector: "button", click_count: 11 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /click_count must be an integer from 1 to 10/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-click-count-type",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "wait", ms: 10, click_count: 2 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /click_count is only supported for click actions/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-coordinates",

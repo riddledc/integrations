@@ -272,6 +272,10 @@ stable enough for Playwright's default click actionability checks. Use `press`
 with a Playwright key name, such as `Enter`, `Space`, or `ArrowLeft`,
 when a route's intended browser control is keyboard-driven; omit `selector` for
 a page-level key press, or provide `selector` to press against a focused element.
+Use `click_count` / `clickCount` / `clicks` from 1 to 10 on a single `click`
+action for atomic double-click or double-submit contracts where modeling the
+interaction as repeated setup actions would incorrectly require the target to
+remain in the DOM after the first click.
 Use `drag` for pointer-driven controls such as canvas launch areas, sliders, or
 drag-to-aim games. Provide `selector`, `from_x`, `from_y`, `to_x`, and `to_y`;
 coordinates are element-relative pixels by default. Set `coordinate_mode:

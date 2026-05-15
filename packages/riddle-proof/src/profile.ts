@@ -86,6 +86,7 @@ export interface RiddleProofProfileSetupAction {
   frame_selector?: string;
   frame_index?: number;
   force?: boolean;
+  click_count?: number;
   coordinate_mode?: "pixels" | "ratio";
   from_x?: number;
   from_y?: number;
@@ -671,6 +672,19 @@ function normalizeSetupActionRepeat(input: Record<string, unknown>, index: numbe
   return repeat;
 }
 
+function normalizeSetupActionClickCount(input: Record<string, unknown>, type: RiddleProofProfileSetupActionType, index: number): number | undefined {
+  const clickCountInput = valueFromOwn(input, "click_count", "clickCount", "clicks");
+  if (clickCountInput === undefined) return undefined;
+  if (type !== "click") {
+    throw new Error(`target.setup_actions[${index}].click_count is only supported for click actions.`);
+  }
+  const clickCount = numberValue(clickCountInput);
+  if (clickCount === undefined || !Number.isInteger(clickCount) || clickCount < 1 || clickCount > 10) {
+    throw new Error(`target.setup_actions[${index}].click_count must be an integer from 1 to 10.`);
+  }
+  return clickCount;
+}
+
 function normalizeSetupActionCoordinateMode(value: unknown, index: number): "pixels" | "ratio" | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const normalized = String(value).trim().replace(/-/g, "_").toLowerCase();
@@ -775,6 +789,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       || input.force_click === true
       || input.forceClick === true
     ),
+    click_count: normalizeSetupActionClickCount(input, type, index),
     coordinate_mode: coordinateMode,
     from_x: fromX,
     from_y: fromY,
@@ -3722,8 +3737,10 @@ async function executeSetupAction(action, ordinal, viewport) {
       const clickOptions = action.force === true
         ? { timeout, noWaitAfter: true, force: true }
         : { timeout, noWaitAfter: true };
+      const clickCount = setupNumber(action.click_count, 1);
+      if (Number.isInteger(clickCount) && clickCount > 1) clickOptions.clickCount = clickCount;
       await locator.nth(targetIndex).click(clickOptions);
-      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined };
+      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined, click_count: clickCount > 1 ? clickCount : undefined };
     }
     if (type === "fill" || type === "set_input_value") {
       const scope = await setupActionScope(action, timeout);
