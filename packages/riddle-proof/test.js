@@ -451,6 +451,27 @@ const cliRunProfileServer = createServer((request, response) => {
       artifacts: { screenshots: ["cli-profile-progress-desktop-ready"], proof_json: "proof.json" },
       checks: [
         {
+          type: "network_mocks_succeeded",
+          status: "passed",
+          evidence: {
+            mock_count: 2,
+            required_count: 2,
+            hit_count: 5,
+            hits_by_label: {
+              "api-fail-then-success": 3,
+              "save-current-build": 2,
+            },
+            required_hits_by_label: {
+              "api-fail-then-success": 3,
+              "save-current-build": 2,
+            },
+            max_hits_by_label: {
+              "save-current-build": 2,
+            },
+            failed: [],
+          },
+        },
+        {
           type: "setup_actions_succeeded",
           status: "passed",
           evidence: {
@@ -540,6 +561,11 @@ try {
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /## Network Mocks/);
+  assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
+  assert.match(profileSummaryMarkdown, /failed mocks: 0/);
+  assert.match(profileSummaryMarkdown, /api-fail-then-success: hits 3, required 3/);
+  assert.match(profileSummaryMarkdown, /save-current-build: hits 2, required 2, max 2/);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");

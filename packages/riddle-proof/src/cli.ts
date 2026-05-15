@@ -362,6 +362,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (setupSummaryLines.length) {
     lines.push("", "## Setup Summary", "", ...setupSummaryLines);
   }
+  const networkMockSummaryLines = profileNetworkMockSummaryMarkdown(result);
+  if (networkMockSummaryLines.length) {
+    lines.push("", "## Network Mocks", "", ...networkMockSummaryLines);
+  }
   if (result.artifacts.riddle_artifacts?.length) {
     lines.push("", "## Riddle Artifacts", "");
     for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
@@ -422,6 +426,46 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${observedPath ? `, path ${observedPath}` : ""}`);
   }
   if (viewports.length > 8) lines.push(`- ${viewports.length - 8} additional viewport(s) omitted from setup summary.`);
+  return lines;
+}
+
+function cliRecordNumber(value: Record<string, unknown>, key: string): number | undefined {
+  return cliFiniteNumber(value[key]);
+}
+
+function profileNetworkMockSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const networkCheck = result.checks.find((check) => check.type === "network_mocks_succeeded");
+  const evidence = cliRecord(networkCheck?.evidence);
+  if (!evidence) return [];
+
+  const hitsByLabel = cliRecord(evidence.hits_by_label) || {};
+  const requiredHitsByLabel = cliRecord(evidence.required_hits_by_label) || {};
+  const maxHitsByLabel = cliRecord(evidence.max_hits_by_label) || {};
+  const labels = Array.from(new Set([
+    ...Object.keys(hitsByLabel),
+    ...Object.keys(requiredHitsByLabel),
+    ...Object.keys(maxHitsByLabel),
+  ])).sort();
+  const mockCount = cliFiniteNumber(evidence.mock_count);
+  const requiredCount = cliFiniteNumber(evidence.required_count);
+  const hitCount = cliFiniteNumber(evidence.hit_count);
+  const failed = Array.isArray(evidence.failed) ? evidence.failed : [];
+  if (!labels.length && mockCount === undefined && hitCount === undefined && !failed.length) return [];
+
+  const lines = [
+    `- mocks: ${mockCount === undefined ? labels.length : mockCount}; total hits: ${hitCount === undefined ? "unknown" : hitCount}${requiredCount === undefined ? "" : `; required mocks: ${requiredCount}`}`,
+    `- failed mocks: ${failed.length}`,
+  ];
+
+  for (const label of labels.slice(0, 16)) {
+    const parts = [`hits ${cliRecordNumber(hitsByLabel, label) ?? 0}`];
+    const requiredHits = cliRecordNumber(requiredHitsByLabel, label);
+    const maxHits = cliRecordNumber(maxHitsByLabel, label);
+    if (requiredHits !== undefined) parts.push(`required ${requiredHits}`);
+    if (maxHits !== undefined) parts.push(`max ${maxHits}`);
+    lines.push(`- ${label}: ${parts.join(", ")}`);
+  }
+  if (labels.length > 16) lines.push(`- ${labels.length - 16} additional network mock label(s) omitted from summary.`);
   return lines;
 }
 

@@ -468,8 +468,11 @@ from weak proof and environment blockers:
 `--output` writes `profile-result.json`, `summary.md`, and local copies of the
 structured `proof.json`, `console.json`, and `dom-summary.json` when they are
 available. Riddle screenshot URLs remain referenced in the result's artifact
-list. The profile/result schema is runner-agnostic; Riddle is the first hosted
-adapter.
+list. When setup actions or network mocks are present, `summary.md` includes
+compact setup and network mock sections so reviewers can see action counts,
+setup screenshots, hit counts, required hits, max-hit caps, and failed mocks
+without opening the full JSON artifact. The profile/result schema is
+runner-agnostic; Riddle is the first hosted adapter.
 
 ## Runner Harness
 
