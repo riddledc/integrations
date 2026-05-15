@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.71
+
+### Patch Changes
+
+- 6b81d1f: Add response-label hit counts to profile network mock evidence and summaries.
+
 ## 0.7.70
 
 ### Patch Changes
