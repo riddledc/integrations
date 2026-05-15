@@ -488,7 +488,9 @@ const cliRunProfileServer = createServer((request, response) => {
                 setup_screenshots: ["cli-profile-progress-desktop-ready"],
                 clicked_total: 1,
                 clicked_truncated: false,
-                clicked: [{ selector: "[data-testid='open-profile']" }],
+                click_count_action_total: 1,
+                click_count_value_total: 2,
+                clicked: [{ selector: "[data-testid='open-profile']", click_count: 2 }],
                 failed: [],
               }],
             },
@@ -560,7 +562,8 @@ try {
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /## Network Mocks/);
   assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
   assert.match(profileSummaryMarkdown, /failed mocks: 0/);
@@ -1578,7 +1581,7 @@ const profileEvidence = {
       },
       text_matches: { "text:Start building": true, "text:Desktop-only copy": false },
       setup_action_results: [
-        { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
+        { ok: true, action: "click", selector: "[data-testid='open-pricing']", click_count: 2 },
         { ok: true, action: "screenshot", label: "after-click", screenshot_label: "pricing-page-basic-mobile-after-click" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
       ],
@@ -1623,7 +1626,10 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts
 assert.deepEqual(profileSetupCheck.evidence.setup_summary.viewports[0].setup_screenshots, ["pricing-page-basic-mobile-after-click"]);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_total, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_truncated, false);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].click_count_action_total, 1);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].click_count_value_total, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].selector, "[data-testid='open-pricing']");
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].click_count, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
 const longClickProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
