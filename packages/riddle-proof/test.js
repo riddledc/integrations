@@ -508,6 +508,36 @@ const cliRunProfileServer = createServer((request, response) => {
           evidence: { expected_path: "/profile", observed_paths: ["/profile"], http_statuses: [200] },
         },
         {
+          type: "selector_visible",
+          status: "passed",
+          evidence: { selector: ".dashboard-content", visible_counts: [1] },
+        },
+        {
+          type: "selector_count_equals",
+          status: "passed",
+          evidence: { selector: ".jobs-list tbody tr", expected_count: 3, counts: [3] },
+        },
+        {
+          type: "text_visible",
+          status: "passed",
+          evidence: { text: "Failed", pattern: null, matches: [true] },
+        },
+        {
+          type: "text_absent",
+          status: "passed",
+          evidence: { text: "NaN", pattern: null, matches: [false] },
+        },
+        {
+          type: "no_horizontal_overflow",
+          status: "passed",
+          evidence: { max_overflow_px: 1, overflow_px: [0], bounds_overflow_px: [0] },
+        },
+        {
+          type: "no_fatal_console_errors",
+          status: "passed",
+          evidence: { fatal_error_count: 0 },
+        },
+        {
           type: "route_inventory",
           label: "pricing funnel route inventory",
           status: "passed",
@@ -600,6 +630,13 @@ try {
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed attempt=2\/4/);
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
+  assert.match(profileSummaryMarkdown, /passed: route_loaded \(`\/profile`\)/);
+  assert.match(profileSummaryMarkdown, /passed: selector_visible \(`\.dashboard-content`\)/);
+  assert.match(profileSummaryMarkdown, /passed: selector_count_equals \(`\.jobs-list tbody tr` = 3\)/);
+  assert.match(profileSummaryMarkdown, /passed: text_visible \(`Failed`\)/);
+  assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
+  assert.match(profileSummaryMarkdown, /passed: no_horizontal_overflow \(<= 1px\)/);
+  assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
