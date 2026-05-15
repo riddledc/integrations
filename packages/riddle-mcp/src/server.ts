@@ -547,7 +547,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           framework: {
             type: "string",
             enum: ["spa", "static"],
-            description: "Framework type: 'spa' for client-side routing (default), 'static' for multi-page"
+            description: "Framework type: 'static' for multi-page routing (default), 'spa' for client-side routing"
           }
         },
         required: ["directory"]
@@ -947,7 +947,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const payload: Record<string, unknown> = {
         type: "preview",
         directory: args.directory,
-        framework: args.framework || "spa"
+        framework: args.framework || "static"
       };
 
       const response = await client.postRun(payload);
