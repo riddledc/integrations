@@ -1419,6 +1419,54 @@ function matchesAllowedMessage(input: unknown, texts?: string[], patterns?: stri
   return false;
 }
 
+function consoleEventLocationUrl(input: unknown): string | undefined {
+  if (!isRecord(input) || !isRecord(input.location)) return undefined;
+  return stringValue(input.location.url);
+}
+
+function expectedFailedNetworkMockEvents(evidence: RiddleProofProfileEvidence): Array<Record<string, JsonValue>> {
+  return (evidence.network_mocks || []).filter((event) => {
+    if (!isRecord(event) || event.ok === false) return false;
+    const status = numberValue(event.status);
+    return status !== undefined && status >= 400 && Boolean(stringValue(event.url));
+  });
+}
+
+function matchingExpectedFailedNetworkMockConsoleEvent(
+  event: unknown,
+  evidence: RiddleProofProfileEvidence,
+): Record<string, JsonValue> | undefined {
+  const sample = allowedMessageSample(event);
+  if (!/Failed to load resource/i.test(sample)) return undefined;
+  const eventUrl = consoleEventLocationUrl(event);
+  if (!eventUrl) return undefined;
+  return expectedFailedNetworkMockEvents(evidence).find((mockEvent) => {
+    const status = numberValue(mockEvent.status);
+    return stringValue(mockEvent.url) === eventUrl
+      && status !== undefined
+      && sample.includes(String(status));
+  });
+}
+
+function isExpectedFailedNetworkMockConsoleEvent(event: unknown, evidence: RiddleProofProfileEvidence): boolean {
+  return Boolean(matchingExpectedFailedNetworkMockConsoleEvent(event, evidence));
+}
+
+function expectedFailedNetworkMockConsoleEventSummary(
+  event: unknown,
+  evidence: RiddleProofProfileEvidence,
+): Record<string, JsonValue> {
+  const match = matchingExpectedFailedNetworkMockConsoleEvent(event, evidence);
+  const sample = allowedMessageSample(event);
+  return {
+    url: consoleEventLocationUrl(event) ?? null,
+    status: match ? numberValue(match.status) ?? null : null,
+    label: match ? stringValue(match.label) ?? null : null,
+    response_label: match ? stringValue(match.response_label) ?? null : null,
+    text: isRecord(event) && typeof event.text === "string" ? event.text.slice(0, 300) : sample.slice(0, 300),
+  };
+}
+
 function normalizeRoutePath(path: string | undefined) {
   const value = path || "/";
   if (value === "/") return "/";
@@ -1901,8 +1949,19 @@ function assessCheckFromEvidence(
 
   if (check.type === "no_fatal_console_errors") {
     const fatalConsoleEvents = (evidence.console?.events || []).filter((event) => event.type === "error" || event.type === "assert");
-    const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
-    const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+    const explicitlyAllowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+    const expectedNetworkMockConsoleEvents = fatalConsoleEvents.filter((event) => (
+      !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+        && isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+    ));
+    const allowedConsoleEvents = fatalConsoleEvents.filter((event) => (
+      matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+        || isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+    ));
+    const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => (
+      !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+        && !isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+    ));
     const pageErrors = evidence.page_errors || [];
     const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
     const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
@@ -1917,6 +1976,11 @@ function assessCheckFromEvidence(
         total_console_fatal_count: fatalConsoleEvents.length,
         total_page_error_count: pageErrors.length,
         allowed_console_fatal_count: allowedConsoleEvents.length,
+        explicitly_allowed_console_fatal_count: explicitlyAllowedConsoleEvents.length,
+        allowed_expected_network_mock_console_count: expectedNetworkMockConsoleEvents.length,
+        allowed_expected_network_mock_console_events: expectedNetworkMockConsoleEvents
+          .slice(0, 5)
+          .map((event) => expectedFailedNetworkMockConsoleEventSummary(event, evidence)),
         allowed_page_error_count: allowedPageErrors.length,
         allowed_console_texts: check.allowed_console_texts || [],
         allowed_console_patterns: check.allowed_console_patterns || [],
@@ -2333,6 +2397,44 @@ function matchesAllowedMessage(input, texts, patterns) {
     } catch {}
   }
   return false;
+}
+function consoleEventLocationUrl(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  if (!input.location || typeof input.location !== "object" || Array.isArray(input.location)) return undefined;
+  return typeof input.location.url === "string" && input.location.url.trim() ? input.location.url.trim() : undefined;
+}
+function expectedFailedNetworkMockEvents(evidence) {
+  return ((evidence && evidence.network_mocks) || []).filter((event) => {
+    if (!event || typeof event !== "object" || Array.isArray(event) || event.ok === false) return false;
+    const status = typeof event.status === "number" && Number.isFinite(event.status) ? event.status : undefined;
+    const url = typeof event.url === "string" && event.url.trim() ? event.url.trim() : undefined;
+    return status !== undefined && status >= 400 && Boolean(url);
+  });
+}
+function matchingExpectedFailedNetworkMockConsoleEvent(event, evidence) {
+  const sample = allowedMessageSample(event);
+  if (!/Failed to load resource/i.test(sample)) return undefined;
+  const eventUrl = consoleEventLocationUrl(event);
+  if (!eventUrl) return undefined;
+  return expectedFailedNetworkMockEvents(evidence).find((mockEvent) => {
+    const status = typeof mockEvent.status === "number" && Number.isFinite(mockEvent.status) ? mockEvent.status : undefined;
+    const mockUrl = typeof mockEvent.url === "string" && mockEvent.url.trim() ? mockEvent.url.trim() : undefined;
+    return mockUrl === eventUrl && status !== undefined && sample.includes(String(status));
+  });
+}
+function isExpectedFailedNetworkMockConsoleEvent(event, evidence) {
+  return Boolean(matchingExpectedFailedNetworkMockConsoleEvent(event, evidence));
+}
+function expectedFailedNetworkMockConsoleEventSummary(event, evidence) {
+  const match = matchingExpectedFailedNetworkMockConsoleEvent(event, evidence);
+  const sample = allowedMessageSample(event);
+  return {
+    url: consoleEventLocationUrl(event) || null,
+    status: match && typeof match.status === "number" && Number.isFinite(match.status) ? match.status : null,
+    label: match && typeof match.label === "string" && match.label.trim() ? match.label.trim() : null,
+    response_label: match && typeof match.response_label === "string" && match.response_label.trim() ? match.response_label.trim() : null,
+    text: event && typeof event === "object" && !Array.isArray(event) && typeof event.text === "string" ? event.text.slice(0, 300) : sample.slice(0, 300),
+  };
 }
 function textSequenceForCheck(viewport, check) {
   const key = check.selector || "";
@@ -3057,8 +3159,19 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "no_fatal_console_errors") {
       const fatalConsoleEvents = ((evidence.console && evidence.console.events) || []).filter((event) => event && (event.type === "error" || event.type === "assert"));
-      const allowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
-      const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+      const explicitlyAllowedConsoleEvents = fatalConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+      const expectedNetworkMockConsoleEvents = fatalConsoleEvents.filter((event) => (
+        !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+          && isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+      ));
+      const allowedConsoleEvents = fatalConsoleEvents.filter((event) => (
+        matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+          || isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+      ));
+      const unallowedConsoleEvents = fatalConsoleEvents.filter((event) => (
+        !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns)
+          && !isExpectedFailedNetworkMockConsoleEvent(event, evidence)
+      ));
       const pageErrors = evidence.page_errors || [];
       const allowedPageErrors = pageErrors.filter((error) => matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
       const unallowedPageErrors = pageErrors.filter((error) => !matchesAllowedMessage(error, check.allowed_page_error_texts, check.allowed_page_error_patterns));
@@ -3073,6 +3186,9 @@ function assessProfile(profile, evidence) {
           total_console_fatal_count: fatalConsoleEvents.length,
           total_page_error_count: pageErrors.length,
           allowed_console_fatal_count: allowedConsoleEvents.length,
+          explicitly_allowed_console_fatal_count: explicitlyAllowedConsoleEvents.length,
+          allowed_expected_network_mock_console_count: expectedNetworkMockConsoleEvents.length,
+          allowed_expected_network_mock_console_events: expectedNetworkMockConsoleEvents.slice(0, 5).map((event) => expectedFailedNetworkMockConsoleEventSummary(event, evidence)),
           allowed_page_error_count: allowedPageErrors.length,
           allowed_console_texts: check.allowed_console_texts || [],
           allowed_console_patterns: check.allowed_console_patterns || [],
