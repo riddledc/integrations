@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.74
+
+### Patch Changes
+
+- ed50471: Include profile check targets in generated summary markdown so repeated text, selector, route, and overflow checks are readable without opening proof JSON.
+
 ## 0.7.73
 
 ### Patch Changes
