@@ -1757,6 +1757,115 @@ const checkpointProtocolResumed = await submitOpenClawRiddleProofReview(
 assert.equal(checkpointProtocolResumed.status, "ready_to_ship");
 assert.ok(checkpointProtocolEngineCalls.some((call) => call.author_packet_json));
 
+const backgroundCheckpointFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-background-checkpoint-"));
+const backgroundCheckpointEngineStatePath = path.join(backgroundCheckpointFixture, "engine-state.json");
+const backgroundCheckpointWrapperStatePath = path.join(backgroundCheckpointFixture, "wrapper-state.json");
+writeFileSync(backgroundCheckpointEngineStatePath, JSON.stringify({
+  branch: "agent/background-checkpoint",
+  change_request: "Use background checkpoint packets in OpenClaw.",
+  verification_mode: "visual",
+  before_cdn: "https://example.com/background-checkpoint-before.png",
+  author_request: {
+    status: "needs_supervisor_judgment",
+    fallback_defaults: {
+      proof_plan: "Capture the background checkpoint proof.",
+      capture_script: "await saveScreenshot('after-background-proof');",
+    },
+  },
+}, null, 2));
+const backgroundCheckpointEngineCalls = [];
+const backgroundCheckpointEngine = {
+  async execute(engineParams) {
+    backgroundCheckpointEngineCalls.push(engineParams);
+    if (engineParams.author_packet_json) {
+      const authorPacket = JSON.parse(engineParams.author_packet_json);
+      assert.equal(authorPacket.proof_plan, "Use the background checkpoint response proof plan.");
+      return {
+        ok: true,
+        state_path: backgroundCheckpointEngineStatePath,
+        checkpoint: "verify_ship_ready",
+        summary: "Background checkpoint proof is ready.",
+        shipGate: { ok: true },
+      };
+    }
+    return {
+      ok: true,
+      state_path: backgroundCheckpointEngineStatePath,
+      checkpoint: "author_supervisor_judgment",
+      summary: "Background run should persist the checkpoint packet on the wrapper state.",
+    };
+  },
+};
+const backgroundCheckpointResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    run_mode: "background",
+    checkpoint_mode: "manual",
+    harness_state_path: backgroundCheckpointWrapperStatePath,
+    state_path: backgroundCheckpointEngineStatePath,
+    ship_mode: "none",
+    dry_run: false,
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: backgroundCheckpointEngine,
+  },
+);
+assert.equal(backgroundCheckpointResult.status, "running");
+for (let attempt = 0; attempt < 50 && backgroundCheckpointEngineCalls.length === 0; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+assert.equal(backgroundCheckpointEngineCalls.length, 1);
+let backgroundCheckpointStatus = readOpenClawRiddleProofStatus(backgroundCheckpointWrapperStatePath, { include_packet: true });
+for (let attempt = 0; attempt < 50 && backgroundCheckpointStatus?.status === "running"; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backgroundCheckpointStatus = readOpenClawRiddleProofStatus(backgroundCheckpointWrapperStatePath, { include_packet: true });
+}
+assert.equal(backgroundCheckpointStatus?.status, "awaiting_checkpoint");
+assert.equal(backgroundCheckpointStatus?.checkpoint_packet?.kind, "author_proof");
+assert.equal(backgroundCheckpointStatus?.suggested_next_action, "resume_checkpoint");
+const backgroundCheckpointState = JSON.parse(readFileSync(backgroundCheckpointWrapperStatePath, "utf-8"));
+assert.equal(backgroundCheckpointState.checkpoint_packet?.kind, "author_proof");
+const backgroundCheckpointResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: backgroundCheckpointStatus.run_id,
+  checkpoint: backgroundCheckpointStatus.checkpoint_packet.checkpoint,
+  resume_token: backgroundCheckpointStatus.checkpoint_packet.resume_token,
+  decision: "author_packet",
+  summary: "Main agent authored the background checkpoint response.",
+  payload: {
+    proof_plan: "Use the background checkpoint response proof plan.",
+    capture_script: "await saveScreenshot('after-background-proof');",
+  },
+  created_at: "2026-05-15T00:00:00.000Z",
+};
+const backgroundCheckpointResume = await submitOpenClawRiddleProofReview(
+  {
+    state_path: backgroundCheckpointWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Submit the background checkpoint response.",
+    checkpoint_response_json: JSON.stringify(backgroundCheckpointResponse),
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: backgroundCheckpointEngine,
+  },
+);
+assert.equal(backgroundCheckpointResume.status, "running");
+for (let attempt = 0; attempt < 50 && backgroundCheckpointEngineCalls.length < 2; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+assert.equal(backgroundCheckpointEngineCalls.length, 2);
+let backgroundCheckpointDoneStatus = readOpenClawRiddleProofStatus(backgroundCheckpointWrapperStatePath);
+for (let attempt = 0; attempt < 50 && backgroundCheckpointDoneStatus?.status === "running"; attempt += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  backgroundCheckpointDoneStatus = readOpenClawRiddleProofStatus(backgroundCheckpointWrapperStatePath);
+}
+assert.equal(backgroundCheckpointDoneStatus?.status, "ready_to_ship");
+assert.ok(backgroundCheckpointEngineCalls.some((call) => call.author_packet_json));
+
 const checkpointProtocolBlockedDuplicateEngineStatePath = path.join(checkpointProtocolFixture, "riddle-state-blocked-duplicate.json");
 const checkpointProtocolBlockedDuplicateWrapperStatePath = path.join(checkpointProtocolFixture, "wrapper-state-blocked-duplicate.json");
 writeFileSync(checkpointProtocolBlockedDuplicateEngineStatePath, JSON.stringify({

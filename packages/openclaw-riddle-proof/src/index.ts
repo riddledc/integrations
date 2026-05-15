@@ -470,6 +470,45 @@ function wakeNextToolsFor(result: RiddleProofRunResult) {
   return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_INSPECT_TOOL_NAME];
 }
 
+function syncWrapperStateFromBackgroundResult(
+  state: RiddleProofRunState,
+  result: RiddleProofRunResult,
+) {
+  if (result.status && state.status !== result.status) {
+    setRunStatus(state, result.status);
+  }
+  if (result.current_stage) state.current_stage = result.current_stage;
+  if (result.last_checkpoint) state.last_checkpoint = result.last_checkpoint;
+  if (result.blocker) {
+    state.blocker = result.blocker;
+  } else if (state.blocker && result.status !== "blocked" && result.status !== "failed") {
+    state.blocker = undefined;
+  }
+  if (typeof result.proof_decision === "string") state.proof_decision = result.proof_decision;
+  if (typeof result.merge_recommendation === "string") state.merge_recommendation = result.merge_recommendation;
+  if (typeof result.finalized === "boolean") state.finalized = result.finalized;
+  if (result.checkpoint_packet) {
+    state.checkpoint_packet = result.checkpoint_packet;
+    state.last_checkpoint = result.checkpoint_packet.checkpoint || state.last_checkpoint;
+    state.current_stage = result.checkpoint_packet.stage || state.current_stage;
+    const alreadyRecorded = Boolean((state.checkpoint_history || []).some((entry) => {
+      const packet = recordValue(entry?.packet);
+      return packet?.resume_token === result.checkpoint_packet?.resume_token &&
+        packet?.checkpoint === result.checkpoint_packet?.checkpoint;
+    }));
+    if (!alreadyRecorded) {
+      state.checkpoint_history = [
+        ...(state.checkpoint_history || []),
+        { ts: timestamp(), packet: result.checkpoint_packet },
+      ].slice(-25);
+    }
+  } else if (state.checkpoint_packet && result.status !== "awaiting_checkpoint") {
+    state.checkpoint_packet = undefined;
+  }
+  if (result.checkpoint_summary) state.checkpoint_summary = result.checkpoint_summary;
+  if (result.state_paths) state.state_paths = result.state_paths;
+}
+
 function appendWakeMonitorRegistration(
   state: RiddleProofRunState,
   wakeContext: OpenClawRiddleProofWakeContext | undefined,
@@ -655,6 +694,7 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
       });
       persistRunState(state);
     } else {
+      syncWrapperStateFromBackgroundResult(state, result);
       appendWakeRequest(state, result);
     }
   }
