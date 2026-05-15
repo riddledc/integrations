@@ -84,6 +84,24 @@ execution, Riddle server usage, proof assessment, ship gates, and notifications.
 The current wrapper owns the public OpenClaw path; private instance repos should
 only provide deployment-specific defaults and credentials.
 
+OpenClaw participation is expressed separately from the base Riddle Proof loop.
+The same durable proof run should support three wrapper modes:
+
+- `interactive`: OpenClaw is the visible driver, runs or delegates the agent
+  work, and reports meaningful stage/checkpoint progress back to Discord or the
+  active chat surface.
+- `background_pr`: OpenClaw starts the same loop, keeps routine iteration quiet,
+  and wakes the user when a PR is ready for review or a concrete blocker needs a
+  decision. This is the default product mode.
+- `continuous`: OpenClaw acts as a guarded long-running development manager that
+  assigns work, requires Riddle Proof evidence, reviews PR/proof/CI, and may
+  merge only under explicit policy controls.
+
+These are OpenClaw UX/policy modes, not separate proof engines. The reusable
+`@riddledc/riddle-proof` package remains responsible for stages, checkpoint
+contracts, evidence recovery, profile/audit runs, Riddle API calls, run cards,
+proof assessment, and ship gates.
+
 ## Tool
 
 - `riddle_proof_change`
@@ -98,6 +116,11 @@ routing metadata. The default ship path should open or update a draft PR, prove
 the exact commit, wait for CI, and mark the PR ready; `leave_draft: true` is an
 explicit escape hatch for debug or intentionally draft-only runs. It returns a
 `RiddleProofRunResult`.
+
+Use `workflow_mode` to select how OpenClaw participates in the proof loop:
+`interactive`, `background_pr`, or `continuous`. This is distinct from
+`run_mode`, which only controls whether the current tool call blocks or returns
+immediately while the run continues in the background.
 
 For chat surfaces that should not keep one long tool reply open, background mode
 is the default. Pass `run_mode: "blocking"` only for deliberate synchronous

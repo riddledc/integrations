@@ -128,6 +128,16 @@
         "default": "background",
         "description": "background returns an accepted run state immediately so channel surfaces can watch status without holding the chat turn; blocking waits for tool completion."
       },
+      "defaultWorkflowMode": {
+        "type": "string",
+        "enum": [
+          "interactive",
+          "background_pr",
+          "continuous"
+        ],
+        "default": "background_pr",
+        "description": "OpenClaw participation model over the same Riddle Proof loop. interactive reports live agent progress, background_pr wakes at PR/blocker milestones, and continuous is reserved for guarded long-running queue/review/merge operation."
+      },
       "checkpointMode": {
         "type": "string",
         "enum": [

@@ -33,6 +33,7 @@ const openclawPluginManifest = JSON.parse(readFileSync(new URL("./openclaw.plugi
 assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_PROOF_WAIT_TOOL_NAME), true);
 assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
 assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
+assert.equal(openclawPluginManifest.configSchema.properties.defaultWorkflowMode.default, "background_pr");
 assert.equal(typeof createRiddleApiClient, "function");
 
 const params = {
@@ -506,6 +507,7 @@ const backgroundResult = await runOpenClawRiddleProof(
   {
     ...params,
     run_mode: "background",
+    workflow_mode: "interactive",
     dry_run: false,
     ship_after_verify: false,
     ship_mode: "none",
@@ -606,6 +608,9 @@ assert.ok(backgroundResult.raw?.next_actions?.[0]?.includes(RIDDLE_PROOF_WAIT_TO
 assert.ok(backgroundResult.raw?.next_actions?.[1]?.includes("monitor_should_continue"));
 assert.ok(backgroundResult.raw?.next_actions?.[2]?.includes("final inspection snapshots"));
 assert.equal(existsSync(backgroundWrapperStatePath), true);
+const backgroundWrapperState = JSON.parse(readFileSync(backgroundWrapperStatePath, "utf-8"));
+assert.equal(backgroundWrapperState.request.integration_context.metadata.workflow_mode, "interactive");
+assert.equal(backgroundWrapperState.request.integration_context.metadata.workflow_mode_source, "workflow_mode_param");
 
 for (let attempt = 0; attempt < 50 && backgroundEngineCalls.length === 0; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 20));
