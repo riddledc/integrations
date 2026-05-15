@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.77
+
+### Patch Changes
+
+- 3f85c51: Let method-specific profile network mocks fall through to other mocks with the same URL pattern when the request method does not match.
+
 ## 0.7.76
 
 ### Patch Changes
