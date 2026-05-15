@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.70
+
+### Patch Changes
+
+- f92e46c: Surface profile setup click counts in compact setup summaries and summary markdown.
+
 ## 0.7.69
 
 ### Patch Changes
