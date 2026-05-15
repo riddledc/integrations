@@ -358,6 +358,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     lines.push(`- ${check.status}: ${check.label || check.type}`);
     if (check.message) lines.push(`  ${check.message}`);
   }
+  const setupSummaryLines = profileSetupSummaryMarkdown(result);
+  if (setupSummaryLines.length) {
+    lines.push("", "## Setup Summary", "", ...setupSummaryLines);
+  }
   if (result.artifacts.riddle_artifacts?.length) {
     lines.push("", "## Riddle Artifacts", "");
     for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
@@ -365,6 +369,60 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function cliRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+function cliFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function cliString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const setupCheck = result.checks.find((check) => check.type === "setup_actions_succeeded");
+  const setupSummary = cliRecord(setupCheck?.evidence?.setup_summary);
+  if (!setupSummary) return [];
+
+  const viewports = Array.isArray(setupSummary.viewports)
+    ? setupSummary.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+  if (!viewports.length) return [];
+
+  const declaredActions = cliFiniteNumber(setupSummary.action_count);
+  const totalResults = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.result_count) || 0), 0);
+  const setupScreenshots = viewports.reduce((sum, viewport) => {
+    const labels = Array.isArray(viewport.setup_screenshots) ? viewport.setup_screenshots : [];
+    return sum + labels.filter((label) => typeof label === "string" && label.trim()).length;
+  }, 0);
+  const clickedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0);
+  const failedTotal = viewports.reduce((sum, viewport) => (
+    sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
+  ), 0);
+
+  const lines = [
+    `- setup actions: ${declaredActions === undefined ? "unknown" : declaredActions} declared, ${totalResults} recorded result(s) across ${viewports.length} viewport(s)`,
+    `- setup screenshots: ${setupScreenshots}`,
+    `- clicked targets: ${clickedTotal}${failedTotal ? `; failed setup actions: ${failedTotal}` : ""}`,
+  ];
+
+  for (const viewport of viewports.slice(0, 8)) {
+    const name = cliString(viewport.name) || "viewport";
+    const ok = viewport.ok === false ? "failed" : "ok";
+    const resultCount = cliFiniteNumber(viewport.result_count) || 0;
+    const screenshotCount = Array.isArray(viewport.setup_screenshots)
+      ? viewport.setup_screenshots.filter((label) => typeof label === "string" && label.trim()).length
+      : 0;
+    const clicked = cliFiniteNumber(viewport.clicked_total) || 0;
+    const observedPath = cliString(viewport.observed_path);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${observedPath ? `, path ${observedPath}` : ""}`);
+  }
+  if (viewports.length > 8) lines.push(`- ${viewports.length - 8} additional viewport(s) omitted from setup summary.`);
+  return lines;
 }
 
 function writeProfileOutput(outputDir: string | undefined, result: RiddleProofProfileResult) {

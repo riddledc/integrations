@@ -448,12 +448,37 @@ const cliRunProfileServer = createServer((request, response) => {
         matched: true,
         http_status: 200,
       },
-      artifacts: { screenshots: [], proof_json: "proof.json" },
-      checks: [{
-        type: "route_loaded",
-        status: "passed",
-        evidence: { expected_path: "/profile", observed_paths: ["/profile"], http_statuses: [200] },
-      }],
+      artifacts: { screenshots: ["cli-profile-progress-desktop-ready"], proof_json: "proof.json" },
+      checks: [
+        {
+          type: "setup_actions_succeeded",
+          status: "passed",
+          evidence: {
+            action_count: 2,
+            viewports: [{ name: "desktop", ok: true, result_count: 3 }],
+            setup_summary: {
+              viewport_count: 1,
+              action_count: 2,
+              viewports: [{
+                name: "desktop",
+                ok: true,
+                result_count: 3,
+                observed_path: "/profile",
+                setup_screenshots: ["cli-profile-progress-desktop-ready"],
+                clicked_total: 1,
+                clicked_truncated: false,
+                clicked: [{ selector: "[data-testid='open-profile']" }],
+                failed: [],
+              }],
+            },
+          },
+        },
+        {
+          type: "route_loaded",
+          status: "passed",
+          evidence: { expected_path: "/profile", observed_paths: ["/profile"], http_statuses: [200] },
+        },
+      ],
       summary: "cli-profile-progress passed.",
       captured_at: "2026-05-13T23:21:20.000Z",
     });
@@ -510,6 +535,11 @@ try {
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running/);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed/);
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
+  const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
+  assert.match(profileSummaryMarkdown, /## Setup Summary/);
+  assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), path \/profile/);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");
