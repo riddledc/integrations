@@ -918,6 +918,8 @@ assert.ok(networkMockProfileScript.includes("delay_ms"));
 assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
 assert.ok(networkMockProfileScript.includes("route.fallback"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+assert.ok(networkMockProfileScript.includes("isExpectedFailedNetworkMockConsoleEvent"));
+assert.ok(networkMockProfileScript.includes("allowed_expected_network_mock_console_count"));
 const cappedNetworkMockProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "builder-network-mock-caps",
@@ -2266,6 +2268,58 @@ assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === 
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.required_hits_by_label["build-retry"], 4);
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.response_hits_by_label["build-retry"]["first-build-fails"], 2);
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.response_hits_by_label["build-retry"]["second-build-succeeds"], 2);
+const expectedFailedMockConsoleAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  ...networkMockProfileAssessment.evidence,
+  console: {
+    events: [{
+      type: "error",
+      text: "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+      location: { url: "https://example.com/api/build" },
+    }],
+    fatal_count: 1,
+  },
+});
+const expectedFailedMockConsoleCheck = expectedFailedMockConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(expectedFailedMockConsoleAssessment.status, "passed");
+assert.equal(expectedFailedMockConsoleCheck.status, "passed");
+assert.equal(expectedFailedMockConsoleCheck.evidence.console_fatal_count, 0);
+assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_console_fatal_count, 1);
+assert.equal(expectedFailedMockConsoleCheck.evidence.explicitly_allowed_console_fatal_count, 0);
+assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_count, 1);
+assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].label, "build-retry");
+assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].response_label, "first-build-fails");
+const expectedFailedMockRuntimeErrorAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  ...networkMockProfileAssessment.evidence,
+  console: {
+    events: [{
+      type: "error",
+      text: "Minified React error #31; visit https://react.dev/errors/31 for the full message.",
+      location: { url: "https://example.com/api/build" },
+    }],
+    fatal_count: 1,
+  },
+});
+const expectedFailedMockRuntimeErrorCheck = expectedFailedMockRuntimeErrorAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(expectedFailedMockRuntimeErrorAssessment.status, "product_regression");
+assert.equal(expectedFailedMockRuntimeErrorCheck.status, "failed");
+assert.equal(expectedFailedMockRuntimeErrorCheck.evidence.console_fatal_count, 1);
+assert.equal(expectedFailedMockRuntimeErrorCheck.evidence.allowed_expected_network_mock_console_count, 0);
+const unmatchedFailedMockConsoleAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
+  ...networkMockProfileAssessment.evidence,
+  console: {
+    events: [{
+      type: "error",
+      text: "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+      location: { url: "https://example.com/api/unmocked-build" },
+    }],
+    fatal_count: 1,
+  },
+});
+const unmatchedFailedMockConsoleCheck = unmatchedFailedMockConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(unmatchedFailedMockConsoleAssessment.status, "product_regression");
+assert.equal(unmatchedFailedMockConsoleCheck.status, "failed");
+assert.equal(unmatchedFailedMockConsoleCheck.evidence.console_fatal_count, 1);
+assert.equal(unmatchedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_count, 0);
 const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
   ...networkMockProfileAssessment.evidence,
   network_mocks: [
@@ -2377,6 +2431,8 @@ assert.equal(allowedConsoleAssessment.status, "passed");
 assert.equal(allowedConsoleCheck.status, "passed");
 assert.equal(allowedConsoleCheck.evidence.total_console_fatal_count, 3);
 assert.equal(allowedConsoleCheck.evidence.allowed_console_fatal_count, 3);
+assert.equal(allowedConsoleCheck.evidence.explicitly_allowed_console_fatal_count, 3);
+assert.equal(allowedConsoleCheck.evidence.allowed_expected_network_mock_console_count, 0);
 assert.equal(allowedConsoleCheck.evidence.console_fatal_count, 0);
 assert.equal(allowedConsoleCheck.evidence.allowed_page_error_count, 1);
 const unallowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {
