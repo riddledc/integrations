@@ -761,6 +761,74 @@ assert.equal(profile.target.setup_actions.length, 2);
 assert.equal(profile.target.setup_actions[0].force, true);
 assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("screenshot"));
+const scopedSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "scoped-setup-profile",
+  target: {
+    route: "/billing",
+    viewports: [
+      { name: "desktop", width: 1280, height: 900 },
+      { name: "phone", width: 390, height: 844 },
+    ],
+    setup_actions: [
+      { type: "click", selector: ".error-message button", text: "Retry", viewports: ["desktop"] },
+      { type: "wait-for-text", selector: "body", text: "Recovered" },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/billing" }],
+}, { url: "https://example.com" });
+assert.deepEqual(scopedSetupProfile.target.setup_actions[0].viewports, ["desktop"]);
+const scopedSetupAssessment = assessRiddleProofProfileEvidence(scopedSetupProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "scoped-setup-profile",
+  target_url: "https://example.com/billing",
+  captured_at: "2026-05-15T22:30:00.000Z",
+  baseline_policy: "invariant_only",
+  viewports: [
+    {
+      name: "desktop",
+      width: 1280,
+      height: 900,
+      url: "https://example.com/billing",
+      route: { requested: "https://example.com/billing", observed: "/billing", expected_path: "/billing", matched: true, http_status: 200 },
+      setup_action_results: [
+        { ok: true, action: "click", ordinal: 0, selector: ".error-message button" },
+        { ok: true, action: "wait_for_text", ordinal: 1, selector: "body" },
+      ],
+      selectors: {},
+      text_matches: {},
+      overflow_px: 0,
+      bounds_overflow_px: 0,
+      overflow_offenders: [],
+    },
+    {
+      name: "phone",
+      width: 390,
+      height: 844,
+      url: "https://example.com/billing",
+      route: { requested: "https://example.com/billing", observed: "/billing", expected_path: "/billing", matched: true, http_status: 200 },
+      setup_action_results: [
+        { ok: true, action: "wait_for_text", ordinal: 0, selector: "body" },
+      ],
+      selectors: {},
+      text_matches: {},
+      overflow_px: 0,
+      bounds_overflow_px: 0,
+      overflow_offenders: [],
+    },
+  ],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dialogs: [],
+  network_mocks: [],
+  dom_summary: { expected_viewport_count: 2, viewport_count: 2, partial: false },
+});
+const scopedSetupCheck = scopedSetupAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
+assert.equal(scopedSetupCheck.status, "passed");
+assert.deepEqual(
+  scopedSetupCheck.evidence.viewports.map((viewport) => [viewport.name, viewport.expected_action_count, viewport.result_count, viewport.ok]),
+  [["desktop", 2, 2, true], ["phone", 1, 1, true]],
+);
 const setupScreenshotProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-screenshot-profile",
@@ -800,7 +868,8 @@ assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
 assert.ok(profileScript.includes('saveScreenshot(label)'));
 assert.ok(profileScript.includes("executeSetupActions"));
-assert.ok(profileScript.includes("executeSetupActions(profile.target.setup_actions || [], viewport)"));
+assert.ok(profileScript.includes("setupActionsForViewport(profile.target.setup_actions || [], viewport.name)"));
+assert.ok(profileScript.includes("expected_action_count"));
 assert.ok(profileScript.includes("executeSetupAction(action, index, viewport)"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("profileSetupSummary"));
