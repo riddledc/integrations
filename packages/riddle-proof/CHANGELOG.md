@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.79
+
+### Patch Changes
+
+- ec75bfc: Add profile setup dialog responses so browser confirm/prompt flows can be accepted or dismissed during proof runs.
+
 ## 0.7.78
 
 ### Patch Changes
