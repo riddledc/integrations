@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.73
+
+### Patch Changes
+
+- da5cae4: Honor `--poll-attempts` / `--pollAttempts` for `run-profile` Riddle polling.
+
 ## 0.7.72
 
 ### Patch Changes
