@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.80
+
+### Patch Changes
+
+- 77744e4: Make hosted `run-profile` default trusted package-generated profile scripts to
+  `strict=false`, while preserving `--strict=true` for callers who want Riddle
+  script-safety warnings to block the run.
+
 ## 0.7.79
 
 ### Patch Changes
