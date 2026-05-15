@@ -772,12 +772,14 @@ const scopedSetupProfile = normalizeRiddleProofProfile({
     ],
     setup_actions: [
       { type: "click", selector: ".error-message button", text: "Retry", viewports: ["desktop"] },
+      { type: "click", selector: ".maybe-dismiss", text: "Dismiss", optional: true, viewports: ["phone"] },
       { type: "wait-for-text", selector: "body", text: "Recovered" },
     ],
   },
   checks: [{ type: "route_loaded", expected_path: "/billing" }],
 }, { url: "https://example.com" });
 assert.deepEqual(scopedSetupProfile.target.setup_actions[0].viewports, ["desktop"]);
+assert.equal(scopedSetupProfile.target.setup_actions[1].optional, true);
 const scopedSetupAssessment = assessRiddleProofProfileEvidence(scopedSetupProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "scoped-setup-profile",
@@ -808,7 +810,8 @@ const scopedSetupAssessment = assessRiddleProofProfileEvidence(scopedSetupProfil
       url: "https://example.com/billing",
       route: { requested: "https://example.com/billing", observed: "/billing", expected_path: "/billing", matched: true, http_status: 200 },
       setup_action_results: [
-        { ok: true, action: "wait_for_text", ordinal: 0, selector: "body" },
+        { ok: false, action: "click", ordinal: 0, selector: ".maybe-dismiss", optional: true, reason: "text_not_found" },
+        { ok: true, action: "wait_for_text", ordinal: 1, selector: "body" },
       ],
       selectors: {},
       text_matches: {},
@@ -827,8 +830,9 @@ const scopedSetupCheck = scopedSetupAssessment.checks.find((check) => check.type
 assert.equal(scopedSetupCheck.status, "passed");
 assert.deepEqual(
   scopedSetupCheck.evidence.viewports.map((viewport) => [viewport.name, viewport.expected_action_count, viewport.result_count, viewport.ok]),
-  [["desktop", 2, 2, true], ["phone", 1, 1, true]],
+  [["desktop", 2, 2, true], ["phone", 2, 2, true]],
 );
+assert.equal(scopedSetupCheck.evidence.setup_summary.viewports[1].optional_failed.length, 1);
 const setupScreenshotProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-screenshot-profile",
@@ -870,6 +874,7 @@ assert.ok(profileScript.includes('saveScreenshot(label)'));
 assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setupActionsForViewport(profile.target.setup_actions || [], viewport.name)"));
 assert.ok(profileScript.includes("expected_action_count"));
+assert.ok(profileScript.includes("action.optional"));
 assert.ok(profileScript.includes("executeSetupAction(action, index, viewport)"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("profileSetupSummary"));
