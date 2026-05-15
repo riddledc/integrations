@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.100
+
+### Patch Changes
+
+- 91aae2d: Add explicit OpenClaw Riddle Proof workflow modes for interactive, background PR, and continuous operation.
+
 ## 0.4.99
 
 ### Patch Changes
