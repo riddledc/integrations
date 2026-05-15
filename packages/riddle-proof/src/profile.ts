@@ -122,6 +122,7 @@ export interface RiddleProofProfileSetupAction {
   reload?: boolean;
   storage?: "local" | "session" | "both";
   viewports?: string[];
+  optional?: boolean;
   continue_on_failure?: boolean;
 }
 
@@ -553,7 +554,8 @@ function profileSetupSummary(
     viewports: viewports.map((viewport) => {
       const expectedActionCount = expectedActionCountByViewport?.get(viewport.name) ?? actionCount;
       const results = viewport.setup_action_results || [];
-      const failed = results.filter((result) => result.ok === false);
+      const failed = results.filter((result) => result.ok === false && result.optional !== true);
+      const optionalFailed = results.filter((result) => result.ok === false && result.optional === true);
       const successfulClicks = results.filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false);
       const clickCountValues = successfulClicks
         .map((result) => typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined)
@@ -603,6 +605,13 @@ function profileSetupSummary(
         clicked,
         text_samples,
         failed: failed.map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          reason: result.reason ?? result.error ?? null,
+        })),
+        optional_failed: optionalFailed.map((result) => ({
           ordinal: result.ordinal ?? null,
           action: profileSetupResultAction(result),
           selector: result.selector ?? null,
@@ -868,6 +877,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     reload: input.reload === true,
     storage: normalizeSetupActionStorage(input.storage, index),
     viewports: normalizeStringList(input.viewports ?? input.viewport_names ?? input.viewportNames, `target.setup_actions[${index}] viewports`),
+    optional: input.optional === true || input.required === false,
     continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
   };
 }
@@ -2077,7 +2087,7 @@ function assessSetupActionsFromEvidence(
     expectedActionCountByViewport.set(viewport.name, expectedActionCount);
     const results = viewport.setup_action_results || [];
     for (const result of results) {
-      if (result.ok === false) {
+      if (result.ok === false && result.optional !== true) {
         failed.push({
           viewport: viewport.name,
           action: result.action ?? result.type ?? null,
@@ -2088,7 +2098,7 @@ function assessSetupActionsFromEvidence(
         });
       }
     }
-    if (results.length < expectedActionCount && results.every((result) => result.ok !== false)) {
+    if (results.length < expectedActionCount && results.every((result) => result.ok !== false || result.optional === true)) {
       failed.push({
         viewport: viewport.name,
         action: "setup_actions",
@@ -2107,7 +2117,7 @@ function assessSetupActionsFromEvidence(
         name: viewport.name,
         expected_action_count: expectedActionCountByViewport.get(viewport.name) ?? actionCount,
         ok: (viewport.setup_action_results || []).length >= (expectedActionCountByViewport.get(viewport.name) ?? actionCount)
-          && (viewport.setup_action_results || []).every((result) => result.ok !== false),
+          && (viewport.setup_action_results || []).every((result) => result.ok !== false || result.optional === true),
         result_count: (viewport.setup_action_results || []).length,
       })),
       setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountByViewport),
@@ -2709,7 +2719,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         ? expectedActionCountsByViewport[viewport.name]
         : actionCount;
       const results = viewport.setup_action_results || [];
-      const failed = results.filter((result) => result && result.ok === false);
+      const failed = results.filter((result) => result && result.ok === false && result.optional !== true);
+      const optionalFailed = results.filter((result) => result && result.ok === false && result.optional === true);
       const successfulClicks = results.filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false);
       const clickCountValues = successfulClicks
         .map((result) => typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined)
@@ -2759,6 +2770,13 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({
+          ordinal: result.ordinal ?? null,
+          action: profileSetupResultAction(result),
+          selector: result.selector ?? null,
+          frame_selector: result.frame_selector ?? null,
+          reason: result.reason || result.error || null,
+        })),
+        optional_failed: optionalFailed.map((result) => ({
           ordinal: result.ordinal ?? null,
           action: profileSetupResultAction(result),
           selector: result.selector ?? null,
@@ -2884,7 +2902,7 @@ function assessProfile(profile, evidence) {
       expectedActionCountsByViewport[viewport.name] = expectedActionCount;
       const results = viewport.setup_action_results || [];
       for (const result of results) {
-        if (result && result.ok === false) {
+        if (result && result.ok === false && result.optional !== true) {
           failed.push({
             viewport: viewport.name,
           action: result.action || result.type || null,
@@ -2895,7 +2913,7 @@ function assessProfile(profile, evidence) {
         });
         }
       }
-      if (results.length < expectedActionCount && results.every((result) => !result || result.ok !== false)) {
+      if (results.length < expectedActionCount && results.every((result) => !result || result.ok !== false || result.optional === true)) {
         failed.push({
           viewport: viewport.name,
           action: "setup_actions",
@@ -2914,7 +2932,7 @@ function assessProfile(profile, evidence) {
           name: viewport.name,
           expected_action_count: expectedActionCountsByViewport[viewport.name] ?? actionCount,
           ok: (viewport.setup_action_results || []).length >= (expectedActionCountsByViewport[viewport.name] ?? actionCount)
-            && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false),
+            && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false || result.optional === true),
           result_count: (viewport.setup_action_results || []).length,
         })),
         setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport),
@@ -3712,7 +3730,7 @@ async function registerNetworkMocks(mocks) {
 async function executeSetupAction(action, ordinal, viewport) {
   const type = setupActionType(action);
   const frameSelector = setupFrameSelector(action);
-  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null, frame_selector: frameSelector || null };
+  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null, frame_selector: frameSelector || null, optional: action.optional === true };
   const timeout = setupNumber(action.timeout_ms, 5000);
   try {
     if (type === "wait") {
@@ -4186,7 +4204,7 @@ async function executeSetupActions(actions, viewport) {
         : result);
       const afterMs = setupNumber(action.after_ms, 0);
       if (afterMs) await page.waitForTimeout(afterMs);
-      if (result.ok === false && action.continue_on_failure !== true) {
+      if (result.ok === false && action.continue_on_failure !== true && action.optional !== true) {
         shouldStop = true;
         break;
       }
