@@ -390,12 +390,23 @@ const cliRunProfileServer = createServer((request, response) => {
       rawBody += chunk;
     });
     request.on("end", () => {
+      const body = JSON.parse(rawBody);
       cliRunProfileRequests.push({
         url: request.url,
         method: request.method,
         auth: request.headers.authorization || null,
-        body: JSON.parse(rawBody),
+        body,
       });
+      if (String(body.url || "").includes("/blocked-profile")) {
+        sendJson({
+          error: "Insufficient available balance",
+          required_seconds: 90,
+          available_seconds: 47,
+          deficit_seconds: 43,
+          minimum_purchase_dollars: 10,
+        }, 402);
+        return;
+      }
       sendJson({ job_id: "job_cli_profile_progress" });
     });
     return;
@@ -682,6 +693,44 @@ try {
   assert.equal(cliRunProfileRequests.length, 2);
   assert.equal(cliRunProfileRequests[1].body.strict, true);
   assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
+
+  const blockedProfileFile = path.join(riddlePreviewDir, "cli-profile-balance-blocked.json");
+  const blockedProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-balance-blocked-output");
+  writeFileSync(blockedProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-balance-blocked",
+    target: {
+      route: "/blocked-profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/blocked-profile" }],
+  }));
+  const cliProfileBlockedResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    blockedProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output-dir",
+    blockedProfileOutputDir,
+  ]);
+  const parsedBlockedProfileResult = JSON.parse(cliProfileBlockedResult.stdout);
+  assert.equal(parsedBlockedProfileResult.status, "environment_blocked");
+  assert.equal(parsedBlockedProfileResult.environment_blocker.reason, "insufficient_balance");
+  assert.equal(parsedBlockedProfileResult.environment_blocker.http_status, 402);
+  assert.equal(parsedBlockedProfileResult.environment_blocker.required_seconds, 90);
+  assert.equal(parsedBlockedProfileResult.environment_blocker.available_seconds, 47);
+  assert.match(parsedBlockedProfileResult.summary, /required 90s, available 47s, deficit 43s/);
+  const blockedProfileSummary = readFileSync(path.join(blockedProfileOutputDir, "summary.md"), "utf8");
+  assert.match(blockedProfileSummary, /## Environment Blocker/);
+  assert.match(blockedProfileSummary, /reason: insufficient_balance/);
+  assert.match(blockedProfileSummary, /seconds: required 90, available 47, deficit 43/);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");

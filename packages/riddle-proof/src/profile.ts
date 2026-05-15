@@ -321,6 +321,7 @@ export interface RiddleProofProfileResult {
     status?: string | null;
     terminal?: boolean;
   };
+  environment_blocker?: Record<string, JsonValue>;
   error?: string;
 }
 
@@ -2353,6 +2354,7 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
   artifacts?: RiddleProofProfileArtifactRef[];
 }): RiddleProofProfileResult {
   const message = input.error instanceof Error ? input.error.message : input.error ? String(input.error) : "Riddle runner did not complete successfully.";
+  const environmentBlocker = extractRiddleRunnerBlocker(message);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: input.profile.name,
@@ -2362,11 +2364,71 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
     route: { requested: resolveRiddleProofProfileTargetUrl(input.profile), observed: "", matched: false, error: message },
     artifacts: { screenshots: [], proof_json: "proof.json", riddle_artifacts: input.artifacts },
     checks: [],
-    summary: `${input.profile.name} could not collect reliable evidence because the runner was blocked.`,
+    summary: summarizeEnvironmentBlockedRunner(input.profile.name, environmentBlocker),
     captured_at: new Date().toISOString(),
     riddle: input.riddle,
+    environment_blocker: environmentBlocker,
     error: message,
   };
+}
+
+function extractRiddleRunnerBlocker(message: string): Record<string, JsonValue> | undefined {
+  const apiError = message.match(/^Riddle API\s+(\S+)\s+failed HTTP\s+(\d+):\s+(\{[\s\S]*\})$/);
+  if (!apiError) return undefined;
+
+  const details: Record<string, JsonValue> = {
+    source: "riddle_api",
+    endpoint: apiError[1],
+    http_status: Number(apiError[2]),
+  };
+
+  let payload: Record<string, unknown> | undefined;
+  try {
+    const parsed = JSON.parse(apiError[3]);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      payload = parsed as Record<string, unknown>;
+    }
+  } catch {
+    payload = undefined;
+  }
+
+  const copyScalar = (key: string) => {
+    const value = payload?.[key];
+    if (typeof value === "string" || typeof value === "boolean") details[key] = value;
+    if (typeof value === "number" && Number.isFinite(value)) details[key] = value;
+  };
+
+  for (const key of ["error", "required_seconds", "available_seconds", "deficit_seconds", "minimum_purchase_dollars"]) {
+    copyScalar(key);
+  }
+
+  const httpStatus = typeof details.http_status === "number" ? details.http_status : undefined;
+  const errorText = typeof details.error === "string" ? details.error.toLowerCase() : "";
+  if (httpStatus === 402 && errorText.includes("balance")) {
+    details.reason = "insufficient_balance";
+  }
+
+  return details;
+}
+
+function summarizeEnvironmentBlockedRunner(profileName: string, blocker: Record<string, JsonValue> | undefined) {
+  if (blocker?.reason === "insufficient_balance") {
+    const required = typeof blocker.required_seconds === "number" ? blocker.required_seconds : undefined;
+    const available = typeof blocker.available_seconds === "number" ? blocker.available_seconds : undefined;
+    const deficit = typeof blocker.deficit_seconds === "number" ? blocker.deficit_seconds : undefined;
+    const parts = [
+      required === undefined ? "" : `required ${required}s`,
+      available === undefined ? "" : `available ${available}s`,
+      deficit === undefined ? "" : `deficit ${deficit}s`,
+    ].filter(Boolean);
+    return `${profileName} could not start because Riddle balance was insufficient${parts.length ? ` (${parts.join(", ")})` : ""}.`;
+  }
+  if (blocker?.source === "riddle_api") {
+    const endpoint = typeof blocker.endpoint === "string" ? blocker.endpoint : "Riddle API";
+    const status = typeof blocker.http_status === "number" ? blocker.http_status : undefined;
+    return `${profileName} could not start because ${endpoint} returned${status === undefined ? "" : ` HTTP ${status}`}.`;
+  }
+  return `${profileName} could not collect reliable evidence because the runner was blocked.`;
 }
 
 export function createRiddleProofProfileInsufficientResult(input: {
