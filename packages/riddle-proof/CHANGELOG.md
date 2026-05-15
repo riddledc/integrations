@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.65
+
+### Patch Changes
+
+- 1912a6a: Fix hosted profile setup screenshots so generated scripts pass viewport metadata into setup action execution before building screenshot artifact labels.
+
 ## 0.7.64
 
 ### Patch Changes
