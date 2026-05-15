@@ -589,13 +589,28 @@ assert.equal(riddleAliasTimeoutProfile.target.timeout_sec, 95);
 assert.equal(profile.target.setup_actions.length, 2);
 assert.equal(profile.target.setup_actions[0].force, true);
 assert.equal(profile.target.setup_actions[1].type, "wait_for_text");
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("screenshot"));
+const setupScreenshotProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-screenshot-profile",
+  target: {
+    route: "/pricing",
+    setup_actions: [{ type: "capture-screenshot", label: "After Pricing Click" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/pricing" }],
+}, { url: "https://example.com" });
+assert.equal(setupScreenshotProfile.target.setup_actions[0].type, "screenshot");
+assert.equal(setupScreenshotProfile.target.setup_actions[0].label, "After Pricing Click");
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
+assert.ok(profileScript.includes('saveScreenshot(label)'));
 assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("profileSetupSummary"));
 assert.ok(profileScript.includes("setup_summary"));
+assert.ok(profileScript.includes("setup_screenshots"));
+assert.ok(profileScript.includes("profileSetupScreenshotLabels"));
 assert.ok(profileScript.includes("sampleProfileSetupSummaryItems"));
 assert.ok(profileScript.includes("setupLocatorVisible"));
 assert.ok(profileScript.includes("matching_element_not_visible"));
@@ -1402,6 +1417,7 @@ const profileEvidence = {
       text_matches: { "text:Start building": true, "text:Desktop-only copy": false },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
+        { ok: true, action: "screenshot", label: "after-click", screenshot_label: "pricing-page-basic-mobile-after-click" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
       ],
       screenshot_label: "pricing-page-basic-mobile",
@@ -1440,7 +1456,9 @@ assert.equal(profileSetupCheck.evidence.setup_summary.action_count, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].name, "mobile");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].observed_path, "/pricing/");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.click, 1);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.screenshot, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.wait_for_text, 1);
+assert.deepEqual(profileSetupCheck.evidence.setup_summary.viewports[0].setup_screenshots, ["pricing-page-basic-mobile-after-click"]);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_total, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked_truncated, false);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].selector, "[data-testid='open-pricing']");
@@ -1478,7 +1496,11 @@ assert.equal(profileAssessment.checks.find((check) => check.type === "selector_c
 const desktopOnlyAssessment = profileAssessment.checks.find((check) => check.evidence?.text === "Desktop-only copy");
 assert.equal(desktopOnlyAssessment.status, "passed");
 assert.deepEqual(desktopOnlyAssessment.evidence.matches, [true]);
-assert.equal(profileAssessment.artifacts.screenshots.length, 2);
+assert.deepEqual(profileAssessment.artifacts.screenshots, [
+  "pricing-page-basic-mobile",
+  "pricing-page-basic-mobile-after-click",
+  "pricing-page-basic-desktop",
+]);
 const failedSelectorAbsentAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [{

@@ -242,10 +242,10 @@ appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
 `click`, `drag`, `press`, `fill`, `set_input_value`, `assert_text_visible`,
 `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
-`assert_window_number`, `local_storage`, `session_storage`, `clear_storage`, `wait`,
-`wait_for_selector`, `wait_for_text`, and `window_call`; a failed setup action
-is recorded as a failed `setup_actions_succeeded` check so the profile cannot
-pass without reaching the intended state. Text-matched `click` actions prefer
+`assert_window_number`, `local_storage`, `session_storage`, `clear_storage`,
+`screenshot`, `wait`, `wait_for_selector`, `wait_for_text`, and `window_call`;
+a failed setup action is recorded as a failed `setup_actions_succeeded` check so
+the profile cannot pass without reaching the intended state. Text-matched `click` actions prefer
 visible matching elements, which keeps responsive layouts from selecting hidden
 desktop or mobile-only links. Add `force: true` to a click action only when the
 matched visible element is intentionally animated or otherwise never becomes
@@ -276,6 +276,10 @@ can include `repeat` / `repeat_count` / `times` from 1 to 100; each repetition
 is recorded with `repeat_index` and `repeat_count`, and `after_ms` runs after
 each repetition. Use it for bounded game proof helpers, retry controls, or other
 workflows where one declarative action needs to advance the app several times.
+Use `screenshot` with an optional `label` to capture durable Riddle screenshots
+at important setup milestones, such as after a route switch, terminal state, or
+reset. These labels are recorded in setup evidence and included in profile
+artifact summaries alongside final viewport screenshots.
 Add `frame_selector` / `frameSelector` to a setup action when the interaction
 target lives inside an embedded iframe, such as a community game player or
 hosted preview surface. Selector-based actions, storage actions, window calls,
@@ -287,7 +291,7 @@ it defaults to the first frame.
 Profiles with setup actions also include a compact
 `setup_actions_succeeded.evidence.setup_summary`. The summary groups each
 viewport's final route, final URL, action counts, clicked targets, iframe URLs,
-compact text samples, and failures so setup-heavy clickthrough or iframe proofs
+setup screenshots, compact text samples, and failures so setup-heavy clickthrough or iframe proofs
 can be reviewed without reading every raw setup-action result. Long click
 sequences include `clicked_total` and `clicked_truncated`; the compact `clicked`
 list keeps the first and last clicked targets so later route switches and reset
