@@ -542,14 +542,22 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
     viewports: viewports.map((viewport) => {
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result.ok === false);
+      const successfulClicks = results.filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false);
+      const clickCountValues = successfulClicks
+        .map((result) => typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined)
+        .filter((value): value is number => value !== undefined);
       const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
-        .map((result) => ({
-          ordinal: result.ordinal ?? null,
-          selector: result.selector ?? null,
-          frame_selector: result.frame_selector ?? null,
-          text: compactProfileSetupSummaryText(result.text),
-        }));
+        .map((result) => {
+          const clickCount = typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined;
+          return {
+            ordinal: result.ordinal ?? null,
+            selector: result.selector ?? null,
+            frame_selector: result.frame_selector ?? null,
+            text: compactProfileSetupSummaryText(result.text),
+            ...(clickCount ? { click_count: clickCount } : {}),
+          };
+        });
       const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
       const text_samples = results
         .filter((result) => result.ok !== false && typeof result.text === "string" && (
@@ -577,6 +585,8 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
+        click_count_action_total: clickCountValues.length,
+        click_count_value_total: clickCountValues.reduce((sum, value) => sum + value, 0),
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -2501,14 +2511,22 @@ function profileSetupSummary(viewports, actionCount) {
     viewports: (viewports || []).map((viewport) => {
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result && result.ok === false);
+      const successfulClicks = results.filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false);
+      const clickCountValues = successfulClicks
+        .map((result) => typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined)
+        .filter((value) => value !== undefined);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
-        .map((result) => ({
-          ordinal: result.ordinal ?? null,
-          selector: result.selector ?? null,
-          frame_selector: result.frame_selector ?? null,
-          text: compactProfileSetupSummaryText(result.text),
-        }));
+        .map((result) => {
+          const clickCount = typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined;
+          return {
+            ordinal: result.ordinal ?? null,
+            selector: result.selector ?? null,
+            frame_selector: result.frame_selector ?? null,
+            text: compactProfileSetupSummaryText(result.text),
+            ...(clickCount ? { click_count: clickCount } : {}),
+          };
+        });
       const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
       const textSamples = results
         .filter((result) => result && result.ok !== false && typeof result.text === "string" && (
@@ -2536,6 +2554,8 @@ function profileSetupSummary(viewports, actionCount) {
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
+        click_count_action_total: clickCountValues.length,
+        click_count_value_total: clickCountValues.reduce((sum, value) => sum + value, 0),
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({

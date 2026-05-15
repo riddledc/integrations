@@ -404,6 +404,8 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     return sum + labels.filter((label) => typeof label === "string" && label.trim()).length;
   }, 0);
   const clickedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0);
+  const clickCountActionTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_action_total) || 0), 0);
+  const clickCountValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_value_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
     sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
   ), 0);
@@ -413,6 +415,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     `- setup screenshots: ${setupScreenshots}`,
     `- clicked targets: ${clickedTotal}${failedTotal ? `; failed setup actions: ${failedTotal}` : ""}`,
   ];
+  if (clickCountActionTotal) {
+    lines.push(`- click counts: ${clickCountActionTotal} action(s), click_count total ${clickCountValueTotal}`);
+  }
 
   for (const viewport of viewports.slice(0, 8)) {
     const name = cliString(viewport.name) || "viewport";
@@ -422,8 +427,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
       ? viewport.setup_screenshots.filter((label) => typeof label === "string" && label.trim()).length
       : 0;
     const clicked = cliFiniteNumber(viewport.clicked_total) || 0;
+    const clickCountActions = cliFiniteNumber(viewport.click_count_action_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   if (viewports.length > 8) lines.push(`- ${viewports.length - 8} additional viewport(s) omitted from setup summary.`);
   return lines;
