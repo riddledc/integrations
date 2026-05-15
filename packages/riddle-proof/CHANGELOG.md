@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.72
+
+### Patch Changes
+
+- 4afa7bf: Add route-inventory evidence counts to profile summary markdown.
+
 ## 0.7.71
 
 ### Patch Changes
