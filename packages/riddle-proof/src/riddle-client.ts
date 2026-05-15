@@ -170,7 +170,7 @@ export async function deployRiddleStaticPreview(
 
   const created = await riddleRequestJson<Record<string, unknown>>(config, "/v1/preview", {
     method: "POST",
-    body: JSON.stringify({ framework: "spa", label }),
+    body: JSON.stringify({ framework: "static", label }),
   });
   const id = String(created.id || "");
   const uploadUrl = String(created.upload_url || "");

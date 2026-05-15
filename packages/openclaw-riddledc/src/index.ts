@@ -1074,7 +1074,7 @@ export default function register(api: PluginApi) {
       description: "Deploy a local build directory as an ephemeral preview site. Tars the directory, uploads to Riddle, and returns a live URL at preview.riddledc.com that can be screenshotted with other riddle_* tools. Previews auto-expire after 24 hours.",
       parameters: Type.Object({
         directory: Type.String({ description: "Absolute path to the build output directory (e.g. /path/to/build or /path/to/dist)" }),
-        framework: Type.Optional(Type.String({ description: "Framework hint: 'spa' (default) or 'static'" }))
+        framework: Type.Optional(Type.String({ description: "Framework hint: 'static' (default) or 'spa' for client-side routing" }))
       }),
       async execute(_id: string, params: any) {
         const result = await createStaticPreview(configFromOpenClawApi(api), params);

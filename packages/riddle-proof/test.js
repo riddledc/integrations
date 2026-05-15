@@ -143,18 +143,18 @@ const riddleClient = createRiddleApiClient({
     });
     if (String(url) === "https://api.test/v1/preview") {
       return new Response(JSON.stringify({
-        id: "pv_test",
-        upload_url: "https://upload.test/pv_test",
+        id: "ps_test",
+        upload_url: "https://upload.test/ps_test",
         expires_at: "2026-05-09T00:00:00.000Z",
       }), { status: 200 });
     }
-    if (String(url) === "https://upload.test/pv_test") {
+    if (String(url) === "https://upload.test/ps_test") {
       return new Response("", { status: 200 });
     }
-    if (String(url) === "https://api.test/v1/preview/pv_test/publish") {
+    if (String(url) === "https://api.test/v1/preview/ps_test/publish") {
       return new Response(JSON.stringify({
-        id: "pv_test",
-        preview_url: "https://preview.riddledc.com/s/pv_test/",
+        id: "ps_test",
+        preview_url: "https://preview.riddledc.com/s/ps_test/",
         file_count: 1,
         total_bytes: 52,
       }), { status: 200 });
@@ -195,7 +195,8 @@ const riddleClient = createRiddleApiClient({
   },
 });
 const deployedPreview = await riddleClient.deployStaticPreview(riddlePreviewDir, "unit-preview");
-assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/pv_test/");
+assert.equal(riddleClientCalls.find((call) => call.url === "https://api.test/v1/preview")?.body?.framework, "static");
+assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/ps_test/");
 assert.equal(deployedPreview.file_count, 1);
 assert.equal(typeof deployRiddleStaticPreview, "function");
 assert.deepEqual(parseRiddleViewport("390x844"), { width: 390, height: 844 });
@@ -311,7 +312,7 @@ assert(
   "Riddle client should send top-level strict=false when requested",
 );
 assert(
-  riddleClientCalls.some((call) => call.url === "https://upload.test/pv_test" && call.auth === null),
+  riddleClientCalls.some((call) => call.url === "https://upload.test/ps_test" && call.auth === null),
   "Riddle preview upload should not send API bearer auth to the signed upload URL",
 );
 assert(

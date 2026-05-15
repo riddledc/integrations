@@ -805,7 +805,7 @@ export async function createStaticPreview(
     createRes = await fetchWithRetry(`${endpoint}/v1/preview`, {
       method: "POST",
       headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ framework: params.framework || "spa" }),
+      body: JSON.stringify({ framework: params.framework || "static" }),
     }, PREVIEW_REQUEST_TIMEOUT_MS, "preview create");
   } catch (e: any) {
     return { ok: false, error: `Create failed: ${describeError(e)}` };
