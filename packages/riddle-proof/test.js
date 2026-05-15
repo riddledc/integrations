@@ -618,7 +618,6 @@ try {
     "0",
     "--progress-every-ms",
     "0",
-    "--strict=false",
   ]);
   const parsedProfileResult = JSON.parse(cliProfileResult.stdout);
   assert.equal(parsedProfileResult.status, "passed");
@@ -653,6 +652,35 @@ try {
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
+
+  cliRunProfilePollCount = 0;
+  const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");
+  const cliProfileStrictTrueResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    strictTrueOutputDir,
+    "--pollAttempts",
+    "4",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+    "--strict=true",
+  ]);
+  assert.equal(JSON.parse(cliProfileStrictTrueResult.stdout).status, "passed");
+  assert.equal(cliRunProfileRequests.length, 2);
+  assert.equal(cliRunProfileRequests[1].body.strict, true);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");
