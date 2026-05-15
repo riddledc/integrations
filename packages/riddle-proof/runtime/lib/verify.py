@@ -61,6 +61,7 @@ MIN_VISUAL_DELTA_PERCENT = 0.5
 MIN_VISUAL_CHANGED_PIXELS = 5000
 TARGETED_VISUAL_DELTA_PERCENT = 0.02
 TARGETED_VISUAL_CHANGED_PIXELS = 250
+TARGETED_CHANGED_REGION_MAX_AREA_PERCENT = 20
 TARGETED_SEMANTIC_STOPWORDS = {
     'about', 'after', 'agent', 'again', 'before', 'browser', 'button',
     'change', 'changed', 'click', 'copy', 'delta', 'does', 'from', 'into',
@@ -95,6 +96,18 @@ VISUAL_TOTAL_PIXEL_KEYS = {
 }
 VISUAL_WIDTH_KEYS = {'width', 'image_width', 'screenshot_width'}
 VISUAL_HEIGHT_KEYS = {'height', 'image_height', 'screenshot_height'}
+VISUAL_CHANGED_REGION_KEYS = {
+    'changed_region', 'changedregion', 'diff_region', 'diffregion',
+    'difference_region', 'differenceregion', 'changed_bounds',
+    'changedbounds', 'diff_bounds', 'diffbounds', 'difference_bounds',
+    'differencebounds', 'bounding_box', 'boundingbox', 'bbox', 'bounds',
+}
+VISUAL_REGION_X_KEYS = {'x', 'left', 'min_x', 'minx'}
+VISUAL_REGION_Y_KEYS = {'y', 'top', 'min_y', 'miny'}
+VISUAL_REGION_WIDTH_KEYS = {'width', 'w'}
+VISUAL_REGION_HEIGHT_KEYS = {'height', 'h'}
+VISUAL_REGION_RIGHT_KEYS = {'right', 'max_x', 'maxx'}
+VISUAL_REGION_BOTTOM_KEYS = {'bottom', 'max_y', 'maxy'}
 
 
 def capture_script_saves_screenshot(script):
@@ -1009,9 +1022,137 @@ def visual_delta_semantic_support(state=None, semantic_context=None):
     }
 
 
-def visual_delta_thresholds_for_context(state=None, semantic_context=None):
+def normalize_changed_region(value, total_pixels=None, changed_pixels=None, image_width=None, image_height=None, dimension_mismatch=False):
+    if not isinstance(value, dict):
+        return None
+
+    x = find_metric_value(value, VISUAL_REGION_X_KEYS)
+    y = find_metric_value(value, VISUAL_REGION_Y_KEYS)
+    width = find_metric_value(value, VISUAL_REGION_WIDTH_KEYS)
+    height = find_metric_value(value, VISUAL_REGION_HEIGHT_KEYS)
+    right = find_metric_value(value, VISUAL_REGION_RIGHT_KEYS)
+    bottom = find_metric_value(value, VISUAL_REGION_BOTTOM_KEYS)
+
+    if width is None and x is not None and right is not None and right > x:
+        width = right - x
+    if height is None and y is not None and bottom is not None and bottom > y:
+        height = bottom - y
+    if x is None and width is not None and right is not None:
+        x = right - width
+    if y is None and height is not None and bottom is not None:
+        y = bottom - height
+
+    if x is None or y is None or width is None or height is None:
+        return None
+    if width <= 0 or height <= 0:
+        return None
+
+    x = int(round(x))
+    y = int(round(y))
+    width = int(round(width))
+    height = int(round(height))
+    area_pixels = width * height
+    changed = metric_number(changed_pixels)
+    total = metric_number(total_pixels)
+    image_w = metric_number(image_width)
+    image_h = metric_number(image_height)
+    area_percent = (area_pixels / total) * 100 if total and total > 0 else None
+    width_percent = (width / image_w) * 100 if image_w and image_w > 0 else None
+    height_percent = (height / image_h) * 100 if image_h and image_h > 0 else None
+    density = (changed / area_pixels) if changed is not None and area_pixels > 0 else None
+    absolute_small_region = area_pixels <= max(TARGETED_VISUAL_CHANGED_PIXELS, int(changed or 0), 1)
+    percent_localized = area_percent is not None and area_percent <= TARGETED_CHANGED_REGION_MAX_AREA_PERCENT
+    localized = bool(not dimension_mismatch and (absolute_small_region or percent_localized))
+    if dimension_mismatch:
+        classification = 'geometry_change'
+    elif absolute_small_region or (area_percent is not None and area_percent <= 1):
+        classification = 'point_or_icon'
+    elif localized:
+        classification = 'localized'
+    else:
+        classification = 'broad'
+
+    return {
+        'present': True,
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+        'right': x + width,
+        'bottom': y + height,
+        'area_pixels': area_pixels,
+        'area_percent': round(area_percent, 4) if area_percent is not None else None,
+        'width_percent': round(width_percent, 4) if width_percent is not None else None,
+        'height_percent': round(height_percent, 4) if height_percent is not None else None,
+        'changed_pixel_density': round(density, 6) if density is not None else None,
+        'localized_for_targeted_change': localized,
+        'classification': classification,
+        'dimension_mismatch': bool(dimension_mismatch),
+    }
+
+
+def find_changed_region(value, total_pixels=None, changed_pixels=None, image_width=None, image_height=None, depth=0):
+    if depth > 7:
+        return None
+    if isinstance(value, dict):
+        for raw_key, raw_value in value.items():
+            if normalize_metric_key(raw_key) in VISUAL_CHANGED_REGION_KEYS:
+                region = normalize_changed_region(
+                    raw_value,
+                    total_pixels=total_pixels,
+                    changed_pixels=changed_pixels,
+                    image_width=image_width,
+                    image_height=image_height,
+                )
+                if region is not None:
+                    return region
+        for raw_value in value.values():
+            region = find_changed_region(raw_value, total_pixels, changed_pixels, image_width, image_height, depth + 1)
+            if region is not None:
+                return region
+    elif isinstance(value, list):
+        for item in value[:60]:
+            region = find_changed_region(item, total_pixels, changed_pixels, image_width, image_height, depth + 1)
+            if region is not None:
+                return region
+    return None
+
+
+def visual_delta_region_support(changed_region=None):
+    if not isinstance(changed_region, dict) or not changed_region.get('present'):
+        return {
+            'available': False,
+            'supported': None,
+            'reason': 'no changed-region metadata was available for targeted visual-delta localization',
+        }
+    if changed_region.get('dimension_mismatch'):
+        return {
+            'available': True,
+            'supported': False,
+            'reason': 'changed-region metadata reports a screenshot geometry change',
+            'classification': changed_region.get('classification'),
+        }
+    if changed_region.get('localized_for_targeted_change') is True:
+        return {
+            'available': True,
+            'supported': True,
+            'reason': 'changed pixels are localized enough for a targeted visual change',
+            'classification': changed_region.get('classification'),
+            'area_percent': changed_region.get('area_percent'),
+        }
+    return {
+        'available': True,
+        'supported': False,
+        'reason': 'changed pixels are too broad for a targeted visual change',
+        'classification': changed_region.get('classification'),
+        'area_percent': changed_region.get('area_percent'),
+    }
+
+
+def visual_delta_thresholds_for_context(state=None, semantic_context=None, changed_region=None):
     semantic = visual_delta_semantic_support(state, semantic_context)
-    if semantic.get('supported'):
+    localization = visual_delta_region_support(changed_region)
+    if semantic.get('supported') and localization.get('supported') is not False:
         return {
             'mode': 'targeted_semantic',
             'min_change_percent': TARGETED_VISUAL_DELTA_PERCENT,
@@ -1019,12 +1160,14 @@ def visual_delta_thresholds_for_context(state=None, semantic_context=None):
             'default_min_change_percent': MIN_VISUAL_DELTA_PERCENT,
             'default_min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
             'semantic_support': semantic,
+            'localization_support': localization,
         }
     return {
         'mode': 'default',
         'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
         'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
         'semantic_support': semantic,
+        'localization_support': localization,
     }
 
 
@@ -1088,6 +1231,14 @@ def extract_visual_delta(payload, state=None, semantic_context=None):
     if percent is None and changed_pixels is not None and total_pixels:
         percent = (changed_pixels / total_pixels) * 100
 
+    changed_region = None
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        changed_region = find_changed_region(candidate, total_pixels, changed_pixels, width, height)
+        if changed_region is not None:
+            break
+
     if percent is None and changed_pixels is None:
         has_artifacts = bool(
             screenshot_url
@@ -1129,7 +1280,7 @@ def extract_visual_delta(payload, state=None, semantic_context=None):
             },
         }
 
-    thresholds = visual_delta_thresholds_for_context(state, semantic_context)
+    thresholds = visual_delta_thresholds_for_context(state, semantic_context, changed_region)
     min_percent = thresholds['min_change_percent']
     min_pixels = thresholds['min_changed_pixels']
     percent_pass = percent is not None and percent >= min_percent
@@ -1145,6 +1296,8 @@ def extract_visual_delta(payload, state=None, semantic_context=None):
         'min_changed_pixels': min_pixels,
         'threshold_mode': thresholds.get('mode'),
         'semantic_support': thresholds.get('semantic_support'),
+        'localization_support': thresholds.get('localization_support'),
+        'changed_region': changed_region,
         'reason': visual_delta_pass_reason('Measured visual delta', passed, thresholds),
     }
 
@@ -1295,6 +1448,14 @@ def compare_rgba_images(before_image, after_image, threshold=10):
     overlap_height = min(before_height, after_height)
     total_pixels = max(before_width * before_height, after_width * after_height)
     changed_pixels = total_pixels - (overlap_width * overlap_height)
+    min_x = min_y = None
+    max_x = max_y = None
+    dimension_mismatch = before_width != after_width or before_height != after_height
+    if dimension_mismatch and total_pixels > 0:
+        min_x = 0
+        min_y = 0
+        max_x = max(before_width, after_width) - 1
+        max_y = max(before_height, after_height) - 1
     for y in range(overlap_height):
         before_row = y * before_width * 4
         after_row = y * after_width * 4
@@ -1308,11 +1469,31 @@ def compare_rgba_images(before_image, after_image, threshold=10):
                 abs(before_rgba[b + 3] - after_rgba[a + 3]),
             ) > threshold:
                 changed_pixels += 1
+                min_x = x if min_x is None else min(min_x, x)
+                min_y = y if min_y is None else min(min_y, y)
+                max_x = x if max_x is None else max(max_x, x)
+                max_y = y if max_y is None else max(max_y, y)
     change_percent = (changed_pixels / total_pixels) * 100 if total_pixels else None
+    changed_region = None
+    if min_x is not None and min_y is not None and max_x is not None and max_y is not None:
+        changed_region = normalize_changed_region(
+            {
+                'x': min_x,
+                'y': min_y,
+                'width': max_x - min_x + 1,
+                'height': max_y - min_y + 1,
+            },
+            total_pixels=total_pixels,
+            changed_pixels=changed_pixels,
+            image_width=max(before_width, after_width),
+            image_height=max(before_height, after_height),
+            dimension_mismatch=dimension_mismatch,
+        )
     return {
         'changed_pixels': changed_pixels,
         'total_pixels': total_pixels,
         'change_percent': change_percent,
+        'changed_region': changed_region,
         'before_width': before_width,
         'before_height': before_height,
         'after_width': after_width,
@@ -1338,7 +1519,8 @@ def measure_visual_delta_from_image_artifacts(before_url, after_url, state=None,
     changed_pixels = comparison.get('changed_pixels')
     total_pixels = comparison.get('total_pixels')
     percent = comparison.get('change_percent')
-    thresholds = visual_delta_thresholds_for_context(state, semantic_context)
+    changed_region = comparison.get('changed_region')
+    thresholds = visual_delta_thresholds_for_context(state, semantic_context, changed_region)
     min_percent = thresholds['min_change_percent']
     min_pixels = thresholds['min_changed_pixels']
     percent_pass = percent is not None and percent >= min_percent
@@ -1354,6 +1536,8 @@ def measure_visual_delta_from_image_artifacts(before_url, after_url, state=None,
         'min_changed_pixels': min_pixels,
         'threshold_mode': thresholds.get('mode'),
         'semantic_support': thresholds.get('semantic_support'),
+        'localization_support': thresholds.get('localization_support'),
+        'changed_region': changed_region,
         'source': 'riddle_artifact_image_diff',
         'reason': visual_delta_pass_reason('Measured visual delta from before/after screenshot artifacts', passed, thresholds),
         'comparison': {
