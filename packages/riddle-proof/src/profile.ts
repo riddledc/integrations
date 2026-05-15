@@ -50,6 +50,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "local_storage",
   "session_storage",
   "clear_storage",
+  "screenshot",
   "wait",
   "wait_for_selector",
   "wait_for_text",
@@ -95,6 +96,7 @@ export interface RiddleProofProfileSetupAction {
   key?: string;
   value?: string;
   value_json?: JsonValue;
+  label?: string;
   path?: string;
   args?: JsonValue[];
   expect_return?: JsonValue;
@@ -507,11 +509,27 @@ function profileSetupActionCounts(results: Array<Record<string, JsonValue>>): Re
   return toJsonValue(counts) as Record<string, JsonValue>;
 }
 
+function profileSetupScreenshotLabels(results: Array<Record<string, JsonValue>>): string[] {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "screenshot" && result.ok !== false && typeof result.screenshot_label === "string")
+    .map((result) => result.screenshot_label as string)
+    .filter(Boolean);
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
   const lastCount = limit - firstCount;
   return [...items.slice(0, firstCount), ...items.slice(-lastCount)];
+}
+
+function profileScreenshotLabels(viewports: RiddleProofProfileViewportEvidence[] | undefined): string[] {
+  const labels: string[] = [];
+  for (const viewport of viewports || []) {
+    if (viewport.screenshot_label) labels.push(viewport.screenshot_label);
+    labels.push(...profileSetupScreenshotLabels(viewport.setup_action_results || []));
+  }
+  return labels;
 }
 
 function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], actionCount?: number): JsonValue {
@@ -553,6 +571,7 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
         clicked,
@@ -614,6 +633,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "drag"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
       ? "press"
+    : normalizedInput === "capture_screenshot" || normalizedInput === "save_screenshot" || normalizedInput === "setup_screenshot"
+      ? "screenshot"
       : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
@@ -762,6 +783,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     key,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
+    label: stringFromOwn(input, "label", "name", "screenshot_label", "screenshotLabel"),
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
@@ -2014,9 +2036,7 @@ export function assessRiddleProofProfileEvidence(
     : [];
   const status = profileStatusFromEvidence(profile, evidence, checks);
   const firstViewport = evidence?.viewports?.[0];
-  const screenshots = (evidence?.viewports || [])
-    .map((viewport) => viewport.screenshot_label)
-    .filter((label): label is string => Boolean(label));
+  const screenshots = profileScreenshotLabels(evidence?.viewports);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: profile.name,
@@ -2392,11 +2412,25 @@ function profileSetupActionCounts(results) {
   }
   return counts;
 }
+function profileSetupScreenshotLabels(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "screenshot" && result.ok !== false && typeof result.screenshot_label === "string")
+    .map((result) => result.screenshot_label)
+    .filter(Boolean);
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
   const lastCount = limit - firstCount;
   return [...items.slice(0, firstCount), ...items.slice(-lastCount)];
+}
+function profileScreenshotLabels(viewports) {
+  const labels = [];
+  for (const viewport of viewports || []) {
+    if (viewport && viewport.screenshot_label) labels.push(viewport.screenshot_label);
+    labels.push(...profileSetupScreenshotLabels(viewport && viewport.setup_action_results || []));
+  }
+  return labels;
 }
 function profileSetupSummary(viewports, actionCount) {
   return {
@@ -2437,6 +2471,7 @@ function profileSetupSummary(viewports, actionCount) {
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result && result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
         clicked,
@@ -2926,7 +2961,7 @@ function assessProfile(profile, evidence) {
   else if (expectedViewportCount && viewports.length < expectedViewportCount) status = "proof_insufficient";
   else if (checks.some((check) => check.status === "needs_human_review")) status = "needs_human_review";
   else if (checks.some((check) => check.status === "failed")) status = "product_regression";
-  const screenshotLabels = viewports.map((viewport) => viewport.screenshot_label).filter(Boolean);
+  const screenshotLabels = profileScreenshotLabels(viewports);
   const route = viewports[0] && viewports[0].route ? viewports[0].route : { requested: evidence.target_url, observed: "", matched: false, error: "missing viewport evidence" };
   const passedChecks = checks.filter((check) => check.status === "passed").length;
   const failedChecks = checks.filter((check) => check.status === "failed").length;
@@ -3293,6 +3328,18 @@ async function executeSetupAction(action, ordinal) {
       const ms = setupNumber(action.ms, 500);
       await page.waitForTimeout(ms);
       return { ...base, ok: true, ms };
+    }
+    if (type === "screenshot") {
+      const rawLabel = String(action.label || action.name || action.screenshot_label || action.screenshotLabel || ("setup-" + ordinal));
+      const labelPart = rawLabel
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80) || ("setup-" + ordinal);
+      const label = profileSlug + "-" + viewport.name + "-" + labelPart;
+      if (typeof saveScreenshot !== "function") return { ...base, reason: "save_screenshot_unavailable", label: rawLabel };
+      await saveScreenshot(label);
+      return { ...base, ok: true, label: rawLabel, screenshot_label: label };
     }
     if (type === "wait_for_selector") {
       const scope = await setupActionScope(action, timeout);
