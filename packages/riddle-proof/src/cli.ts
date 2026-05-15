@@ -106,6 +106,10 @@ function optionBoolean(options: CliOptions, key: string) {
   throw new Error(`--${flag} must be true or false.`);
 }
 
+function runProfileStrictOption(options: CliOptions) {
+  return optionBoolean(options, "strict") ?? false;
+}
+
 function optionNumber(options: CliOptions, ...keys: string[]) {
   for (const key of keys) {
     const value = optionString(options, key);
@@ -728,7 +732,7 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
         profile,
         optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
       ),
-      strict: optionBoolean(options, "strict"),
+      strict: runProfileStrictOption(options),
       sync: options.sync === true ? true : undefined,
     });
   } catch (error) {
