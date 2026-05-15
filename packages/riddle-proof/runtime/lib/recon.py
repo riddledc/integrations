@@ -19,6 +19,7 @@ from util import (  # noqa: E402
     apply_auth_context,
     build_capture_script,
     capture_static_preview,
+    capture_viewport_matrix_status,
     enrich_capture_payload,
     has_auth_context,
     invoke_retry,
@@ -27,6 +28,9 @@ from util import (  # noqa: E402
     save_state,
     should_use_static_preview,
     summarize_capture_artifacts,
+    viewport_matrix_return_js,
+    viewport_matrix_screenshot_js,
+    viewport_matrix_setup_js,
 )
 import subprocess as sp
 
@@ -514,9 +518,10 @@ def route_matches_expected(expected_path, observed_path):
     return True
 
 
-def build_probe_capture_script(base_script='', screenshot_label=''):
+def build_probe_capture_script(base_script='', screenshot_label='', viewport_matrix=None):
     pieces = []
     script = (base_script or '').strip()
+    pieces.extend(viewport_matrix_setup_js(viewport_matrix))
     if script:
         pieces.append(script.rstrip(';') + ';')
     pieces.extend([
@@ -556,9 +561,12 @@ def build_probe_capture_script(base_script='', screenshot_label=''):
         'console.log(' + json.dumps(PAGE_STATE_PREFIX) + ' + JSON.stringify(pageState));',
     ])
     label = (screenshot_label or '').strip()
-    if label and 'saveScreenshot' not in script:
+    viewport_screenshot_lines = viewport_matrix_screenshot_js(label, viewport_matrix)
+    if label and viewport_screenshot_lines:
+        pieces.extend(viewport_screenshot_lines)
+    elif label and 'saveScreenshot' not in script:
         pieces.append('await saveScreenshot(' + json.dumps(label) + ');')
-    pieces.append('return { pageState };')
+    pieces.append('return { pageState, viewportMatrix: ' + viewport_matrix_return_js() + ' };')
     return ' '.join(pieces)
 
 
@@ -727,7 +735,7 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
             'exclude': server_exclude,
             'path': target_path,
             'readiness_path': '/' if has_auth_context(s) else target_path,
-            'script': build_probe_capture_script(capture_script, label),
+            'script': build_probe_capture_script(capture_script, label, s.get('viewport_matrix')),
         }
         if s.get('color_scheme'):
             server_args['color_scheme'] = s['color_scheme']
@@ -757,7 +765,7 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
         print('Recon capture (' + label + ') using static preview fallback: ' + static_reason)
     capture_phase = label + '_capture'
     record_recon_phase(capture_phase, 'running', 'Capturing ' + label + ' recon baseline evidence.')
-    capture = capture_static_preview(state_for_capture, project_dir, label, build_probe_capture_script(capture_script, label), timeout=300, target_path=target_path)
+    capture = capture_static_preview(state_for_capture, project_dir, label, build_probe_capture_script(capture_script, label, s.get('viewport_matrix')), timeout=300, target_path=target_path)
     raw = (capture.get('raw') or {}).get('capture') or {}
     append_capture_diagnostic(
         s,
@@ -787,7 +795,7 @@ def capture_prod_baseline(prod_url, plan, capture_script=''):
     if not target_url:
         raise SystemExit('Requested prod baseline in recon, but prod_url is missing.')
     wait_for_selector = (plan.get('wait_for_selector') or '').strip()
-    script = build_capture_script(target_url, build_probe_capture_script(capture_script, 'prod'), 'prod', wait_for_selector)
+    script = build_capture_script(target_url, build_probe_capture_script(capture_script, 'prod', s.get('viewport_matrix')), 'prod', wait_for_selector, s.get('viewport_matrix'))
     args = {'script': script, 'timeout_sec': 60}
     apply_auth_context(s, args)
     print('Recon capture (prod) at ' + target_url)
@@ -815,6 +823,7 @@ def baseline_record(capture, observation):
         'url': capture.get('url'),
         'static_fallback_reason': capture.get('static_fallback_reason', ''),
         'artifact_summary': summarize_capture_artifacts(capture.get('raw') or {}),
+        'viewport_matrix': capture_viewport_matrix_status(s, capture.get('raw') or {}, str(observation.get('label') or '')),
         'observation': observation,
     }
 
@@ -833,6 +842,24 @@ def build_observation_packet(label, expected_path, capture=None, error=''):
 
     payload = (capture or {}).get('raw') or {}
     quality = evaluate_capture_quality(payload, expected_path)
+    viewport_matrix = capture_viewport_matrix_status(s, payload, label)
+    if viewport_matrix.get('status') == 'incomplete':
+        missing_names = [
+            str(item.get('name') or item.get('slug') or '').strip()
+            for item in viewport_matrix.get('missing') or []
+            if str(item.get('name') or item.get('slug') or '').strip()
+        ]
+        missing_text = ', '.join(missing_names[:8]) or 'requested viewport screenshots'
+        quality['valid'] = False
+        quality['telemetry_ready'] = False
+        quality['reason'] = (
+            quality.get('reason') + '; missing requested viewport evidence: ' + missing_text
+            if quality.get('reason') and quality.get('reason') != 'ok'
+            else 'missing requested viewport evidence: ' + missing_text
+        )
+    details = quality.get('details') if isinstance(quality.get('details'), dict) else {}
+    details['viewport_matrix'] = viewport_matrix
+    quality['details'] = details
     return {
         'label': label,
         'ok': bool((capture or {}).get('url')) and quality['valid'],
@@ -1042,6 +1069,13 @@ attempt_record = {
     'captured_baselines': attempt_captured_baselines,
     'result': attempt_result,
 }
+if attempt_captured_baselines:
+    latest_viewport_status = None
+    for baseline in attempt_captured_baselines.values():
+        if isinstance(baseline, dict) and isinstance(baseline.get('viewport_matrix'), dict):
+            latest_viewport_status = baseline.get('viewport_matrix')
+    if latest_viewport_status:
+        s['viewport_matrix_status'] = latest_viewport_status
 attempt_history.append(attempt_record)
 recon_results['attempt_history'] = attempt_history
 recon_results['baselines'] = {}

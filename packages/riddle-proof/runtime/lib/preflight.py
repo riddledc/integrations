@@ -15,6 +15,7 @@ from util import (
     invoke,
     load_package_json,
     load_proof_session_source,
+    normalize_viewport_matrix,
     save_state,
     validate_proof_session_resume,
 )
@@ -130,6 +131,12 @@ if raw_assertions:
         raise SystemExit('assertions_json is not valid JSON: ' + str(e))
 s['parsed_assertions'] = parsed_assertions
 s['viewport_matrix'] = parse_json_arg('viewport_matrix_json', (dict, list), None)
+s['viewport_matrix_status'] = {
+    'status': 'not_run' if normalize_viewport_matrix(s.get('viewport_matrix')) else 'not_requested',
+    'requested': normalize_viewport_matrix(s.get('viewport_matrix')),
+    'executed': [],
+    'missing': [],
+}
 s['deterministic_setup'] = parse_json_arg('deterministic_setup_json', (dict, list), None)
 
 # Generate branch if not provided. The riddle-proof/* namespace is reserved for

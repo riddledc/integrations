@@ -7,7 +7,7 @@ while good captures produce a structured evidence packet that the supervising ag
 must assess before the wrapper routes back into author/implement/recon work or ship.
 """
 
-import json, os, struct, sys, time, zlib
+import json, os, re, struct, sys, time, zlib
 from urllib.parse import parse_qsl, urlparse
 from urllib.request import Request, urlopen
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +18,7 @@ from util import (
     build_visual_proof_session,
     capture_proof_session_seed,
     capture_static_preview,
+    capture_viewport_matrix_status,
     enrich_capture_payload,
     has_auth_context,
     invoke,
@@ -31,6 +32,9 @@ from util import (
     should_use_static_preview,
     proof_session_output_url,
     summarize_capture_artifacts,
+    viewport_matrix_return_js,
+    viewport_matrix_screenshot_js,
+    viewport_matrix_setup_js,
 )
 import subprocess as sp
 
@@ -55,6 +59,15 @@ PLAYABILITY_MODES = {'playable', 'gameplay', 'game'}
 PROOF_EVIDENCE_REQUIRED_MODES = {'audio'}
 MIN_VISUAL_DELTA_PERCENT = 0.5
 MIN_VISUAL_CHANGED_PIXELS = 5000
+TARGETED_VISUAL_DELTA_PERCENT = 0.02
+TARGETED_VISUAL_CHANGED_PIXELS = 250
+TARGETED_SEMANTIC_STOPWORDS = {
+    'about', 'after', 'agent', 'again', 'before', 'browser', 'button',
+    'change', 'changed', 'click', 'copy', 'delta', 'does', 'from', 'into',
+    'layout', 'mode', 'page', 'proof', 'route', 'screen', 'shows', 'small',
+    'target', 'that', 'this', 'until', 'update', 'user', 'verify', 'view',
+    'visual', 'with',
+}
 VISUAL_DELTA_PERCENT_KEYS = {
     'change_pct', 'change_percent', 'changed_percent', 'percent_changed',
     'diff_percent', 'visual_delta_percent', 'pixel_change_percent',
@@ -133,7 +146,7 @@ def audit_current_capture_url(state, prod_url, expected_path):
 
 
 def capture_current_target(state, target_url, label, capture_script, timeout=300):
-    script = build_capture_script(target_url, capture_script, label, state.get('wait_for_selector', ''))
+    script = build_capture_script(target_url, capture_script, label, state.get('wait_for_selector', ''), state.get('viewport_matrix'))
     args = {'script': script, 'timeout_sec': 60}
     apply_auth_context(state, args)
     shot = invoke_retry('riddle_script', args, retries=3, timeout=max(timeout, 120))
@@ -312,9 +325,10 @@ def abort_capture_failure(state, results, expected_path, message, raw_payload):
     raise SystemExit(summary)
 
 
-def build_probe_capture_script(base_script='', verification_mode='proof', proof_session_seed=None):
+def build_probe_capture_script(base_script='', verification_mode='proof', proof_session_seed=None, viewport_matrix=None):
     pieces = []
     script = (base_script or '').strip()
+    pieces.extend(viewport_matrix_setup_js(viewport_matrix))
     pieces.append('let __riddleProofCaptureScriptError = null;')
     pieces.append('let __riddleProofCaptureScriptResult = null;')
     if script:
@@ -374,7 +388,10 @@ def build_probe_capture_script(base_script='', verification_mode='proof', proof_
         '  catch (err) { console.log(' + json.dumps(PROOF_EVIDENCE_PREFIX) + ' + JSON.stringify({ serialization_error: String(err) })); }',
         '}',
     ])
-    if auto_screenshot_for_mode(verification_mode) and not capture_script_saves_screenshot(script):
+    viewport_screenshot_lines = viewport_matrix_screenshot_js('after-proof', viewport_matrix)
+    if auto_screenshot_for_mode(verification_mode) and viewport_screenshot_lines:
+        pieces.extend(viewport_screenshot_lines)
+    elif auto_screenshot_for_mode(verification_mode) and not capture_script_saves_screenshot(script):
         pieces.append("await saveScreenshot('after-proof');")
     if isinstance(proof_session_seed, dict):
         pieces.append(
@@ -383,7 +400,7 @@ def build_probe_capture_script(base_script='', verification_mode='proof', proof_
             '); } catch {}'
         )
     pieces.append('if (__riddleProofCaptureScriptError) throw __riddleProofCaptureScriptError;')
-    pieces.append('return { pageState, proofEvidence: __riddleProofEvidenceValue };')
+    pieces.append('return { pageState, proofEvidence: __riddleProofEvidenceValue, viewportMatrix: ' + viewport_matrix_return_js() + ' };')
     return ' '.join(pieces)
 
 
@@ -885,7 +902,144 @@ def find_metric_value(value, key_names, depth=0):
     return None
 
 
-def extract_visual_delta(payload):
+def targeted_semantic_tokens(value, limit=24):
+    text = ''
+    try:
+        text = json.dumps(value, sort_keys=True) if isinstance(value, (dict, list)) else str(value or '')
+    except Exception:
+        text = str(value or '')
+    tokens = []
+    for token in re.findall(r'[a-z0-9]+', text.lower()):
+        if len(token) < 4 or token in TARGETED_SEMANTIC_STOPWORDS or token in tokens:
+            continue
+        tokens.append(token)
+        if len(tokens) >= limit:
+            break
+    return tokens
+
+
+def semantic_visible_text_for_delta(state=None, semantic_context=None):
+    chunks = []
+    after = (semantic_context or {}).get('after') if isinstance(semantic_context, dict) else {}
+    for source in [after or {}]:
+        if not isinstance(source, dict):
+            continue
+        for key in ('visible_text_sample', 'title'):
+            if source.get(key):
+                chunks.append(str(source.get(key)))
+        for key in ('headings', 'buttons', 'links', 'large_visible_elements'):
+            value = source.get(key)
+            try:
+                chunks.append(json.dumps(value, sort_keys=True))
+            except Exception:
+                chunks.append(str(value))
+    return ' '.join(chunks).lower()
+
+
+def targeted_assertion_text_sources(value, depth=0):
+    if depth > 8:
+        return []
+    sources = []
+    if isinstance(value, list):
+        for item in value:
+            sources.extend(targeted_assertion_text_sources(item, depth + 1))
+        return sources
+    if not isinstance(value, dict):
+        return sources
+
+    assertion_type = str(value.get('type') or value.get('kind') or '').strip().lower()
+    text_keys = (
+        'text', 'contains', 'pattern', 'label', 'copy', 'expected',
+        'expected_text', 'expectedText', 'visible_text', 'visibleText',
+    )
+    text_values = [
+        value.get(key)
+        for key in text_keys
+        if isinstance(value.get(key), str) and value.get(key).strip()
+    ]
+    type_is_textual = any(marker in assertion_type for marker in (
+        'text', 'copy', 'visible', 'contains', 'label', 'heading', 'button', 'link', 'badge',
+    ))
+    if text_values and (type_is_textual or not assertion_type):
+        sources.extend(text_values)
+
+    for key in ('assertions', 'checks', 'expected', 'match', 'matches'):
+        nested = value.get(key)
+        if isinstance(nested, (dict, list)):
+            sources.extend(targeted_assertion_text_sources(nested, depth + 1))
+    return sources
+
+
+def visual_delta_semantic_support(state=None, semantic_context=None):
+    state = state if isinstance(state, dict) else {}
+    visible_text = semantic_visible_text_for_delta(state, semantic_context)
+    if not visible_text:
+        return {
+            'supported': False,
+            'matched_tokens': [],
+            'reason': 'no semantic text sample was available for targeted visual-delta thresholds',
+        }
+
+    assertion_sources = targeted_assertion_text_sources(state.get('parsed_assertions'))
+    assertion_tokens = []
+    for source in assertion_sources:
+        for token in targeted_semantic_tokens(source):
+            if token not in assertion_tokens:
+                assertion_tokens.append(token)
+    if not assertion_tokens:
+        return {
+            'supported': False,
+            'matched_tokens': [],
+            'reason': 'targeted visual-delta thresholds require text/visible assertions for the intended small change',
+        }
+
+    matched_assertion_tokens = [token for token in assertion_tokens if token in visible_text]
+    context_tokens = []
+    for source in (state.get('success_criteria'), state.get('change_request'), state.get('proof_plan')):
+        for token in targeted_semantic_tokens(source):
+            if token not in context_tokens:
+                context_tokens.append(token)
+    matched_context_tokens = [token for token in context_tokens if token in visible_text]
+    return {
+        'supported': len(matched_assertion_tokens) >= 1,
+        'matched_tokens': (matched_assertion_tokens + [token for token in matched_context_tokens if token not in matched_assertion_tokens])[:12],
+        'matched_assertion_tokens': matched_assertion_tokens[:12],
+        'matched_context_tokens': matched_context_tokens[:12],
+        'reason': 'text assertions matched visible after evidence' if matched_assertion_tokens else 'no text assertion tokens matched visible after evidence',
+    }
+
+
+def visual_delta_thresholds_for_context(state=None, semantic_context=None):
+    semantic = visual_delta_semantic_support(state, semantic_context)
+    if semantic.get('supported'):
+        return {
+            'mode': 'targeted_semantic',
+            'min_change_percent': TARGETED_VISUAL_DELTA_PERCENT,
+            'min_changed_pixels': TARGETED_VISUAL_CHANGED_PIXELS,
+            'default_min_change_percent': MIN_VISUAL_DELTA_PERCENT,
+            'default_min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
+            'semantic_support': semantic,
+        }
+    return {
+        'mode': 'default',
+        'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
+        'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
+        'semantic_support': semantic,
+    }
+
+
+def visual_delta_pass_reason(source_label, passed, thresholds):
+    mode = (thresholds or {}).get('mode')
+    if passed and mode == 'targeted_semantic':
+        return source_label + ' clears the targeted-change threshold with matching semantic/text evidence.'
+    if passed:
+        return source_label + ' clears the legibility threshold.'
+    if mode == 'targeted_semantic':
+        return source_label + ' is below even the targeted-change threshold; capture success alone is not proof.'
+    return source_label + ' is below the legibility threshold; capture success alone is not proof.'
+
+
+def extract_visual_delta(payload, state=None, semantic_context=None):
     payload = enrich_capture_payload(payload)
     result = payload.get('result') if isinstance(payload, dict) else {}
     proof_json = payload.get('_proof_json') if isinstance(payload, dict) else {}
@@ -975,8 +1129,11 @@ def extract_visual_delta(payload):
             },
         }
 
-    percent_pass = percent is not None and percent >= MIN_VISUAL_DELTA_PERCENT
-    pixel_pass = changed_pixels is not None and changed_pixels >= MIN_VISUAL_CHANGED_PIXELS
+    thresholds = visual_delta_thresholds_for_context(state, semantic_context)
+    min_percent = thresholds['min_change_percent']
+    min_pixels = thresholds['min_changed_pixels']
+    percent_pass = percent is not None and percent >= min_percent
+    pixel_pass = changed_pixels is not None and changed_pixels >= min_pixels
     passed = percent_pass or pixel_pass
     return {
         'status': 'measured',
@@ -984,13 +1141,11 @@ def extract_visual_delta(payload):
         'change_percent': round(percent, 4) if percent is not None else None,
         'changed_pixels': int(changed_pixels) if changed_pixels is not None else None,
         'total_pixels': int(total_pixels) if total_pixels is not None else None,
-        'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
-        'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
-        'reason': (
-            'Measured visual delta clears the legibility threshold.'
-            if passed else
-            'Measured visual delta is below the legibility threshold; capture success alone is not proof.'
-        ),
+        'min_change_percent': min_percent,
+        'min_changed_pixels': min_pixels,
+        'threshold_mode': thresholds.get('mode'),
+        'semantic_support': thresholds.get('semantic_support'),
+        'reason': visual_delta_pass_reason('Measured visual delta', passed, thresholds),
     }
 
 
@@ -1165,7 +1320,7 @@ def compare_rgba_images(before_image, after_image, threshold=10):
     }
 
 
-def measure_visual_delta_from_image_artifacts(before_url, after_url):
+def measure_visual_delta_from_image_artifacts(before_url, after_url, state=None, semantic_context=None):
     if not (image_artifact_url(before_url) and image_artifact_url(after_url)):
         return {
             'status': 'skipped',
@@ -1183,8 +1338,11 @@ def measure_visual_delta_from_image_artifacts(before_url, after_url):
     changed_pixels = comparison.get('changed_pixels')
     total_pixels = comparison.get('total_pixels')
     percent = comparison.get('change_percent')
-    percent_pass = percent is not None and percent >= MIN_VISUAL_DELTA_PERCENT
-    pixel_pass = changed_pixels is not None and changed_pixels >= MIN_VISUAL_CHANGED_PIXELS
+    thresholds = visual_delta_thresholds_for_context(state, semantic_context)
+    min_percent = thresholds['min_change_percent']
+    min_pixels = thresholds['min_changed_pixels']
+    percent_pass = percent is not None and percent >= min_percent
+    pixel_pass = changed_pixels is not None and changed_pixels >= min_pixels
     passed = bool(percent_pass or pixel_pass)
     return {
         'status': 'measured',
@@ -1192,14 +1350,12 @@ def measure_visual_delta_from_image_artifacts(before_url, after_url):
         'change_percent': round(percent, 4) if percent is not None else None,
         'changed_pixels': int(changed_pixels) if changed_pixels is not None else None,
         'total_pixels': int(total_pixels) if total_pixels is not None else None,
-        'min_change_percent': MIN_VISUAL_DELTA_PERCENT,
-        'min_changed_pixels': MIN_VISUAL_CHANGED_PIXELS,
+        'min_change_percent': min_percent,
+        'min_changed_pixels': min_pixels,
+        'threshold_mode': thresholds.get('mode'),
+        'semantic_support': thresholds.get('semantic_support'),
         'source': 'riddle_artifact_image_diff',
-        'reason': (
-            'Measured visual delta from before/after screenshot artifacts clears the legibility threshold.'
-            if passed else
-            'Measured visual delta from before/after screenshot artifacts is below the legibility threshold.'
-        ),
+        'reason': visual_delta_pass_reason('Measured visual delta from before/after screenshot artifacts', passed, thresholds),
         'comparison': {
             'before_url': before_url,
             'after_url': after_url,
@@ -1219,7 +1375,7 @@ def add_visual_delta_diagnostic(visual_delta, key, value):
     return updated
 
 
-def measure_visual_delta_against_baseline(state, results, after_payload, current_visual_delta):
+def measure_visual_delta_against_baseline(state, results, after_payload, current_visual_delta, semantic_context=None):
     if not visual_delta_required_for_state(state):
         return current_visual_delta
     if isinstance(current_visual_delta, dict) and current_visual_delta.get('status') == 'measured':
@@ -1246,7 +1402,7 @@ def measure_visual_delta_against_baseline(state, results, after_payload, current
             },
         )
 
-    artifact_delta = measure_visual_delta_from_image_artifacts(before_url, after_url)
+    artifact_delta = measure_visual_delta_from_image_artifacts(before_url, after_url, state, semantic_context)
     append_capture_diagnostic(state, 'visual_delta', 'riddle_artifact_image_diff', {
         'baseline_label': baseline.get('label') or '',
         'before_url': before_url,
@@ -1281,7 +1437,7 @@ def measure_visual_delta_against_baseline(state, results, after_payload, current
             },
         )
 
-    measured = extract_visual_delta(payload)
+    measured = extract_visual_delta(payload, state, semantic_context)
     if isinstance(measured, dict) and measured.get('status') == 'measured':
         measured['source'] = 'riddle_visual_diff'
         measured['comparison'] = {
@@ -1895,6 +2051,8 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
     proof_evidence = extract_proof_evidence(after_payload)
     playability_assessment = assess_playability_evidence(proof_evidence)
     playability_evidence = extract_playability_evidence(proof_evidence)
+    semantic_context = build_semantic_context(state, results, after_observation, expected_path)
+    viewport_matrix = (results.get('after') or {}).get('viewport_matrix') or capture_viewport_matrix_status(state, after_payload, 'after-proof')
     if audit_no_diff_mode(state):
         visual_delta = {
             'status': 'not_applicable',
@@ -1903,12 +2061,11 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         }
     else:
         visual_delta = (
-            extract_visual_delta(after_payload)
+            extract_visual_delta(after_payload, state, semantic_context)
             if visual_delta_applies(state.get('verification_mode'))
             else {'status': 'not_applicable', 'passed': None, 'reason': 'Verification mode does not require visual delta gating.'}
         )
-    visual_delta = measure_visual_delta_against_baseline(state, results, after_payload, visual_delta)
-    semantic_context = build_semantic_context(state, results, after_observation, expected_path)
+    visual_delta = measure_visual_delta_against_baseline(state, results, after_payload, visual_delta, semantic_context)
     artifact_contract = artifact_contract_for_state(state)
     artifact_production = artifact_production_summary(after_payload, supporting)
     artifact_usage = artifact_usage_summary(
@@ -1948,6 +2105,7 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
             'semantic_context': semantic_context,
             'artifact_contract': artifact_contract,
             'artifact_usage': artifact_usage,
+            'viewport_matrix': viewport_matrix,
         },
         status='evidence_captured' if after_observation.get('valid') else 'capture_incomplete',
     )
@@ -1958,6 +2116,7 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         'required_baseline_present': required_baseline_present,
         'baseline': results.get('baseline') or {},
         'semantic_context': semantic_context,
+        'viewport_matrix': viewport_matrix,
         'artifact_contract': artifact_contract,
         'artifact_production': artifact_production,
         'artifact_usage': artifact_usage,
@@ -2023,6 +2182,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         semantic_context,
         evidence_basis,
     )
+    viewport_matrix = (evidence_bundle or {}).get('viewport_matrix') if isinstance(evidence_bundle, dict) else None
     if isinstance(evidence_bundle, dict):
         evidence_bundle['artifact_contract'] = artifact_contract
         evidence_bundle['artifact_production'] = artifact_production
@@ -2071,6 +2231,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'supporting_artifacts': supporting,
         'visual_delta': visual_delta,
         'semantic_context': semantic_context,
+        'viewport_matrix': viewport_matrix,
         'evidence_bundle': evidence_bundle or {},
         'evidence_basis': evidence_basis,
         'artifact_contract': artifact_contract,
@@ -2124,7 +2285,7 @@ expected_path = (
 )
 verification_mode = normalized_verification_mode(s.get('verification_mode'))
 proof_session_seed = capture_proof_session_seed(s, expected_path)
-probe_capture_script = build_probe_capture_script(capture_script, verification_mode, proof_session_seed)
+probe_capture_script = build_probe_capture_script(capture_script, verification_mode, proof_session_seed, s.get('viewport_matrix'))
 results = {
     'baseline': {
         'reference': reference,
@@ -2297,9 +2458,30 @@ else:
         results['after'] = {'screenshots': [{'url': capture.get('url', '')}] if capture.get('url') else [], 'raw': capture.get('raw')}
         s['after_cdn'] = capture.get('url', '')
 
+after_viewport_matrix = capture_viewport_matrix_status(s, after_payload, 'after-proof')
 after_observation = evaluate_capture_quality(after_payload, expected_path, verification_mode)
+details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+details['viewport_matrix'] = after_viewport_matrix
+after_observation['details'] = details
+if after_viewport_matrix.get('status') == 'incomplete':
+    missing_names = [
+        str(item.get('name') or item.get('slug') or '').strip()
+        for item in after_viewport_matrix.get('missing') or []
+        if str(item.get('name') or item.get('slug') or '').strip()
+    ]
+    missing_text = ', '.join(missing_names[:8]) or 'requested viewport screenshots'
+    reason = 'missing requested viewport evidence: ' + missing_text
+    after_observation['valid'] = False
+    after_observation['telemetry_ready'] = False
+    after_observation['reason'] = (
+        (after_observation.get('reason') + '; ' + reason)
+        if after_observation.get('reason') and after_observation.get('reason') != 'ok'
+        else reason
+    )
+s['viewport_matrix_status'] = after_viewport_matrix
 results['after']['observation'] = after_observation
 results['after']['supporting_artifacts'] = collect_supporting_artifacts(after_payload)
+results['after']['viewport_matrix'] = after_viewport_matrix
 record_verify_phase('capture', 'completed', 'After-proof capture completed.')
 
 # Structured proof summary
@@ -2338,6 +2520,8 @@ if existing_before:
 if existing_prod:
     summary_lines.append('Prod baseline (recon): ' + existing_prod)
 summary_lines.append('After screenshot: ' + (s.get('after_cdn') or '(none)'))
+if after_viewport_matrix.get('status') not in ('not_requested', ''):
+    summary_lines.append('Viewport matrix: ' + after_viewport_matrix.get('status', 'unknown') + ' (' + str(len(after_viewport_matrix.get('executed') or [])) + '/' + str(len(after_viewport_matrix.get('requested') or [])) + ' captured)')
 summary_lines.append('Expected proof path from recon: ' + expected_path)
 summary_lines.append('After observation: ' + after_observation['reason'])
 supporting = results['after'].get('supporting_artifacts') or {}
