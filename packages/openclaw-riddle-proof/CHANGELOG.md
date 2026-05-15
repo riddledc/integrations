@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.101
+
+### Patch Changes
+
+- 1feba96: Persist background checkpoint packets onto the OpenClaw wrapper state so checkpoint responses can resume background Riddle Proof runs.
+
 ## 0.4.100
 
 ### Patch Changes
