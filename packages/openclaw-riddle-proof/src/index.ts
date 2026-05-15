@@ -1603,6 +1603,8 @@ function buildPrHandoffPolicy(
   const blocked = status === "blocked" || status === "failed";
   const complete = status === "ready_to_ship" || status === "shipped" || status === "completed";
   const leftDraft = wrapperState?.left_draft === true;
+  const shipMode = stringValue(wrapperState?.request?.ship_mode);
+  const shipDisabled = shipMode === "none";
   const blockerCode = stringValue(recordValue(snapshot.blocker)?.code) || stringValue(wrapperState?.blocker?.code);
   if (status === "awaiting_checkpoint") {
     return {
@@ -1667,6 +1669,22 @@ function buildPrHandoffPolicy(
     };
   }
   if (complete) {
+    if (shipDisabled) {
+      return {
+        state: "proof_complete_ship_disabled",
+        proof_complete: true,
+        shipping_disabled: true,
+        ship_mode: "none",
+        merge_ready: false,
+        normal_pr_allowed: false,
+        fallback_pr: {
+          allowed: false,
+          reason: "Proof completed, but ship_mode=none disables PR/ship handoff for this run.",
+        },
+        user_facing_summary:
+          "Riddle Proof completed, but this run was explicitly no-ship. Do not treat it as merge-ready unless a separate shipping run or PR handoff is requested.",
+      };
+    }
     return {
       state: leftDraft ? "proof_complete_draft_hold" : "proof_complete",
       proof_complete: true,
@@ -1769,11 +1787,28 @@ function compactCheckpointPacket(packet: unknown, includeStateExcerpt = false) {
   });
 }
 
+function presentCheckpointSummary(summary: unknown) {
+  const record = recordValue(summary);
+  if (!record) return summary;
+  const pending = record.pending === true;
+  const latestResumeToken = stringValue(record.latest_resume_token);
+  const latestResponseToken = stringValue(record.latest_response_token);
+  const next = { ...record };
+  if (pending && latestResumeToken && !latestResponseToken && record.token_matches === false) {
+    delete next.token_matches;
+    next.token_status = "awaiting_response";
+    next.token_note = "Token match is evaluated after a checkpoint response is submitted.";
+  }
+  return compactRecordValue(next);
+}
+
 function prepareStatusPayload(
   status: RiddleProofRunStatusSnapshot & Record<string, unknown>,
   options: { debug?: boolean; include_packet?: boolean; include_state_excerpt?: boolean } = {},
 ) {
   const payload: Record<string, unknown> = { ...status };
+  const checkpointSummary = recordValue(payload.checkpoint_summary);
+  if (checkpointSummary) payload.checkpoint_summary = presentCheckpointSummary(checkpointSummary);
   const packet = recordValue(payload.checkpoint_packet);
   if (packet && options.include_packet === true) {
     payload.checkpoint_packet = compactCheckpointPacket(packet, options.include_state_excerpt === true);
@@ -1787,7 +1822,7 @@ function compactDebugEvent(event: unknown) {
   const record = recordValue(event);
   if (!record) return null;
   const details = recordValue(record.details);
-  return {
+  return compactRecordValue({
     ts: stringValue(record.ts) || null,
     kind: stringValue(record.kind) || null,
     checkpoint: stringValue(record.checkpoint) || null,
@@ -1798,7 +1833,23 @@ function compactDebugEvent(event: unknown) {
     status: stringValue(details?.status) || null,
     duration_ms: numericValue(details?.duration_ms),
     error: stringValue(details?.error) || null,
-  };
+  });
+}
+
+function compactDebugRecord(value: unknown) {
+  const record = recordValue(value);
+  if (!record) return null;
+  const summary = stringValue(record.summary) || stringValue(record.message) || stringValue(record.error);
+  return compactRecordValue({
+    ts: stringValue(record.ts) || stringValue(record.created_at) || null,
+    kind: stringValue(record.kind) || stringValue(record.type) || null,
+    stage: stringValue(record.stage) || null,
+    step: stringValue(record.step) || null,
+    phase: stringValue(record.phase) || null,
+    status: stringValue(record.status) || null,
+    summary: summary || null,
+    details: compactValue(record.details ?? record, 1000),
+  });
 }
 
 function buildDebugPayload(wrapperState: RiddleProofRunState | null, engineState: Record<string, unknown> | null) {
@@ -1809,8 +1860,8 @@ function buildDebugPayload(wrapperState: RiddleProofRunState | null, engineState
   return {
     wrapper_events_recent: wrapperEvents.slice(-8).map(compactDebugEvent).filter(Boolean),
     engine_runtime_events_recent: runtimeEvents.slice(-8).map(compactDebugEvent).filter(Boolean),
-    capture_diagnostics_recent: captureDiagnostics.slice(-4),
-    stage_attempts: stageAttempts || null,
+    capture_diagnostics_recent: captureDiagnostics.slice(-4).map(compactDebugRecord).filter(Boolean),
+    stage_attempts: stageAttempts ? compactValue(stageAttempts, 2000) : null,
   };
 }
 
@@ -1902,13 +1953,13 @@ function summarizeImplementationAgent(wrapperState: RiddleProofRunState | null |
       kind: stringValue(lastEvent.kind) || null,
       summary: stringValue(lastEvent.summary) || null,
       ts: stringValue(lastEvent.ts) || null,
-      details: recordValue(lastEvent.details) || null,
+      details: compactValue(lastEvent.details, 1000) || null,
     } : null,
     last_outcome: lastOutcome ? {
       kind: stringValue(lastOutcome.kind) || null,
       summary: stringValue(lastOutcome.summary) || null,
       ts: stringValue(lastOutcome.ts) || null,
-      details: recordValue(lastOutcome.details) || null,
+      details: compactValue(lastOutcome.details, 1000) || null,
     } : null,
   };
 }
@@ -3063,7 +3114,7 @@ export function readOpenClawRiddleProofStatus(
     progress_update: progressUpdate,
     substep_elapsed_ms: activeSubstep?.status === "running" ? elapsedMsSince(activeSubstep.started_at) : null,
     phase_elapsed_ms: activeSubstep?.phase_status === "running" ? elapsedMsSince(activeSubstep.phase_started_at) : null,
-    engine_latest_event: latestRuntimeEvent(engineState),
+    engine_latest_event: compactDebugEvent(latestRuntimeEvent(engineState)),
     engine_runtime_event_count: runtimeEvents.length,
     runtime_staleness: runtimeStaleness,
     scratch_cleanup: scratchCleanup,

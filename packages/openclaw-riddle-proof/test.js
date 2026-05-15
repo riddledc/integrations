@@ -954,6 +954,15 @@ writeFileSync(reviewStatePath, JSON.stringify({
         outputs: [{ name: "after-proof.png" }],
       },
     },
+    {
+      label: "after-debug",
+      tool: "riddle_server_preview",
+      captured_at: "2026-04-23T00:05:41.000Z",
+      ok: true,
+      details: {
+        source: "openclaw-riddle-proof bundled source " + "X".repeat(5000),
+      },
+    },
   ],
   proof_profile: {
     name: "Tic Tac Toe",
@@ -1339,10 +1348,38 @@ assert.equal(reviewStatus?.timing_summary?.retry_counts?.recon, 1);
 assert.equal(Array.isArray(reviewStatus?.debug?.wrapper_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.engine_runtime_events_recent), true);
 assert.equal(Array.isArray(reviewStatus?.debug?.capture_diagnostics_recent), true);
+assert.equal(typeof reviewStatus?.debug?.capture_diagnostics_recent?.at(-1)?.details, "string");
+assert(reviewStatus.debug.capture_diagnostics_recent.at(-1).details.length <= 1000);
+assert(!JSON.stringify(reviewStatus.debug).includes("X".repeat(1500)));
 assert.equal(reviewStatus?.pr_handoff_policy?.state, "proof_checkpoint_required");
 assert.equal(reviewStatus?.pr_handoff_policy?.fallback_pr?.allowed, false);
 assert.equal(reviewStatus?.proof_artifact_summary?.baseline?.before?.url, "https://example.com/before.png");
 assert.equal(reviewStatus?.proof_artifact_summary?.after?.url, "https://example.com/after.png");
+
+const noShipCompleteWrapperStatePath = path.join(reviewFixture, "wrapper-state-no-ship-complete.json");
+writeFileSync(noShipCompleteWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_no_ship_complete",
+  status: "ready_to_ship",
+  current_stage: "ship",
+  last_checkpoint: "verify_ship_ready",
+  state_path: noShipCompleteWrapperStatePath,
+  request: {
+    repo: "davisdiehl/lilarcade",
+    change_request: "Make a tiny copy update.",
+    engine_state_path: reviewStatePath,
+    verification_mode: "visual",
+    ship_mode: "none",
+  },
+  events: [],
+}, null, 2));
+const noShipCompleteStatus = readOpenClawRiddleProofStatus(noShipCompleteWrapperStatePath);
+assert.equal(noShipCompleteStatus?.pr_handoff_policy?.state, "proof_complete_ship_disabled");
+assert.equal(noShipCompleteStatus?.pr_handoff_policy?.proof_complete, true);
+assert.equal(noShipCompleteStatus?.pr_handoff_policy?.merge_ready, false);
+assert.equal(noShipCompleteStatus?.pr_handoff_policy?.normal_pr_allowed, false);
+assert.equal(noShipCompleteStatus?.pr_handoff_policy?.fallback_pr?.allowed, false);
+assert.match(noShipCompleteStatus?.pr_handoff_policy?.user_facing_summary, /no-ship/);
 
 const blockedSalvageStatePath = path.join(reviewFixture, "riddle-state-blocked-salvage.json");
 const blockedSalvageWrapperStatePath = path.join(reviewFixture, "wrapper-state-blocked-salvage.json");
@@ -1718,6 +1755,8 @@ assert.equal(checkpointProtocolStatus?.checkpoint_action?.kind, "resume_checkpoi
 assert.equal(checkpointProtocolStatus?.monitor_contract.response_gate, "checkpoint_ok");
 assert.equal(checkpointProtocolStatus?.checkpoint_packet, undefined);
 assert.equal(checkpointProtocolStatus?.checkpoint_summary?.pending, true);
+assert.equal(checkpointProtocolStatus?.checkpoint_summary?.token_matches, undefined);
+assert.equal(checkpointProtocolStatus?.checkpoint_summary?.token_status, "awaiting_response");
 const checkpointProtocolStatusWithPacket = readOpenClawRiddleProofStatus(checkpointProtocolWrapperStatePath, { include_packet: true });
 assert.equal(checkpointProtocolStatusWithPacket?.checkpoint_packet?.kind, "author_proof");
 assert.equal(checkpointProtocolStatusWithPacket?.checkpoint_packet?.state_excerpt, undefined);
@@ -2865,6 +2904,7 @@ const blockedAfterAttemptStatus = readOpenClawRiddleProofStatus(blockedAfterAtte
 assert.equal(blockedAfterAttemptStatus.implementation_agent_attempt_count, 1);
 assert.equal(blockedAfterAttemptStatus.implementation_gap_origin, "after_agent_attempt");
 assert.equal(blockedAfterAttemptStatus.implementation_agent_last_outcome.kind, "agent.implementation.no_diff");
+assert.equal(typeof blockedAfterAttemptStatus.implementation_agent_last_outcome.details, "string");
 
 const blockedDuringAttemptWrapperStatePath = path.join(reviewFixture, "wrapper-blocked-routable-during-attempt.json");
 writeFileSync(blockedDuringAttemptWrapperStatePath, JSON.stringify({
