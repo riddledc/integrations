@@ -3385,7 +3385,11 @@ async function registerNetworkMocks(mocks) {
       const request = route.request();
       const method = request.method ? request.method() : "";
       if (mock.method && method.toUpperCase() !== String(mock.method).toUpperCase()) {
-        await route.continue();
+        if (typeof route.fallback === "function") {
+          await route.fallback();
+        } else {
+          await route.continue();
+        }
         return;
       }
       try {
