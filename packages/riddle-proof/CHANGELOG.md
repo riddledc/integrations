@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.66
+
+### Patch Changes
+
+- 515427a: Add setup action and setup screenshot counts to profile summary markdown output.
+
 ## 0.7.65
 
 ### Patch Changes
