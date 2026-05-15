@@ -663,6 +663,33 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert generic_page_token_delta['passed'] is False
     assert generic_page_token_delta['threshold_mode'] == 'default'
 
+    broad_region_targeted_delta = namespace['extract_visual_delta'](
+        {
+            'ok': True,
+            'result': {
+                'proofEvidence': {
+                    'change_pct': '0.0487',
+                    'changed_pixels': 2351,
+                    'total_pixels': 1152000,
+                    'width': 1280,
+                    'height': 900,
+                    'changed_region': {'x': 0, 'y': 0, 'width': 1280, 'height': 720},
+                },
+            },
+        },
+        {
+            'change_request': 'Add the Riddle Proof recovery smoke badge',
+            'success_criteria': 'The recovery smoke badge is visible after verify.',
+            'parsed_assertions': [{'kind': 'text_visible', 'text': 'recovery smoke badge'}],
+        },
+        {'after': {'visible_text_sample': 'Home page Riddle Proof recovery smoke badge'}},
+    )
+    assert broad_region_targeted_delta['status'] == 'measured'
+    assert broad_region_targeted_delta['passed'] is False
+    assert broad_region_targeted_delta['threshold_mode'] == 'default'
+    assert broad_region_targeted_delta['changed_region']['classification'] == 'broad'
+    assert broad_region_targeted_delta['localization_support']['supported'] is False
+
     unmeasured_delta = namespace['extract_visual_delta']({
         'ok': True,
         'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
@@ -738,6 +765,11 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert artifact_image_delta['source'] == 'riddle_artifact_image_diff'
     assert artifact_image_delta['changed_pixels'] == 1
     assert artifact_image_delta['change_percent'] == 50
+    assert artifact_image_delta['changed_region']['x'] == 1
+    assert artifact_image_delta['changed_region']['y'] == 0
+    assert artifact_image_delta['changed_region']['width'] == 1
+    assert artifact_image_delta['changed_region']['height'] == 1
+    assert artifact_image_delta['changed_region']['localized_for_targeted_change'] is True
 
     fallback_calls = []
 

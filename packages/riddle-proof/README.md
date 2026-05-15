@@ -100,9 +100,11 @@ viewport evidence as incomplete capture evidence.
 
 Measured visual deltas still require numeric before/after evidence. For small
 targeted copy or UI changes, the visual gate can use a lower targeted threshold
-only when route/text semantics match the requested change. Missing or unmeasured
-visual deltas continue through evidence recovery instead of being treated as a
-passing proof.
+only when route/text semantics match the requested change. When before/after
+image artifacts can be compared directly, the runtime also records the changed
+region bounding box and refuses the targeted threshold if that exact region is
+too broad for a localized UI change. Missing or unmeasured visual deltas
+continue through evidence recovery instead of being treated as a passing proof.
 
 ## CI / Profile Mode
 
