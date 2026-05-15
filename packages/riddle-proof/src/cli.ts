@@ -447,10 +447,12 @@ function profileNetworkMockSummaryMarkdown(result: RiddleProofProfileResult): st
   const hitsByLabel = cliRecord(evidence.hits_by_label) || {};
   const requiredHitsByLabel = cliRecord(evidence.required_hits_by_label) || {};
   const maxHitsByLabel = cliRecord(evidence.max_hits_by_label) || {};
+  const responseHitsByLabel = cliRecord(evidence.response_hits_by_label) || {};
   const labels = Array.from(new Set([
     ...Object.keys(hitsByLabel),
     ...Object.keys(requiredHitsByLabel),
     ...Object.keys(maxHitsByLabel),
+    ...Object.keys(responseHitsByLabel),
   ])).sort();
   const mockCount = cliFiniteNumber(evidence.mock_count);
   const requiredCount = cliFiniteNumber(evidence.required_count);
@@ -470,6 +472,15 @@ function profileNetworkMockSummaryMarkdown(result: RiddleProofProfileResult): st
     if (requiredHits !== undefined) parts.push(`required ${requiredHits}`);
     if (maxHits !== undefined) parts.push(`max ${maxHits}`);
     lines.push(`- ${label}: ${parts.join(", ")}`);
+    const responseHits = cliRecord(responseHitsByLabel[label]);
+    const responseLabels = responseHits ? Object.keys(responseHits).sort() : [];
+    if (responseHits && responseLabels.length) {
+      const responseParts = responseLabels
+        .slice(0, 8)
+        .map((responseLabel) => `${responseLabel} ${cliRecordNumber(responseHits, responseLabel) ?? 0}`);
+      const omitted = responseLabels.length > 8 ? `; ${responseLabels.length - 8} additional response label(s) omitted` : "";
+      lines.push(`- ${label} responses: ${responseParts.join("; ")}${omitted}`);
+    }
   }
   if (labels.length > 16) lines.push(`- ${labels.length - 16} additional network mock label(s) omitted from summary.`);
   return lines;

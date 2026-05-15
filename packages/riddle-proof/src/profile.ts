@@ -2064,10 +2064,27 @@ function assessNetworkMocksFromEvidence(
       max_hits_by_label: Object.fromEntries(mocks
         .filter((mock) => mock.max_hit_count !== undefined)
         .map((mock) => [mock.label, mock.max_hit_count ?? null])),
+      response_hits_by_label: networkMockResponseHitsByLabel(events),
       failed,
     },
     message: failed.length ? `Network mocks failed or hit-count contracts failed for ${failed.length} mock(s).` : undefined,
   };
+}
+
+function networkMockResponseHitsByLabel(events: Array<Record<string, JsonValue>>): Record<string, JsonValue> {
+  const responseHits: Record<string, Record<string, number>> = {};
+  for (const event of events) {
+    if (!event || event.ok === false) continue;
+    const label = typeof event.label === "string" ? event.label : "";
+    const responseLabel = typeof event.response_label === "string" ? event.response_label : "";
+    const hasSequenceResponse = typeof event.response_index === "number"
+      || event.sequence_cycle === true
+      || Boolean(responseLabel && responseLabel !== label);
+    if (!label || !responseLabel || !hasSequenceResponse) continue;
+    responseHits[label] ||= {};
+    responseHits[label][responseLabel] = (responseHits[label][responseLabel] || 0) + 1;
+  }
+  return responseHits;
 }
 
 function requiredNetworkMockHitCount(mock: RiddleProofProfileNetworkMock): number {
@@ -2632,10 +2649,20 @@ function assessProfile(profile, evidence) {
     const hitsByLabel = {};
     const requiredHitsByLabel = {};
     const maxHitsByLabel = {};
+    const responseHitsByLabel = {};
     for (const mock of profile.target.network_mocks) {
       hitsByLabel[mock.label] = hitCountForMock(mock);
       if (mock && mock.required !== false) requiredHitsByLabel[mock.label] = requiredNetworkMockHitCount(mock);
       if (mock && mock.max_hit_count !== undefined) maxHitsByLabel[mock.label] = mock.max_hit_count;
+    }
+    for (const event of events) {
+      if (!event || event.ok === false) continue;
+      const label = typeof event.label === "string" ? event.label : "";
+      const responseLabel = typeof event.response_label === "string" ? event.response_label : "";
+      const hasSequenceResponse = typeof event.response_index === "number" || event.sequence_cycle === true || Boolean(responseLabel && responseLabel !== label);
+      if (!label || !responseLabel || !hasSequenceResponse) continue;
+      responseHitsByLabel[label] ||= {};
+      responseHitsByLabel[label][responseLabel] = (responseHitsByLabel[label][responseLabel] || 0) + 1;
     }
     checks.push({
       type: "network_mocks_succeeded",
@@ -2648,6 +2675,7 @@ function assessProfile(profile, evidence) {
         hits_by_label: hitsByLabel,
         required_hits_by_label: requiredHitsByLabel,
         max_hits_by_label: maxHitsByLabel,
+        response_hits_by_label: responseHitsByLabel,
         failed,
       },
       message: failed.length ? "Network mocks failed or hit-count contracts failed for " + failed.length + " mock(s)." : undefined,

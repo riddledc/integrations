@@ -468,6 +468,12 @@ const cliRunProfileServer = createServer((request, response) => {
             max_hits_by_label: {
               "save-current-build": 2,
             },
+            response_hits_by_label: {
+              "api-fail-then-success": {
+                "first-api-fails": 1,
+                "second-api-succeeds": 2,
+              },
+            },
             failed: [],
           },
         },
@@ -568,6 +574,7 @@ try {
   assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
   assert.match(profileSummaryMarkdown, /failed mocks: 0/);
   assert.match(profileSummaryMarkdown, /api-fail-then-success: hits 3, required 3/);
+  assert.match(profileSummaryMarkdown, /api-fail-then-success responses: first-api-fails 1; second-api-succeeds 2/);
   assert.match(profileSummaryMarkdown, /save-current-build: hits 2, required 2, max 2/);
 } finally {
   cliRunProfileServer.close();
@@ -828,6 +835,7 @@ assert.ok(networkMockProfileScript.includes("request_body_sample"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_text"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_pattern_matched"));
 assert.ok(networkMockProfileScript.includes("max_hits_by_label"));
+assert.ok(networkMockProfileScript.includes("response_hits_by_label"));
 assert.ok(networkMockProfileScript.includes("forbidden_mock_hit"));
 assert.ok(networkMockProfileScript.includes("delay_ms"));
 assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
@@ -2170,6 +2178,8 @@ assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === 
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.hits_by_label.save, 1);
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.hits_by_label["build-retry"], 4);
 assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.required_hits_by_label["build-retry"], 4);
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.response_hits_by_label["build-retry"]["first-build-fails"], 2);
+assert.equal(networkMockProfileAssessment.checks.find((check) => check.type === "network_mocks_succeeded").evidence.response_hits_by_label["build-retry"]["second-build-succeeds"], 2);
 const missingNetworkMockAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
   ...networkMockProfileAssessment.evidence,
   network_mocks: [
