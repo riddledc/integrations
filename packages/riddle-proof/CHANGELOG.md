@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.68
+
+### Patch Changes
+
+- f1bc74c: Add network mock hit, required-hit, and max-hit details to profile summary markdown.
+
 ## 0.7.67
 
 ### Patch Changes
