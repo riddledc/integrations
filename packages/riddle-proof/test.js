@@ -606,6 +606,8 @@ assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
 assert.ok(profileScript.includes('saveScreenshot(label)'));
 assert.ok(profileScript.includes("executeSetupActions"));
+assert.ok(profileScript.includes("executeSetupActions(profile.target.setup_actions || [], viewport)"));
+assert.ok(profileScript.includes("executeSetupAction(action, index, viewport)"));
 assert.ok(profileScript.includes("setup_action_results"));
 assert.ok(profileScript.includes("profileSetupSummary"));
 assert.ok(profileScript.includes("setup_summary"));
