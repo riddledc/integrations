@@ -50,7 +50,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false] [--output <dir>] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false] [--poll-attempts n] [--output <dir>] [--quiet]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
@@ -104,6 +104,14 @@ function optionBoolean(options: CliOptions, key: string) {
   if (["false", "0", "no", "n"].includes(normalized)) return false;
   const flag = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
   throw new Error(`--${flag} must be true or false.`);
+}
+
+function optionNumber(options: CliOptions, ...keys: string[]) {
+  for (const key of keys) {
+    const value = optionString(options, key);
+    if (value !== undefined) return Number(value);
+  }
+  return undefined;
 }
 
 function readStdin() {
@@ -664,9 +672,9 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
 
   const poll = await client.pollJob(jobId, {
     wait: true,
-    attempts: optionString(options, "attempts") ? Number(optionString(options, "attempts")) : undefined,
-    intervalMs: optionString(options, "intervalMs") ? Number(optionString(options, "intervalMs")) : undefined,
-    progressEveryMs: optionString(options, "progressEveryMs") ? Number(optionString(options, "progressEveryMs")) : undefined,
+    attempts: optionNumber(options, "pollAttempts", "attempts"),
+    intervalMs: optionNumber(options, "intervalMs"),
+    progressEveryMs: optionNumber(options, "progressEveryMs"),
     onProgress: options.quiet !== true
       ? (snapshot) => {
           process.stderr.write(`${riddlePollProgressLine(snapshot)}\n`);
