@@ -507,6 +507,41 @@ const cliRunProfileServer = createServer((request, response) => {
           status: "passed",
           evidence: { expected_path: "/profile", observed_paths: ["/profile"], http_statuses: [200] },
         },
+        {
+          type: "route_inventory",
+          label: "pricing funnel route inventory",
+          status: "passed",
+          evidence: {
+            expected_count: 5,
+            source_link_count: 8,
+            source_unique_link_count: 5,
+            duplicate_source_link_count: 3,
+            duplicate_source_links: ["/billing", "/register"],
+            duplicates_allowed: true,
+            direct_route_count: 5,
+            clickthrough_count: 5,
+            viewport_count: 2,
+            viewports: [
+              {
+                viewport: "desktop",
+                source_link_count: 8,
+                source_unique_link_count: 5,
+                direct_route_count: 5,
+                clickthrough_count: 5,
+                failure_count: 0,
+              },
+              {
+                viewport: "phone",
+                source_link_count: 8,
+                source_unique_link_count: 5,
+                direct_route_count: 5,
+                clickthrough_count: 5,
+                failure_count: 0,
+              },
+            ],
+            failures: [],
+          },
+        },
       ],
       summary: "cli-profile-progress passed.",
       captured_at: "2026-05-13T23:21:20.000Z",
@@ -576,6 +611,10 @@ try {
   assert.match(profileSummaryMarkdown, /api-fail-then-success: hits 3, required 3/);
   assert.match(profileSummaryMarkdown, /api-fail-then-success responses: first-api-fails 1; second-api-succeeds 2/);
   assert.match(profileSummaryMarkdown, /save-current-build: hits 2, required 2, max 2/);
+  assert.match(profileSummaryMarkdown, /## Route Inventory/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");

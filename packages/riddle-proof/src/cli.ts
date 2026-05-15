@@ -366,6 +366,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (networkMockSummaryLines.length) {
     lines.push("", "## Network Mocks", "", ...networkMockSummaryLines);
   }
+  const routeInventorySummaryLines = profileRouteInventorySummaryMarkdown(result);
+  if (routeInventorySummaryLines.length) {
+    lines.push("", "## Route Inventory", "", ...routeInventorySummaryLines);
+  }
   if (result.artifacts.riddle_artifacts?.length) {
     lines.push("", "## Riddle Artifacts", "");
     for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
@@ -385,6 +389,10 @@ function cliFiniteNumber(value: unknown): number | undefined {
 
 function cliString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function cliStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())) : [];
 }
 
 function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[] {
@@ -483,6 +491,54 @@ function profileNetworkMockSummaryMarkdown(result: RiddleProofProfileResult): st
     }
   }
   if (labels.length > 16) lines.push(`- ${labels.length - 16} additional network mock label(s) omitted from summary.`);
+  return lines;
+}
+
+function profileRouteInventorySummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const routeInventoryChecks = result.checks.filter((check) => check.type === "route_inventory");
+  const lines: string[] = [];
+
+  for (const check of routeInventoryChecks) {
+    const evidence = cliRecord(check.evidence);
+    if (!evidence) continue;
+    const label = check.label || check.type;
+    const expectedCount = cliFiniteNumber(evidence.expected_count);
+    const sourceLinkCount = cliFiniteNumber(evidence.source_link_count);
+    const sourceUniqueLinkCount = cliFiniteNumber(evidence.source_unique_link_count);
+    const directRouteCount = cliFiniteNumber(evidence.direct_route_count);
+    const clickthroughCount = cliFiniteNumber(evidence.clickthrough_count);
+    const topLevelFailures = Array.isArray(evidence.failures) ? evidence.failures.length : undefined;
+    const viewports = Array.isArray(evidence.viewports)
+      ? evidence.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+      : [];
+    const viewportFailureTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.failure_count) || 0), 0);
+    const failureCount = topLevelFailures === undefined ? viewportFailureTotal : topLevelFailures;
+
+    lines.push(
+      `- ${label}: expected ${expectedCount ?? "unknown"}, source links ${sourceLinkCount ?? "unknown"}${sourceUniqueLinkCount === undefined ? "" : ` (${sourceUniqueLinkCount} unique)`}, direct ${directRouteCount ?? "unknown"}, clickthrough ${clickthroughCount ?? "unknown"}, failures ${failureCount}`,
+    );
+
+    const duplicateCount = cliFiniteNumber(evidence.duplicate_source_link_count) || 0;
+    const duplicateLinks = cliStringArray(evidence.duplicate_source_links);
+    if (duplicateCount || duplicateLinks.length) {
+      const duplicateText = duplicateLinks.length ? `: ${duplicateLinks.slice(0, 8).join(", ")}${duplicateLinks.length > 8 ? `, ${duplicateLinks.length - 8} more` : ""}` : "";
+      lines.push(`- ${label} duplicate source links: ${duplicateCount}${evidence.duplicates_allowed === true ? " allowed" : ""}${duplicateText}`);
+    }
+
+    for (const viewport of viewports.slice(0, 8)) {
+      const viewportName = cliString(viewport.viewport) || cliString(viewport.name) || "viewport";
+      const viewportSourceLinkCount = cliFiniteNumber(viewport.source_link_count);
+      const viewportSourceUniqueLinkCount = cliFiniteNumber(viewport.source_unique_link_count);
+      const viewportDirectRouteCount = cliFiniteNumber(viewport.direct_route_count);
+      const viewportClickthroughCount = cliFiniteNumber(viewport.clickthrough_count);
+      const viewportFailureCount = cliFiniteNumber(viewport.failure_count) || 0;
+      lines.push(
+        `- ${label} ${viewportName}: source ${viewportSourceLinkCount ?? "unknown"}${viewportSourceUniqueLinkCount === undefined ? "" : ` (${viewportSourceUniqueLinkCount} unique)`}, direct ${viewportDirectRouteCount ?? "unknown"}, clickthrough ${viewportClickthroughCount ?? "unknown"}, failures ${viewportFailureCount}`,
+      );
+    }
+    if (viewports.length > 8) lines.push(`- ${label}: ${viewports.length - 8} additional viewport(s) omitted from route inventory summary.`);
+  }
+
   return lines;
 }
 
