@@ -59,7 +59,7 @@ without depending on another plugin runtime.
 ## Durable Loop CLI
 
 The package publishes `riddle-proof-loop` as a host-agnostic runner surface for
-Codex/CLI-style testing:
+CLI-style and sole-agent testing:
 
 ```sh
 riddle-proof-loop run --request-json request.json --checkpoint-mode yield
@@ -88,9 +88,9 @@ Flag-based `respond` refuses to submit generated placeholder payloads. If the
 checkpoint template includes `TODO` fields, provide a real `--payload-json`
 file/object before resuming the run.
 
-`--agent local` is the generic CLI executor slot. The current implementation
-uses the local Codex CLI adapter underneath, but the loop contract and CLI
-surface are intentionally not Codex-specific.
+`--agent local` is the generic CLI executor slot. A host can wire that slot to
+Codex, Claude Code, another local CLI, or a managed worker without changing the
+checkpoint, evidence, or proof-assessment contract.
 
 Visual/UI proof runs can pass `viewport_matrix` / `viewport_matrix_json` to the
 base loop. The runtime records the requested matrix, captures per-viewport
@@ -676,7 +676,7 @@ terminal proof failure. If `--wait` exhausts its attempts before a terminal job
 status, the command exits non-zero and the result explains the last observed
 status and `submitted_at` state.
 
-## OpenClaw Adapter Boundary
+## Base vs OpenClaw Wrapper Boundary
 
 `@riddledc/riddle-proof/openclaw` translates OpenClaw Riddle Proof tool params
 into generic `RiddleProofRunParams`.
@@ -688,6 +688,27 @@ Generic authenticated proof inputs are preserved as pass-through JSON strings:
 `auth_localStorage_json`, `auth_cookies_json`, and `auth_headers_json`. Use
 those for public integrations; reserve `use_auth` for a configured, site-specific
 auth helper.
+
+Keep behavior in base `@riddledc/riddle-proof` when it changes the portable run
+contract or evidence semantics:
+
+- checkpoint packets and responses
+- profile, audit/no-diff, and proof-of-change run modes
+- viewport matrices and per-viewport artifact metadata
+- visual-delta thresholds, changed-region evidence, and evidence recovery gates
+- run state, run cards, result objects, proof sessions, and evidence bundles
+- generic auth/header/local storage inputs
+
+Keep behavior in the OpenClaw wrapper when it only concerns OpenClaw hosting or
+presentation:
+
+- OpenClaw tool registration and schema wording
+- Discord thread/status formatting
+- OpenClaw workflow labels such as interactive, background PR, and continuous
+- PR handoff/status phrasing such as `ship_mode=none`
+- checkpoint packet display and review UX
+- configured site-specific auth helpers
+- wrapper deployment, hot reload, and notification adapters
 
 The adapter does not invoke another OpenClaw plugin and does not supply a
 coding agent. It is the reusable mapping layer a future OpenClaw wrapper can
