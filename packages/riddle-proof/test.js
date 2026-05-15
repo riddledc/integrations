@@ -581,8 +581,8 @@ try {
     "riddle",
     "--output",
     profileOutputDir,
-    "--attempts",
-    "3",
+    "--pollAttempts",
+    "4",
     "--interval-ms",
     "0",
     "--progress-every-ms",
@@ -596,8 +596,8 @@ try {
   assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
   assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
   assert.equal(cliRunProfileRequests[0].body.strict, false);
-  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running/);
-  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed/);
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running attempt=1\/4/);
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed attempt=2\/4/);
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
