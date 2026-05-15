@@ -1,5 +1,11 @@
 # @riddledc/riddle-mcp
 
+## 0.8.1
+
+### Patch Changes
+
+- bc18e66: Default static directory previews to static routing so clean nested routes resolve to their generated index pages, while preserving explicit SPA routing via `framework: "spa"`.
+
 ## 0.8.0
 
 ### Minor Changes

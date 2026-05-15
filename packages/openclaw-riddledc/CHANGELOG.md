@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.8
+
+### Patch Changes
+
+- bc18e66: Default static directory previews to static routing so clean nested routes resolve to their generated index pages, while preserving explicit SPA routing via `framework: "spa"`.
+
 ## 0.9.7
 
 ### Patch Changes
