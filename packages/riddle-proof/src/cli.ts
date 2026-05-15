@@ -386,6 +386,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (routeInventorySummaryLines.length) {
     lines.push("", "## Route Inventory", "", ...routeInventorySummaryLines);
   }
+  const environmentBlockerLines = profileEnvironmentBlockerMarkdown(result);
+  if (environmentBlockerLines.length) {
+    lines.push("", "## Environment Blocker", "", ...environmentBlockerLines);
+  }
   if (result.artifacts.riddle_artifacts?.length) {
     lines.push("", "## Riddle Artifacts", "");
     for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
@@ -486,6 +490,33 @@ function cliString(value: unknown): string | undefined {
 
 function cliStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())) : [];
+}
+
+function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): string[] {
+  const blocker = cliRecord(result.environment_blocker);
+  if (!blocker) return [];
+
+  const lines: string[] = [];
+  const reason = cliString(blocker.reason);
+  const source = cliString(blocker.source);
+  const endpoint = cliString(blocker.endpoint);
+  const httpStatus = cliFiniteNumber(blocker.http_status);
+  const error = cliString(blocker.error);
+  const requiredSeconds = cliFiniteNumber(blocker.required_seconds);
+  const availableSeconds = cliFiniteNumber(blocker.available_seconds);
+  const deficitSeconds = cliFiniteNumber(blocker.deficit_seconds);
+  const minimumPurchaseDollars = cliFiniteNumber(blocker.minimum_purchase_dollars);
+
+  if (reason) lines.push(`- reason: ${reason}`);
+  if (source || endpoint || httpStatus !== undefined) {
+    lines.push(`- source: ${source || "runner"}${endpoint ? ` ${endpoint}` : ""}${httpStatus === undefined ? "" : ` HTTP ${httpStatus}`}`);
+  }
+  if (error) lines.push(`- error: ${error}`);
+  if (requiredSeconds !== undefined || availableSeconds !== undefined || deficitSeconds !== undefined) {
+    lines.push(`- seconds: required ${requiredSeconds ?? "unknown"}, available ${availableSeconds ?? "unknown"}, deficit ${deficitSeconds ?? "unknown"}`);
+  }
+  if (minimumPurchaseDollars !== undefined) lines.push(`- minimum purchase: $${minimumPurchaseDollars}`);
+  return lines;
 }
 
 function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[] {
