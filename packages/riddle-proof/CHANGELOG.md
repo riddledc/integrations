@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.64
+
+### Patch Changes
+
+- 1e7b91f: Add a profile `screenshot` setup action so long setup flows can capture durable Riddle screenshots at intermediate proof milestones.
+
 ## 0.7.63
 
 ### Patch Changes
