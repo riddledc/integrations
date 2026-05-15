@@ -916,6 +916,7 @@ assert.ok(networkMockProfileScript.includes("response_hits_by_label"));
 assert.ok(networkMockProfileScript.includes("forbidden_mock_hit"));
 assert.ok(networkMockProfileScript.includes("delay_ms"));
 assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
+assert.ok(networkMockProfileScript.includes("route.fallback"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 const cappedNetworkMockProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
