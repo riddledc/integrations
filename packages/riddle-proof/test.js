@@ -1146,6 +1146,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_window_number
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_console"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("drag"));
 const formSetupProfile = normalizeRiddleProofProfile({
@@ -1170,6 +1171,9 @@ const formSetupProfile = normalizeRiddleProofProfile({
         type: "session-storage",
         key: "builder_session",
         value: "proof-session",
+      },
+      {
+        type: "reset-console",
       },
       {
         type: "fill",
@@ -1200,11 +1204,12 @@ assert.deepEqual(formSetupProfile.target.setup_actions[1].value_json, { IdToken:
 assert.equal(formSetupProfile.target.setup_actions[1].reload, true);
 assert.equal(formSetupProfile.target.setup_actions[2].type, "session_storage");
 assert.equal(formSetupProfile.target.setup_actions[2].value, "proof-session");
-assert.equal(formSetupProfile.target.setup_actions[3].value, "Build a tiny maze");
-assert.equal(formSetupProfile.target.setup_actions[4].type, "set_input_value");
-assert.equal(formSetupProfile.target.setup_actions[4].value, "Riddle Proof Maze");
-assert.equal(formSetupProfile.target.setup_actions[5].type, "press");
-assert.equal(formSetupProfile.target.setup_actions[5].key, "Enter");
+assert.equal(formSetupProfile.target.setup_actions[3].type, "clear_console");
+assert.equal(formSetupProfile.target.setup_actions[4].value, "Build a tiny maze");
+assert.equal(formSetupProfile.target.setup_actions[5].type, "set_input_value");
+assert.equal(formSetupProfile.target.setup_actions[5].value, "Riddle Proof Maze");
+assert.equal(formSetupProfile.target.setup_actions[6].type, "press");
+assert.equal(formSetupProfile.target.setup_actions[6].key, "Enter");
 const dragSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-drag-action",
@@ -1507,6 +1512,9 @@ assert.ok(formSetupProfileScript.includes("window.localStorage"));
 assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));
 assert.ok(formSetupProfileScript.includes('type === "clear_storage"'));
+assert.ok(formSetupProfileScript.includes('type === "clear_console"'));
+assert.ok(formSetupProfileScript.includes("cleared_console_event_count"));
+assert.ok(formSetupProfileScript.includes("cleared_page_error_count"));
 assert.ok(formSetupProfileScript.includes('type === "fill" || type === "set_input_value"'));
 assert.ok(formSetupProfileScript.includes("click(clickOptions)"));
 assert.ok(formSetupProfileScript.includes("noWaitAfter: true"));

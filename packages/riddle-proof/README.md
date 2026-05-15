@@ -262,7 +262,8 @@ transport control, or other bounded interaction. Supported setup actions are
 `click`, `drag`, `press`, `fill`, `set_input_value`, `assert_text_visible`,
 `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
 `assert_window_number`, `local_storage`, `session_storage`, `clear_storage`,
-`screenshot`, `wait`, `wait_for_selector`, `wait_for_text`, and `window_call`;
+`clear_console`, `screenshot`, `wait`, `wait_for_selector`, `wait_for_text`,
+and `window_call`;
 a failed setup action is recorded as a failed `setup_actions_succeeded` check so
 the profile cannot pass without reaching the intended state. Text-matched `click` actions prefer
 visible matching elements, which keeps responsive layouts from selecting hidden
@@ -294,10 +295,14 @@ distance, elapsed time, score, or retry counters.
 `local_storage` and `session_storage` accept a `key` plus string `value` or
 JSON `json` / `value_json`, and can reload the page with `reload: true`.
 `clear_storage` clears `local`, `session`, or `both` browser storage scopes,
-defaults to `both`, and can also reload with `reload: true`. Any setup action
-can include `repeat` / `repeat_count` / `times` from 1 to 100; each repetition
-is recorded with `repeat_index` and `repeat_count`, and `after_ms` runs after
-each repetition. Use it for bounded game proof helpers, retry controls, or other
+defaults to `both`, and can also reload with `reload: true`. Use
+`clear_console` after setup reaches the intended proof state when expected
+bootstrap console or page errors should not count against the final
+`no_fatal_console_errors` invariant. It clears recorded console events and page
+errors, but keeps network mock hit evidence intact. Any setup action can include
+`repeat` / `repeat_count` / `times` from 1 to 100; each repetition is recorded
+with `repeat_index` and `repeat_count`, and `after_ms` runs after each
+repetition. Use it for bounded game proof helpers, retry controls, or other
 workflows where one declarative action needs to advance the app several times.
 Use `screenshot` with an optional `label` to capture durable Riddle screenshots
 at important setup milestones, such as after a route switch, terminal state, or

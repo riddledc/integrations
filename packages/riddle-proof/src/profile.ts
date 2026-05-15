@@ -50,6 +50,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "local_storage",
   "session_storage",
   "clear_storage",
+  "clear_console",
   "screenshot",
   "wait",
   "wait_for_selector",
@@ -642,6 +643,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
   const normalizedInput = String(value || "").trim().replace(/-/g, "_");
   const normalized = normalizedInput === "clear_browser_storage"
     ? "clear_storage"
+    : normalizedInput === "reset_console" || normalizedInput === "clear_browser_console" || normalizedInput === "reset_browser_console"
+      ? "clear_console"
     : normalizedInput === "pointer_drag" || normalizedInput === "mouse_drag" || normalizedInput === "drag_to"
       ? "drag"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
@@ -3469,6 +3472,13 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (typeof saveScreenshot !== "function") return { ...base, reason: "save_screenshot_unavailable", label: rawLabel };
       await saveScreenshot(label);
       return { ...base, ok: true, label: rawLabel, screenshot_label: label };
+    }
+    if (type === "clear_console") {
+      const cleared_console_event_count = consoleEvents.length;
+      const cleared_page_error_count = pageErrors.length;
+      consoleEvents.length = 0;
+      pageErrors.length = 0;
+      return { ...base, ok: true, cleared_console_event_count, cleared_page_error_count };
     }
     if (type === "wait_for_selector") {
       const scope = await setupActionScope(action, timeout);
