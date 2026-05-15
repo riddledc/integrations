@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.84
+
+### Patch Changes
+
+- 75042f8: Allow profile setup actions to be scoped to specific viewport names, and judge setup success against the actions applicable to each viewport.
+
 ## 0.7.83
 
 ### Patch Changes
