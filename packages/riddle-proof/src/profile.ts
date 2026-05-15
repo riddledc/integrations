@@ -3318,7 +3318,7 @@ async function registerNetworkMocks(mocks) {
     });
   }
 }
-async function executeSetupAction(action, ordinal) {
+async function executeSetupAction(action, ordinal, viewport) {
   const type = setupActionType(action);
   const frameSelector = setupFrameSelector(action);
   const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null, frame_selector: frameSelector || null };
@@ -3336,7 +3336,8 @@ async function executeSetupAction(action, ordinal) {
         .replace(/[^a-z0-9_-]+/g, "-")
         .replace(/^-+|-+$/g, "")
         .slice(0, 80) || ("setup-" + ordinal);
-      const label = profileSlug + "-" + viewport.name + "-" + labelPart;
+      const viewportName = viewport && viewport.name ? viewport.name : "viewport";
+      const label = profileSlug + "-" + viewportName + "-" + labelPart;
       if (typeof saveScreenshot !== "function") return { ...base, reason: "save_screenshot_unavailable", label: rawLabel };
       await saveScreenshot(label);
       return { ...base, ok: true, label: rawLabel, screenshot_label: label };
@@ -3753,7 +3754,7 @@ async function executeSetupAction(action, ordinal) {
     return { ...base, error: String(error && error.message ? error.message : error).slice(0, 1000) };
   }
 }
-async function executeSetupActions(actions) {
+async function executeSetupActions(actions, viewport) {
   const results = [];
   for (let index = 0; index < (actions || []).length; index += 1) {
     const action = actions[index] || {};
@@ -3761,7 +3762,7 @@ async function executeSetupActions(actions) {
     const repeatCount = Math.min(100, Math.max(1, Math.floor(requestedRepeat || 1)));
     let shouldStop = false;
     for (let repeatIndex = 0; repeatIndex < repeatCount; repeatIndex += 1) {
-      const result = await executeSetupAction(action, index);
+      const result = await executeSetupAction(action, index, viewport);
       results.push(repeatCount > 1
         ? { ...result, repeat_index: repeatIndex, repeat_count: repeatCount }
         : result);
@@ -4236,7 +4237,7 @@ async function captureViewport(viewport) {
     await page.waitForTimeout(profile.target.wait_ms);
   }
   const setupActionResults = (!navigationError && !waitError)
-    ? await executeSetupActions(profile.target.setup_actions || [])
+    ? await executeSetupActions(profile.target.setup_actions || [], viewport)
     : [];
   const dom = await page.evaluate(() => {
     const body = document.body;
