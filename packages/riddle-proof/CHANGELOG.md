@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.67
+
+### Patch Changes
+
+- f218511: Add profile network mock hit caps with `max_hit_count` / `max_hits` and a `forbidden: true` shorthand so audit profiles can prove downstream requests did not run.
+
 ## 0.7.66
 
 ### Patch Changes
