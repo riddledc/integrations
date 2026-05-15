@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.78
+
+### Patch Changes
+
+- d4277f7: Allow `no_fatal_console_errors` to treat browser resource-load console errors from expected failing network mocks as known-good evidence while still failing runtime errors and unmatched resource failures.
+
 ## 0.7.77
 
 ### Patch Changes
