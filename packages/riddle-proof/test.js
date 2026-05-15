@@ -775,9 +775,72 @@ assert.ok(networkMockProfileScript.includes("request_body_matches"));
 assert.ok(networkMockProfileScript.includes("request_body_sample"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_text"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_pattern_matched"));
+assert.ok(networkMockProfileScript.includes("max_hits_by_label"));
+assert.ok(networkMockProfileScript.includes("forbidden_mock_hit"));
 assert.ok(networkMockProfileScript.includes("delay_ms"));
 assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+const cappedNetworkMockProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "builder-network-mock-caps",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [
+      {
+        label: "build-should-not-run",
+        url: "**/api/build",
+        method: "POST",
+        forbidden: true,
+        json: { previewUrl: "https://cdn.test/should-not-run/index.html" },
+      },
+      {
+        label: "analytics-at-most-two",
+        url: "**/analytics",
+        method: "POST",
+        required: false,
+        max_hits: 2,
+        status: 204,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" });
+assert.equal(cappedNetworkMockProfile.target.network_mocks[0].required, false);
+assert.equal(cappedNetworkMockProfile.target.network_mocks[0].forbidden, true);
+assert.equal(cappedNetworkMockProfile.target.network_mocks[0].max_hit_count, 0);
+assert.equal(cappedNetworkMockProfile.target.network_mocks[1].required, false);
+assert.equal(cappedNetworkMockProfile.target.network_mocks[1].max_hit_count, 2);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "invalid-forbidden-network-mock",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "build",
+      url: "**/api/build",
+      forbidden: true,
+      max_hit_count: 1,
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /forbidden cannot be combined with max_hit_count greater than 0/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "impossible-network-mock-cap",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "save",
+      url: "**/api/save",
+      required_hit_count: 3,
+      max_hit_count: 2,
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" }), /max_hit_count cannot be less than its required hit count/);
 const networkMockMismatchResult = assessRiddleProofProfileEvidence(networkMockProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: networkMockProfile.name,
@@ -2060,6 +2123,53 @@ assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].label, "build-re
 assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].reason, "required_mock_hit_count_not_met");
 assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].required_hit_count, 4);
 assert.equal(partialSequenceNetworkMockCheck.evidence.failed[0].hit_count, 3);
+const cappedNetworkMockAssessment = assessRiddleProofProfileEvidence(cappedNetworkMockProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "builder-network-mock-caps",
+  target_url: "https://example.com/create",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-15T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    url: "https://example.com/create",
+    route: { requested: "https://example.com/create", observed: "/create", expected_path: "/create", matched: true, http_status: 200 },
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  network_mocks: [
+    { ok: true, label: "analytics-at-most-two", url: "https://example.com/analytics", method: "POST", status: 204 },
+    { ok: true, label: "analytics-at-most-two", url: "https://example.com/analytics", method: "POST", status: 204 },
+  ],
+});
+const cappedNetworkMockCheck = cappedNetworkMockAssessment.checks.find((check) => check.type === "network_mocks_succeeded");
+assert.equal(cappedNetworkMockAssessment.status, "passed");
+assert.equal(cappedNetworkMockCheck.status, "passed");
+assert.deepEqual(cappedNetworkMockCheck.evidence.max_hits_by_label, {
+  "build-should-not-run": 0,
+  "analytics-at-most-two": 2,
+});
+const forbiddenNetworkMockHitAssessment = assessRiddleProofProfileEvidence(cappedNetworkMockProfile, {
+  ...cappedNetworkMockAssessment.evidence,
+  network_mocks: [
+    { ok: true, label: "build-should-not-run", url: "https://example.com/api/build", method: "POST", status: 200 },
+    { ok: true, label: "analytics-at-most-two", url: "https://example.com/analytics", method: "POST", status: 204 },
+    { ok: true, label: "analytics-at-most-two", url: "https://example.com/analytics", method: "POST", status: 204 },
+    { ok: true, label: "analytics-at-most-two", url: "https://example.com/analytics", method: "POST", status: 204 },
+  ],
+});
+const forbiddenNetworkMockHitCheck = forbiddenNetworkMockHitAssessment.checks.find((check) => check.type === "network_mocks_succeeded");
+assert.equal(forbiddenNetworkMockHitAssessment.status, "product_regression");
+assert.equal(forbiddenNetworkMockHitCheck.status, "failed");
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[0].label, "build-should-not-run");
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[0].reason, "forbidden_mock_hit");
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[0].max_hit_count, 0);
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[0].hit_count, 1);
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[1].label, "analytics-at-most-two");
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[1].reason, "mock_hit_count_exceeded");
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[1].max_hit_count, 2);
+assert.equal(forbiddenNetworkMockHitCheck.evidence.failed[1].hit_count, 3);
 const allowedConsoleAssessment = assessRiddleProofProfileEvidence(consoleAllowedProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "expected-negative-console-profile",

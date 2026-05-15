@@ -139,6 +139,8 @@ export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetwork
   responses?: RiddleProofProfileNetworkMockResponse[];
   repeat_responses?: boolean;
   required_hit_count?: number;
+  max_hit_count?: number;
+  forbidden?: boolean;
   required?: boolean;
   capture_request_body?: boolean;
   request_body_contains?: string[];
@@ -830,6 +832,31 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
   if (requiredHitCount !== undefined && (!Number.isInteger(requiredHitCount) || requiredHitCount < 1)) {
     throw new Error(`target.network_mocks[${index}].required_hit_count must be a positive integer.`);
   }
+  const forbidden = input.forbidden === true
+    || input.must_not_hit === true
+    || input.mustNotHit === true
+    || input.should_not_run === true
+    || input.shouldNotRun === true;
+  const configuredMaxHitCount = numberValue(
+    input.max_hit_count
+    ?? input.maxHitCount
+    ?? input.max_hits
+    ?? input.maxHits,
+  );
+  if (configuredMaxHitCount !== undefined && (!Number.isInteger(configuredMaxHitCount) || configuredMaxHitCount < 0)) {
+    throw new Error(`target.network_mocks[${index}].max_hit_count must be a non-negative integer.`);
+  }
+  if (forbidden && configuredMaxHitCount !== undefined && configuredMaxHitCount !== 0) {
+    throw new Error(`target.network_mocks[${index}].forbidden cannot be combined with max_hit_count greater than 0.`);
+  }
+  const maxHitCount = forbidden ? 0 : configuredMaxHitCount;
+  const required = input.required === false || (maxHitCount === 0 && input.required !== true) ? false : true;
+  const effectiveRequiredHitCount = required
+    ? requiredHitCount ?? (Array.isArray(responses) && responses.length ? responses.length : 1)
+    : 0;
+  if (maxHitCount !== undefined && effectiveRequiredHitCount > maxHitCount) {
+    throw new Error(`target.network_mocks[${index}].max_hit_count cannot be less than its required hit count.`);
+  }
   return {
     ...payload,
     label: normalizeName(input.label || input.name, `network-mock-${index + 1}`),
@@ -841,7 +868,9 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
       || input.cycle_responses === true
       || input.cycleResponses === true,
     required_hit_count: requiredHitCount,
-    required: input.required === false ? false : true,
+    max_hit_count: maxHitCount,
+    forbidden,
+    required,
     capture_request_body: requestBody.capture_request_body,
     request_body_contains: requestBody.request_body_contains,
     request_body_patterns: requestBody.request_body_patterns,
@@ -1938,8 +1967,9 @@ function assessNetworkMocksFromEvidence(
   const events = evidence.network_mocks || [];
   const failed: Array<Record<string, JsonValue>> = [];
   const requiredMocks = mocks.filter((mock) => mock.required !== false);
+  const hitCountForMock = (mock: RiddleProofProfileNetworkMock) => events.filter((event) => event.label === mock.label && event.ok !== false).length;
   for (const mock of requiredMocks) {
-    const hits = events.filter((event) => event.label === mock.label && event.ok !== false).length;
+    const hits = hitCountForMock(mock);
     const requiredHitCount = requiredNetworkMockHitCount(mock);
     if (hits < requiredHitCount) {
       failed.push({
@@ -1948,6 +1978,20 @@ function assessNetworkMocksFromEvidence(
         method: mock.method || null,
         reason: hits < 1 ? "required_mock_not_hit" : "required_mock_hit_count_not_met",
         required_hit_count: requiredHitCount,
+        hit_count: hits,
+      });
+    }
+  }
+  for (const mock of mocks) {
+    if (mock.max_hit_count === undefined) continue;
+    const hits = hitCountForMock(mock);
+    if (hits > mock.max_hit_count) {
+      failed.push({
+        label: mock.label,
+        url: mock.url,
+        method: mock.method || null,
+        reason: mock.max_hit_count === 0 ? "forbidden_mock_hit" : "mock_hit_count_exceeded",
+        max_hit_count: mock.max_hit_count,
         hit_count: hits,
       });
     }
@@ -1986,15 +2030,18 @@ function assessNetworkMocksFromEvidence(
       hit_count: events.filter((event) => event.ok !== false).length,
       hits_by_label: Object.fromEntries(mocks.map((mock) => [
         mock.label,
-        events.filter((event) => event.label === mock.label && event.ok !== false).length,
+        hitCountForMock(mock),
       ])),
       required_hits_by_label: Object.fromEntries(requiredMocks.map((mock) => [
         mock.label,
         requiredNetworkMockHitCount(mock),
       ])),
+      max_hits_by_label: Object.fromEntries(mocks
+        .filter((mock) => mock.max_hit_count !== undefined)
+        .map((mock) => [mock.label, mock.max_hit_count ?? null])),
       failed,
     },
-    message: failed.length ? `Network mocks failed or were not hit for ${failed.length} mock(s).` : undefined,
+    message: failed.length ? `Network mocks failed or hit-count contracts failed for ${failed.length} mock(s).` : undefined,
   };
 }
 
@@ -2494,8 +2541,9 @@ function assessProfile(profile, evidence) {
     const events = evidence.network_mocks || [];
     const requiredMocks = profile.target.network_mocks.filter((mock) => mock && mock.required !== false);
     const failed = [];
+    const hitCountForMock = (mock) => events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
     for (const mock of requiredMocks) {
-      const hits = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
+      const hits = hitCountForMock(mock);
       const requiredHitCount = requiredNetworkMockHitCount(mock);
       if (hits < requiredHitCount) {
         failed.push({
@@ -2504,6 +2552,20 @@ function assessProfile(profile, evidence) {
           method: mock.method || null,
           reason: hits < 1 ? "required_mock_not_hit" : "required_mock_hit_count_not_met",
           required_hit_count: requiredHitCount,
+          hit_count: hits,
+        });
+      }
+    }
+    for (const mock of profile.target.network_mocks) {
+      if (!mock || mock.max_hit_count === undefined) continue;
+      const hits = hitCountForMock(mock);
+      if (hits > mock.max_hit_count) {
+        failed.push({
+          label: mock.label,
+          url: mock.url,
+          method: mock.method || null,
+          reason: mock.max_hit_count === 0 ? "forbidden_mock_hit" : "mock_hit_count_exceeded",
+          max_hit_count: mock.max_hit_count,
           hit_count: hits,
         });
       }
@@ -2534,9 +2596,11 @@ function assessProfile(profile, evidence) {
     }
     const hitsByLabel = {};
     const requiredHitsByLabel = {};
+    const maxHitsByLabel = {};
     for (const mock of profile.target.network_mocks) {
-      hitsByLabel[mock.label] = events.filter((event) => event && event.label === mock.label && event.ok !== false).length;
+      hitsByLabel[mock.label] = hitCountForMock(mock);
       if (mock && mock.required !== false) requiredHitsByLabel[mock.label] = requiredNetworkMockHitCount(mock);
+      if (mock && mock.max_hit_count !== undefined) maxHitsByLabel[mock.label] = mock.max_hit_count;
     }
     checks.push({
       type: "network_mocks_succeeded",
@@ -2548,9 +2612,10 @@ function assessProfile(profile, evidence) {
         hit_count: events.filter((event) => event && event.ok !== false).length,
         hits_by_label: hitsByLabel,
         required_hits_by_label: requiredHitsByLabel,
+        max_hits_by_label: maxHitsByLabel,
         failed,
       },
-      message: failed.length ? "Network mocks failed or were not hit for " + failed.length + " mock(s)." : undefined,
+      message: failed.length ? "Network mocks failed or hit-count contracts failed for " + failed.length + " mock(s)." : undefined,
     });
   }
   if (profile.target && Array.isArray(profile.target.setup_actions) && profile.target.setup_actions.length) {

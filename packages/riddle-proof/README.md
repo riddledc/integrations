@@ -226,6 +226,25 @@ cycle instead of reusing the final response, for example to repeat a fail-then-
 success pair across multiple viewports. Repeated sequences also record
 `sequence_cycle: true` after the first cycle.
 
+Use `max_hit_count` / `max_hits` when a profile needs to prove a request does
+not run too many times. Use `forbidden: true` as shorthand for
+`max_hit_count: 0` and `required: false`, for example when a chat failure must
+not trigger a downstream build:
+
+```json
+{
+  "label": "builder-build-should-not-run",
+  "url": "**/api/build",
+  "method": "POST",
+  "forbidden": true,
+  "json": { "previewUrl": "https://cdn.example/should-not-run/index.html" }
+}
+```
+
+The implicit `network_mocks_succeeded` check records `max_hits_by_label` and
+fails with `forbidden_mock_hit` or `mock_hit_count_exceeded` when a cap is
+exceeded.
+
 Set `capture_request_body: true` to include compact request-body evidence on
 mock hits. Add `request_body_contains` / `request_body_patterns` or
 `request_body_not_contains` / `request_body_not_patterns` when the request body
