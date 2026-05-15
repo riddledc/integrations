@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.102
+
+### Patch Changes
+
+- 3050334: Clarify no-ship proof completion status, pending checkpoint token status, and debug payload compaction for OpenClaw smoke runs.
+
 ## 0.4.101
 
 ### Patch Changes
