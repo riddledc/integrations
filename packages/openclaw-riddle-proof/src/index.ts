@@ -116,11 +116,17 @@ function riddleProofPackageMetadata() {
 }
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
+export type OpenClawRiddleProofWorkflowMode =
+  | "interactive"
+  | "background_pr"
+  | "continuous";
 export type RiddleProofReportMode = "checkpoint" | "terminal_only";
 export type OpenClawRiddleProofCheckpointMode = "liveblog" | "quiet" | "terminal_only" | "manual";
 type OpenClawRiddleProofRunModeSource = "background_param" | "run_mode_param" | "config_default" | "wrapper_default";
+type OpenClawRiddleProofWorkflowModeSource = "workflow_mode_param" | "config_default" | "wrapper_default";
 export type RiddleProofChangeParams = OpenClawProofedChangeParams & {
   run_mode?: OpenClawRiddleProofRunMode;
+  workflow_mode?: OpenClawRiddleProofWorkflowMode;
   background?: boolean;
   report_mode?: RiddleProofReportMode;
   checkpoint_mode?: OpenClawRiddleProofCheckpointMode;
@@ -206,6 +212,7 @@ export interface OpenClawRiddleProofRuntimeConfig {
   defaultMaxIterations?: number;
   defaultShipMode?: "none" | "ship";
   defaultRunMode?: OpenClawRiddleProofRunMode;
+  defaultWorkflowMode?: OpenClawRiddleProofWorkflowMode;
   checkpointMode?: OpenClawRiddleProofCheckpointMode;
   autoReviewShipModeNone?: boolean;
   enableWakeMonitor?: boolean;
@@ -373,6 +380,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
         "local_exec";
   const defaultShipMode = cfg.defaultShipMode === "none" ? "none" : cfg.defaultShipMode === "ship" ? "ship" : undefined;
   const defaultRunMode = cfg.defaultRunMode === "background" ? "background" : cfg.defaultRunMode === "blocking" ? "blocking" : undefined;
+  const defaultWorkflowMode = normalizeWorkflowMode(cfg.defaultWorkflowMode || cfg.workflowMode);
   const checkpointMode = normalizeCheckpointDispatchMode(cfg.checkpointMode);
   const autoReviewShipModeNone = cfg.autoReviewShipModeNone === false ? false : true;
   const enableWakeMonitor = cfg.enableWakeMonitor === false ? false : true;
@@ -393,6 +401,7 @@ function runtimeConfigFrom(api: any): OpenClawRiddleProofRuntimeConfig {
     defaultMaxIterations: normalizeDefaultMaxIterations(cfg.defaultMaxIterations),
     defaultShipMode,
     defaultRunMode,
+    defaultWorkflowMode,
     checkpointMode,
     autoReviewShipModeNone,
     enableWakeMonitor,
@@ -699,6 +708,23 @@ function runModeDecisionFrom(
   return { mode: "background", source: "wrapper_default" };
 }
 
+function normalizeWorkflowMode(value: unknown): OpenClawRiddleProofWorkflowMode | undefined {
+  if (value === "interactive") return "interactive";
+  if (value === "background_pr" || value === "background") return "background_pr";
+  if (value === "continuous") return "continuous";
+  return undefined;
+}
+
+function workflowModeDecisionFrom(
+  params: Pick<RiddleProofChangeParams, "workflow_mode">,
+  config: Pick<OpenClawRiddleProofRuntimeConfig, "defaultWorkflowMode"> = {},
+): { mode: OpenClawRiddleProofWorkflowMode; source: OpenClawRiddleProofWorkflowModeSource } {
+  const paramMode = normalizeWorkflowMode(params.workflow_mode);
+  if (paramMode) return { mode: paramMode, source: "workflow_mode_param" };
+  if (config.defaultWorkflowMode) return { mode: config.defaultWorkflowMode, source: "config_default" };
+  return { mode: "background_pr", source: "wrapper_default" };
+}
+
 function normalizeCheckpointDispatchMode(value: unknown): OpenClawRiddleProofCheckpointMode | undefined {
   if (value === "liveblog" || value === "quiet" || value === "terminal_only" || value === "manual") return value;
   return undefined;
@@ -753,16 +779,19 @@ function readWrapperMetadata(request: RiddleProofRunParams) {
 
 function applyWrapperMonitorSettings(
   request: RiddleProofRunParams,
-  params: Pick<RiddleProofChangeParams, "checkpoint_mode" | "report_mode" | "wait_for_terminal">,
-  config: Pick<OpenClawRiddleProofRuntimeConfig, "checkpointMode"> = {},
+  params: Pick<RiddleProofChangeParams, "checkpoint_mode" | "report_mode" | "wait_for_terminal" | "workflow_mode">,
+  config: Pick<OpenClawRiddleProofRuntimeConfig, "checkpointMode" | "defaultWorkflowMode"> = {},
 ) {
   const metadata = {
     ...readWrapperMetadata(request),
   };
   const reportMode = reportModeFromParams(params);
   const checkpointMode = checkpointModeFrom(params, config);
+  const workflowMode = workflowModeDecisionFrom(params, config);
   if (reportMode) metadata.report_mode = reportMode;
   metadata.checkpoint_mode = checkpointMode;
+  metadata.workflow_mode = workflowMode.mode;
+  metadata.workflow_mode_source = workflowMode.source;
   if (typeof params.wait_for_terminal === "boolean") metadata.wait_for_terminal = params.wait_for_terminal;
   request.integration_context = {
     ...(request.integration_context || {}),
@@ -798,7 +827,9 @@ function requestMetadataFor(
   const resolutionRequestedReference = stringValue(referenceResolution?.requested_reference);
   const effectiveReference = resolutionEffectiveReference || engineReference || requestReference || engineRequestedReference;
   const requestedReference = engineRequestedReference || resolutionRequestedReference;
+  const workflowMode = normalizeWorkflowMode(integrationMetadata.workflow_mode);
   return compactRecordValue({
+    workflow_mode: workflowMode || null,
     reference: requestReference || null,
     effective_reference: effectiveReference || null,
     requested_reference: requestedReference || null,
@@ -3929,6 +3960,14 @@ export const riddleProofChangeParameters = Type.Object({
   ], {
     description:
       "background returns an accepted run state immediately so chat surfaces can watch status instead of holding one long reply open. This is the default; use blocking only for synchronous debug runs.",
+  })),
+  workflow_mode: Type.Optional(Type.Union([
+    Type.Literal("interactive"),
+    Type.Literal("background_pr"),
+    Type.Literal("continuous"),
+  ], {
+    description:
+      "OpenClaw participation model over the same Riddle Proof loop: interactive liveblogs agent work, background_pr runs quietly until PR/blocker, and continuous is the guarded long-running queue/review/merge mode.",
   })),
   background: optionalBoolean("Compatibility shortcut for run_mode=background."),
   report_mode: Type.Optional(Type.Union([
