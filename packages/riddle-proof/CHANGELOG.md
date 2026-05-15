@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.85
+
+### Patch Changes
+
+- fbb4ad4: Allow profile setup actions to be marked optional so conditional recovery clicks can be attempted without failing setup when the page has already recovered.
+
 ## 0.7.84
 
 ### Patch Changes
