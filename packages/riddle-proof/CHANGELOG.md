@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.69
+
+### Patch Changes
+
+- 8783e16: Add profile setup click count support for atomic double-click and double-submit contracts.
+
 ## 0.7.68
 
 ### Patch Changes
