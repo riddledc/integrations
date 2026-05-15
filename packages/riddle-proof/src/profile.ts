@@ -51,6 +51,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "session_storage",
   "clear_storage",
   "clear_console",
+  "dialog_response",
   "screenshot",
   "wait",
   "wait_for_selector",
@@ -108,6 +109,10 @@ export interface RiddleProofProfileSetupAction {
   text?: string;
   pattern?: string;
   flags?: string;
+  accept?: boolean;
+  prompt_text?: string;
+  message_text?: string;
+  message_pattern?: string;
   index?: number;
   expected_count?: number;
   ms?: number;
@@ -651,6 +656,10 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "press"
     : normalizedInput === "capture_screenshot" || normalizedInput === "save_screenshot" || normalizedInput === "setup_screenshot"
       ? "screenshot"
+    : normalizedInput === "accept_dialog" || normalizedInput === "accept_dialogs" || normalizedInput === "confirm_dialog" || normalizedInput === "set_dialog_response"
+      ? "dialog_response"
+    : normalizedInput === "dismiss_dialog" || normalizedInput === "dismiss_dialogs" || normalizedInput === "cancel_dialog"
+      ? "dialog_response"
       : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
@@ -709,6 +718,7 @@ function normalizeSetupActionCoordinateMode(value: unknown, index: number): "pix
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
+  const rawType = String(input.type || "").trim().replace(/-/g, "_").toLowerCase();
   const selector = stringValue(input.selector);
   const frameSelector = stringFromOwn(input, "frame_selector", "frameSelector", "iframe_selector", "iframeSelector");
   const frameIndex = numberValue(valueFromOwn(input, "frame_index", "frameIndex", "iframe_index", "iframeIndex"));
@@ -750,6 +760,21 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const key = stringValue(input.key);
+  let dialogAccept: boolean | undefined;
+  if (type === "dialog_response") {
+    const acceptInput = valueFromOwn(input, "accept", "accepted", "should_accept", "shouldAccept");
+    const responseInput = stringFromOwn(input, "response", "dialog_response", "dialogResponse", "mode");
+    const response = String(responseInput || "").trim().toLowerCase().replace(/-/g, "_");
+    if (acceptInput !== undefined) {
+      dialogAccept = acceptInput !== false && String(acceptInput).toLowerCase() !== "false";
+    } else if (rawType === "dismiss_dialog" || rawType === "dismiss_dialogs" || rawType === "cancel_dialog") {
+      dialogAccept = false;
+    } else if (response === "dismiss" || response === "cancel" || response === "reject" || response === "no" || response === "false") {
+      dialogAccept = false;
+    } else {
+      dialogAccept = true;
+    }
+  }
   if (type === "press" && !key) {
     throw new Error(`target.setup_actions[${index}] ${type} requires key.`);
   }
@@ -823,6 +848,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     text: stringValue(input.text),
     pattern: stringValue(input.pattern),
     flags: stringValue(input.flags),
+    accept: dialogAccept,
+    prompt_text: stringFromOwn(input, "prompt_text", "promptText", "prompt_value", "promptValue"),
+    message_text: stringFromOwn(input, "message_text", "messageText", "dialog_text", "dialogText"),
+    message_pattern: stringFromOwn(input, "message_pattern", "messagePattern", "dialog_pattern", "dialogPattern"),
     index: numberValue(input.index),
     expected_count: expectedCount,
     ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
@@ -3249,6 +3278,9 @@ const capturedAt = new Date().toISOString();
 const consoleEvents = [];
 const pageErrors = [];
 const networkMockEvents = [];
+const dialogEvents = [];
+let dialogResponseConfig = null;
+let dialogHandlerInstalled = false;
 page.on("console", (message) => {
   const type = message.type();
   if (type === "error" || type === "warning" || type === "assert") {
@@ -3262,6 +3294,50 @@ page.on("console", (message) => {
 page.on("pageerror", (error) => {
   pageErrors.push({ message: String(error && error.message ? error.message : error).slice(0, 1000) });
 });
+function setupDialogMessageMatches(message, config) {
+  if (!config) return true;
+  if (config.message_pattern) {
+    try { return new RegExp(config.message_pattern, config.flags || "").test(message || ""); } catch { return false; }
+  }
+  if (config.message_text) return String(message || "").includes(config.message_text);
+  return true;
+}
+function ensureDialogHandler() {
+  if (dialogHandlerInstalled) return;
+  dialogHandlerInstalled = true;
+  page.on("dialog", async (dialog) => {
+    const config = dialogResponseConfig || { accept: false };
+    const message = typeof dialog.message === "function" ? dialog.message() : "";
+    const type = typeof dialog.type === "function" ? dialog.type() : "dialog";
+    const defaultValue = typeof dialog.defaultValue === "function" ? dialog.defaultValue() : "";
+    const accept = config.accept !== false;
+    const event = {
+      type,
+      message: String(message || "").slice(0, 1000),
+      default_value: String(defaultValue || "").slice(0, 500),
+      configured: Boolean(dialogResponseConfig),
+      response: accept ? "accept" : "dismiss",
+      message_matches: setupDialogMessageMatches(message, config),
+      expected_message_text: config.message_text || undefined,
+      expected_message_pattern: config.message_pattern || undefined,
+    };
+    try {
+      if (accept) {
+        const promptText = config.prompt_text === undefined ? undefined : String(config.prompt_text);
+        await dialog.accept(promptText);
+      } else {
+        await dialog.dismiss();
+      }
+      dialogEvents.push({ ...event, ok: true });
+    } catch (error) {
+      dialogEvents.push({
+        ...event,
+        ok: false,
+        error: String(error && error.message ? error.message : error).slice(0, 1000),
+      });
+    }
+  });
+}
 function textKey(check) {
   return check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
 }
@@ -3599,6 +3675,24 @@ async function executeSetupAction(action, ordinal, viewport) {
       consoleEvents.length = 0;
       pageErrors.length = 0;
       return { ...base, ok: true, cleared_console_event_count, cleared_page_error_count };
+    }
+    if (type === "dialog_response") {
+      ensureDialogHandler();
+      dialogResponseConfig = {
+        accept: action.accept !== false,
+        prompt_text: action.prompt_text,
+        message_text: action.message_text,
+        message_pattern: action.message_pattern,
+        flags: action.flags || "",
+      };
+      return {
+        ...base,
+        ok: true,
+        response: dialogResponseConfig.accept ? "accept" : "dismiss",
+        message_text: dialogResponseConfig.message_text || undefined,
+        message_pattern: dialogResponseConfig.message_pattern || undefined,
+        prompt_text_length: dialogResponseConfig.prompt_text === undefined ? undefined : String(dialogResponseConfig.prompt_text).length,
+      };
     }
     if (type === "wait_for_selector") {
       const scope = await setupActionScope(action, timeout);
@@ -4700,6 +4794,7 @@ function buildProfileEvidence(currentViewports) {
       fatal_count: consoleEvents.filter((event) => event.type === "error" || event.type === "assert").length,
     },
     page_errors: pageErrors,
+    dialogs: dialogEvents.slice(),
     network_mocks: networkMockEvents.slice(),
     dom_summary: {
       expected_viewport_count: expectedViewportCount,
@@ -4739,6 +4834,9 @@ function buildProfileEvidence(currentViewports) {
         })),
       network_mock_count: (profile.target.network_mocks || []).length,
       network_mock_hit_count: networkMockEvents.filter((event) => event.ok !== false).length,
+      dialog_count: dialogEvents.length,
+      dialog_accept_count: dialogEvents.filter((event) => event.response === "accept" && event.ok !== false).length,
+      dialog_dismiss_count: dialogEvents.filter((event) => event.response === "dismiss" && event.ok !== false).length,
     },
   };
 }
@@ -4747,7 +4845,7 @@ async function saveProfileArtifacts(currentViewports) {
   const result = assessProfile(profile, evidence);
   if (typeof saveJson === "function") {
     await saveJson("proof.json", result);
-    await saveJson("console.json", { events: consoleEvents, page_errors: pageErrors });
+    await saveJson("console.json", { events: consoleEvents, page_errors: pageErrors, dialogs: dialogEvents });
     await saveJson("dom-summary.json", evidence.dom_summary);
   }
   return result;
