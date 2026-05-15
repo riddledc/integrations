@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.87
+
+### Patch Changes
+
+- 02e88c9: Expose structured environment blocker details for profile runner failures, including Riddle API balance errors in profile JSON and summary output.
+
 ## 0.7.86
 
 ### Patch Changes
