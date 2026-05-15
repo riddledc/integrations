@@ -1151,6 +1151,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("local_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("session_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_console"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("dialog_response"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("drag"));
 const formSetupProfile = normalizeRiddleProofProfile({
@@ -1214,6 +1215,34 @@ assert.equal(formSetupProfile.target.setup_actions[5].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[5].value, "Riddle Proof Maze");
 assert.equal(formSetupProfile.target.setup_actions[6].type, "press");
 assert.equal(formSetupProfile.target.setup_actions[6].key, "Enter");
+const dialogSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-dialog-response-action",
+  target: {
+    route: "/dashboard",
+    setup_actions: [
+      {
+        type: "accept-dialog",
+        messageText: "Are you sure?",
+      },
+      {
+        type: "dismiss-dialog",
+        messagePattern: "Cannot be undone",
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/dashboard" }],
+}, { url: "https://example.com" });
+assert.equal(dialogSetupProfile.target.setup_actions[0].type, "dialog_response");
+assert.equal(dialogSetupProfile.target.setup_actions[0].accept, true);
+assert.equal(dialogSetupProfile.target.setup_actions[0].message_text, "Are you sure?");
+assert.equal(dialogSetupProfile.target.setup_actions[1].type, "dialog_response");
+assert.equal(dialogSetupProfile.target.setup_actions[1].accept, false);
+assert.equal(dialogSetupProfile.target.setup_actions[1].message_pattern, "Cannot be undone");
+const dialogSetupProfileScript = buildRiddleProofProfileScript(dialogSetupProfile);
+assert.ok(dialogSetupProfileScript.includes('type === "dialog_response"'));
+assert.ok(dialogSetupProfileScript.includes('page.on("dialog"'));
+assert.ok(dialogSetupProfileScript.includes("dialogEvents"));
 const dragSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-drag-action",
