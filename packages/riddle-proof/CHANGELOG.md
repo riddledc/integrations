@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.76
+
+### Patch Changes
+
+- bc18e66: Default static directory previews to static routing so clean nested routes resolve to their generated index pages, while preserving explicit SPA routing via `framework: "spa"`.
+
 ## 0.7.75
 
 ### Patch Changes
