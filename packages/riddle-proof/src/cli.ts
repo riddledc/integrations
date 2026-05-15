@@ -363,7 +363,7 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     "",
   ];
   for (const check of result.checks) {
-    lines.push(`- ${check.status}: ${check.label || check.type}`);
+    lines.push(`- ${check.status}: ${profileCheckMarkdownLabel(check)}`);
     if (check.message) lines.push(`  ${check.message}`);
   }
   const setupSummaryLines = profileSetupSummaryMarkdown(result);
@@ -385,6 +385,83 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function markdownInlineCode(value: string, maxLength = 80): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const clipped = normalized.length > maxLength
+    ? `${normalized.slice(0, Math.max(0, maxLength - 3))}...`
+    : normalized;
+  return `\`${clipped.replace(/`/g, "'")}\``;
+}
+
+function profileCheckTextTarget(evidence: Record<string, unknown>): string | undefined {
+  const text = cliString(evidence.text);
+  if (text) return markdownInlineCode(text);
+  const pattern = cliString(evidence.pattern);
+  return pattern ? `pattern ${markdownInlineCode(pattern)}` : undefined;
+}
+
+function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][number]): string | undefined {
+  const evidence = cliRecord(check.evidence);
+  if (!evidence) return undefined;
+
+  const selector = cliString(evidence.selector);
+  if (check.type === "route_loaded") {
+    const expectedPath = cliString(evidence.expected_path);
+    return expectedPath ? markdownInlineCode(expectedPath) : undefined;
+  }
+  if (check.type === "selector_visible" || check.type === "selector_absent") {
+    return selector ? markdownInlineCode(selector) : undefined;
+  }
+  if (check.type === "selector_count_at_least") {
+    const minCount = cliFiniteNumber(evidence.min_count);
+    return selector && minCount !== undefined ? `${markdownInlineCode(selector)} >= ${minCount}` : undefined;
+  }
+  if (check.type === "selector_count_equals" || check.type === "selector_count_equal" || check.type === "selector_count_eq") {
+    const expectedCount = cliFiniteNumber(evidence.expected_count);
+    return selector && expectedCount !== undefined ? `${markdownInlineCode(selector)} = ${expectedCount}` : undefined;
+  }
+  if (check.type === "selector_text_order") {
+    return selector ? `${markdownInlineCode(selector)} text order` : undefined;
+  }
+  if (check.type === "text_visible" || check.type === "text_absent") {
+    return profileCheckTextTarget(evidence);
+  }
+  if (check.type === "frame_text_visible") {
+    const textTarget = profileCheckTextTarget(evidence);
+    if (selector && textTarget) return `${markdownInlineCode(selector)} contains ${textTarget}`;
+    return selector ? markdownInlineCode(selector) : textTarget;
+  }
+  if (check.type === "frame_url_equals") {
+    const expectedUrl = cliString(evidence.expected_url);
+    if (selector && expectedUrl) return `${markdownInlineCode(selector)} = ${markdownInlineCode(expectedUrl)}`;
+    return selector ? markdownInlineCode(selector) : expectedUrl ? markdownInlineCode(expectedUrl) : undefined;
+  }
+  if (check.type === "frame_url_matches") {
+    const pattern = cliString(evidence.pattern);
+    if (selector && pattern) return `${markdownInlineCode(selector)} matches ${markdownInlineCode(pattern)}`;
+    return selector ? markdownInlineCode(selector) : pattern ? `pattern ${markdownInlineCode(pattern)}` : undefined;
+  }
+  if (check.type === "frame_no_horizontal_overflow") {
+    const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
+    if (selector && maxOverflow !== undefined) return `${markdownInlineCode(selector)} <= ${maxOverflow}px`;
+    return selector ? markdownInlineCode(selector) : maxOverflow !== undefined ? `<= ${maxOverflow}px` : undefined;
+  }
+  if (check.type === "no_horizontal_overflow" || check.type === "no_mobile_horizontal_overflow") {
+    const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
+    return maxOverflow !== undefined ? `<= ${maxOverflow}px` : undefined;
+  }
+  if (check.type === "no_fatal_console_errors") {
+    return "0 unallowed fatal errors";
+  }
+  return undefined;
+}
+
+function profileCheckMarkdownLabel(check: RiddleProofProfileResult["checks"][number]) {
+  const label = check.label || check.type;
+  const target = profileCheckMarkdownTarget(check);
+  return target ? `${label} (${target})` : label;
 }
 
 function cliRecord(value: unknown): Record<string, unknown> | undefined {
