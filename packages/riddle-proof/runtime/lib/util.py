@@ -948,8 +948,153 @@ def join_url_path(base_url, target_path=''):
     return urljoin(base.rstrip('/') + '/', path.lstrip('/'))
 
 
-def build_capture_script(url, capture_script, label, wait_for_selector=''):
+def slugify_viewport_name(value, fallback='viewport'):
+    text = re.sub(r'[^a-zA-Z0-9]+', '-', str(value or '').strip().lower()).strip('-')
+    return text or fallback
+
+
+def normalize_viewport_matrix(value):
+    matrix = value
+    if isinstance(matrix, dict):
+        for key in ('viewports', 'viewport_matrix', 'matrix'):
+            if isinstance(matrix.get(key), list):
+                matrix = matrix.get(key)
+                break
+        else:
+            matrix = [matrix]
+    if not isinstance(matrix, list):
+        return []
+
+    normalized = []
+    for index, item in enumerate(matrix):
+        if not isinstance(item, dict):
+            continue
+        try:
+            width = int(item.get('width'))
+            height = int(item.get('height'))
+        except Exception:
+            continue
+        if width <= 0 or height <= 0:
+            continue
+        raw_name = str(item.get('name') or item.get('label') or '').strip()
+        name = raw_name or f'{width}x{height}'
+        slug = slugify_viewport_name(name, f'viewport-{index + 1}')
+        normalized.append({
+            'name': name,
+            'slug': slug,
+            'width': width,
+            'height': height,
+        })
+    return normalized
+
+
+def viewport_screenshot_label(label, viewport):
+    return (str(label or 'screenshot').strip() or 'screenshot') + '-' + str(viewport.get('slug') or viewport.get('name') or 'viewport')
+
+
+def viewport_matrix_setup_js(viewport_matrix):
+    viewports = normalize_viewport_matrix(viewport_matrix)
+    if not viewports:
+        return []
+    return [
+        'const __riddleProofViewportMatrix = ' + json.dumps(viewports) + ';',
+        'const __riddleProofViewportResults = [];',
+        'const __riddleProofApplyViewport = async (vp) => {',
+        '  if (!vp || !vp.width || !vp.height) return;',
+        '  await page.setViewportSize({ width: Number(vp.width), height: Number(vp.height) });',
+        '};',
+        'await __riddleProofApplyViewport(__riddleProofViewportMatrix[0]);',
+    ]
+
+
+def viewport_matrix_screenshot_js(label, viewport_matrix):
+    viewports = normalize_viewport_matrix(viewport_matrix)
+    if not viewports:
+        return []
+    base_label = str(label or 'screenshot').strip() or 'screenshot'
+    return [
+        'for (const __riddleProofViewport of __riddleProofViewportMatrix) {',
+        '  await __riddleProofApplyViewport(__riddleProofViewport);',
+        '  await page.waitForTimeout(250);',
+        '  const __riddleProofViewportLabel = ' + json.dumps(base_label) + ' + "-" + (__riddleProofViewport.slug || __riddleProofViewport.name || "viewport");',
+        '  await saveScreenshot(__riddleProofViewportLabel);',
+        '  __riddleProofViewportResults.push({',
+        '    name: __riddleProofViewport.name || "",',
+        '    slug: __riddleProofViewport.slug || "",',
+        '    width: Number(__riddleProofViewport.width) || null,',
+        '    height: Number(__riddleProofViewport.height) || null,',
+        '    screenshot_label: __riddleProofViewportLabel,',
+        '  });',
+        '}',
+    ]
+
+
+def viewport_matrix_return_js():
+    return 'typeof __riddleProofViewportMatrix !== "undefined" ? { requested: __riddleProofViewportMatrix, executed: __riddleProofViewportResults } : null'
+
+
+def capture_viewport_matrix_status(state, payload, label=''):
+    requested = normalize_viewport_matrix((state or {}).get('viewport_matrix'))
+    if not requested:
+        return {
+            'status': 'not_requested',
+            'requested': [],
+            'executed': [],
+            'missing': [],
+        }
+
+    artifact_summary = summarize_capture_artifacts(payload)
+    image_items = []
+    for key in ('outputs', 'screenshots', 'artifacts'):
+        for item in artifact_summary.get(key) or []:
+            if isinstance(item, dict):
+                image_items.append(item)
+
+    executed = []
+    missing = []
+    for viewport in requested:
+        expected_label = viewport_screenshot_label(label, viewport)
+        expected_names = {
+            expected_label,
+            expected_label + '.png',
+            expected_label + '.jpg',
+            expected_label + '.jpeg',
+            expected_label + '.webp',
+            expected_label + '.gif',
+        }
+        match = None
+        for item in image_items:
+            name = str(item.get('name') or '')
+            url = str(item.get('url') or '')
+            if name in expected_names and url:
+                match = item
+                break
+        record = {
+            'name': viewport.get('name'),
+            'slug': viewport.get('slug'),
+            'width': viewport.get('width'),
+            'height': viewport.get('height'),
+            'screenshot_label': expected_label,
+            'screenshot_url': str((match or {}).get('url') or ''),
+        }
+        if match:
+            executed.append(record)
+        else:
+            missing.append(record)
+
+    return {
+        'status': 'complete' if not missing else 'incomplete',
+        'requested': requested,
+        'executed': executed,
+        'missing': missing,
+    }
+
+
+def build_capture_script(url, capture_script, label, wait_for_selector='', viewport_matrix=None):
+    script_handles_viewport_matrix = '__riddleProofViewportMatrix' in (capture_script or '')
+    effective_viewport_matrix = None if script_handles_viewport_matrix else viewport_matrix
     pieces = [
+        *viewport_matrix_setup_js(effective_viewport_matrix),
         'await page.goto(' + json.dumps(url) + ');',
     ]
     selector = (wait_for_selector or '').strip()
@@ -958,8 +1103,11 @@ def build_capture_script(url, capture_script, label, wait_for_selector=''):
     pieces.append('await page.waitForTimeout(1500);')
     if (capture_script or '').strip():
         pieces.append((capture_script or '').strip().rstrip(';') + ';')
-    if not capture_script_saves_screenshot(capture_script):
+    if normalize_viewport_matrix(effective_viewport_matrix):
+        pieces.extend(viewport_matrix_screenshot_js(label, effective_viewport_matrix))
+    elif not capture_script_saves_screenshot(capture_script):
         pieces.append('await saveScreenshot(' + json.dumps(label) + ');')
+    pieces.append('return { viewportMatrix: ' + viewport_matrix_return_js() + ' };')
     return ' '.join(pieces)
 
 
@@ -987,7 +1135,7 @@ def capture_static_preview(state, project_dir, label, capture_script, timeout=30
     preview_id = preview.get('id', '')
     capture_url = join_url_path(preview_url, target_path or state.get('server_path', ''))
 
-    script = build_capture_script(capture_url, capture_script, label, state.get('wait_for_selector', ''))
+    script = build_capture_script(capture_url, capture_script, label, state.get('wait_for_selector', ''), state.get('viewport_matrix'))
     args = {'script': script, 'timeout_sec': 60}
     apply_auth_context(state, args)
     shot = invoke_retry('riddle_script', args, retries=3, timeout=max(timeout, 120))

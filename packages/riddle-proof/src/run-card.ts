@@ -142,6 +142,22 @@ function artifactsFrom(input: {
   return artifacts.length ? artifacts : undefined;
 }
 
+function viewportMatrixFrom(input: {
+  fullRiddleState?: Record<string, unknown> | null;
+  runState: RiddleProofRunState;
+}): RiddleProofRunCard["latest_evidence"]["viewport_matrix"] | undefined {
+  const fullState = input.fullRiddleState || {};
+  const bundle = recordValue(fullState.evidence_bundle);
+  const fromBundle = recordValue(bundle?.viewport_matrix);
+  if (fromBundle && Object.keys(fromBundle).length) return jsonCloneRecord(fromBundle) as RiddleProofRunCard["latest_evidence"]["viewport_matrix"];
+  const fromRequest = recordValue(recordValue(fullState.proof_assessment_request)?.viewport_matrix);
+  if (fromRequest && Object.keys(fromRequest).length) return jsonCloneRecord(fromRequest) as RiddleProofRunCard["latest_evidence"]["viewport_matrix"];
+  const fromState = recordValue(fullState.viewport_matrix_status) || recordValue(input.runState.viewport_matrix_status);
+  return fromState && Object.keys(fromState).length
+    ? jsonCloneRecord(fromState) as RiddleProofRunCard["latest_evidence"]["viewport_matrix"]
+    : undefined;
+}
+
 function ownerFor(state: RiddleProofRunState) {
   if (state.status === "awaiting_checkpoint") {
     const role = nonEmptyString(state.checkpoint_packet?.routing_hint?.suggested_role);
@@ -206,6 +222,7 @@ export function createRiddleProofRunCard(
   const statePaths = input.state_paths || state.state_paths || statePathsForRunState(state);
   const visualDelta = visualDeltaFrom({ fullRiddleState: fullState, runState: state });
   const artifacts = artifactsFrom({ fullRiddleState: fullState, runState: state });
+  const viewportMatrix = viewportMatrixFrom({ fullRiddleState: fullState, runState: state });
 
   return {
     version: RIDDLE_PROOF_RUN_CARD_VERSION,
@@ -253,6 +270,7 @@ export function createRiddleProofRunCard(
       visual_delta: visualDelta || null,
       evidence_issue_code: evidenceIssueCode({ fullRiddleState: fullState, runState: state }) || null,
       proof_evidence_present: fullState.proof_evidence_present === true || Boolean(bundle?.proof_evidence || bundle?.proof_evidence_sample),
+      viewport_matrix: viewportMatrix,
       artifacts,
     }),
     observability: observabilityFrom(state),

@@ -92,6 +92,18 @@ file/object before resuming the run.
 uses the local Codex CLI adapter underneath, but the loop contract and CLI
 surface are intentionally not Codex-specific.
 
+Visual/UI proof runs can pass `viewport_matrix` / `viewport_matrix_json` to the
+base loop. The runtime records the requested matrix, captures per-viewport
+screenshots with viewport-scoped labels, persists the executed/missing viewport
+metadata into run status and proof artifacts, and treats missing requested
+viewport evidence as incomplete capture evidence.
+
+Measured visual deltas still require numeric before/after evidence. For small
+targeted copy or UI changes, the visual gate can use a lower targeted threshold
+only when route/text semantics match the requested change. Missing or unmeasured
+visual deltas continue through evidence recovery instead of being treated as a
+passing proof.
+
 ## CI / Profile Mode
 
 Profile mode runs durable proof profiles against an existing site without an

@@ -287,6 +287,7 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     state_paths: state.state_paths,
     proof_contract: state.proof_contract,
     run_card: state.run_card || createRiddleProofRunCard(state, { at }),
+    viewport_matrix_status: state.viewport_matrix_status,
     latest_event: latestEvent,
   }) as RiddleProofRunStatusSnapshot;
 }

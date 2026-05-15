@@ -592,6 +592,77 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert weak_delta['passed'] is False
     assert 'below the legibility threshold' in weak_delta['reason']
 
+    targeted_delta = namespace['extract_visual_delta'](
+        {
+            'ok': True,
+            'result': {
+                'proofEvidence': {
+                    'change_pct': '0.0487',
+                    'changed_pixels': 2351,
+                    'width': 1280,
+                    'height': 900,
+                },
+            },
+        },
+        {
+            'change_request': 'Add the Riddle Proof recovery smoke badge',
+            'success_criteria': 'The recovery smoke badge is visible after verify.',
+            'parsed_assertions': [{'kind': 'text_visible', 'text': 'recovery smoke badge'}],
+        },
+        {
+            'after': {
+                'visible_text_sample': 'Home page Riddle Proof recovery smoke badge',
+                'headings': ['Home page'],
+                'buttons': ['Start'],
+                'links': [],
+            },
+            'route': {'after_observed_path': '/'},
+        },
+    )
+    assert targeted_delta['status'] == 'measured'
+    assert targeted_delta['passed'] is True
+    assert targeted_delta['threshold_mode'] == 'targeted_semantic'
+    assert targeted_delta['min_changed_pixels'] == 250
+    assert 'targeted-change threshold' in targeted_delta['reason']
+
+    unmatched_targeted_delta = namespace['extract_visual_delta'](
+        {
+            'ok': True,
+            'result': {
+                'proofEvidence': {
+                    'change_pct': '0.0487',
+                    'changed_pixels': 2351,
+                    'width': 1280,
+                    'height': 900,
+                },
+            },
+        },
+        {'change_request': 'Add the billing badge'},
+        {'after': {'visible_text_sample': 'Home page unchanged copy'}},
+    )
+    assert unmatched_targeted_delta['status'] == 'measured'
+    assert unmatched_targeted_delta['passed'] is False
+    assert unmatched_targeted_delta['threshold_mode'] == 'default'
+
+    generic_page_token_delta = namespace['extract_visual_delta'](
+        {
+            'ok': True,
+            'result': {
+                'proofEvidence': {
+                    'change_pct': '0.0487',
+                    'changed_pixels': 2351,
+                    'width': 1280,
+                    'height': 900,
+                },
+            },
+        },
+        {'change_request': 'Polish the pricing page CTA'},
+        {'after': {'visible_text_sample': 'Pricing plans for teams'}},
+    )
+    assert generic_page_token_delta['status'] == 'measured'
+    assert generic_page_token_delta['passed'] is False
+    assert generic_page_token_delta['threshold_mode'] == 'default'
+
     unmeasured_delta = namespace['extract_visual_delta']({
         'ok': True,
         'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/after-proof.png'}],
@@ -616,6 +687,31 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert visual_diff_delta['passed'] is True
     assert visual_diff_delta['change_percent'] == 1.45
     assert visual_diff_delta['changed_pixels'] == 14094
+
+    viewport_status = namespace['capture_viewport_matrix_status'](
+        {
+            'viewport_matrix': [
+                {'name': 'phone', 'width': 390, 'height': 844},
+                {'name': 'ipad', 'width': 820, 'height': 1180},
+            ],
+        },
+        {
+            'outputs': [
+                {'name': 'after-proof-phone.png', 'url': 'https://cdn.example.com/phone.png'},
+                {'name': 'after-proof-ipad.png', 'url': 'https://cdn.example.com/ipad.png'},
+            ],
+        },
+        'after-proof',
+    )
+    assert viewport_status['status'] == 'complete'
+    assert [item['name'] for item in viewport_status['executed']] == ['phone', 'ipad']
+    missing_viewport_status = namespace['capture_viewport_matrix_status'](
+        {'viewport_matrix': [{'name': 'phone', 'width': 390, 'height': 844}]},
+        {'outputs': [{'name': 'after-proof-desktop.png', 'url': 'https://cdn.example.com/desktop.png'}]},
+        'after-proof',
+    )
+    assert missing_viewport_status['status'] == 'incomplete'
+    assert missing_viewport_status['missing'][0]['name'] == 'phone'
 
     before_png = png_rgba(2, 1, bytes([
         0, 0, 0, 255,

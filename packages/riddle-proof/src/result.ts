@@ -270,6 +270,7 @@ export function createRunResult(input: {
     proof_contract: state.proof_contract,
     run_card: state.run_card,
     proof_session: state.proof_session,
+    viewport_matrix_status: state.viewport_matrix_status,
     evidence_bundle: input.evidence_bundle,
     raw: input.raw,
   }) as RiddleProofRunResult;

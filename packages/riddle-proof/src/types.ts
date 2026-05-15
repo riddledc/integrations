@@ -63,6 +63,22 @@ export type RiddleProofArtifactRole =
   | "diagnostic"
   | (string & {});
 
+export interface RiddleProofViewportCapture {
+  name?: string;
+  slug?: string;
+  width?: number;
+  height?: number;
+  screenshot_label?: string;
+  screenshot_url?: string;
+}
+
+export interface RiddleProofViewportMatrixStatus {
+  status?: "not_requested" | "not_run" | "complete" | "incomplete" | (string & {});
+  requested?: RiddleProofViewportCapture[];
+  executed?: RiddleProofViewportCapture[];
+  missing?: RiddleProofViewportCapture[];
+}
+
 export interface RiddleProofRunParams {
   repo?: string;
   branch?: string;
@@ -301,6 +317,7 @@ export interface RiddleProofRunCard {
     visual_delta?: Record<string, unknown> | null;
     evidence_issue_code?: string | null;
     proof_evidence_present?: boolean;
+    viewport_matrix?: RiddleProofViewportMatrixStatus;
     artifacts?: RiddleProofCheckpointArtifact[];
   };
   observability?: {
@@ -389,6 +406,7 @@ export interface RiddleProofRunState {
   implementation_detection_summary?: string | null;
   implementation_detection?: Record<string, unknown> | null;
   proof_session?: RiddleProofVisualSession;
+  viewport_matrix_status?: RiddleProofViewportMatrixStatus;
   finalized?: boolean;
   blocker?: RiddleProofBlocker;
   checkpoint_packet?: RiddleProofCheckpointPacket;
@@ -443,6 +461,7 @@ export interface RiddleProofRunResult {
   proof_contract?: RiddleProofProofContract;
   run_card?: RiddleProofRunCard;
   proof_session?: RiddleProofVisualSession;
+  viewport_matrix_status?: RiddleProofViewportMatrixStatus;
   evidence_bundle?: RiddleProofEvidenceBundle;
   raw?: Record<string, unknown>;
 }
@@ -479,6 +498,7 @@ export interface RiddleProofRunStatusSnapshot {
   state_paths?: RiddleProofStatePaths;
   proof_contract?: RiddleProofProofContract;
   run_card?: RiddleProofRunCard;
+  viewport_matrix_status?: RiddleProofViewportMatrixStatus;
   latest_event?: RiddleProofEvent;
 }
 
@@ -488,6 +508,7 @@ export interface RiddleProofEvidenceBundle {
   after?: EvidenceReference;
   artifacts?: EvidenceArtifact[];
   proof_session?: RiddleProofVisualSession;
+  viewport_matrix?: RiddleProofViewportMatrixStatus;
   proof_evidence?: unknown;
   playability_evidence?: unknown;
   proof_evidence_sample?: unknown;
@@ -700,6 +721,7 @@ export interface RiddleProofVisualSession {
   };
   evidence?: {
     visual_delta?: JsonValue;
+    viewport_matrix?: RiddleProofViewportMatrixStatus;
     semantic_context?: JsonValue;
     artifact_contract?: JsonValue;
     artifact_usage?: JsonValue;
