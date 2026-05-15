@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.83
+
+### Patch Changes
+
+- 749e483: Clarify the base Riddle Proof versus OpenClaw wrapper boundary in the published package docs.
+
 ## 0.7.82
 
 ### Patch Changes
