@@ -50,7 +50,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false] [--poll-attempts n] [--output <dir>] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label>",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
@@ -116,6 +116,10 @@ function optionNumber(options: CliOptions, ...keys: string[]) {
     if (value !== undefined) return Number(value);
   }
   return undefined;
+}
+
+function profileOutputDirOption(options: CliOptions) {
+  return optionString(options, "output") ?? optionString(options, "outputDir");
 }
 
 function readStdin() {
@@ -847,7 +851,7 @@ async function main() {
   if (command === "run-profile") {
     const profile = normalizeProfileForCli(options);
     const result = await runProfileForCli(profile, options);
-    writeProfileOutput(optionString(options, "output"), result);
+    writeProfileOutput(profileOutputDirOption(options), result);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = profileStatusExitCode(profile, result.status);
     return;

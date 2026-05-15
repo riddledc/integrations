@@ -667,7 +667,7 @@ try {
     "https://example.com",
     "--runner",
     "riddle",
-    "--output",
+    "--output-dir",
     strictTrueOutputDir,
     "--pollAttempts",
     "4",
@@ -681,6 +681,7 @@ try {
   assert.equal(JSON.parse(cliProfileStrictTrueResult.stdout).status, "passed");
   assert.equal(cliRunProfileRequests.length, 2);
   assert.equal(cliRunProfileRequests[1].body.strict, true);
+  assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");
