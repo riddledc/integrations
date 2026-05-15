@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.86
+
+### Patch Changes
+
+- 97b4372: Add `run-profile --output-dir` as an alias for `--output` so profile artifacts are saved when users reach for the more explicit flag name.
+
 ## 0.7.85
 
 ### Patch Changes
