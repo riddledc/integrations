@@ -121,6 +121,7 @@ export interface RiddleProofProfileSetupAction {
   repeat?: number;
   reload?: boolean;
   storage?: "local" | "session" | "both";
+  viewports?: string[];
   continue_on_failure?: boolean;
 }
 
@@ -541,11 +542,16 @@ function profileScreenshotLabels(viewports: RiddleProofProfileViewportEvidence[]
   return labels;
 }
 
-function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], actionCount?: number): JsonValue {
+function profileSetupSummary(
+  viewports: RiddleProofProfileViewportEvidence[],
+  actionCount?: number,
+  expectedActionCountByViewport?: Map<string, number>,
+): JsonValue {
   return toJsonValue({
     viewport_count: viewports.length,
     action_count: actionCount ?? null,
     viewports: viewports.map((viewport) => {
+      const expectedActionCount = expectedActionCountByViewport?.get(viewport.name) ?? actionCount;
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result.ok === false);
       const successfulClicks = results.filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false);
@@ -581,7 +587,8 @@ function profileSetupSummary(viewports: RiddleProofProfileViewportEvidence[], ac
         .slice(-6);
       return {
         name: viewport.name,
-        ok: (actionCount === undefined ? results.length > 0 : results.length >= actionCount) && failed.length === 0,
+        expected_action_count: expectedActionCount ?? null,
+        ok: (expectedActionCount === undefined ? results.length > 0 : results.length >= expectedActionCount) && failed.length === 0,
         result_count: results.length,
         observed_path: viewport.route?.observed ?? null,
         final_url: viewport.url ?? null,
@@ -860,6 +867,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     repeat: normalizeSetupActionRepeat(input, index),
     reload: input.reload === true,
     storage: normalizeSetupActionStorage(input.storage, index),
+    viewports: normalizeStringList(input.viewports ?? input.viewport_names ?? input.viewportNames, `target.setup_actions[${index}] viewports`),
     continue_on_failure: input.continue_on_failure === true || input.continueOnFailure === true,
   };
 }
@@ -1600,6 +1608,21 @@ function viewportsForCheck(
   return viewports.filter((viewport) => names.has(viewport.name));
 }
 
+function setupActionAppliesToViewport(
+  action: RiddleProofProfileSetupAction,
+  viewportName: string | undefined,
+): boolean {
+  if (!action.viewports?.length) return true;
+  return Boolean(viewportName && action.viewports.includes(viewportName));
+}
+
+function setupActionsForViewport(
+  actions: RiddleProofProfileSetupAction[] | undefined,
+  viewportName: string | undefined,
+): RiddleProofProfileSetupAction[] {
+  return (actions || []).filter((action) => setupActionAppliesToViewport(action, viewportName));
+}
+
 function assessCheckFromEvidence(
   check: RiddleProofProfileCheck,
   evidence: RiddleProofProfileEvidence,
@@ -2037,7 +2060,21 @@ function assessSetupActionsFromEvidence(
   const actionCount = profile.target.setup_actions.length;
   const failed: Array<Record<string, JsonValue>> = [];
   const viewports = evidence.viewports || [];
+  const expectedActionCountByViewport = new Map<string, number>();
+  const capturedViewportNames = new Set(viewports.map((viewport) => viewport.name));
+  for (const action of profile.target.setup_actions) {
+    if (action.viewports?.length && !action.viewports.some((name) => capturedViewportNames.has(name))) {
+      failed.push({
+        viewport: null,
+        action: action.type,
+        selector: action.selector ?? null,
+        reason: `setup action scoped to missing viewport(s): ${action.viewports.join(", ")}`,
+      });
+    }
+  }
   for (const viewport of viewports) {
+    const expectedActionCount = setupActionsForViewport(profile.target.setup_actions, viewport.name).length;
+    expectedActionCountByViewport.set(viewport.name, expectedActionCount);
     const results = viewport.setup_action_results || [];
     for (const result of results) {
       if (result.ok === false) {
@@ -2051,12 +2088,12 @@ function assessSetupActionsFromEvidence(
         });
       }
     }
-    if (results.length < actionCount && results.every((result) => result.ok !== false)) {
+    if (results.length < expectedActionCount && results.every((result) => result.ok !== false)) {
       failed.push({
         viewport: viewport.name,
         action: "setup_actions",
         selector: null,
-        reason: `missing setup action results: ${results.length}/${actionCount}`,
+        reason: `missing setup action results: ${results.length}/${expectedActionCount}`,
       });
     }
   }
@@ -2068,11 +2105,12 @@ function assessSetupActionsFromEvidence(
       action_count: actionCount,
       viewports: viewports.map((viewport) => ({
         name: viewport.name,
-        ok: (viewport.setup_action_results || []).length >= actionCount
+        expected_action_count: expectedActionCountByViewport.get(viewport.name) ?? actionCount,
+        ok: (viewport.setup_action_results || []).length >= (expectedActionCountByViewport.get(viewport.name) ?? actionCount)
           && (viewport.setup_action_results || []).every((result) => result.ok !== false),
         result_count: (viewport.setup_action_results || []).length,
       })),
-      setup_summary: profileSetupSummary(viewports, actionCount),
+      setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountByViewport),
       failed,
     },
     message: failed.length ? `Setup actions failed in ${failed.length} viewport action(s).` : undefined,
@@ -2507,6 +2545,13 @@ function viewportsForCheck(check, viewports) {
   const names = new Set(check.viewports);
   return viewports.filter((viewport) => names.has(viewport.name));
 }
+function setupActionAppliesToViewport(action, viewportName) {
+  if (!Array.isArray(action.viewports) || !action.viewports.length) return true;
+  return Boolean(viewportName && action.viewports.includes(viewportName));
+}
+function setupActionsForViewport(actions, viewportName) {
+  return (actions || []).filter((action) => setupActionAppliesToViewport(action, viewportName));
+}
 function summarizeRouteInventory(viewport, inventory) {
   const directRoutes = Array.isArray(inventory.direct_routes) ? inventory.direct_routes : [];
   const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
@@ -2655,11 +2700,14 @@ function profileScreenshotLabels(viewports) {
   }
   return labels;
 }
-function profileSetupSummary(viewports, actionCount) {
+function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport) {
   return {
     viewport_count: (viewports || []).length,
     action_count: actionCount ?? null,
     viewports: (viewports || []).map((viewport) => {
+      const expectedActionCount = expectedActionCountsByViewport && expectedActionCountsByViewport[viewport.name] !== undefined
+        ? expectedActionCountsByViewport[viewport.name]
+        : actionCount;
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result && result.ok === false);
       const successfulClicks = results.filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false);
@@ -2695,7 +2743,8 @@ function profileSetupSummary(viewports, actionCount) {
         .slice(-6);
       return {
         name: viewport.name,
-        ok: (actionCount === undefined ? results.length > 0 : results.length >= actionCount) && failed.length === 0,
+        expected_action_count: expectedActionCount ?? null,
+        ok: (expectedActionCount === undefined ? results.length > 0 : results.length >= expectedActionCount) && failed.length === 0,
         result_count: results.length,
         observed_path: viewport.route && viewport.route.observed || null,
         final_url: viewport.url || null,
@@ -2818,7 +2867,21 @@ function assessProfile(profile, evidence) {
   if (profile.target && Array.isArray(profile.target.setup_actions) && profile.target.setup_actions.length) {
     const actionCount = profile.target.setup_actions.length;
     const failed = [];
+    const expectedActionCountsByViewport = {};
+    const capturedViewportNames = new Set(viewports.map((viewport) => viewport.name));
+    for (const action of profile.target.setup_actions) {
+      if (Array.isArray(action.viewports) && action.viewports.length && !action.viewports.some((name) => capturedViewportNames.has(name))) {
+        failed.push({
+          viewport: null,
+          action: action.type,
+          selector: action.selector || null,
+          reason: "setup action scoped to missing viewport(s): " + action.viewports.join(", "),
+        });
+      }
+    }
     for (const viewport of viewports) {
+      const expectedActionCount = setupActionsForViewport(profile.target.setup_actions, viewport.name).length;
+      expectedActionCountsByViewport[viewport.name] = expectedActionCount;
       const results = viewport.setup_action_results || [];
       for (const result of results) {
         if (result && result.ok === false) {
@@ -2832,12 +2895,12 @@ function assessProfile(profile, evidence) {
         });
         }
       }
-      if (results.length < actionCount && results.every((result) => !result || result.ok !== false)) {
+      if (results.length < expectedActionCount && results.every((result) => !result || result.ok !== false)) {
         failed.push({
           viewport: viewport.name,
           action: "setup_actions",
           selector: null,
-          reason: "missing setup action results: " + results.length + "/" + actionCount,
+          reason: "missing setup action results: " + results.length + "/" + expectedActionCount,
         });
       }
     }
@@ -2849,11 +2912,12 @@ function assessProfile(profile, evidence) {
         action_count: actionCount,
         viewports: viewports.map((viewport) => ({
           name: viewport.name,
-          ok: (viewport.setup_action_results || []).length >= actionCount
+          expected_action_count: expectedActionCountsByViewport[viewport.name] ?? actionCount,
+          ok: (viewport.setup_action_results || []).length >= (expectedActionCountsByViewport[viewport.name] ?? actionCount)
             && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false),
           result_count: (viewport.setup_action_results || []).length,
         })),
-        setup_summary: profileSetupSummary(viewports, actionCount),
+        setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport),
         failed,
       },
       message: failed.length ? "Setup actions failed in " + failed.length + " viewport action(s)." : undefined,
@@ -4591,7 +4655,7 @@ async function captureViewport(viewport) {
     await page.waitForTimeout(profile.target.wait_ms);
   }
   const setupActionResults = (!navigationError && !waitError)
-    ? await executeSetupActions(profile.target.setup_actions || [], viewport)
+    ? await executeSetupActions(setupActionsForViewport(profile.target.setup_actions || [], viewport.name), viewport)
     : [];
   const dom = await page.evaluate(() => {
     const body = document.body;
