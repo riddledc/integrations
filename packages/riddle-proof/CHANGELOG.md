@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.90
+
+### Patch Changes
+
+- e44c2d7: Add profile-mode link status checks for public link and artifact URL audits.
+
 ## 0.7.89
 
 ### Patch Changes
