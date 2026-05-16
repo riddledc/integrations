@@ -3801,6 +3801,10 @@ function textMatches(sample, check) {
   }
   return String(sample || "").includes(check.text || "");
 }
+function profileCheckAppliesToViewport(check, viewport) {
+  if (!Array.isArray(check.viewports) || !check.viewports.length) return true;
+  return Boolean(viewport && viewport.name && check.viewports.includes(viewport.name));
+}
 function setupActionType(action) {
   return String(action && action.type ? action.type : "").replace(/-/g, "_");
 }
@@ -3817,6 +3821,30 @@ function setupTextMatches(sample, action) {
     try { return new RegExp(action.pattern, action.flags || "").test(sample || ""); } catch { return false; }
   }
   return String(sample || "").includes(action.text || "");
+}
+async function waitForAnyVisibleSelector(context, selector, timeout) {
+  const deadline = Date.now() + setupNumber(timeout, 15000);
+  let lastReason = "selector_not_found";
+  while (Date.now() <= deadline) {
+    try {
+      const locator = context.locator(selector);
+      const count = await locator.count();
+      if (!count) {
+        lastReason = "selector_not_found";
+      } else {
+        lastReason = "no_visible_match";
+        for (let index = 0; index < count; index += 1) {
+          if (await locator.nth(index).isVisible().catch(() => false)) {
+            return { ok: true, count, index };
+          }
+        }
+      }
+    } catch (error) {
+      lastReason = String(error && error.message ? error.message : error).slice(0, 500);
+    }
+    await page.waitForTimeout(200);
+  }
+  throw new Error("No visible match for selector " + selector + ": " + lastReason);
 }
 function setupHasOwn(action, key) {
   return Boolean(action) && Object.keys(action).includes(key);
@@ -4151,7 +4179,7 @@ async function executeSetupAction(action, ordinal, viewport) {
     if (type === "wait_for_selector") {
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
-      await scope.context.waitForSelector(action.selector, { state: "visible", timeout });
+      await waitForAnyVisibleSelector(scope.context, action.selector, timeout);
       return { ...base, ...setupScopeEvidence(scope), ok: true, timeout_ms: timeout };
     }
     if (type === "drag") {
@@ -5167,7 +5195,7 @@ async function collectRouteInventory(check, viewport) {
       try {
         await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 90000 });
         if (profile.target.wait_for_selector) {
-          await page.waitForSelector(profile.target.wait_for_selector, { state: "visible", timeout: 15000 }).catch(() => {});
+          await waitForAnyVisibleSelector(page, profile.target.wait_for_selector, 15000).catch(() => {});
         }
         const index = await findInventoryLinkIndex(check, expectedRoute.path);
         if (index < 0) {
@@ -5226,7 +5254,7 @@ async function captureViewport(viewport) {
   }
   if (!navigationError && profile.target.wait_for_selector) {
     try {
-      await page.waitForSelector(profile.target.wait_for_selector, { state: "visible", timeout: 15000 });
+      await waitForAnyVisibleSelector(page, profile.target.wait_for_selector, 15000);
     } catch (error) {
       waitError = String(error && error.message ? error.message : error).slice(0, 1000);
     }
@@ -5330,6 +5358,7 @@ async function captureViewport(viewport) {
   const text_matches = {};
   const link_statuses = {};
   for (const check of profile.checks || []) {
+    if (!profileCheckAppliesToViewport(check, viewport)) continue;
     if (
       (
         check.type === "selector_visible"
@@ -5365,7 +5394,7 @@ async function captureViewport(viewport) {
     pageErrors.push({ message: "saveScreenshot failed: " + String(error && error.message ? error.message : error).slice(0, 500) });
   }
   let routeInventory;
-  const routeInventoryCheck = (profile.checks || []).find((check) => check.type === "route_inventory");
+  const routeInventoryCheck = (profile.checks || []).find((check) => check.type === "route_inventory" && profileCheckAppliesToViewport(check, viewport));
   const firstViewportName = (profile.target.viewports || [])[0] && (profile.target.viewports || [])[0].name;
   if (routeInventoryCheck && (routeInventoryCheck.run_all_viewports || !firstViewportName || viewport.name === firstViewportName)) {
     try {
@@ -5470,7 +5499,7 @@ function buildProfileEvidence(currentViewports) {
           })),
         })),
       link_status: currentViewports
-        .filter((viewport) => viewport.link_statuses)
+        .filter((viewport) => viewport.link_statuses && Object.keys(viewport.link_statuses).length)
         .map((viewport) => ({
           viewport: viewport.name,
           selectors: Object.entries(viewport.link_statuses || {}).map(([selector, statusSet]) => ({

@@ -1785,6 +1785,8 @@ assert.ok(linkStatusProfileScript.includes("collectLinkStatus"));
 assert.ok(linkStatusProfileScript.includes("riddle-proof.link-status.v1"));
 assert.ok(linkStatusProfileScript.includes("link_statuses"));
 assert.ok(linkStatusProfileScript.includes("link_status: currentViewports"));
+assert.ok(linkStatusProfileScript.includes("profileCheckAppliesToViewport(check, viewport)"));
+assert.ok(linkStatusProfileScript.includes("waitForAnyVisibleSelector"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
