@@ -1533,6 +1533,17 @@ function httpStatusRequestUrl(check: RiddleProofProfileCheck, baseUrl?: string):
   const rawUrl = check.url || "";
   if (!rawUrl) return "";
   try {
+    if (baseUrl && rawUrl.startsWith("/") && !rawUrl.startsWith("//")) {
+      const base = new URL(baseUrl);
+      const mountPrefix = previewMountPrefix(base.pathname);
+      if (mountPrefix) {
+        const requested = new URL(rawUrl, base.origin);
+        base.pathname = joinMountedRoutePath(mountPrefix, requested.pathname);
+        base.search = requested.search;
+        base.hash = requested.hash;
+        return base.href;
+      }
+    }
     return baseUrl ? new URL(rawUrl, baseUrl).href : new URL(rawUrl).href;
   } catch {
     return rawUrl;
@@ -3126,6 +3137,17 @@ function httpStatusRequestUrl(check, baseUrl) {
   const rawUrl = check.url || "";
   if (!rawUrl) return "";
   try {
+    if (baseUrl && rawUrl.startsWith("/") && !rawUrl.startsWith("//")) {
+      const base = new URL(baseUrl);
+      const mountPrefix = previewMountPrefix(base.pathname);
+      if (mountPrefix) {
+        const requested = new URL(rawUrl, base.origin);
+        base.pathname = joinMountedRoutePath(mountPrefix, requested.pathname);
+        base.search = requested.search;
+        base.hash = requested.hash;
+        return base.href;
+      }
+    }
     return baseUrl ? new URL(rawUrl, baseUrl).href : new URL(rawUrl).href;
   } catch {
     return rawUrl;
