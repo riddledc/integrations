@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.91
+
+### Patch Changes
+
+- 8f4e384: Make profile waits use any visible matching selector and skip capture work for viewport-scoped checks on non-matching viewports.
+
 ## 0.7.90
 
 ### Patch Changes
