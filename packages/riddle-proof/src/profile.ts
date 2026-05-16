@@ -1538,6 +1538,10 @@ function summarizeLinkStatusEvidence(
   }
   const results = Array.isArray(linkEvidence.results) ? linkEvidence.results.filter(isRecord) : [];
   const totalCount = numberValue(linkEvidence.total_count) ?? results.length;
+  const resultCount = numberValue(linkEvidence.result_count) ?? totalCount;
+  const storedResultCount = numberValue(linkEvidence.stored_result_count) ?? results.length;
+  const omittedResultCount = numberValue(linkEvidence.omitted_result_count) ?? Math.max(0, resultCount - storedResultCount);
+  const omittedSuccessCount = numberValue(linkEvidence.omitted_success_count) ?? 0;
   const okCount = results.filter((result) => linkStatusResultOk(result, check)).length;
   const failures: Array<Record<string, unknown>> = results
     .filter((result) => !linkStatusResultOk(result, check))
@@ -1587,6 +1591,11 @@ function summarizeLinkStatusEvidence(
     failed_count: failures.length,
     truncated: linkEvidence.truncated === true,
     max_links: numberValue(linkEvidence.max_links) ?? check.max_links ?? 100,
+    result_count: resultCount,
+    stored_result_count: storedResultCount,
+    omitted_result_count: omittedResultCount,
+    omitted_success_count: omittedSuccessCount,
+    results_compacted: linkEvidence.results_compacted === true || omittedResultCount > 0,
     min_bytes: check.min_bytes ?? null,
     allowed_content_types: check.allowed_content_types ?? null,
     status_counts: statusCounts,
@@ -2954,6 +2963,10 @@ function summarizeLinkStatusEvidence(viewport, check) {
   }
   const results = Array.isArray(linkEvidence.results) ? linkEvidence.results.filter((result) => result && typeof result === "object" && !Array.isArray(result)) : [];
   const totalCount = typeof linkEvidence.total_count === "number" && Number.isFinite(linkEvidence.total_count) ? linkEvidence.total_count : results.length;
+  const resultCount = typeof linkEvidence.result_count === "number" && Number.isFinite(linkEvidence.result_count) ? linkEvidence.result_count : totalCount;
+  const storedResultCount = typeof linkEvidence.stored_result_count === "number" && Number.isFinite(linkEvidence.stored_result_count) ? linkEvidence.stored_result_count : results.length;
+  const omittedResultCount = typeof linkEvidence.omitted_result_count === "number" && Number.isFinite(linkEvidence.omitted_result_count) ? linkEvidence.omitted_result_count : Math.max(0, resultCount - storedResultCount);
+  const omittedSuccessCount = typeof linkEvidence.omitted_success_count === "number" && Number.isFinite(linkEvidence.omitted_success_count) ? linkEvidence.omitted_success_count : 0;
   const okCount = results.filter((result) => linkStatusResultOk(result, check)).length;
   const failures = results
     .filter((result) => !linkStatusResultOk(result, check))
@@ -3001,6 +3014,11 @@ function summarizeLinkStatusEvidence(viewport, check) {
     failed_count: failures.length,
     truncated: linkEvidence.truncated === true,
     max_links: typeof linkEvidence.max_links === "number" ? linkEvidence.max_links : check.max_links || 100,
+    result_count: resultCount,
+    stored_result_count: storedResultCount,
+    omitted_result_count: omittedResultCount,
+    omitted_success_count: omittedSuccessCount,
+    results_compacted: linkEvidence.results_compacted === true || omittedResultCount > 0,
     min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
     allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
     status_counts: linkEvidence.status_counts && typeof linkEvidence.status_counts === "object" && !Array.isArray(linkEvidence.status_counts) ? linkEvidence.status_counts : {},
@@ -4941,6 +4959,30 @@ async function probeLinkStatus(candidate, check) {
     return result;
   }
 }
+function compactLinkProbeResults(results) {
+  const allResults = Array.isArray(results) ? results : [];
+  if (allResults.length <= 20) {
+    return {
+      result_count: allResults.length,
+      stored_result_count: allResults.length,
+      omitted_result_count: 0,
+      omitted_success_count: 0,
+      results_compacted: false,
+      results: allResults,
+    };
+  }
+  const successResults = allResults.filter((result) => result && result.ok);
+  const sampledSuccesses = new Set(successResults.slice(0, 5));
+  const storedResults = allResults.filter((result) => result && (!result.ok || sampledSuccesses.has(result)));
+  return {
+    result_count: allResults.length,
+    stored_result_count: storedResults.length,
+    omitted_result_count: allResults.length - storedResults.length,
+    omitted_success_count: Math.max(0, successResults.length - sampledSuccesses.size),
+    results_compacted: storedResults.length < allResults.length,
+    results: storedResults,
+  };
+}
 async function collectLinkStatus(check) {
   const selector = linkStatusSelector(check);
   const candidateResult = await collectLinkCandidates(selector);
@@ -4997,6 +5039,7 @@ async function collectLinkStatus(check) {
     const key = result.status == null ? "error" : String(result.status);
     statusCounts[key] = (statusCounts[key] || 0) + 1;
   }
+  const compactedResults = compactLinkProbeResults(results);
   return {
     version: "riddle-proof.link-status.v1",
     selector,
@@ -5018,7 +5061,7 @@ async function collectLinkStatus(check) {
     failed_count: failures.length,
     status_counts: statusCounts,
     failures: failures.slice(0, 20),
-    results,
+    ...compactedResults,
   };
 }
 async function frameEvidence(selector) {
