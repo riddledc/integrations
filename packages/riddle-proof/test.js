@@ -727,6 +727,7 @@ try {
   assert.equal(parsedBlockedProfileResult.environment_blocker.required_seconds, 90);
   assert.equal(parsedBlockedProfileResult.environment_blocker.available_seconds, 47);
   assert.match(parsedBlockedProfileResult.summary, /required 90s, available 47s, deficit 43s/);
+  assert.match(cliProfileBlockedResult.stderr, /environment_blocked insufficient_balance required=90s available=47s deficit=43s/);
   const blockedProfileSummary = readFileSync(path.join(blockedProfileOutputDir, "summary.md"), "utf8");
   assert.match(blockedProfileSummary, /## Environment Blocker/);
   assert.match(blockedProfileSummary, /reason: insufficient_balance/);

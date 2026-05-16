@@ -519,6 +519,32 @@ function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): st
   return lines;
 }
 
+function profileCliDiagnosticLine(result: RiddleProofProfileResult): string | undefined {
+  if (result.status !== "environment_blocked") return undefined;
+
+  const blocker = cliRecord(result.environment_blocker);
+  if (blocker?.reason === "insufficient_balance") {
+    const requiredSeconds = cliFiniteNumber(blocker.required_seconds);
+    const availableSeconds = cliFiniteNumber(blocker.available_seconds);
+    const deficitSeconds = cliFiniteNumber(blocker.deficit_seconds);
+    const parts = [
+      requiredSeconds === undefined ? "" : `required=${requiredSeconds}s`,
+      availableSeconds === undefined ? "" : `available=${availableSeconds}s`,
+      deficitSeconds === undefined ? "" : `deficit=${deficitSeconds}s`,
+    ].filter(Boolean);
+    return `[riddle-profile] environment_blocked insufficient_balance${parts.length ? ` ${parts.join(" ")}` : ""}`;
+  }
+
+  const source = cliString(blocker?.source);
+  const endpoint = cliString(blocker?.endpoint);
+  const httpStatus = cliFiniteNumber(blocker?.http_status);
+  if (source || endpoint || httpStatus !== undefined) {
+    return `[riddle-profile] environment_blocked${source ? ` source=${source}` : ""}${endpoint ? ` endpoint=${endpoint}` : ""}${httpStatus === undefined ? "" : ` http_status=${httpStatus}`}`;
+  }
+
+  return `[riddle-profile] environment_blocked ${result.summary}`;
+}
+
 function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[] {
   const setupCheck = result.checks.find((check) => check.type === "setup_actions_succeeded");
   const setupSummary = cliRecord(setupCheck?.evidence?.setup_summary);
@@ -883,6 +909,10 @@ async function main() {
     const profile = normalizeProfileForCli(options);
     const result = await runProfileForCli(profile, options);
     writeProfileOutput(profileOutputDirOption(options), result);
+    const diagnosticLine = profileCliDiagnosticLine(result);
+    if (diagnosticLine && optionBoolean(options, "quiet") !== true) {
+      process.stderr.write(`${diagnosticLine}\n`);
+    }
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = profileStatusExitCode(profile, result.status);
     return;
