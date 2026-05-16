@@ -1785,6 +1785,8 @@ const linkStatusProfile = normalizeRiddleProofProfile({
     max_links: 150,
     same_origin_only: true,
     require_nonzero_bytes: true,
+    min_bytes: 32,
+    allowed_content_types: ["image/*", "application/json"],
   }],
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("link_status"));
@@ -1795,10 +1797,14 @@ assert.deepEqual(linkStatusProfile.checks[0].allowed_statuses, [200, 304]);
 assert.equal(linkStatusProfile.checks[0].max_links, 150);
 assert.equal(linkStatusProfile.checks[0].same_origin_only, true);
 assert.equal(linkStatusProfile.checks[0].require_nonzero_bytes, true);
+assert.equal(linkStatusProfile.checks[0].min_bytes, 32);
+assert.deepEqual(linkStatusProfile.checks[0].allowed_content_types, ["image/*", "application/json"]);
 const linkStatusProfileScript = buildRiddleProofProfileScript(linkStatusProfile);
 assert.ok(linkStatusProfileScript.includes("collectLinkStatus"));
 assert.ok(linkStatusProfileScript.includes("riddle-proof.link-status.v1"));
 assert.ok(linkStatusProfileScript.includes("link_statuses"));
+assert.ok(linkStatusProfileScript.includes("allowed_content_types"));
+assert.ok(linkStatusProfileScript.includes("min_bytes"));
 assert.ok(linkStatusProfileScript.includes("link_status: currentViewports"));
 assert.ok(linkStatusProfileScript.includes("profileCheckAppliesToViewport(check, viewport)"));
 assert.ok(linkStatusProfileScript.includes("waitForAnyVisibleSelector"));
@@ -2257,8 +2263,8 @@ const linkStatusEvidence = {
         status_counts: { 200: 2 },
         failures: [],
         results: [
-          { url: "https://example.com/proof/good-catches/artifacts/a.png", status: 200, method: "HEAD", ok: true, content_length: 1234, bytes: null },
-          { url: "https://example.com/proof/good-catches/artifacts/b.json", status: 200, method: "GET", ok: true, content_length: null, bytes: 42 },
+          { url: "https://example.com/proof/good-catches/artifacts/a.png", status: 200, method: "HEAD", ok: true, content_type: "image/png", content_length: 1234, bytes: null },
+          { url: "https://example.com/proof/good-catches/artifacts/b.json", status: 200, method: "GET", ok: true, content_type: "application/json; charset=utf-8", content_length: null, bytes: 42 },
         ],
       },
     },
@@ -2275,6 +2281,8 @@ assert.equal(linkStatusCheck.status, "passed");
 assert.equal(linkStatusCheck.evidence.viewports[0].total_count, 2);
 assert.equal(linkStatusCheck.evidence.viewports[0].ok_count, 2);
 assert.equal(linkStatusCheck.evidence.require_nonzero_bytes, true);
+assert.equal(linkStatusCheck.evidence.min_bytes, 32);
+assert.deepEqual(linkStatusCheck.evidence.allowed_content_types, ["image/*", "application/json"]);
 const failedLinkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, {
   ...linkStatusEvidence,
   viewports: [{
@@ -2298,6 +2306,29 @@ const failedLinkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusPr
 assert.equal(failedLinkStatusAssessment.status, "product_regression");
 assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").status, "failed");
 assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").evidence.failures.length, 1);
+const weakArtifactAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, {
+  ...linkStatusEvidence,
+  viewports: [{
+    ...linkStatusEvidence.viewports[0],
+    link_statuses: {
+      ...linkStatusEvidence.viewports[0].link_statuses,
+      "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']": {
+        ...linkStatusEvidence.viewports[0].link_statuses["a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']"],
+        ok_count: 1,
+        failed_count: 1,
+        results: [
+          { url: "https://example.com/proof/good-catches/artifacts/a.png", status: 200, method: "GET", ok: true, content_type: "text/plain", content_length: 1, bytes: 1 },
+          linkStatusEvidence.viewports[0].link_statuses["a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']"].results[1],
+        ],
+      },
+    },
+  }],
+});
+const weakArtifactCheck = weakArtifactAssessment.checks.find((check) => check.type === "artifact_link_status");
+assert.equal(weakArtifactAssessment.status, "product_regression");
+assert.equal(weakArtifactCheck.status, "failed");
+assert.equal(weakArtifactCheck.evidence.failures[0].failure.bytes, 1);
+assert.equal(weakArtifactCheck.evidence.failures[0].failure.content_type, "text/plain");
 const selectorTextOrderEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "table-order-profile",

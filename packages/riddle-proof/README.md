@@ -479,6 +479,8 @@ artifact links should fail the profile:
   "expected_count": 88,
   "same_origin_only": true,
   "require_nonzero_bytes": true,
+  "min_bytes": 32,
+  "allowed_content_types": ["image/*", "application/json"],
   "max_links": 150
 }
 ```
@@ -486,9 +488,12 @@ artifact links should fail the profile:
 The check defaults to `a[href]`, deduplicates URLs, probes up to 100 selected
 URLs, and treats HTTP `2xx` / `3xx` responses as healthy. Use
 `allowed_statuses` or `expected_status` when a narrower status contract is
-intentional, `min_count` for lower-bound audits, and `max_links` when the
-selected set is intentionally larger than 100. `artifact_link_status` is an
-alias with the same behavior for profiles that want artifact-specific wording.
+intentional, `min_count` for lower-bound audits, `min_bytes` when a one-byte
+range response is too weak, `allowed_content_types` for MIME checks, and
+`max_links` when the selected set is intentionally larger than 100.
+`allowed_content_types` accepts exact types and family wildcards such as
+`image/*`. `artifact_link_status` is an alias with the same behavior for
+profiles that want artifact-specific wording.
 
 Use the `route_inventory` check for source-page route coverage audits where a
 navigation surface must expose a known set of routes and each route must load
