@@ -50,7 +50,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
