@@ -43,10 +43,13 @@ export interface RiddlePollJobOptions {
   onProgress?: (snapshot: RiddlePollProgressSnapshot) => void | Promise<void>;
 }
 
+export type RiddlePreviewFramework = "spa" | "static";
+
 export interface RiddlePreviewDeployResult {
   ok: true;
   id: string;
   label: string;
+  framework: RiddlePreviewFramework;
   preview_url: string;
   file_count?: number;
   total_bytes?: number;
@@ -160,17 +163,19 @@ export async function riddleRequestJson<T = unknown>(
   return (json ?? text) as T;
 }
 
-export async function deployRiddleStaticPreview(
+export async function deployRiddlePreview(
   config: RiddleClientConfig,
   directory: string,
   label: string,
+  framework: RiddlePreviewFramework = "static",
 ): Promise<RiddlePreviewDeployResult> {
   if (!directory?.trim()) throw new Error("directory is required");
   if (!label?.trim()) throw new Error("label is required");
+  if (framework !== "spa" && framework !== "static") throw new Error("framework must be spa or static");
 
   const created = await riddleRequestJson<Record<string, unknown>>(config, "/v1/preview", {
     method: "POST",
-    body: JSON.stringify({ framework: "static", label }),
+    body: JSON.stringify({ framework, label }),
   });
   const id = String(created.id || "");
   const uploadUrl = String(created.upload_url || "");
@@ -199,12 +204,21 @@ export async function deployRiddleStaticPreview(
     ok: true,
     id: String(published.id || id),
     label,
+    framework,
     preview_url: String(published.preview_url || ""),
     file_count: typeof published.file_count === "number" ? published.file_count : undefined,
     total_bytes: typeof published.total_bytes === "number" ? published.total_bytes : undefined,
     expires_at: typeof created.expires_at === "string" ? created.expires_at : undefined,
     raw: published,
   };
+}
+
+export async function deployRiddleStaticPreview(
+  config: RiddleClientConfig,
+  directory: string,
+  label: string,
+): Promise<RiddlePreviewDeployResult> {
+  return deployRiddlePreview(config, directory, label, "static");
 }
 
 function createTarball(directory: string, label: string, exclude: string[] = []) {
@@ -482,6 +496,8 @@ export function createRiddleApiClient(config: RiddleClientConfig = {}) {
   return {
     requestJson: <T = unknown>(pathname: string, init?: RequestInit) =>
       riddleRequestJson<T>(config, pathname, init),
+    deployPreview: (directory: string, label: string, framework: RiddlePreviewFramework = "static") =>
+      deployRiddlePreview(config, directory, label, framework),
     deployStaticPreview: (directory: string, label: string) =>
       deployRiddleStaticPreview(config, directory, label),
     runScript: (input: RiddleRunScriptInput) =>

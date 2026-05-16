@@ -49,6 +49,7 @@ import {
   setRunStatus,
   summarizeCaptureArtifacts,
   createRiddleApiClient,
+  deployRiddlePreview,
   deployRiddleStaticPreview,
   parseRiddleViewport,
   RIDDLE_PROOF_PROFILE_CHECK_TYPES,
@@ -92,6 +93,7 @@ assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
+assert.equal(typeof cjs.deployRiddlePreview, "function");
 assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
 
 function runCli(args, options = {}) {
@@ -198,6 +200,12 @@ const deployedPreview = await riddleClient.deployStaticPreview(riddlePreviewDir,
 assert.equal(riddleClientCalls.find((call) => call.url === "https://api.test/v1/preview")?.body?.framework, "static");
 assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/ps_test/");
 assert.equal(deployedPreview.file_count, 1);
+assert.equal(deployedPreview.framework, "static");
+const deployedSpaPreview = await riddleClient.deployPreview(riddlePreviewDir, "unit-spa-preview", "spa");
+const previewCreateCalls = riddleClientCalls.filter((call) => call.url === "https://api.test/v1/preview");
+assert.equal(previewCreateCalls.at(-1)?.body?.framework, "spa");
+assert.equal(deployedSpaPreview.framework, "spa");
+assert.equal(typeof deployRiddlePreview, "function");
 assert.equal(typeof deployRiddleStaticPreview, "function");
 assert.deepEqual(parseRiddleViewport("390x844"), { width: 390, height: 844 });
 const scriptRun = await riddleClient.runScript({
