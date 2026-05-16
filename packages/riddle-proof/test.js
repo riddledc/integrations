@@ -2205,6 +2205,10 @@ const failedSelectorTextVisibleAssessment = assessRiddleProofProfileEvidence(pro
 });
 assert.equal(failedSelectorTextVisibleAssessment.status, "product_regression");
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_visible").status, "failed");
+assert.deepEqual(
+  failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_visible").evidence.viewports[0].samples,
+  ["Pricing"],
+);
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
 const urlParamEvidence = {
   version: "riddle-proof.profile-evidence.v1",

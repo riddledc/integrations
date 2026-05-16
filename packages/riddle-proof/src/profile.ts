@@ -2227,13 +2227,16 @@ function assessCheckFromEvidence(
     const results = viewports.map((viewport) => {
       const texts = textSequenceForCheck(viewport, check);
       const matches = texts.filter((text) => matchText(text, check));
+      const matched = matches.length > 0;
+      const failedAgainstExpectation = matched !== expectedVisible;
+      const sampleTexts = matches.length ? matches : failedAgainstExpectation ? texts : [];
       return {
         viewport: viewport.name,
         selector_count: viewport.selectors?.[key]?.count || 0,
         visible_count: viewport.selectors?.[key]?.visible_count || 0,
         matched_count: matches.length,
-        matched: matches.length > 0,
-        samples: matches.slice(0, 3).map((text) => text.slice(0, 240)),
+        matched,
+        samples: sampleTexts.slice(0, 3).map((text) => text.slice(0, 240)),
       };
     });
     const failed = results.filter((result) => result.matched !== expectedVisible).length;
@@ -3920,13 +3923,16 @@ function assessProfile(profile, evidence) {
       const results = checkViewports.map((viewport) => {
         const texts = textSequenceForCheck(viewport, check);
         const matches = texts.filter((text) => textMatches(text, check));
+        const matched = matches.length > 0;
+        const failedAgainstExpectation = matched !== expectedVisible;
+        const sampleTexts = matches.length ? matches : failedAgainstExpectation ? texts : [];
         return {
           viewport: viewport.name,
           selector_count: viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0,
           visible_count: viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].visible_count : 0,
           matched_count: matches.length,
-          matched: matches.length > 0,
-          samples: matches.slice(0, 3).map((text) => text.slice(0, 240)),
+          matched,
+          samples: sampleTexts.slice(0, 3).map((text) => text.slice(0, 240)),
         };
       });
       const failed = results.filter((result) => result.matched !== expectedVisible).length;
