@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.105
+
+### Patch Changes
+
+- da95ebd: Align setup text assertions with final selector text checks by preferring rendered `innerText` before falling back to `textContent`.
+
 ## 0.7.104
 
 ### Patch Changes
