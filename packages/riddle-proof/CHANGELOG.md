@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.96
+
+### Patch Changes
+
+- d1eb59e: Compact high-volume link status proof artifacts while preserving counts and failure details.
+
 ## 0.7.95
 
 ### Patch Changes
