@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.106
+
+### Patch Changes
+
+- 9c77e33: Normalize whitespace for setup text assertions so rendered line breaks do not prevent visible phrase matches.
+
 ## 0.7.105
 
 ### Patch Changes
