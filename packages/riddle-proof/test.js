@@ -1850,6 +1850,8 @@ const httpStatusProfile = normalizeRiddleProofProfile({
     require_nonzero_bytes: true,
     min_bytes: 8,
     body_contains: ["UNAUTHORIZED"],
+    body_not_contains: ["FORBIDDEN"],
+    body_not_patterns: ['"debug"\\s*:'],
   }],
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("http_status"));
@@ -1861,12 +1863,16 @@ assert.equal(httpStatusProfile.checks[0].expected_status, 401);
 assert.equal(httpStatusProfile.checks[0].require_nonzero_bytes, true);
 assert.equal(httpStatusProfile.checks[0].min_bytes, 8);
 assert.deepEqual(httpStatusProfile.checks[0].body_contains, ["UNAUTHORIZED"]);
+assert.deepEqual(httpStatusProfile.checks[0].body_not_contains, ["FORBIDDEN"]);
+assert.deepEqual(httpStatusProfile.checks[0].body_not_patterns, ['"debug"\\s*:']);
 const httpStatusProfileScript = buildRiddleProofProfileScript(httpStatusProfile);
 assert.ok(httpStatusProfileScript.includes("collectHttpStatus"));
 assert.ok(httpStatusProfileScript.includes("riddle-proof.http-status.v1"));
 assert.ok(httpStatusProfileScript.includes("http_statuses"));
 assert.ok(httpStatusProfileScript.includes("http_status: currentViewports"));
 assert.ok(httpStatusProfileScript.includes("body_contains"));
+assert.ok(httpStatusProfileScript.includes("body_not_contains"));
+assert.ok(httpStatusProfileScript.includes("body_not_patterns"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
@@ -2374,6 +2380,8 @@ const httpStatusEvidence = {
         content_length: 54,
         bytes: 54,
         body_contains: { UNAUTHORIZED: true },
+        body_not_contains: { FORBIDDEN: false },
+        body_not_patterns: { '"debug"\\s*:': false },
         body_sample: '{"error":{"code":"UNAUTHORIZED"}}',
       },
     },
@@ -2391,9 +2399,15 @@ assert.equal(httpStatusCheck.evidence.url, "https://api.example.com/v1/scrape");
 assert.equal(httpStatusCheck.evidence.method, "POST");
 assert.deepEqual(httpStatusCheck.evidence.allowed_statuses, [401]);
 assert.deepEqual(httpStatusCheck.evidence.body_contains, ["UNAUTHORIZED"]);
+assert.deepEqual(httpStatusCheck.evidence.body_not_contains, ["FORBIDDEN"]);
+assert.deepEqual(httpStatusCheck.evidence.body_not_patterns, ['"debug"\\s*:']);
 assert.equal(httpStatusCheck.evidence.viewports[0].status, 401);
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains, { UNAUTHORIZED: true });
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains_missing, []);
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains, { FORBIDDEN: false });
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains_found, []);
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns, { '"debug"\\s*:': false });
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns_found, []);
 const failedBodyStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
   ...httpStatusEvidence,
   viewports: [{
@@ -2412,6 +2426,42 @@ const failedBodyStatusCheck = failedBodyStatusAssessment.checks.find((check) => 
 assert.equal(failedBodyStatusAssessment.status, "product_regression");
 assert.equal(failedBodyStatusCheck.status, "failed");
 assert.deepEqual(failedBodyStatusCheck.evidence.failures[0].failure.body_contains_missing, ["UNAUTHORIZED"]);
+const failedForbiddenTextStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
+  ...httpStatusEvidence,
+  viewports: [{
+    ...httpStatusEvidence.viewports[0],
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        ...httpStatusEvidence.viewports[0].http_statuses["POST https://api.example.com/v1/scrape"],
+        body_not_contains: { FORBIDDEN: true },
+        body_sample: '{"error":{"code":"UNAUTHORIZED"},"message":"FORBIDDEN"}',
+        ok: false,
+      },
+    },
+  }],
+});
+const failedForbiddenTextStatusCheck = failedForbiddenTextStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(failedForbiddenTextStatusAssessment.status, "product_regression");
+assert.equal(failedForbiddenTextStatusCheck.status, "failed");
+assert.deepEqual(failedForbiddenTextStatusCheck.evidence.failures[0].failure.body_not_contains_found, ["FORBIDDEN"]);
+const failedForbiddenPatternStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
+  ...httpStatusEvidence,
+  viewports: [{
+    ...httpStatusEvidence.viewports[0],
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        ...httpStatusEvidence.viewports[0].http_statuses["POST https://api.example.com/v1/scrape"],
+        body_not_patterns: { '"debug"\\s*:': true },
+        body_sample: '{"error":{"code":"UNAUTHORIZED"},"debug":true}',
+        ok: false,
+      },
+    },
+  }],
+});
+const failedForbiddenPatternStatusCheck = failedForbiddenPatternStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(failedForbiddenPatternStatusAssessment.status, "product_regression");
+assert.equal(failedForbiddenPatternStatusCheck.status, "failed");
+assert.deepEqual(failedForbiddenPatternStatusCheck.evidence.failures[0].failure.body_not_patterns_found, ['"debug"\\s*:']);
 const failedHttpStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
   ...httpStatusEvidence,
   viewports: [{
