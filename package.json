@@ -10,9 +10,9 @@
     "build": "pnpm -r build",
     "clean": "pnpm -r clean",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
+    "test": "node scripts/check-openclaw-plugin-versions.mjs && pnpm -r test",
     "changeset": "changeset",
-    "version-packages": "changeset version && pnpm --filter @riddledc/openclaw-riddle-proof sync:openclaw-plugin-version && pnpm install --lockfile-only",
+    "version-packages": "changeset version && pnpm -r --if-present sync:openclaw-plugin-version && pnpm install --lockfile-only",
     "release": "changeset publish --access public"
   },
   "devDependencies": {
