@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.101
+
+### Patch Changes
+
+- 5e1793b: Surface `http_status` forbidden body matches in generated proof summaries.
+
 ## 0.7.100
 
 ### Patch Changes
