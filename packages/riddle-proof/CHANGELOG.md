@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.108
+
+### Patch Changes
+
+- 02af40a: Add a Profile Mode `no_console_warnings` contract with console warning allowlists.
+
 ## 0.7.107
 
 ### Patch Changes
