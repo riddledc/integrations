@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.98
+
+### Patch Changes
+
+- def63a6: Add a profile `http_status` check for direct endpoint/API probes with method, headers, body, status, content-type, and byte evidence.
+
 ## 0.7.97
 
 ### Patch Changes
