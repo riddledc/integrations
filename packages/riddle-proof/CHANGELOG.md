@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.88
+
+### Patch Changes
+
+- ac77674: Print concise run-profile environment-blocker diagnostics to stderr so neutral blocked runs still show actionable status without opening saved artifacts.
+
 ## 0.7.87
 
 ### Patch Changes
