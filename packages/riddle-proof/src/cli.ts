@@ -446,7 +446,9 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
   }
   if (check.type === "selector_text_visible" || check.type === "selector_text_absent") {
     const textTarget = profileCheckTextTarget(evidence);
-    if (selector && textTarget) return `${markdownInlineCode(selector)} contains ${textTarget}`;
+    const verb = check.type === "selector_text_absent" ? "does not contain" : "contains";
+    if (selector && textTarget) return `${markdownInlineCode(selector)} ${verb} ${textTarget}`;
+    if (textTarget && check.type === "selector_text_absent") return `${verb} ${textTarget}`;
     return selector ? markdownInlineCode(selector) : textTarget;
   }
   if (check.type === "selector_text_order") {

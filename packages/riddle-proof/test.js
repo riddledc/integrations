@@ -533,6 +533,26 @@ const cliRunProfileServer = createServer((request, response) => {
           evidence: { selector: ".dashboard-content", visible_counts: [1] },
         },
         {
+          type: "selector_text_visible",
+          status: "passed",
+          evidence: {
+            selector: ".dashboard-content",
+            text: "Start building",
+            pattern: null,
+            viewports: [{ viewport: "desktop", matched: true, matched_count: 1 }],
+          },
+        },
+        {
+          type: "selector_text_absent",
+          status: "passed",
+          evidence: {
+            selector: ".dashboard-content",
+            text: null,
+            pattern: "NaN|undefined",
+            viewports: [{ viewport: "desktop", matched: false, matched_count: 0 }],
+          },
+        },
+        {
           type: "selector_count_equals",
           status: "passed",
           evidence: { selector: ".jobs-list tbody tr", expected_count: 3, counts: [3] },
@@ -651,6 +671,8 @@ try {
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
   assert.match(profileSummaryMarkdown, /passed: route_loaded \(`\/profile`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_visible \(`\.dashboard-content`\)/);
+  assert.match(profileSummaryMarkdown, /passed: selector_text_visible \(`\.dashboard-content` contains `Start building`\)/);
+  assert.match(profileSummaryMarkdown, /passed: selector_text_absent \(`\.dashboard-content` does not contain pattern `NaN\|undefined`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_count_equals \(`\.jobs-list tbody tr` = 3\)/);
   assert.match(profileSummaryMarkdown, /passed: text_visible \(`Failed`\)/);
   assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
