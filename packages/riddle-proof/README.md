@@ -306,7 +306,10 @@ Use setup assertions when the pre-click or pre-navigation state is part of the c
 for example a fresh row must be present, stale copy must be absent, exactly one
 source link must exist before clicking into the final route, or a canvas app's
 proof state must expose a terminal flag. `assert_selector_count` accepts
-`expected_count`; `assert_window_value` accepts `path` / `state_path` plus
+`expected_count`; `assert_text_visible` and `assert_text_absent` prefer rendered
+selector text (`innerText`) so casing from CSS `text-transform` matches
+`selector_text_visible`, with a `textContent` fallback for non-HTML elements.
+`assert_window_value` accepts `path` / `state_path` plus
 `expected_value` / `expected` and compares JSON-safe values exactly.
 `assert_window_number` accepts `path` / `state_path` plus `expected_value`,
 `min_value`, or `max_value`, and is useful for canvas-only proof state such as

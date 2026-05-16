@@ -4517,7 +4517,9 @@ async function setupActionScope(action, timeout) {
   return { ok: true, context: frame, frame_selector: frameSelector, frame_index: frameIndex, frame_count: frameCount };
 }
 async function setupLocatorText(locator, index) {
-  return await locator.nth(index).textContent({ timeout: 1000 }).catch(() => "");
+  const target = locator.nth(index);
+  return await target.innerText({ timeout: 1000 })
+    .catch(async () => await target.textContent({ timeout: 1000 }).catch(() => ""));
 }
 function compactSetupResultText(value) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
