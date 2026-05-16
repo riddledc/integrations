@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.93
+
+### Patch Changes
+
+- 4ffa690: Wait for expected route-inventory source links before clickthrough checks so dynamic navigation surfaces can finish rendering after returning to the source route.
+
 ## 0.7.92
 
 ### Patch Changes
