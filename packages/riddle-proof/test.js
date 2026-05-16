@@ -1873,6 +1873,8 @@ assert.ok(httpStatusProfileScript.includes("http_status: currentViewports"));
 assert.ok(httpStatusProfileScript.includes("body_contains"));
 assert.ok(httpStatusProfileScript.includes("body_not_contains"));
 assert.ok(httpStatusProfileScript.includes("body_not_patterns"));
+assert.ok(httpStatusProfileScript.includes("body_not_contains_found"));
+assert.ok(httpStatusProfileScript.includes("body_not_patterns_found"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
