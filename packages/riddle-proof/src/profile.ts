@@ -3183,6 +3183,22 @@ function httpStatusBodyContainsFailures(result, check) {
     : {};
   return expected.filter((text) => observed[text] !== true);
 }
+function httpStatusBodyNotContainsFailures(result, check) {
+  const forbidden = Array.isArray(check.body_not_contains) ? check.body_not_contains.filter(Boolean) : [];
+  if (!forbidden.length) return [];
+  const observed = result && typeof result.body_not_contains === "object" && !Array.isArray(result.body_not_contains)
+    ? result.body_not_contains
+    : {};
+  return forbidden.filter((text) => observed[text] !== false);
+}
+function httpStatusBodyNotPatternFailures(result, check) {
+  const forbidden = Array.isArray(check.body_not_patterns) ? check.body_not_patterns.filter(Boolean) : [];
+  if (!forbidden.length) return [];
+  const observed = result && typeof result.body_not_patterns === "object" && !Array.isArray(result.body_not_patterns)
+    ? result.body_not_patterns
+    : {};
+  return forbidden.filter((pattern) => observed[pattern] !== false);
+}
 function linkStatusResultOk(result, check) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return false;
   if (!httpStatusIsAllowed(result.status, check)) return false;
@@ -3198,6 +3214,8 @@ function linkStatusResultOk(result, check) {
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   if (httpStatusBodyContainsFailures(result, check).length) return false;
+  if (httpStatusBodyNotContainsFailures(result, check).length) return false;
+  if (httpStatusBodyNotPatternFailures(result, check).length) return false;
   return true;
 }
 function summarizeHttpStatusEvidence(viewport, check) {
@@ -3216,6 +3234,8 @@ function summarizeHttpStatusEvidence(viewport, check) {
   }
   const failures = [];
   const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
+  const bodyNotContainsFound = httpStatusBodyNotContainsFailures(statusEvidence, check);
+  const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -3230,6 +3250,10 @@ function summarizeHttpStatusEvidence(viewport, check) {
       allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
       body_contains: Array.isArray(check.body_contains) ? check.body_contains : null,
       body_contains_missing: bodyContainsMissing,
+      body_not_contains: Array.isArray(check.body_not_contains) ? check.body_not_contains : null,
+      body_not_contains_found: bodyNotContainsFound,
+      body_not_patterns: Array.isArray(check.body_not_patterns) ? check.body_not_patterns : null,
+      body_not_patterns_found: bodyNotPatternsFound,
       body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     });
   }
@@ -3249,6 +3273,14 @@ function summarizeHttpStatusEvidence(viewport, check) {
       ? statusEvidence.body_contains
       : null,
     body_contains_missing: bodyContainsMissing,
+    body_not_contains: statusEvidence.body_not_contains && typeof statusEvidence.body_not_contains === "object" && !Array.isArray(statusEvidence.body_not_contains)
+      ? statusEvidence.body_not_contains
+      : null,
+    body_not_contains_found: bodyNotContainsFound,
+    body_not_patterns: statusEvidence.body_not_patterns && typeof statusEvidence.body_not_patterns === "object" && !Array.isArray(statusEvidence.body_not_patterns)
+      ? statusEvidence.body_not_patterns
+      : null,
+    body_not_patterns_found: bodyNotPatternsFound,
     body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     failures,
   };
