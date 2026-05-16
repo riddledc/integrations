@@ -508,6 +508,10 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
   if (check.type === "no_fatal_console_errors") {
     return "0 unallowed fatal errors";
   }
+  if (check.type === "no_console_warnings") {
+    const warningCount = cliFiniteNumber(evidence.console_warning_count) ?? 0;
+    return `${warningCount} unallowed warning${warningCount === 1 ? "" : "s"}`;
+  }
   return undefined;
 }
 

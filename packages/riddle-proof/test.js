@@ -578,6 +578,11 @@ const cliRunProfileServer = createServer((request, response) => {
           evidence: { fatal_error_count: 0 },
         },
         {
+          type: "no_console_warnings",
+          status: "passed",
+          evidence: { console_warning_count: 0 },
+        },
+        {
           type: "route_inventory",
           label: "pricing funnel route inventory",
           status: "passed",
@@ -678,6 +683,7 @@ try {
   assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
   assert.match(profileSummaryMarkdown, /passed: no_horizontal_overflow \(<= 1px\)/);
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
+  assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
@@ -793,6 +799,7 @@ const profile = normalizeRiddleProofProfile({
     { type: "text_visible", text: "Desktop-only copy", viewports: ["desktop"] },
     { type: "no_mobile_horizontal_overflow" },
     { type: "no_fatal_console_errors" },
+    { type: "no_console_warnings" },
   ],
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
@@ -800,6 +807,7 @@ assert.equal(profile.target.timeout_sec, 420);
 assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("no_console_warnings"));
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
@@ -1388,6 +1396,25 @@ assert.deepEqual(consoleAllowedProfile.checks[0].allowed_console_patterns, [
   "expected-negative-console-profile/resource\\.js",
 ]);
 assert.deepEqual(consoleAllowedProfile.checks[0].allowed_page_error_texts, ["Known app-level page error"]);
+const consoleWarningProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "warning-hygiene-profile",
+  target: {
+    route: "/proof/good-catches",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "no_console_warnings",
+    allowed_console_patterns: [
+      "intentional dev-mode warning",
+      "cdn\\.example.com/known-warning\\.js",
+    ],
+  }],
+}, { url: "https://example.com" });
+assert.deepEqual(consoleWarningProfile.checks[0].allowed_console_patterns, [
+  "intentional dev-mode warning",
+  "cdn\\.example.com/known-warning\\.js",
+]);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-console-allowlist",
@@ -1397,6 +1424,7 @@ assert.throws(() => normalizeRiddleProofProfile({
 const consoleAllowedProfileScript = buildRiddleProofProfileScript(consoleAllowedProfile);
 assert.ok(consoleAllowedProfileScript.includes("matchesAllowedMessage"));
 assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
+assert.ok(buildRiddleProofProfileScript(consoleWarningProfile).includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
@@ -2104,7 +2132,7 @@ const profileEvidence = {
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
-assert.equal(profileAssessment.checks.length, 11);
+assert.equal(profileAssessment.checks.length, 12);
 const profileSetupCheck = profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
 assert.equal(profileSetupCheck.status, "passed");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewport_count, 2);
@@ -3181,6 +3209,55 @@ const unallowedConsoleCheck = unallowedConsoleAssessment.checks.find((check) => 
 assert.equal(unallowedConsoleAssessment.status, "product_regression");
 assert.equal(unallowedConsoleCheck.status, "failed");
 assert.equal(unallowedConsoleCheck.evidence.console_fatal_count, 1);
+const allowedConsoleWarningAssessment = assessRiddleProofProfileEvidence(consoleWarningProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "warning-hygiene-profile",
+  target_url: "https://example.com/proof/good-catches",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-16T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/proof/good-catches", observed: "/proof/good-catches", expected_path: "/proof/good-catches", matched: true, http_status: 200 },
+    body_text_sample: "Good Catch Diary",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    screenshot_label: "warning-hygiene-profile-desktop",
+  }],
+  console: {
+    events: [
+      { type: "warning", text: "intentional dev-mode warning from test profile" },
+      { type: "warn", text: "generic loader warning", location: { url: "https://cdn.example.com/known-warning.js" } },
+      { type: "error", text: "Fatal errors are handled by no_fatal_console_errors" },
+    ],
+    fatal_count: 1,
+  },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const allowedConsoleWarningCheck = allowedConsoleWarningAssessment.checks.find((check) => check.type === "no_console_warnings");
+assert.equal(allowedConsoleWarningAssessment.status, "passed");
+assert.equal(allowedConsoleWarningCheck.status, "passed");
+assert.equal(allowedConsoleWarningCheck.evidence.total_console_warning_count, 2);
+assert.equal(allowedConsoleWarningCheck.evidence.allowed_console_warning_count, 2);
+assert.equal(allowedConsoleWarningCheck.evidence.console_warning_count, 0);
+assert.equal(allowedConsoleWarningCheck.evidence.allowed_console_warning_samples.length, 2);
+const unallowedConsoleWarningAssessment = assessRiddleProofProfileEvidence(consoleWarningProfile, {
+  ...allowedConsoleWarningAssessment.evidence,
+  console: {
+    events: [
+      { type: "warning", text: "Image with src /proof/good-catches/artifact.png was detected as the Largest Contentful Paint." },
+    ],
+    fatal_count: 0,
+  },
+});
+const unallowedConsoleWarningCheck = unallowedConsoleWarningAssessment.checks.find((check) => check.type === "no_console_warnings");
+assert.equal(unallowedConsoleWarningAssessment.status, "product_regression");
+assert.equal(unallowedConsoleWarningCheck.status, "failed");
+assert.equal(unallowedConsoleWarningCheck.evidence.console_warning_count, 1);
+assert.match(unallowedConsoleWarningCheck.evidence.unallowed_console_warning_samples[0], /Largest Contentful Paint/);
 const mountedPreviewAssessment = assessRiddleProofProfileEvidence(mountedPreviewProfile, {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "preview-playground-basic",

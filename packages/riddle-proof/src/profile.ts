@@ -39,6 +39,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "no_horizontal_overflow",
   "no_mobile_horizontal_overflow",
   "no_fatal_console_errors",
+  "no_console_warnings",
 ] as const;
 
 export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
@@ -2588,6 +2589,31 @@ function assessCheckFromEvidence(
     };
   }
 
+  if (check.type === "no_console_warnings") {
+    const warningConsoleEvents = (evidence.console?.events || []).filter((event) => event.type === "warning" || event.type === "warn");
+    const allowedConsoleEvents = warningConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+    const unallowedConsoleEvents = warningConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: unallowedConsoleEvents.length ? "failed" : "passed",
+      evidence: {
+        console_warning_count: unallowedConsoleEvents.length,
+        total_console_warning_count: warningConsoleEvents.length,
+        allowed_console_warning_count: allowedConsoleEvents.length,
+        allowed_console_texts: check.allowed_console_texts || [],
+        allowed_console_patterns: check.allowed_console_patterns || [],
+        unallowed_console_warning_samples: unallowedConsoleEvents
+          .slice(0, 5)
+          .map((event) => allowedMessageSample(event)),
+        allowed_console_warning_samples: allowedConsoleEvents
+          .slice(0, 5)
+          .map((event) => allowedMessageSample(event)),
+      },
+      message: unallowedConsoleEvents.length ? `${unallowedConsoleEvents.length} console warning(s) were captured.` : undefined,
+    };
+  }
+
   return {
     type: check.type,
     label: checkLabel(check),
@@ -4237,6 +4263,27 @@ function assessProfile(profile, evidence) {
           allowed_page_error_patterns: check.allowed_page_error_patterns || [],
         },
         message: fatalCount ? String(fatalCount) + " fatal browser error(s) were captured." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "no_console_warnings") {
+      const warningConsoleEvents = ((evidence.console && evidence.console.events) || []).filter((event) => event && (event.type === "warning" || event.type === "warn"));
+      const allowedConsoleEvents = warningConsoleEvents.filter((event) => matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+      const unallowedConsoleEvents = warningConsoleEvents.filter((event) => !matchesAllowedMessage(event, check.allowed_console_texts, check.allowed_console_patterns));
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: unallowedConsoleEvents.length ? "failed" : "passed",
+        evidence: {
+          console_warning_count: unallowedConsoleEvents.length,
+          total_console_warning_count: warningConsoleEvents.length,
+          allowed_console_warning_count: allowedConsoleEvents.length,
+          allowed_console_texts: check.allowed_console_texts || [],
+          allowed_console_patterns: check.allowed_console_patterns || [],
+          unallowed_console_warning_samples: unallowedConsoleEvents.slice(0, 5).map((event) => allowedMessageSample(event)),
+          allowed_console_warning_samples: allowedConsoleEvents.slice(0, 5).map((event) => allowedMessageSample(event)),
+        },
+        message: unallowedConsoleEvents.length ? String(unallowedConsoleEvents.length) + " console warning(s) were captured." : undefined,
       });
       continue;
     }
