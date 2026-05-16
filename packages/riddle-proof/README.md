@@ -434,6 +434,28 @@ The check records visible text for the selector in each viewport and reports
 matched counts plus short samples, which makes generated-command and evidence
 card audits easier to diagnose than global `text_visible` checks.
 
+Use `http_status` when the contract belongs to the fetched response itself:
+status code, content type, byte size, or raw body fragments from a markdown,
+JSON, YAML, robots, sitemap, or other machine-readable endpoint:
+
+```json
+{
+  "type": "http_status",
+  "label": "agent markdown",
+  "url": "https://example.com/docs/markdown.md",
+  "expected_status": 200,
+  "allowed_content_types": ["text/markdown"],
+  "min_bytes": 1000,
+  "body_contains": ["# API Documentation"]
+}
+```
+
+`body_contains`, `body_patterns`, `body_not_contains`, and
+`body_not_patterns` match the raw HTTP response body, not rendered browser
+text. Use `text_visible` or `selector_text_visible` when CSS transforms,
+hydration, client rendering, hidden elements, or layout-specific copy should be
+judged exactly as the browser exposes it to users.
+
 Use `frame_text_visible` and `frame_no_horizontal_overflow` for embedded app,
 game, or preview surfaces that render inside iframes:
 
