@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.97
+
+### Patch Changes
+
+- d889882: Clarify profile summary wording for selector text absence checks.
+
 ## 0.7.96
 
 ### Patch Changes
