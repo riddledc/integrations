@@ -478,9 +478,13 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
   if (check.type === "link_status" || check.type === "artifact_link_status") {
     const expectedCount = cliFiniteNumber(evidence.expected_count);
     const minCount = cliFiniteNumber(evidence.min_count);
-    if (selector && expectedCount !== undefined) return `${markdownInlineCode(selector)} links = ${expectedCount}`;
-    if (selector && minCount !== undefined) return `${markdownInlineCode(selector)} links >= ${minCount}`;
-    return selector ? markdownInlineCode(selector) : undefined;
+    const minBytes = cliFiniteNumber(evidence.min_bytes);
+    const parts: string[] = [];
+    if (expectedCount !== undefined) parts.push(`links = ${expectedCount}`);
+    else if (minCount !== undefined) parts.push(`links >= ${minCount}`);
+    if (minBytes !== undefined) parts.push(`bytes >= ${minBytes}`);
+    if (selector && parts.length) return `${markdownInlineCode(selector)} ${parts.join(", ")}`;
+    return selector ? markdownInlineCode(selector) : parts.join(", ") || undefined;
   }
   if (check.type === "no_horizontal_overflow" || check.type === "no_mobile_horizontal_overflow") {
     const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
@@ -730,9 +734,13 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
     const okTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.ok_count) || 0), 0);
     const failedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.failed_count) || 0), 0);
     const truncatedTotal = viewports.filter((viewport) => viewport.truncated === true).length;
+    const minBytes = cliFiniteNumber(evidence.min_bytes);
+    const allowedContentTypes = Array.isArray(evidence.allowed_content_types)
+      ? evidence.allowed_content_types.map(cliString).filter((value): value is string => Boolean(value))
+      : [];
     const countText = totals.length ? totals.join("/") : "unknown";
     lines.push(
-      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}`,
+      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
     );
   }
 

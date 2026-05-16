@@ -212,6 +212,8 @@ export interface RiddleProofProfileCheck {
   same_origin_only?: boolean;
   dedupe?: boolean;
   require_nonzero_bytes?: boolean;
+  min_bytes?: number;
+  allowed_content_types?: string[];
   allow_get_fallback?: boolean;
   max_overflow_px?: number;
   timeout_ms?: number;
@@ -1287,6 +1289,18 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   const maxLinks = isLinkStatusCheck
     ? normalizePositiveInteger(input.max_links ?? input.maxLinks ?? input.limit, `checks[${index}] max_links`, 500)
     : undefined;
+  const minBytes = isLinkStatusCheck
+    ? normalizePositiveInteger(input.min_bytes ?? input.minBytes ?? input.min_response_bytes ?? input.minResponseBytes, `checks[${index}] min_bytes`)
+    : undefined;
+  const expectedContentType = isLinkStatusCheck
+    ? stringValue(input.expected_content_type) || stringValue(input.expectedContentType) || stringValue(input.content_type) || stringValue(input.contentType)
+    : undefined;
+  const allowedContentTypes = isLinkStatusCheck
+    ? normalizeStringList(
+      input.allowed_content_types ?? input.allowedContentTypes ?? input.expected_content_types ?? input.expectedContentTypes,
+      `checks[${index}] allowed_content_types`,
+    ) ?? (expectedContentType ? [expectedContentType] : undefined)
+    : undefined;
   if (isLinkStatusCheck) {
     if (minCount !== undefined && (!Number.isInteger(minCount) || minCount < 0)) {
       throw new Error(`checks[${index}] ${type} min_count must be a non-negative integer.`);
@@ -1328,6 +1342,8 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     same_origin_only: isLinkStatusCheck ? input.same_origin_only === true || input.sameOriginOnly === true : undefined,
     dedupe: isLinkStatusCheck ? input.dedupe === false ? false : true : undefined,
     require_nonzero_bytes: isLinkStatusCheck ? input.require_nonzero_bytes === true || input.requireNonzeroBytes === true : undefined,
+    min_bytes: minBytes,
+    allowed_content_types: allowedContentTypes,
     allow_get_fallback: isLinkStatusCheck ? input.allow_get_fallback === false || input.allowGetFallback === false ? false : true : undefined,
     max_overflow_px: numberValue(input.max_overflow_px),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
@@ -1456,15 +1472,43 @@ function linkStatusIsAllowed(status: number | undefined, check: RiddleProofProfi
   return allowed?.length ? allowed.includes(status) : status >= 200 && status < 400;
 }
 
+function linkStatusObservedBytes(result: Record<string, unknown>): number | undefined {
+  const bytes = numberValue(result.bytes);
+  const contentLength = numberValue(result.content_length);
+  return Math.max(bytes ?? 0, contentLength ?? 0) || undefined;
+}
+
+function normalizeLinkStatusContentType(value: string | undefined): string | undefined {
+  const normalized = value?.split(";")[0]?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
+function linkStatusContentTypeOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
+  const expected = check.allowed_content_types;
+  if (!expected?.length) return true;
+  const actual = normalizeLinkStatusContentType(stringValue(result.content_type));
+  if (!actual) return false;
+  return expected.some((contentType) => {
+    const normalized = normalizeLinkStatusContentType(contentType);
+    if (!normalized) return false;
+    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
+    return actual === normalized;
+  });
+}
+
 function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const status = numberValue(result.status);
   if (!linkStatusIsAllowed(status, check)) return false;
   if (stringValue(result.error)) return false;
   if (result.ok === false) return false;
+  if (!linkStatusContentTypeOk(result, check)) return false;
   if (check.require_nonzero_bytes) {
-    const bytes = numberValue(result.bytes);
-    const contentLength = numberValue(result.content_length);
-    return (bytes !== undefined && bytes > 0) || (contentLength !== undefined && contentLength > 0);
+    const observedBytes = linkStatusObservedBytes(result);
+    if (observedBytes === undefined || observedBytes <= 0) return false;
+  }
+  if (check.min_bytes !== undefined) {
+    const observedBytes = linkStatusObservedBytes(result);
+    if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   return true;
 }
@@ -1503,7 +1547,10 @@ function summarizeLinkStatusEvidence(
       status: numberValue(result.status) ?? null,
       method: stringValue(result.method) ?? null,
       error: stringValue(result.error) ?? null,
-      bytes: numberValue(result.bytes) ?? numberValue(result.content_length) ?? null,
+      content_type: stringValue(result.content_type) ?? null,
+      bytes: linkStatusObservedBytes(result) ?? null,
+      min_bytes: check.min_bytes ?? null,
+      allowed_content_types: check.allowed_content_types ?? null,
     }));
   if (stringValue(linkEvidence.error)) {
     failures.push({ code: "link_status_capture_failed", error: stringValue(linkEvidence.error) ?? "" });
@@ -1540,6 +1587,8 @@ function summarizeLinkStatusEvidence(
     failed_count: failures.length,
     truncated: linkEvidence.truncated === true,
     max_links: numberValue(linkEvidence.max_links) ?? check.max_links ?? 100,
+    min_bytes: check.min_bytes ?? null,
+    allowed_content_types: check.allowed_content_types ?? null,
     status_counts: statusCounts,
     failures: failures.slice(0, 20),
   };
@@ -2153,6 +2202,8 @@ function assessCheckFromEvidence(
         min_count: check.min_count ?? null,
         allowed_statuses: linkStatusAllowedStatuses(check) || ["2xx", "3xx"],
         require_nonzero_bytes: check.require_nonzero_bytes === true,
+        min_bytes: check.min_bytes ?? null,
+        allowed_content_types: check.allowed_content_types ?? null,
         viewports: summaries.map((summary) => toJsonValue(summary)),
         failures: failed.flatMap((summary) => (
           Array.isArray(summary.failures)
@@ -2850,15 +2901,41 @@ function linkStatusIsAllowed(status, check) {
   const allowed = linkStatusAllowedStatuses(check);
   return Array.isArray(allowed) && allowed.length ? allowed.includes(status) : status >= 200 && status < 400;
 }
+function linkStatusObservedBytes(result) {
+  const bytes = typeof result.bytes === "number" && Number.isFinite(result.bytes) ? result.bytes : undefined;
+  const contentLength = typeof result.content_length === "number" && Number.isFinite(result.content_length) ? result.content_length : undefined;
+  const observed = Math.max(bytes || 0, contentLength || 0);
+  return observed > 0 ? observed : undefined;
+}
+function normalizeLinkStatusContentType(value) {
+  if (typeof value !== "string") return undefined;
+  const normalized = (value.split(";")[0] || "").trim().toLowerCase();
+  return normalized || undefined;
+}
+function linkStatusContentTypeOk(result, check) {
+  if (!Array.isArray(check.allowed_content_types) || !check.allowed_content_types.length) return true;
+  const actual = normalizeLinkStatusContentType(result.content_type);
+  if (!actual) return false;
+  return check.allowed_content_types.some((contentType) => {
+    const normalized = normalizeLinkStatusContentType(contentType);
+    if (!normalized) return false;
+    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
+    return actual === normalized;
+  });
+}
 function linkStatusResultOk(result, check) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return false;
   if (!linkStatusIsAllowed(result.status, check)) return false;
   if (typeof result.error === "string" && result.error.trim()) return false;
   if (result.ok === false) return false;
+  if (!linkStatusContentTypeOk(result, check)) return false;
   if (check.require_nonzero_bytes === true) {
-    const bytes = typeof result.bytes === "number" && Number.isFinite(result.bytes) ? result.bytes : undefined;
-    const contentLength = typeof result.content_length === "number" && Number.isFinite(result.content_length) ? result.content_length : undefined;
-    return (bytes !== undefined && bytes > 0) || (contentLength !== undefined && contentLength > 0);
+    const observedBytes = linkStatusObservedBytes(result);
+    if (observedBytes === undefined || observedBytes <= 0) return false;
+  }
+  if (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) {
+    const observedBytes = linkStatusObservedBytes(result);
+    if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   return true;
 }
@@ -2886,11 +2963,10 @@ function summarizeLinkStatusEvidence(viewport, check) {
       status: typeof result.status === "number" && Number.isFinite(result.status) ? result.status : null,
       method: typeof result.method === "string" ? result.method : null,
       error: typeof result.error === "string" ? result.error : null,
-      bytes: typeof result.bytes === "number" && Number.isFinite(result.bytes)
-        ? result.bytes
-        : typeof result.content_length === "number" && Number.isFinite(result.content_length)
-          ? result.content_length
-          : null,
+      content_type: typeof result.content_type === "string" ? result.content_type : null,
+      bytes: linkStatusObservedBytes(result) ?? null,
+      min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+      allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
     }));
   if (typeof linkEvidence.error === "string" && linkEvidence.error.trim()) {
     failures.push({ code: "link_status_capture_failed", error: linkEvidence.error });
@@ -2925,6 +3001,8 @@ function summarizeLinkStatusEvidence(viewport, check) {
     failed_count: failures.length,
     truncated: linkEvidence.truncated === true,
     max_links: typeof linkEvidence.max_links === "number" ? linkEvidence.max_links : check.max_links || 100,
+    min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+    allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
     status_counts: linkEvidence.status_counts && typeof linkEvidence.status_counts === "object" && !Array.isArray(linkEvidence.status_counts) ? linkEvidence.status_counts : {},
     failures: failures.slice(0, 20),
   };
@@ -3621,6 +3699,8 @@ function assessProfile(profile, evidence) {
           min_count: check.min_count ?? null,
           allowed_statuses: linkStatusAllowedStatuses(check) || ["2xx", "3xx"],
           require_nonzero_bytes: check.require_nonzero_bytes === true,
+          min_bytes: check.min_bytes ?? null,
+          allowed_content_types: check.allowed_content_types ?? null,
           viewports: summaries,
           failures: failed.flatMap((summary) => Array.isArray(summary.failures)
             ? summary.failures.map((failure) => ({ viewport: summary.viewport || null, failure }))
@@ -4769,6 +4849,28 @@ function linkProbeAllowed(status, check) {
       : null;
   return allowed ? allowed.includes(status) : status >= 200 && status < 400;
 }
+function linkProbeObservedBytes(result) {
+  const bytes = typeof result.bytes === "number" && Number.isFinite(result.bytes) ? result.bytes : undefined;
+  const contentLength = typeof result.content_length === "number" && Number.isFinite(result.content_length) ? result.content_length : undefined;
+  const observed = Math.max(bytes || 0, contentLength || 0);
+  return observed > 0 ? observed : undefined;
+}
+function normalizeLinkProbeContentType(value) {
+  if (typeof value !== "string") return undefined;
+  const normalized = (value.split(";")[0] || "").trim().toLowerCase();
+  return normalized || undefined;
+}
+function linkProbeContentTypeAllowed(result, check) {
+  if (!Array.isArray(check.allowed_content_types) || !check.allowed_content_types.length) return true;
+  const actual = normalizeLinkProbeContentType(result.content_type);
+  if (!actual) return false;
+  return check.allowed_content_types.some((contentType) => {
+    const normalized = normalizeLinkProbeContentType(contentType);
+    if (!normalized) return false;
+    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
+    return actual === normalized;
+  });
+}
 function linkProbeResponseFields(response, method) {
   const contentLengthHeader = response.headers && typeof response.headers.get === "function" ? response.headers.get("content-length") : null;
   const contentLength = contentLengthHeader && /^\d+$/.test(contentLengthHeader) ? Number(contentLengthHeader) : null;
@@ -4783,6 +4885,7 @@ function linkProbeResponseFields(response, method) {
 }
 async function probeLinkStatus(candidate, check) {
   const requireNonzeroBytes = check.require_nonzero_bytes === true;
+  const minBytes = typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? Math.max(1, Math.floor(check.min_bytes)) : null;
   const allowGetFallback = check.allow_get_fallback !== false;
   const result = {
     url: candidate.url,
@@ -4800,7 +4903,7 @@ async function probeLinkStatus(candidate, check) {
   };
   const applyResponse = async (response, method, readBytes) => {
     Object.assign(result, linkProbeResponseFields(response, method));
-    if (readBytes || requireNonzeroBytes) {
+    if (readBytes) {
       try {
         const buffer = await response.arrayBuffer();
         result.bytes = buffer.byteLength;
@@ -4809,7 +4912,9 @@ async function probeLinkStatus(candidate, check) {
       }
     }
     result.ok = linkProbeAllowed(result.status, check)
-      && (!requireNonzeroBytes || (typeof result.bytes === "number" ? result.bytes > 0 : typeof result.content_length === "number" && result.content_length > 0))
+      && linkProbeContentTypeAllowed(result, check)
+      && (!requireNonzeroBytes || ((linkProbeObservedBytes(result) || 0) > 0))
+      && (minBytes === null || ((linkProbeObservedBytes(result) || 0) >= minBytes))
       && !result.error;
   };
   try {
@@ -4826,9 +4931,9 @@ async function probeLinkStatus(candidate, check) {
       method: "GET",
       redirect: "follow",
       cache: "no-store",
-      headers: { Range: "bytes=0-0" },
+      headers: { Range: "bytes=0-" + String((minBytes || 1) - 1) },
     });
-    await applyResponse(response, "GET", requireNonzeroBytes);
+    await applyResponse(response, "GET", requireNonzeroBytes || minBytes !== null);
     return result;
   } catch (error) {
     result.error = String(error && error.message ? error.message : error).slice(0, 500);
@@ -4882,7 +4987,10 @@ async function collectLinkStatus(check) {
     status: result.status,
     method: result.method,
     error: result.error,
-    bytes: result.bytes == null ? result.content_length : result.bytes,
+    content_type: result.content_type,
+    bytes: linkProbeObservedBytes(result) || null,
+    min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+    allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
   }));
   const statusCounts = {};
   for (const result of results) {
@@ -4896,6 +5004,8 @@ async function collectLinkStatus(check) {
     same_origin_only: linkProbeSameOriginOnly(check),
     dedupe: linkProbeDedupe(check),
     require_nonzero_bytes: check.require_nonzero_bytes === true,
+    min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+    allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
     allowed_statuses: Array.isArray(check.allowed_statuses) && check.allowed_statuses.length
       ? check.allowed_statuses
       : typeof check.expected_status === "number"
