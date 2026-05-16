@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.100
+
+### Patch Changes
+
+- e3cb0b5: Add `body_not_contains` and `body_not_patterns` assertions for profile `http_status` checks.
+
 ## 0.7.99
 
 ### Patch Changes
