@@ -30,6 +30,8 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "frame_no_horizontal_overflow",
   "text_visible",
   "text_absent",
+  "link_status",
+  "artifact_link_status",
   "route_inventory",
   "no_horizontal_overflow",
   "no_mobile_horizontal_overflow",
@@ -202,6 +204,13 @@ export interface RiddleProofProfileCheck {
   allowed_page_error_patterns?: string[];
   min_count?: number;
   expected_count?: number;
+  expected_status?: number;
+  allowed_statuses?: number[];
+  max_links?: number;
+  same_origin_only?: boolean;
+  dedupe?: boolean;
+  require_nonzero_bytes?: boolean;
+  allow_get_fallback?: boolean;
   max_overflow_px?: number;
   timeout_ms?: number;
   run_direct_routes?: boolean;
@@ -267,6 +276,7 @@ export interface RiddleProofProfileViewportEvidence {
   frames?: Record<string, Record<string, JsonValue>>;
   text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
+  link_statuses?: Record<string, Record<string, JsonValue>>;
   route_inventory?: Record<string, JsonValue>;
   setup_action_results?: Array<Record<string, JsonValue>>;
   screenshot_label?: string;
@@ -1151,6 +1161,32 @@ function normalizeStringList(value: unknown, label: string): string[] | undefine
   return values;
 }
 
+function normalizeHttpStatus(value: unknown, label: string): number | undefined {
+  if (value === undefined) return undefined;
+  const status = numberValue(value);
+  if (status === undefined || !Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error(`${label} must be an HTTP status code.`);
+  }
+  return status;
+}
+
+function normalizeHttpStatuses(value: unknown, label: string): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
+  if (!value.length) throw new Error(`${label} must not be empty.`);
+  const statuses = value.map((item, index) => normalizeHttpStatus(item, `${label}[${index}]`) as number);
+  return Array.from(new Set(statuses));
+}
+
+function normalizePositiveInteger(value: unknown, label: string, max?: number): number | undefined {
+  if (value === undefined) return undefined;
+  const number = numberValue(value);
+  if (number === undefined || !Number.isInteger(number) || number < 1 || (max !== undefined && number > max)) {
+    throw new Error(`${label} must be an integer from 1 to ${max ?? "unbounded"}.`);
+  }
+  return number;
+}
+
 function validateRegexPatterns(patterns: string[] | undefined, label: string): void {
   for (const pattern of patterns || []) {
     try {
@@ -1204,7 +1240,8 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "url_search_param_equals" && expectedValue === undefined) {
     throw new Error(`checks[${index}] url_search_param_equals requires expected_value.`);
   }
-  if (type === "selector_count_at_least" && numberValue(input.min_count) === undefined) {
+  const minCount = numberValue(input.min_count) ?? numberValue(input.minCount);
+  if (type === "selector_count_at_least" && minCount === undefined) {
     throw new Error(`checks[${index}] selector_count_at_least requires min_count.`);
   }
   const expectedCount = numberValue(input.expected_count) ?? numberValue(input.expectedCount) ?? numberValue(input.count);
@@ -1225,6 +1262,27 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   const expectedRoutes = normalizeRouteInventoryRoutes(input.expected_routes ?? input.expectedRoutes, index);
   if (type === "route_inventory" && !expectedRoutes?.length) {
     throw new Error(`checks[${index}] route_inventory requires expected_routes.`);
+  }
+  const isLinkStatusCheck = type === "link_status" || type === "artifact_link_status";
+  const expectedStatus = isLinkStatusCheck
+    ? normalizeHttpStatus(input.expected_status ?? input.expectedStatus ?? input.status, `checks[${index}] expected_status`)
+    : undefined;
+  const allowedStatuses = isLinkStatusCheck
+    ? normalizeHttpStatuses(
+      input.allowed_statuses ?? input.allowedStatuses ?? input.expected_statuses ?? input.expectedStatuses,
+      `checks[${index}] allowed_statuses`,
+    )
+    : undefined;
+  const maxLinks = isLinkStatusCheck
+    ? normalizePositiveInteger(input.max_links ?? input.maxLinks ?? input.limit, `checks[${index}] max_links`, 500)
+    : undefined;
+  if (isLinkStatusCheck) {
+    if (minCount !== undefined && (!Number.isInteger(minCount) || minCount < 0)) {
+      throw new Error(`checks[${index}] ${type} min_count must be a non-negative integer.`);
+    }
+    if (expectedCount !== undefined && (!Number.isInteger(expectedCount) || expectedCount < 0)) {
+      throw new Error(`checks[${index}] ${type} expected_count must be a non-negative integer.`);
+    }
   }
   return {
     type,
@@ -1251,8 +1309,15 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     allowed_console_patterns: normalizeStringList(input.allowed_console_patterns ?? input.allowedConsolePatterns ?? input.allow_console_patterns ?? input.allowConsolePatterns, `checks[${index}] allowed_console_patterns`),
     allowed_page_error_texts: normalizeStringList(input.allowed_page_error_texts ?? input.allowedPageErrorTexts ?? input.allow_page_error_texts ?? input.allowPageErrorTexts, `checks[${index}] allowed_page_error_texts`),
     allowed_page_error_patterns: normalizeStringList(input.allowed_page_error_patterns ?? input.allowedPageErrorPatterns ?? input.allow_page_error_patterns ?? input.allowPageErrorPatterns, `checks[${index}] allowed_page_error_patterns`),
-    min_count: numberValue(input.min_count),
+    min_count: minCount,
     expected_count: expectedCount,
+    expected_status: expectedStatus,
+    allowed_statuses: allowedStatuses,
+    max_links: maxLinks,
+    same_origin_only: isLinkStatusCheck ? input.same_origin_only === true || input.sameOriginOnly === true : undefined,
+    dedupe: isLinkStatusCheck ? input.dedupe === false ? false : true : undefined,
+    require_nonzero_bytes: isLinkStatusCheck ? input.require_nonzero_bytes === true || input.requireNonzeroBytes === true : undefined,
+    allow_get_fallback: isLinkStatusCheck ? input.allow_get_fallback === false || input.allowGetFallback === false ? false : true : undefined,
     max_overflow_px: numberValue(input.max_overflow_px),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
     run_direct_routes: input.run_direct_routes === false || input.runDirectRoutes === false ? false : true,
@@ -1362,6 +1427,111 @@ function checkLabel(check: RiddleProofProfileCheck): string | undefined {
 
 function selectorKey(check: RiddleProofProfileCheck) {
   return check.selector || "";
+}
+
+function linkStatusSelector(check: RiddleProofProfileCheck) {
+  return check.selector || check.link_selector || "a[href]";
+}
+
+function linkStatusAllowedStatuses(check: RiddleProofProfileCheck): number[] | undefined {
+  if (check.allowed_statuses?.length) return check.allowed_statuses;
+  if (check.expected_status !== undefined) return [check.expected_status];
+  return undefined;
+}
+
+function linkStatusIsAllowed(status: number | undefined, check: RiddleProofProfileCheck): boolean {
+  if (status === undefined) return false;
+  const allowed = linkStatusAllowedStatuses(check);
+  return allowed?.length ? allowed.includes(status) : status >= 200 && status < 400;
+}
+
+function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
+  const status = numberValue(result.status);
+  if (!linkStatusIsAllowed(status, check)) return false;
+  if (stringValue(result.error)) return false;
+  if (result.ok === false) return false;
+  if (check.require_nonzero_bytes) {
+    const bytes = numberValue(result.bytes);
+    const contentLength = numberValue(result.content_length);
+    return (bytes !== undefined && bytes > 0) || (contentLength !== undefined && contentLength > 0);
+  }
+  return true;
+}
+
+function linkStatusEvidenceForCheck(
+  viewport: RiddleProofProfileViewportEvidence,
+  check: RiddleProofProfileCheck,
+): Record<string, unknown> | undefined {
+  const evidence = viewport.link_statuses?.[linkStatusSelector(check)];
+  return isRecord(evidence) ? evidence : undefined;
+}
+
+function summarizeLinkStatusEvidence(
+  viewport: RiddleProofProfileViewportEvidence,
+  check: RiddleProofProfileCheck,
+): Record<string, unknown> {
+  const linkEvidence = linkStatusEvidenceForCheck(viewport, check);
+  if (!linkEvidence) {
+    return {
+      viewport: viewport.name,
+      selector: linkStatusSelector(check),
+      total_count: 0,
+      ok_count: 0,
+      failed_count: 1,
+      failures: [{ code: "link_status_evidence_missing" }],
+    };
+  }
+  const results = Array.isArray(linkEvidence.results) ? linkEvidence.results.filter(isRecord) : [];
+  const totalCount = numberValue(linkEvidence.total_count) ?? results.length;
+  const okCount = results.filter((result) => linkStatusResultOk(result, check)).length;
+  const failures: Array<Record<string, unknown>> = results
+    .filter((result) => !linkStatusResultOk(result, check))
+    .map((result) => ({
+      code: "link_status_failed",
+      url: stringValue(result.url) ?? null,
+      status: numberValue(result.status) ?? null,
+      method: stringValue(result.method) ?? null,
+      error: stringValue(result.error) ?? null,
+      bytes: numberValue(result.bytes) ?? numberValue(result.content_length) ?? null,
+    }));
+  if (stringValue(linkEvidence.error)) {
+    failures.push({ code: "link_status_capture_failed", error: stringValue(linkEvidence.error) ?? "" });
+  }
+  const recordedFailedCount = numberValue(linkEvidence.failed_count) ?? 0;
+  if (!failures.length && recordedFailedCount > 0) {
+    const recordedFailures = Array.isArray(linkEvidence.failures) ? linkEvidence.failures.slice(0, 20) : [];
+    failures.push({
+      code: "link_status_recorded_failures",
+      failed_count: recordedFailedCount,
+      failures: toJsonValue(recordedFailures),
+    });
+  }
+  if (linkEvidence.truncated === true) {
+    failures.push({
+      code: "link_status_probe_truncated",
+      discovered_count: numberValue(linkEvidence.discovered_count) ?? totalCount,
+      max_links: numberValue(linkEvidence.max_links) ?? check.max_links ?? 100,
+    });
+  }
+  if (check.expected_count !== undefined && totalCount !== check.expected_count) {
+    failures.push({ code: "link_status_count_mismatch", expected: check.expected_count, actual: totalCount });
+  }
+  if (check.min_count !== undefined && totalCount < check.min_count) {
+    failures.push({ code: "link_status_count_below_minimum", min_count: check.min_count, actual: totalCount });
+  }
+  const statusCounts = isRecord(linkEvidence.status_counts) ? linkEvidence.status_counts : {};
+  return {
+    viewport: viewport.name,
+    selector: linkStatusSelector(check),
+    total_count: totalCount,
+    discovered_count: numberValue(linkEvidence.discovered_count) ?? totalCount,
+    ok_count: numberValue(linkEvidence.ok_count) ?? okCount,
+    failed_count: failures.length,
+    truncated: linkEvidence.truncated === true,
+    max_links: numberValue(linkEvidence.max_links) ?? check.max_links ?? 100,
+    status_counts: statusCounts,
+    failures: failures.slice(0, 20),
+  };
 }
 
 function textKey(check: RiddleProofProfileCheck) {
@@ -1923,6 +2093,31 @@ function assessCheckFromEvidence(
         matches,
       },
       message: failed ? `Text assertion failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "link_status" || check.type === "artifact_link_status") {
+    const selector = linkStatusSelector(check);
+    const summaries = viewports.map((viewport) => summarizeLinkStatusEvidence(viewport, check));
+    const failed = summaries.filter((summary) => (numberValue(summary.failed_count) ?? 0) > 0);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        selector,
+        expected_count: check.expected_count ?? null,
+        min_count: check.min_count ?? null,
+        allowed_statuses: linkStatusAllowedStatuses(check) || ["2xx", "3xx"],
+        require_nonzero_bytes: check.require_nonzero_bytes === true,
+        viewports: summaries.map((summary) => toJsonValue(summary)),
+        failures: failed.flatMap((summary) => (
+          Array.isArray(summary.failures)
+            ? summary.failures.map((failure) => toJsonValue({ viewport: stringValue(summary.viewport) ?? null, failure }))
+            : []
+        )),
+      },
+      message: failed.length ? `Link status failed in ${failed.length} viewport(s).` : undefined,
     };
   }
 
@@ -2597,6 +2792,98 @@ function textOrderMatch(texts, expectedTexts) {
   }
   return { matched: true, positions };
 }
+function linkStatusSelector(check) {
+  return check.selector || check.link_selector || "a[href]";
+}
+function linkStatusAllowedStatuses(check) {
+  if (Array.isArray(check.allowed_statuses) && check.allowed_statuses.length) return check.allowed_statuses;
+  if (typeof check.expected_status === "number" && Number.isFinite(check.expected_status)) return [check.expected_status];
+  return undefined;
+}
+function linkStatusIsAllowed(status, check) {
+  if (typeof status !== "number" || !Number.isFinite(status)) return false;
+  const allowed = linkStatusAllowedStatuses(check);
+  return Array.isArray(allowed) && allowed.length ? allowed.includes(status) : status >= 200 && status < 400;
+}
+function linkStatusResultOk(result, check) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  if (!linkStatusIsAllowed(result.status, check)) return false;
+  if (typeof result.error === "string" && result.error.trim()) return false;
+  if (result.ok === false) return false;
+  if (check.require_nonzero_bytes === true) {
+    const bytes = typeof result.bytes === "number" && Number.isFinite(result.bytes) ? result.bytes : undefined;
+    const contentLength = typeof result.content_length === "number" && Number.isFinite(result.content_length) ? result.content_length : undefined;
+    return (bytes !== undefined && bytes > 0) || (contentLength !== undefined && contentLength > 0);
+  }
+  return true;
+}
+function summarizeLinkStatusEvidence(viewport, check) {
+  const selector = linkStatusSelector(check);
+  const linkEvidence = viewport && viewport.link_statuses && viewport.link_statuses[selector];
+  if (!linkEvidence || typeof linkEvidence !== "object" || Array.isArray(linkEvidence)) {
+    return {
+      viewport: viewport && viewport.name,
+      selector,
+      total_count: 0,
+      ok_count: 0,
+      failed_count: 1,
+      failures: [{ code: "link_status_evidence_missing" }],
+    };
+  }
+  const results = Array.isArray(linkEvidence.results) ? linkEvidence.results.filter((result) => result && typeof result === "object" && !Array.isArray(result)) : [];
+  const totalCount = typeof linkEvidence.total_count === "number" && Number.isFinite(linkEvidence.total_count) ? linkEvidence.total_count : results.length;
+  const okCount = results.filter((result) => linkStatusResultOk(result, check)).length;
+  const failures = results
+    .filter((result) => !linkStatusResultOk(result, check))
+    .map((result) => ({
+      code: "link_status_failed",
+      url: typeof result.url === "string" ? result.url : null,
+      status: typeof result.status === "number" && Number.isFinite(result.status) ? result.status : null,
+      method: typeof result.method === "string" ? result.method : null,
+      error: typeof result.error === "string" ? result.error : null,
+      bytes: typeof result.bytes === "number" && Number.isFinite(result.bytes)
+        ? result.bytes
+        : typeof result.content_length === "number" && Number.isFinite(result.content_length)
+          ? result.content_length
+          : null,
+    }));
+  if (typeof linkEvidence.error === "string" && linkEvidence.error.trim()) {
+    failures.push({ code: "link_status_capture_failed", error: linkEvidence.error });
+  }
+  const recordedFailedCount = typeof linkEvidence.failed_count === "number" && Number.isFinite(linkEvidence.failed_count) ? linkEvidence.failed_count : 0;
+  if (!failures.length && recordedFailedCount > 0) {
+    failures.push({
+      code: "link_status_recorded_failures",
+      failed_count: recordedFailedCount,
+      failures: Array.isArray(linkEvidence.failures) ? linkEvidence.failures.slice(0, 20) : [],
+    });
+  }
+  if (linkEvidence.truncated === true) {
+    failures.push({
+      code: "link_status_probe_truncated",
+      discovered_count: typeof linkEvidence.discovered_count === "number" ? linkEvidence.discovered_count : totalCount,
+      max_links: typeof linkEvidence.max_links === "number" ? linkEvidence.max_links : check.max_links || 100,
+    });
+  }
+  if (typeof check.expected_count === "number" && Number.isFinite(check.expected_count) && totalCount !== check.expected_count) {
+    failures.push({ code: "link_status_count_mismatch", expected: check.expected_count, actual: totalCount });
+  }
+  if (typeof check.min_count === "number" && Number.isFinite(check.min_count) && totalCount < check.min_count) {
+    failures.push({ code: "link_status_count_below_minimum", min_count: check.min_count, actual: totalCount });
+  }
+  return {
+    viewport: viewport && viewport.name,
+    selector,
+    total_count: totalCount,
+    discovered_count: typeof linkEvidence.discovered_count === "number" ? linkEvidence.discovered_count : totalCount,
+    ok_count: typeof linkEvidence.ok_count === "number" ? linkEvidence.ok_count : okCount,
+    failed_count: failures.length,
+    truncated: linkEvidence.truncated === true,
+    max_links: typeof linkEvidence.max_links === "number" ? linkEvidence.max_links : check.max_links || 100,
+    status_counts: linkEvidence.status_counts && typeof linkEvidence.status_counts === "object" && !Array.isArray(linkEvidence.status_counts) ? linkEvidence.status_counts : {},
+    failures: failures.slice(0, 20),
+  };
+}
 function frameEvidenceForSelector(viewport, selector) {
   const container = viewport.frames && viewport.frames[selector || ""];
   if (!container || typeof container !== "object" || Array.isArray(container)) return [];
@@ -3247,6 +3534,29 @@ function assessProfile(profile, evidence) {
         status: failed ? "failed" : "passed",
         evidence: { text: check.text, pattern: check.pattern, matches },
         message: failed ? "Text assertion failed in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "link_status" || check.type === "artifact_link_status") {
+      const selector = linkStatusSelector(check);
+      const summaries = checkViewports.map((viewport) => summarizeLinkStatusEvidence(viewport, check));
+      const failed = summaries.filter((summary) => summary.failed_count > 0);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: {
+          selector,
+          expected_count: check.expected_count ?? null,
+          min_count: check.min_count ?? null,
+          allowed_statuses: linkStatusAllowedStatuses(check) || ["2xx", "3xx"],
+          require_nonzero_bytes: check.require_nonzero_bytes === true,
+          viewports: summaries,
+          failures: failed.flatMap((summary) => Array.isArray(summary.failures)
+            ? summary.failures.map((failure) => ({ viewport: summary.viewport || null, failure }))
+            : []),
+        },
+        message: failed.length ? "Link status failed in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -4309,6 +4619,196 @@ async function selectorTextSequence(selector) {
     };
   }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
 }
+function linkProbeMaxLinks(check) {
+  const value = Number(check.max_links || check.maxLinks || check.limit || 100);
+  return Number.isInteger(value) && value > 0 ? Math.min(value, 500) : 100;
+}
+function linkProbeDedupe(check) {
+  return check.dedupe !== false;
+}
+function linkProbeSameOriginOnly(check) {
+  return check.same_origin_only === true;
+}
+async function collectLinkCandidates(selector) {
+  return page.locator(selector).evaluateAll((elements) => {
+    const compact = (value, limit) => String(value || "").replace(/\s+/g, " ").trim().slice(0, limit || 160);
+    return elements.map((element, index) => {
+      const tag = element && element.tagName ? element.tagName.toLowerCase() : "element";
+      const href = element && typeof element.href === "string" ? element.href : "";
+      const src = element && typeof element.src === "string" ? element.src : "";
+      const currentSrc = element && typeof element.currentSrc === "string" ? element.currentSrc : "";
+      const attrHref = element && typeof element.getAttribute === "function" ? element.getAttribute("href") || "" : "";
+      const attrSrc = element && typeof element.getAttribute === "function" ? element.getAttribute("src") || "" : "";
+      const attrPoster = element && typeof element.getAttribute === "function" ? element.getAttribute("poster") || "" : "";
+      const raw = href || currentSrc || src || attrHref || attrSrc || attrPoster;
+      if (!raw) return null;
+      let url = "";
+      try {
+        url = new URL(raw, location.href).href;
+      } catch {}
+      if (!url) return null;
+      return {
+        index,
+        tag,
+        url,
+        raw,
+        text: compact(element.innerText || element.textContent || "", 160),
+        alt: compact(element.getAttribute && element.getAttribute("alt"), 80),
+      };
+    }).filter(Boolean);
+  }).catch((error) => ({ error: String(error && error.message ? error.message : error).slice(0, 500) }));
+}
+function linkProbeAllowed(status, check) {
+  if (typeof status !== "number" || !Number.isFinite(status)) return false;
+  const allowed = Array.isArray(check.allowed_statuses) && check.allowed_statuses.length
+    ? check.allowed_statuses
+    : typeof check.expected_status === "number" && Number.isFinite(check.expected_status)
+      ? [check.expected_status]
+      : null;
+  return allowed ? allowed.includes(status) : status >= 200 && status < 400;
+}
+function linkProbeResponseFields(response, method) {
+  const contentLengthHeader = response.headers && typeof response.headers.get === "function" ? response.headers.get("content-length") : null;
+  const contentLength = contentLengthHeader && /^\d+$/.test(contentLengthHeader) ? Number(contentLengthHeader) : null;
+  return {
+    method,
+    status: response.status,
+    redirected: Boolean(response.redirected),
+    final_url: response.url || null,
+    content_type: response.headers && typeof response.headers.get === "function" ? response.headers.get("content-type") : null,
+    content_length: contentLength,
+  };
+}
+async function probeLinkStatus(candidate, check) {
+  const requireNonzeroBytes = check.require_nonzero_bytes === true;
+  const allowGetFallback = check.allow_get_fallback !== false;
+  const result = {
+    url: candidate.url,
+    tag: candidate.tag,
+    text: candidate.text || null,
+    status: null,
+    method: null,
+    ok: false,
+    content_type: null,
+    content_length: null,
+    bytes: null,
+    redirected: false,
+    final_url: null,
+    error: null,
+  };
+  const applyResponse = async (response, method, readBytes) => {
+    Object.assign(result, linkProbeResponseFields(response, method));
+    if (readBytes || requireNonzeroBytes) {
+      try {
+        const buffer = await response.arrayBuffer();
+        result.bytes = buffer.byteLength;
+      } catch (error) {
+        result.error = String(error && error.message ? error.message : error).slice(0, 500);
+      }
+    }
+    result.ok = linkProbeAllowed(result.status, check)
+      && (!requireNonzeroBytes || (typeof result.bytes === "number" ? result.bytes > 0 : typeof result.content_length === "number" && result.content_length > 0))
+      && !result.error;
+  };
+  try {
+    const response = await fetch(candidate.url, { method: "HEAD", redirect: "follow", cache: "no-store" });
+    await applyResponse(response, "HEAD", false);
+    if (result.ok || !allowGetFallback) return result;
+  } catch (error) {
+    result.error = String(error && error.message ? error.message : error).slice(0, 500);
+    if (!allowGetFallback) return result;
+  }
+  try {
+    result.error = null;
+    const response = await fetch(candidate.url, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      headers: { Range: "bytes=0-0" },
+    });
+    await applyResponse(response, "GET", requireNonzeroBytes);
+    return result;
+  } catch (error) {
+    result.error = String(error && error.message ? error.message : error).slice(0, 500);
+    result.ok = false;
+    return result;
+  }
+}
+async function collectLinkStatus(check) {
+  const selector = linkStatusSelector(check);
+  const candidateResult = await collectLinkCandidates(selector);
+  if (candidateResult && candidateResult.error) {
+    return {
+      version: "riddle-proof.link-status.v1",
+      selector,
+      total_count: 0,
+      discovered_count: 0,
+      ok_count: 0,
+      failed_count: 1,
+      failures: [{ code: "link_status_capture_failed", error: candidateResult.error }],
+      results: [],
+      status_counts: {},
+      error: candidateResult.error,
+    };
+  }
+  const baseUrl = page.url() || targetUrl;
+  let candidates = Array.isArray(candidateResult) ? candidateResult : [];
+  if (linkProbeSameOriginOnly(check)) {
+    const origin = new URL(baseUrl).origin;
+    candidates = candidates.filter((candidate) => {
+      try { return new URL(candidate.url).origin === origin; } catch { return false; }
+    });
+  }
+  const discoveredCount = candidates.length;
+  if (linkProbeDedupe(check)) {
+    const seen = new Set();
+    candidates = candidates.filter((candidate) => {
+      if (seen.has(candidate.url)) return false;
+      seen.add(candidate.url);
+      return true;
+    });
+  }
+  const maxLinks = linkProbeMaxLinks(check);
+  const selected = candidates.slice(0, maxLinks);
+  const results = [];
+  for (const candidate of selected) {
+    results.push(await probeLinkStatus(candidate, check));
+  }
+  const failures = results.filter((result) => !result.ok).map((result) => ({
+    code: "link_status_failed",
+    url: result.url,
+    status: result.status,
+    method: result.method,
+    error: result.error,
+    bytes: result.bytes == null ? result.content_length : result.bytes,
+  }));
+  const statusCounts = {};
+  for (const result of results) {
+    const key = result.status == null ? "error" : String(result.status);
+    statusCounts[key] = (statusCounts[key] || 0) + 1;
+  }
+  return {
+    version: "riddle-proof.link-status.v1",
+    selector,
+    max_links: maxLinks,
+    same_origin_only: linkProbeSameOriginOnly(check),
+    dedupe: linkProbeDedupe(check),
+    require_nonzero_bytes: check.require_nonzero_bytes === true,
+    allowed_statuses: Array.isArray(check.allowed_statuses) && check.allowed_statuses.length
+      ? check.allowed_statuses
+      : typeof check.expected_status === "number"
+        ? [check.expected_status]
+        : ["2xx", "3xx"],
+    discovered_count: discoveredCount,
+    total_count: selected.length,
+    truncated: candidates.length > selected.length,
+    ok_count: results.filter((result) => result.ok).length,
+    failed_count: failures.length,
+    status_counts: statusCounts,
+    failures: failures.slice(0, 20),
+    results,
+  };
+}
 async function frameEvidence(selector) {
   const result = { selector, count: 0, frame_count: 0, frames: [], errors: [] };
   let handles = [];
@@ -4828,6 +5328,7 @@ async function captureViewport(viewport) {
   const frames = {};
   const text_sequences = {};
   const text_matches = {};
+  const link_statuses = {};
   for (const check of profile.checks || []) {
     if (
       (
@@ -4851,6 +5352,10 @@ async function captureViewport(viewport) {
     if ((check.type === "frame_text_visible" || check.type === "frame_url_equals" || check.type === "frame_url_matches" || check.type === "frame_no_horizontal_overflow") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
       frames[check.selector] = frames[check.selector] || await frameEvidence(check.selector);
+    }
+    if (check.type === "link_status" || check.type === "artifact_link_status") {
+      const selector = linkStatusSelector(check);
+      link_statuses[selector] = link_statuses[selector] || await collectLinkStatus(check);
     }
   }
   const screenshotLabel = profileSlug + "-" + viewport.name;
@@ -4915,6 +5420,7 @@ async function captureViewport(viewport) {
     frames,
     text_sequences,
     text_matches,
+    link_statuses,
     route_inventory: routeInventory,
     setup_action_results: setupActionResults,
     screenshot_label: screenshotLabel,
@@ -4961,6 +5467,18 @@ function buildProfileEvidence(currentViewports) {
               0,
               ...((frameSet && Array.isArray(frameSet.frames) ? frameSet.frames : [])).map((frame) => horizontalBoundsOverflowPx(frame)),
             ),
+          })),
+        })),
+      link_status: currentViewports
+        .filter((viewport) => viewport.link_statuses)
+        .map((viewport) => ({
+          viewport: viewport.name,
+          selectors: Object.entries(viewport.link_statuses || {}).map(([selector, statusSet]) => ({
+            selector,
+            total_count: statusSet && statusSet.total_count,
+            ok_count: statusSet && statusSet.ok_count,
+            failed_count: statusSet && statusSet.failed_count,
+            truncated: statusSet && statusSet.truncated === true,
           })),
         })),
       route_inventory: currentViewports
