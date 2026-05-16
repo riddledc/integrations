@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.9
+
+### Patch Changes
+
+- 289d6d4: Keep OpenClaw plugin manifest versions synchronized during Changesets versioning.
+
 ## 0.9.8
 
 ### Patch Changes
