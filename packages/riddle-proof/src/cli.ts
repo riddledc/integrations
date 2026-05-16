@@ -444,6 +444,11 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     const expectedCount = cliFiniteNumber(evidence.expected_count);
     return selector && expectedCount !== undefined ? `${markdownInlineCode(selector)} = ${expectedCount}` : undefined;
   }
+  if (check.type === "selector_text_visible" || check.type === "selector_text_absent") {
+    const textTarget = profileCheckTextTarget(evidence);
+    if (selector && textTarget) return `${markdownInlineCode(selector)} contains ${textTarget}`;
+    return selector ? markdownInlineCode(selector) : textTarget;
+  }
   if (check.type === "selector_text_order") {
     return selector ? `${markdownInlineCode(selector)} text order` : undefined;
   }

@@ -765,6 +765,8 @@ const profile = normalizeRiddleProofProfile({
     { type: "selector_visible", selector: "[data-testid='pricing-cards']" },
     { type: "selector_absent", selector: ".game-player-root iframe" },
     { type: "selector_count_equals", selector: "[data-testid='pricing-cards']", expected_count: 1 },
+    { type: "selector_text_visible", selector: "[data-testid='pricing-cards']", text: "Start building" },
+    { type: "selector_text_absent", selector: "[data-testid='pricing-cards']", text: "Enterprise-only" },
     { type: "text_visible", text: "Start building" },
     { type: "text_visible", text: "Desktop-only copy", viewports: ["desktop"] },
     { type: "no_mobile_horizontal_overflow" },
@@ -774,6 +776,8 @@ const profile = normalizeRiddleProofProfile({
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
 assert.equal(profile.target.timeout_sec, 420);
 assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
@@ -955,6 +959,7 @@ assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
 assert.ok(profileScript.includes('check.type === "selector_absent"'));
 assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
+assert.ok(profileScript.includes('check.type === "selector_text_visible"'));
 assert.ok(profileScript.includes('check.type === "url_search_param_equals"'));
 assert.ok(profileScript.includes('check.type === "url_search_param_absent"'));
 assert.ok(profileScript.includes("force: true"));
@@ -1899,6 +1904,16 @@ const profileEvidence = {
         "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
         ".game-player-root iframe": { count: 0, visible_count: 0 },
       },
+      text_sequences: {
+        "[data-testid='pricing-cards']": {
+          count: 1,
+          visible_count: 1,
+          texts: [`Pricing ${"x".repeat(260)}`],
+          visible_texts: [`Pricing ${"x".repeat(260)}`],
+          match_texts: [`Pricing ${"x".repeat(260)} Start building`],
+          visible_match_texts: [`Pricing ${"x".repeat(260)} Start building`],
+        },
+      },
       text_matches: { "text:Start building": true, "text:Desktop-only copy": false },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']", click_count: 2 },
@@ -1918,6 +1933,16 @@ const profileEvidence = {
         "[data-testid='pricing-cards']": { count: 1, visible_count: 1 },
         ".game-player-root iframe": { count: 0, visible_count: 0 },
       },
+      text_sequences: {
+        "[data-testid='pricing-cards']": {
+          count: 1,
+          visible_count: 1,
+          texts: [`Pricing ${"x".repeat(260)}`],
+          visible_texts: [`Pricing ${"x".repeat(260)}`],
+          match_texts: [`Pricing ${"x".repeat(260)} Start building Desktop-only copy`],
+          visible_match_texts: [`Pricing ${"x".repeat(260)} Start building Desktop-only copy`],
+        },
+      },
       text_matches: { "text:Start building": true, "text:Desktop-only copy": true },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
@@ -1933,7 +1958,7 @@ const profileEvidence = {
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
-assert.equal(profileAssessment.checks.length, 9);
+assert.equal(profileAssessment.checks.length, 11);
 const profileSetupCheck = profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
 assert.equal(profileSetupCheck.status, "passed");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewport_count, 2);
@@ -1981,6 +2006,11 @@ assert.deepEqual(longClickSummary.clicked.map((item) => item.selector), [
 ]);
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
+const selectorTextVisibleAssessment = profileAssessment.checks.find((check) => check.type === "selector_text_visible");
+assert.equal(selectorTextVisibleAssessment.status, "passed");
+assert.equal(selectorTextVisibleAssessment.evidence.selector, "[data-testid='pricing-cards']");
+assert.deepEqual(selectorTextVisibleAssessment.evidence.viewports.map((viewport) => viewport.matched_count), [1, 1]);
+assert.equal(profileAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
 const desktopOnlyAssessment = profileAssessment.checks.find((check) => check.evidence?.text === "Desktop-only copy");
 assert.equal(desktopOnlyAssessment.status, "passed");
 assert.deepEqual(desktopOnlyAssessment.evidence.matches, [true]);
@@ -2013,6 +2043,23 @@ const failedSelectorExactCountAssessment = assessRiddleProofProfileEvidence(prof
 });
 assert.equal(failedSelectorExactCountAssessment.status, "product_regression");
 assert.equal(failedSelectorExactCountAssessment.checks.find((check) => check.type === "selector_count_equals").status, "failed");
+const failedSelectorTextVisibleAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    text_sequences: {
+      "[data-testid='pricing-cards']": {
+        count: 1,
+        visible_count: 1,
+        texts: ["Pricing"],
+        visible_texts: ["Pricing"],
+      },
+    },
+  }, profileEvidence.viewports[1]],
+});
+assert.equal(failedSelectorTextVisibleAssessment.status, "product_regression");
+assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_visible").status, "failed");
+assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
 const urlParamEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "deep-link-url-profile",

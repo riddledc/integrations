@@ -163,6 +163,7 @@ or as a stronger proof base before a change loop.
     { "type": "selector_visible", "selector": "[data-testid='pricing-cards']" },
     { "type": "selector_absent", "selector": "[data-testid='loading-spinner']" },
     { "type": "selector_count_equals", "selector": "[data-testid='pricing-card']", "expected_count": 3 },
+    { "type": "selector_text_visible", "selector": "[data-testid='pricing-cards']", "text": "Pro" },
     { "type": "text_visible", "text": "Start building" },
     { "type": "text_visible", "text": "Compare plans", "viewports": ["desktop"] },
     { "type": "no_mobile_horizontal_overflow" },
@@ -416,6 +417,22 @@ items in a specific order after setup actions such as sorting or filtering:
 The check records the visible text sequence for the selector and passes when
 the expected texts appear in that order as a subsequence. This is less brittle
 than matching one large body-text regex when only row or card order matters.
+
+Use `selector_text_visible` and `selector_text_absent` when the durable
+assertion belongs to one panel, code sample, result area, or card group rather
+than the whole page:
+
+```json
+{
+  "type": "selector_text_visible",
+  "selector": ".result-state",
+  "text": "\"sync\": false"
+}
+```
+
+The check records visible text for the selector in each viewport and reports
+matched counts plus short samples, which makes generated-command and evidence
+card audits easier to diagnose than global `text_visible` checks.
 
 Use `frame_text_visible` and `frame_no_horizontal_overflow` for embedded app,
 game, or preview surfaces that render inside iframes:
