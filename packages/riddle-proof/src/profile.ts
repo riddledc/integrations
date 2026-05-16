@@ -32,6 +32,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "frame_no_horizontal_overflow",
   "text_visible",
   "text_absent",
+  "http_status",
   "link_status",
   "artifact_link_status",
   "route_inventory",
@@ -188,6 +189,11 @@ export interface RiddleProofProfileCheck {
   expected_url?: string;
   expected_routes?: RiddleProofProfileRouteInventoryRoute[];
   selector?: string;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  body_json?: JsonValue;
   expected_texts?: string[];
   link_selector?: string;
   source_selector?: string;
@@ -280,6 +286,7 @@ export interface RiddleProofProfileViewportEvidence {
   frames?: Record<string, Record<string, JsonValue>>;
   text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
+  http_statuses?: Record<string, Record<string, JsonValue>>;
   link_statuses?: Record<string, Record<string, JsonValue>>;
   route_inventory?: Record<string, JsonValue>;
   setup_action_results?: Array<Record<string, JsonValue>>;
@@ -1276,11 +1283,22 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "route_inventory" && !expectedRoutes?.length) {
     throw new Error(`checks[${index}] route_inventory requires expected_routes.`);
   }
+  const isHttpStatusCheck = type === "http_status";
   const isLinkStatusCheck = type === "link_status" || type === "artifact_link_status";
-  const expectedStatus = isLinkStatusCheck
+  const isStatusCheck = isHttpStatusCheck || isLinkStatusCheck;
+  const requestUrl = stringFromOwn(input, "url", "endpoint_url", "endpointUrl", "endpoint", "request_url", "requestUrl", "path");
+  if (isHttpStatusCheck && !requestUrl) {
+    throw new Error(`checks[${index}] http_status requires url.`);
+  }
+  const method = stringFromOwn(input, "method", "http_method", "httpMethod")?.toUpperCase();
+  if (isHttpStatusCheck && method && !/^[A-Z]+$/.test(method)) {
+    throw new Error(`checks[${index}] http_status method must contain only letters.`);
+  }
+  const hasBodyJson = hasOwn(input, "body_json") || hasOwn(input, "bodyJson") || hasOwn(input, "json");
+  const expectedStatus = isStatusCheck
     ? normalizeHttpStatus(input.expected_status ?? input.expectedStatus ?? input.status, `checks[${index}] expected_status`)
     : undefined;
-  const allowedStatuses = isLinkStatusCheck
+  const allowedStatuses = isStatusCheck
     ? normalizeHttpStatuses(
       input.allowed_statuses ?? input.allowedStatuses ?? input.expected_statuses ?? input.expectedStatuses,
       `checks[${index}] allowed_statuses`,
@@ -1289,13 +1307,13 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   const maxLinks = isLinkStatusCheck
     ? normalizePositiveInteger(input.max_links ?? input.maxLinks ?? input.limit, `checks[${index}] max_links`, 500)
     : undefined;
-  const minBytes = isLinkStatusCheck
+  const minBytes = isStatusCheck
     ? normalizePositiveInteger(input.min_bytes ?? input.minBytes ?? input.min_response_bytes ?? input.minResponseBytes, `checks[${index}] min_bytes`)
     : undefined;
-  const expectedContentType = isLinkStatusCheck
+  const expectedContentType = isStatusCheck
     ? stringValue(input.expected_content_type) || stringValue(input.expectedContentType) || stringValue(input.content_type) || stringValue(input.contentType)
     : undefined;
-  const allowedContentTypes = isLinkStatusCheck
+  const allowedContentTypes = isStatusCheck
     ? normalizeStringList(
       input.allowed_content_types ?? input.allowedContentTypes ?? input.expected_content_types ?? input.expectedContentTypes,
       `checks[${index}] allowed_content_types`,
@@ -1318,6 +1336,11 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     expected_url: expectedUrl,
     expected_routes: expectedRoutes,
     selector: stringValue(input.selector),
+    url: isHttpStatusCheck ? requestUrl : undefined,
+    method: isHttpStatusCheck ? method || "GET" : undefined,
+    headers: isHttpStatusCheck ? stringRecord(input.headers) : undefined,
+    body: isHttpStatusCheck ? stringValue(input.body) : undefined,
+    body_json: isHttpStatusCheck && hasBodyJson ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : undefined,
     expected_texts: expectedTexts,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
@@ -1341,7 +1364,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     max_links: maxLinks,
     same_origin_only: isLinkStatusCheck ? input.same_origin_only === true || input.sameOriginOnly === true : undefined,
     dedupe: isLinkStatusCheck ? input.dedupe === false ? false : true : undefined,
-    require_nonzero_bytes: isLinkStatusCheck ? input.require_nonzero_bytes === true || input.requireNonzeroBytes === true : undefined,
+    require_nonzero_bytes: isStatusCheck ? input.require_nonzero_bytes === true || input.requireNonzeroBytes === true : undefined,
     min_bytes: minBytes,
     allowed_content_types: allowedContentTypes,
     allow_get_fallback: isLinkStatusCheck ? input.allow_get_fallback === false || input.allowGetFallback === false ? false : true : undefined,
@@ -1460,16 +1483,42 @@ function linkStatusSelector(check: RiddleProofProfileCheck) {
   return check.selector || check.link_selector || "a[href]";
 }
 
-function linkStatusAllowedStatuses(check: RiddleProofProfileCheck): number[] | undefined {
+function httpStatusRequestUrl(check: RiddleProofProfileCheck, baseUrl?: string): string {
+  const rawUrl = check.url || "";
+  if (!rawUrl) return "";
+  try {
+    return baseUrl ? new URL(rawUrl, baseUrl).href : new URL(rawUrl).href;
+  } catch {
+    return rawUrl;
+  }
+}
+
+function httpStatusMethod(check: RiddleProofProfileCheck): string {
+  return (check.method || "GET").toUpperCase();
+}
+
+function httpStatusKey(check: RiddleProofProfileCheck, baseUrl?: string): string {
+  return `${httpStatusMethod(check)} ${httpStatusRequestUrl(check, baseUrl)}`;
+}
+
+function httpStatusAllowedStatuses(check: RiddleProofProfileCheck): number[] | undefined {
   if (check.allowed_statuses?.length) return check.allowed_statuses;
   if (check.expected_status !== undefined) return [check.expected_status];
   return undefined;
 }
 
-function linkStatusIsAllowed(status: number | undefined, check: RiddleProofProfileCheck): boolean {
+function linkStatusAllowedStatuses(check: RiddleProofProfileCheck): number[] | undefined {
+  return httpStatusAllowedStatuses(check);
+}
+
+function httpStatusIsAllowed(status: number | undefined, check: RiddleProofProfileCheck): boolean {
   if (status === undefined) return false;
-  const allowed = linkStatusAllowedStatuses(check);
+  const allowed = httpStatusAllowedStatuses(check);
   return allowed?.length ? allowed.includes(status) : status >= 200 && status < 400;
+}
+
+function linkStatusIsAllowed(status: number | undefined, check: RiddleProofProfileCheck): boolean {
+  return httpStatusIsAllowed(status, check);
 }
 
 function linkStatusObservedBytes(result: Record<string, unknown>): number | undefined {
@@ -1498,7 +1547,7 @@ function linkStatusContentTypeOk(result: Record<string, unknown>, check: RiddleP
 
 function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const status = numberValue(result.status);
-  if (!linkStatusIsAllowed(status, check)) return false;
+  if (!httpStatusIsAllowed(status, check)) return false;
   if (stringValue(result.error)) return false;
   if (result.ok === false) return false;
   if (!linkStatusContentTypeOk(result, check)) return false;
@@ -1511,6 +1560,62 @@ function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofP
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   return true;
+}
+
+function httpStatusEvidenceForCheck(
+  viewport: RiddleProofProfileViewportEvidence,
+  check: RiddleProofProfileCheck,
+): Record<string, unknown> | undefined {
+  const evidence = viewport.http_statuses?.[httpStatusKey(check, viewport.url)];
+  return isRecord(evidence) ? evidence : undefined;
+}
+
+function summarizeHttpStatusEvidence(
+  viewport: RiddleProofProfileViewportEvidence,
+  check: RiddleProofProfileCheck,
+): Record<string, unknown> {
+  const key = httpStatusKey(check, viewport.url);
+  const statusEvidence = httpStatusEvidenceForCheck(viewport, check);
+  if (!statusEvidence) {
+    return {
+      viewport: viewport.name,
+      key,
+      url: httpStatusRequestUrl(check, viewport.url),
+      method: httpStatusMethod(check),
+      ok: false,
+      status: null,
+      failures: [{ code: "http_status_evidence_missing" }],
+    };
+  }
+  const failures: Array<Record<string, unknown>> = [];
+  if (!linkStatusResultOk(statusEvidence, check)) {
+    failures.push({
+      code: "http_status_failed",
+      url: stringValue(statusEvidence.url) ?? httpStatusRequestUrl(check, viewport.url),
+      status: numberValue(statusEvidence.status) ?? null,
+      method: stringValue(statusEvidence.method) ?? httpStatusMethod(check),
+      error: stringValue(statusEvidence.error) ?? null,
+      content_type: stringValue(statusEvidence.content_type) ?? null,
+      bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+      allowed_statuses: httpStatusAllowedStatuses(check) ?? ["2xx", "3xx"],
+      min_bytes: check.min_bytes ?? null,
+      allowed_content_types: check.allowed_content_types ?? null,
+    });
+  }
+  return {
+    viewport: viewport.name,
+    key,
+    url: stringValue(statusEvidence.url) ?? httpStatusRequestUrl(check, viewport.url),
+    method: stringValue(statusEvidence.method) ?? httpStatusMethod(check),
+    status: numberValue(statusEvidence.status) ?? null,
+    status_text: stringValue(statusEvidence.status_text) ?? null,
+    ok: failures.length === 0,
+    error: stringValue(statusEvidence.error) ?? null,
+    content_type: stringValue(statusEvidence.content_type) ?? null,
+    content_length: numberValue(statusEvidence.content_length) ?? null,
+    bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+    failures,
+  };
 }
 
 function linkStatusEvidenceForCheck(
@@ -2194,6 +2299,33 @@ function assessCheckFromEvidence(
         matches,
       },
       message: failed ? `Text assertion failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "http_status") {
+    const url = httpStatusRequestUrl(check, evidence.target_url);
+    const method = httpStatusMethod(check);
+    const summaries = viewports.map((viewport) => summarizeHttpStatusEvidence(viewport, check));
+    const failed = summaries.filter((summary) => Array.isArray(summary.failures) && summary.failures.length > 0);
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed.length ? "failed" : "passed",
+      evidence: {
+        url,
+        method,
+        allowed_statuses: httpStatusAllowedStatuses(check) || ["2xx", "3xx"],
+        require_nonzero_bytes: check.require_nonzero_bytes === true,
+        min_bytes: check.min_bytes ?? null,
+        allowed_content_types: check.allowed_content_types ?? null,
+        viewports: summaries.map((summary) => toJsonValue(summary)),
+        failures: failed.flatMap((summary) => (
+          Array.isArray(summary.failures)
+            ? summary.failures.map((failure) => toJsonValue({ viewport: stringValue(summary.viewport) ?? null, failure }))
+            : []
+        )),
+      },
+      message: failed.length ? `HTTP status failed in ${failed.length} viewport(s).` : undefined,
     };
   }
 
@@ -2900,15 +3032,36 @@ function textOrderMatch(texts, expectedTexts) {
 function linkStatusSelector(check) {
   return check.selector || check.link_selector || "a[href]";
 }
-function linkStatusAllowedStatuses(check) {
+function httpStatusRequestUrl(check, baseUrl) {
+  const rawUrl = check.url || "";
+  if (!rawUrl) return "";
+  try {
+    return baseUrl ? new URL(rawUrl, baseUrl).href : new URL(rawUrl).href;
+  } catch {
+    return rawUrl;
+  }
+}
+function httpStatusMethod(check) {
+  return String(check.method || "GET").toUpperCase();
+}
+function httpStatusKey(check, baseUrl) {
+  return httpStatusMethod(check) + " " + httpStatusRequestUrl(check, baseUrl);
+}
+function httpStatusAllowedStatuses(check) {
   if (Array.isArray(check.allowed_statuses) && check.allowed_statuses.length) return check.allowed_statuses;
   if (typeof check.expected_status === "number" && Number.isFinite(check.expected_status)) return [check.expected_status];
   return undefined;
 }
-function linkStatusIsAllowed(status, check) {
+function linkStatusAllowedStatuses(check) {
+  return httpStatusAllowedStatuses(check);
+}
+function httpStatusIsAllowed(status, check) {
   if (typeof status !== "number" || !Number.isFinite(status)) return false;
-  const allowed = linkStatusAllowedStatuses(check);
+  const allowed = httpStatusAllowedStatuses(check);
   return Array.isArray(allowed) && allowed.length ? allowed.includes(status) : status >= 200 && status < 400;
+}
+function linkStatusIsAllowed(status, check) {
+  return httpStatusIsAllowed(status, check);
 }
 function linkStatusObservedBytes(result) {
   const bytes = typeof result.bytes === "number" && Number.isFinite(result.bytes) ? result.bytes : undefined;
@@ -2934,7 +3087,7 @@ function linkStatusContentTypeOk(result, check) {
 }
 function linkStatusResultOk(result, check) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return false;
-  if (!linkStatusIsAllowed(result.status, check)) return false;
+  if (!httpStatusIsAllowed(result.status, check)) return false;
   if (typeof result.error === "string" && result.error.trim()) return false;
   if (result.ok === false) return false;
   if (!linkStatusContentTypeOk(result, check)) return false;
@@ -2947,6 +3100,50 @@ function linkStatusResultOk(result, check) {
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   return true;
+}
+function summarizeHttpStatusEvidence(viewport, check) {
+  const key = httpStatusKey(check, viewport && viewport.url);
+  const statusEvidence = viewport && viewport.http_statuses && viewport.http_statuses[key];
+  if (!statusEvidence || typeof statusEvidence !== "object" || Array.isArray(statusEvidence)) {
+    return {
+      viewport: viewport && viewport.name,
+      key,
+      url: httpStatusRequestUrl(check, viewport && viewport.url),
+      method: httpStatusMethod(check),
+      ok: false,
+      status: null,
+      failures: [{ code: "http_status_evidence_missing" }],
+    };
+  }
+  const failures = [];
+  if (!linkStatusResultOk(statusEvidence, check)) {
+    failures.push({
+      code: "http_status_failed",
+      url: typeof statusEvidence.url === "string" ? statusEvidence.url : httpStatusRequestUrl(check, viewport && viewport.url),
+      status: typeof statusEvidence.status === "number" && Number.isFinite(statusEvidence.status) ? statusEvidence.status : null,
+      method: typeof statusEvidence.method === "string" ? statusEvidence.method : httpStatusMethod(check),
+      error: typeof statusEvidence.error === "string" ? statusEvidence.error : null,
+      content_type: typeof statusEvidence.content_type === "string" ? statusEvidence.content_type : null,
+      bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+      allowed_statuses: httpStatusAllowedStatuses(check) || ["2xx", "3xx"],
+      min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+      allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
+    });
+  }
+  return {
+    viewport: viewport && viewport.name,
+    key,
+    url: typeof statusEvidence.url === "string" ? statusEvidence.url : httpStatusRequestUrl(check, viewport && viewport.url),
+    method: typeof statusEvidence.method === "string" ? statusEvidence.method : httpStatusMethod(check),
+    status: typeof statusEvidence.status === "number" && Number.isFinite(statusEvidence.status) ? statusEvidence.status : null,
+    status_text: typeof statusEvidence.status_text === "string" ? statusEvidence.status_text : null,
+    ok: failures.length === 0,
+    error: typeof statusEvidence.error === "string" ? statusEvidence.error : null,
+    content_type: typeof statusEvidence.content_type === "string" ? statusEvidence.content_type : null,
+    content_length: typeof statusEvidence.content_length === "number" && Number.isFinite(statusEvidence.content_length) ? statusEvidence.content_length : null,
+    bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+    failures,
+  };
 }
 function summarizeLinkStatusEvidence(viewport, check) {
   const selector = linkStatusSelector(check);
@@ -3700,6 +3897,31 @@ function assessProfile(profile, evidence) {
         status: failed ? "failed" : "passed",
         evidence: { text: check.text, pattern: check.pattern, matches },
         message: failed ? "Text assertion failed in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
+    if (check.type === "http_status") {
+      const url = httpStatusRequestUrl(check, evidence.target_url);
+      const method = httpStatusMethod(check);
+      const summaries = checkViewports.map((viewport) => summarizeHttpStatusEvidence(viewport, check));
+      const failed = summaries.filter((summary) => Array.isArray(summary.failures) && summary.failures.length > 0);
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed.length ? "failed" : "passed",
+        evidence: {
+          url,
+          method,
+          allowed_statuses: httpStatusAllowedStatuses(check) || ["2xx", "3xx"],
+          require_nonzero_bytes: check.require_nonzero_bytes === true,
+          min_bytes: check.min_bytes ?? null,
+          allowed_content_types: check.allowed_content_types ?? null,
+          viewports: summaries,
+          failures: failed.flatMap((summary) => Array.isArray(summary.failures)
+            ? summary.failures.map((failure) => ({ viewport: summary.viewport || null, failure }))
+            : []),
+        },
+        message: failed.length ? "HTTP status failed in " + failed.length + " viewport(s)." : undefined,
       });
       continue;
     }
@@ -4901,6 +5123,65 @@ function linkProbeResponseFields(response, method) {
     content_length: contentLength,
   };
 }
+async function collectHttpStatus(check) {
+  const url = httpStatusRequestUrl(check, page.url() || targetUrl);
+  const method = httpStatusMethod(check);
+  const headers = check.headers && typeof check.headers === "object" && !Array.isArray(check.headers)
+    ? Object.fromEntries(Object.entries(check.headers).map(([key, value]) => [key, String(value)]).filter(([key]) => key.trim()))
+    : {};
+  let body;
+  if (check.body_json !== undefined) {
+    body = JSON.stringify(check.body_json);
+    if (!Object.keys(headers).some((key) => key.toLowerCase() === "content-type")) headers["content-type"] = "application/json";
+  } else if (typeof check.body === "string") {
+    body = check.body;
+  }
+  const options = {
+    method,
+    redirect: "follow",
+    cache: "no-store",
+    headers,
+  };
+  if (body !== undefined && method !== "GET" && method !== "HEAD") options.body = body;
+  const result = {
+    version: "riddle-proof.http-status.v1",
+    url,
+    method,
+    status: null,
+    ok: false,
+    error: null,
+    request_body_bytes: typeof body === "string" ? body.length : 0,
+    allowed_statuses: httpStatusAllowedStatuses(check) || ["2xx", "3xx"],
+    require_nonzero_bytes: check.require_nonzero_bytes === true,
+    min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
+    allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
+  };
+  try {
+    const response = await fetch(url, options);
+    Object.assign(result, linkProbeResponseFields(response, method));
+    result.url = url;
+    result.status_text = response.statusText || "";
+    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes));
+    if (shouldReadBody) {
+      try {
+        const buffer = await response.arrayBuffer();
+        result.bytes = buffer.byteLength;
+      } catch (error) {
+        result.error = String(error && error.message ? error.message : error).slice(0, 500);
+      }
+    }
+    result.ok = linkProbeAllowed(result.status, check)
+      && linkProbeContentTypeAllowed(result, check)
+      && (check.require_nonzero_bytes !== true || ((linkProbeObservedBytes(result) || 0) > 0))
+      && (!(typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || ((linkProbeObservedBytes(result) || 0) >= check.min_bytes))
+      && !result.error;
+    return result;
+  } catch (error) {
+    result.error = String(error && error.message ? error.message : error).slice(0, 500);
+    result.ok = false;
+    return result;
+  }
+}
 async function probeLinkStatus(candidate, check) {
   const requireNonzeroBytes = check.require_nonzero_bytes === true;
   const minBytes = typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? Math.max(1, Math.floor(check.min_bytes)) : null;
@@ -5593,6 +5874,7 @@ async function captureViewport(viewport) {
   const frames = {};
   const text_sequences = {};
   const text_matches = {};
+  const http_statuses = {};
   const link_statuses = {};
   for (const check of profile.checks || []) {
     if (!profileCheckAppliesToViewport(check, viewport)) continue;
@@ -5618,6 +5900,10 @@ async function captureViewport(viewport) {
     if ((check.type === "frame_text_visible" || check.type === "frame_url_equals" || check.type === "frame_url_matches" || check.type === "frame_no_horizontal_overflow") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
       frames[check.selector] = frames[check.selector] || await frameEvidence(check.selector);
+    }
+    if (check.type === "http_status") {
+      const key = httpStatusKey(check, page.url() || targetUrl);
+      http_statuses[key] = http_statuses[key] || await collectHttpStatus(check);
     }
     if (check.type === "link_status" || check.type === "artifact_link_status") {
       const selector = linkStatusSelector(check);
@@ -5686,6 +5972,7 @@ async function captureViewport(viewport) {
     frames,
     text_sequences,
     text_matches,
+    http_statuses,
     link_statuses,
     route_inventory: routeInventory,
     setup_action_results: setupActionResults,
@@ -5733,6 +6020,19 @@ function buildProfileEvidence(currentViewports) {
               0,
               ...((frameSet && Array.isArray(frameSet.frames) ? frameSet.frames : [])).map((frame) => horizontalBoundsOverflowPx(frame)),
             ),
+          })),
+        })),
+      http_status: currentViewports
+        .filter((viewport) => viewport.http_statuses && Object.keys(viewport.http_statuses).length)
+        .map((viewport) => ({
+          viewport: viewport.name,
+          requests: Object.entries(viewport.http_statuses || {}).map(([key, statusSet]) => ({
+            key,
+            url: statusSet && statusSet.url,
+            method: statusSet && statusSet.method,
+            status: statusSet && statusSet.status,
+            ok: statusSet && statusSet.ok === true,
+            error: statusSet && statusSet.error,
           })),
         })),
       link_status: currentViewports
