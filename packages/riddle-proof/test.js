@@ -828,6 +828,75 @@ assert.equal(
   resolveRiddleProofProfileTargetUrl(mountedPreviewProfile),
   "https://preview.riddledc.com/s/ps_1234abcd/playground/",
 );
+const mountedPreviewHttpStatusProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "preview-markdown-status",
+  target: {
+    url: "https://preview.riddledc.com/s/ps_1234abcd/",
+    route: "/docs/riddle-proof/",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "http_status",
+    url: "/docs/riddle-proof/markdown.md",
+    expected_status: 200,
+    allowed_content_types: ["text/markdown"],
+    body_contains: ["Profile Text Semantics"],
+  }],
+});
+const mountedPreviewHttpStatusEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "preview-markdown-status",
+  target_url: "https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-16T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    url: "https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/",
+    route: {
+      requested: "https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/",
+      observed: "/s/ps_1234abcd/docs/riddle-proof/",
+      expected_path: "/docs/riddle-proof/",
+      matched: true,
+      http_status: 200,
+    },
+    body_text_sample: "Profile Text Semantics",
+    overflow_px: 0,
+    bounds_overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    http_statuses: {
+      "GET https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/markdown.md": {
+        version: "riddle-proof.http-status.v1",
+        url: "https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/markdown.md",
+        method: "GET",
+        status: 200,
+        ok: true,
+        error: null,
+        content_type: "text/markdown",
+        content_length: 1024,
+        bytes: 1024,
+        body_contains: { "Profile Text Semantics": true },
+      },
+    },
+    screenshot_label: "preview-markdown-status-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+};
+const mountedPreviewHttpStatusAssessment = assessRiddleProofProfileEvidence(
+  mountedPreviewHttpStatusProfile,
+  mountedPreviewHttpStatusEvidence,
+);
+const mountedPreviewHttpStatusCheck = mountedPreviewHttpStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(mountedPreviewHttpStatusAssessment.status, "passed");
+assert.equal(
+  mountedPreviewHttpStatusCheck.evidence.url,
+  "https://preview.riddledc.com/s/ps_1234abcd/docs/riddle-proof/markdown.md",
+);
 const camelTimeoutProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "timeout-alias",
@@ -1875,6 +1944,7 @@ assert.ok(httpStatusProfileScript.includes("body_not_contains"));
 assert.ok(httpStatusProfileScript.includes("body_not_patterns"));
 assert.ok(httpStatusProfileScript.includes("body_not_contains_found"));
 assert.ok(httpStatusProfileScript.includes("body_not_patterns_found"));
+assert.ok(httpStatusProfileScript.includes("joinMountedRoutePath(mountPrefix, requested.pathname)"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",

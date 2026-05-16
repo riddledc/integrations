@@ -456,6 +456,13 @@ text. Use `text_visible` or `selector_text_visible` when CSS transforms,
 hydration, client rendering, hidden elements, or layout-specific copy should be
 judged exactly as the browser exposes it to users.
 
+When the profile target is a mounted Riddle static Preview such as
+`https://preview.riddledc.com/s/ps_1234abcd/docs/`, root-relative
+`http_status` URLs preserve that mount. A check for
+`/docs/markdown.md` probes
+`https://preview.riddledc.com/s/ps_1234abcd/docs/markdown.md`, matching the
+Preview artifact instead of escaping to the Preview origin root.
+
 Use `frame_text_visible` and `frame_no_horizontal_overflow` for embedded app,
 game, or preview surfaces that render inside iframes:
 
