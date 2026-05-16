@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.92
+
+### Patch Changes
+
+- e5c1fa7: Expose `riddle-preview-deploy --framework spa|static` and a `deployPreview` client helper so SPA deep-link previews can use `pv_` fallback routing from the packaged CLI.
+
 ## 0.7.91
 
 ### Patch Changes
