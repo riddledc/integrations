@@ -1688,6 +1688,8 @@ const setupAssertionProfileScript = buildRiddleProofProfileScript(setupAssertion
 assert.ok(setupAssertionProfileScript.includes('type === "assert_selector_count"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_text_visible" || type === "assert_text_absent"'));
 assert.ok(setupAssertionProfileScript.includes("target.innerText"));
+assert.ok(setupAssertionProfileScript.includes("normalizeSetupMatchText"));
+assert.ok(setupAssertionProfileScript.includes("normalizeSetupMatchText(rawSample).includes(normalizeSetupMatchText(expected))"));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_window_value"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_window_number"'));
 assert.ok(setupAssertionProfileScript.includes("setupReadWindowValue"));
