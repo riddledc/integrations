@@ -23,6 +23,8 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_count_equals",
   "selector_count_equal",
   "selector_count_eq",
+  "selector_text_visible",
+  "selector_text_absent",
   "selector_text_order",
   "frame_text_visible",
   "frame_url_equals",
@@ -1213,6 +1215,8 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
       || type === "selector_count_equals"
       || type === "selector_count_equal"
       || type === "selector_count_eq"
+      || type === "selector_text_visible"
+      || type === "selector_text_absent"
     ) && !stringValue(input.selector)
   ) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
@@ -1230,7 +1234,14 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "frame_url_matches" && !stringValue(input.pattern)) {
     throw new Error(`checks[${index}] frame_url_matches requires pattern.`);
   }
-  if ((type === "text_visible" || type === "text_absent") && !stringValue(input.text) && !stringValue(input.pattern)) {
+  if (
+    (
+      type === "text_visible"
+      || type === "text_absent"
+      || type === "selector_text_visible"
+      || type === "selector_text_absent"
+    ) && !stringValue(input.text) && !stringValue(input.pattern)
+  ) {
     throw new Error(`checks[${index}] ${type} requires text or pattern.`);
   }
   if ((type === "url_search_param_equals" || type === "url_search_param_absent") && !stringValue(input.param) && !stringValue(input.search_param) && !stringValue(input.searchParam) && !stringValue(input.key)) {
@@ -1542,9 +1553,11 @@ function textSequenceForCheck(viewport: RiddleProofProfileViewportEvidence, chec
   const key = selectorKey(check);
   const sequence = viewport.text_sequences?.[key];
   if (isRecord(sequence)) {
+    const visibleMatchTexts = Array.isArray(sequence.visible_match_texts) ? sequence.visible_match_texts : [];
+    const matchTexts = Array.isArray(sequence.match_texts) ? sequence.match_texts : [];
     const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
     const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
-    const candidates = visibleTexts.length ? visibleTexts : texts;
+    const candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
     return candidates.map((text) => String(text).replace(/\s+/g, " ").trim()).filter(Boolean);
   }
   return [];
@@ -1947,6 +1960,36 @@ function assessCheckFromEvidence(
     };
   }
 
+  if (check.type === "selector_text_visible" || check.type === "selector_text_absent") {
+    const key = selectorKey(check);
+    const expectedVisible = check.type === "selector_text_visible";
+    const results = viewports.map((viewport) => {
+      const texts = textSequenceForCheck(viewport, check);
+      const matches = texts.filter((text) => matchText(text, check));
+      return {
+        viewport: viewport.name,
+        selector_count: viewport.selectors?.[key]?.count || 0,
+        visible_count: viewport.selectors?.[key]?.visible_count || 0,
+        matched_count: matches.length,
+        matched: matches.length > 0,
+        samples: matches.slice(0, 3).map((text) => text.slice(0, 240)),
+      };
+    });
+    const failed = results.filter((result) => result.matched !== expectedVisible).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: key,
+        text: check.text || null,
+        pattern: check.pattern || null,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Selector ${key} text assertion failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
   if (check.type === "selector_text_order") {
     const key = selectorKey(check);
     const expectedTexts = check.expected_texts || [];
@@ -1957,7 +2000,7 @@ function assessCheckFromEvidence(
         viewport: viewport.name,
         matched: match.matched,
         matched_positions: match.positions,
-        visible_texts: texts.slice(0, 20),
+        visible_texts: texts.slice(0, 20).map((text) => text.slice(0, 240)),
       };
     });
     const failed = results.filter((result) => !result.matched).length;
@@ -2774,9 +2817,11 @@ function textSequenceForCheck(viewport, check) {
   const key = check.selector || "";
   const sequence = viewport.text_sequences && viewport.text_sequences[key];
   if (sequence && typeof sequence === "object") {
+    const visibleMatchTexts = Array.isArray(sequence.visible_match_texts) ? sequence.visible_match_texts : [];
+    const matchTexts = Array.isArray(sequence.match_texts) ? sequence.match_texts : [];
     const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
     const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
-    const candidates = visibleTexts.length ? visibleTexts : texts;
+    const candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
     return candidates.map((text) => String(text || "").replace(/\s+/g, " ").trim()).filter(Boolean);
   }
   return [];
@@ -3414,6 +3459,31 @@ function assessProfile(profile, evidence) {
       });
       continue;
     }
+    if (check.type === "selector_text_visible" || check.type === "selector_text_absent") {
+      const selector = check.selector || "";
+      const expectedVisible = check.type === "selector_text_visible";
+      const results = checkViewports.map((viewport) => {
+        const texts = textSequenceForCheck(viewport, check);
+        const matches = texts.filter((text) => textMatches(text, check));
+        return {
+          viewport: viewport.name,
+          selector_count: viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0,
+          visible_count: viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].visible_count : 0,
+          matched_count: matches.length,
+          matched: matches.length > 0,
+          samples: matches.slice(0, 3).map((text) => text.slice(0, 240)),
+        };
+      });
+      const failed = results.filter((result) => result.matched !== expectedVisible).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: { selector, text: check.text || null, pattern: check.pattern || null, viewports: results },
+        message: failed ? "Selector " + selector + " text assertion failed in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
     if (check.type === "selector_text_order") {
       const selector = check.selector || "";
       const expectedTexts = check.expected_texts || [];
@@ -3424,7 +3494,7 @@ function assessProfile(profile, evidence) {
           viewport: viewport.name,
           matched: match.matched,
           matched_positions: match.positions,
-          visible_texts: texts.slice(0, 20),
+          visible_texts: texts.slice(0, 20).map((text) => text.slice(0, 240)),
         };
       });
       const failed = results.filter((result) => !result.matched).length;
@@ -4629,6 +4699,7 @@ async function selectorStats(selector) {
 async function selectorTextSequence(selector) {
   return page.locator(selector).evaluateAll((elements) => {
     const compact = (value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    const matchText = (value) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 8000);
     const isVisible = (element) => {
       const style = window.getComputedStyle(element);
       const rect = element.getBoundingClientRect();
@@ -4637,6 +4708,7 @@ async function selectorTextSequence(selector) {
     const rows = elements.map((element, index) => ({
       index,
       text: compact(element.innerText || element.textContent || ""),
+      match_text: matchText(element.innerText || element.textContent || ""),
       visible: isVisible(element),
     }));
     return {
@@ -4644,8 +4716,10 @@ async function selectorTextSequence(selector) {
       visible_count: rows.filter((row) => row.visible).length,
       texts: rows.map((row) => row.text).filter(Boolean).slice(0, 40),
       visible_texts: rows.filter((row) => row.visible).map((row) => row.text).filter(Boolean).slice(0, 40),
+      match_texts: rows.map((row) => row.match_text).filter(Boolean).slice(0, 40),
+      visible_match_texts: rows.filter((row) => row.visible).map((row) => row.match_text).filter(Boolean).slice(0, 40),
     };
-  }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
+  }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], match_texts: [], visible_match_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
 }
 function linkProbeMaxLinks(check) {
   const value = Number(check.max_links || check.maxLinks || check.limit || 100);
@@ -5381,7 +5455,7 @@ async function captureViewport(viewport) {
     ) {
       selectors[check.selector] = await selectorStats(check.selector);
     }
-    if (check.type === "selector_text_order" && check.selector) {
+    if ((check.type === "selector_text_order" || check.type === "selector_text_visible" || check.type === "selector_text_absent") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
       text_sequences[check.selector] = await selectorTextSequence(check.selector);
     }
