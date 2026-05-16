@@ -386,6 +386,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (routeInventorySummaryLines.length) {
     lines.push("", "## Route Inventory", "", ...routeInventorySummaryLines);
   }
+  const linkStatusSummaryLines = profileLinkStatusSummaryMarkdown(result);
+  if (linkStatusSummaryLines.length) {
+    lines.push("", "## Link Status", "", ...linkStatusSummaryLines);
+  }
   const environmentBlockerLines = profileEnvironmentBlockerMarkdown(result);
   if (environmentBlockerLines.length) {
     lines.push("", "## Environment Blocker", "", ...environmentBlockerLines);
@@ -459,6 +463,13 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
     if (selector && maxOverflow !== undefined) return `${markdownInlineCode(selector)} <= ${maxOverflow}px`;
     return selector ? markdownInlineCode(selector) : maxOverflow !== undefined ? `<= ${maxOverflow}px` : undefined;
+  }
+  if (check.type === "link_status" || check.type === "artifact_link_status") {
+    const expectedCount = cliFiniteNumber(evidence.expected_count);
+    const minCount = cliFiniteNumber(evidence.min_count);
+    if (selector && expectedCount !== undefined) return `${markdownInlineCode(selector)} links = ${expectedCount}`;
+    if (selector && minCount !== undefined) return `${markdownInlineCode(selector)} links >= ${minCount}`;
+    return selector ? markdownInlineCode(selector) : undefined;
   }
   if (check.type === "no_horizontal_overflow" || check.type === "no_mobile_horizontal_overflow") {
     const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
@@ -687,6 +698,31 @@ function profileRouteInventorySummaryMarkdown(result: RiddleProofProfileResult):
       );
     }
     if (viewports.length > 8) lines.push(`- ${label}: ${viewports.length - 8} additional viewport(s) omitted from route inventory summary.`);
+  }
+
+  return lines;
+}
+
+function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const linkStatusChecks = result.checks.filter((check) => check.type === "link_status" || check.type === "artifact_link_status");
+  const lines: string[] = [];
+
+  for (const check of linkStatusChecks) {
+    const evidence = cliRecord(check.evidence);
+    if (!evidence) continue;
+    const label = check.label || check.type;
+    const selector = cliString(evidence.selector);
+    const viewports = Array.isArray(evidence.viewports)
+      ? evidence.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+      : [];
+    const totals = viewports.map((viewport) => cliFiniteNumber(viewport.total_count)).filter((count): count is number => count !== undefined);
+    const okTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.ok_count) || 0), 0);
+    const failedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.failed_count) || 0), 0);
+    const truncatedTotal = viewports.filter((viewport) => viewport.truncated === true).length;
+    const countText = totals.length ? totals.join("/") : "unknown";
+    lines.push(
+      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}`,
+    );
   }
 
   return lines;

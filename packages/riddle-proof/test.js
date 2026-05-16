@@ -1755,6 +1755,36 @@ assert.ok(routeInventoryProfileScript.includes("routeInventoryCheck.run_all_view
 assert.ok(routeInventoryProfileScript.includes("viewport_count: inventories.length"));
 assert.ok(routeInventoryProfileScript.includes("inventoryScreenshotLabel"));
 assert.ok(routeInventoryProfileScript.includes('check.run_all_viewports ? "-" + inventorySlugFromViewport(viewport) : ""'));
+const linkStatusProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "public-artifact-link-status",
+  target: {
+    route: "/proof/good-catches",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "artifact_link_status",
+    selector: "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']",
+    expected_count: 2,
+    allowed_statuses: [200, 304],
+    max_links: 150,
+    same_origin_only: true,
+    require_nonzero_bytes: true,
+  }],
+}, { url: "https://example.com" });
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("link_status"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("artifact_link_status"));
+assert.equal(linkStatusProfile.checks[0].type, "artifact_link_status");
+assert.equal(linkStatusProfile.checks[0].expected_count, 2);
+assert.deepEqual(linkStatusProfile.checks[0].allowed_statuses, [200, 304]);
+assert.equal(linkStatusProfile.checks[0].max_links, 150);
+assert.equal(linkStatusProfile.checks[0].same_origin_only, true);
+assert.equal(linkStatusProfile.checks[0].require_nonzero_bytes, true);
+const linkStatusProfileScript = buildRiddleProofProfileScript(linkStatusProfile);
+assert.ok(linkStatusProfileScript.includes("collectLinkStatus"));
+assert.ok(linkStatusProfileScript.includes("riddle-proof.link-status.v1"));
+assert.ok(linkStatusProfileScript.includes("link_statuses"));
+assert.ok(linkStatusProfileScript.includes("link_status: currentViewports"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
@@ -2136,6 +2166,79 @@ const multiViewportRouteInventoryCheck = multiViewportRouteInventoryAssessment.c
 assert.equal(multiViewportRouteInventoryAssessment.status, "passed");
 assert.equal(multiViewportRouteInventoryCheck.evidence.viewport_count, 2);
 assert.deepEqual(multiViewportRouteInventoryCheck.evidence.viewports.map((viewport) => viewport.viewport), ["desktop", "phone"]);
+const linkStatusEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "public-artifact-link-status",
+  target_url: "https://example.com/proof/good-catches",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-16T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/proof/good-catches", observed: "/proof/good-catches", expected_path: "/proof/good-catches", matched: true, http_status: 200 },
+    body_text_sample: "Good catches",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    link_statuses: {
+      "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']": {
+        version: "riddle-proof.link-status.v1",
+        selector: "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']",
+        max_links: 150,
+        same_origin_only: true,
+        dedupe: true,
+        require_nonzero_bytes: true,
+        allowed_statuses: [200, 304],
+        discovered_count: 2,
+        total_count: 2,
+        truncated: false,
+        ok_count: 2,
+        failed_count: 0,
+        status_counts: { 200: 2 },
+        failures: [],
+        results: [
+          { url: "https://example.com/proof/good-catches/artifacts/a.png", status: 200, method: "HEAD", ok: true, content_length: 1234, bytes: null },
+          { url: "https://example.com/proof/good-catches/artifacts/b.json", status: 200, method: "GET", ok: true, content_length: null, bytes: 42 },
+        ],
+      },
+    },
+    screenshot_label: "public-artifact-link-status-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+};
+const linkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, linkStatusEvidence);
+const linkStatusCheck = linkStatusAssessment.checks.find((check) => check.type === "artifact_link_status");
+assert.equal(linkStatusAssessment.status, "passed");
+assert.equal(linkStatusCheck.status, "passed");
+assert.equal(linkStatusCheck.evidence.viewports[0].total_count, 2);
+assert.equal(linkStatusCheck.evidence.viewports[0].ok_count, 2);
+assert.equal(linkStatusCheck.evidence.require_nonzero_bytes, true);
+const failedLinkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, {
+  ...linkStatusEvidence,
+  viewports: [{
+    ...linkStatusEvidence.viewports[0],
+    link_statuses: {
+      ...linkStatusEvidence.viewports[0].link_statuses,
+      "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']": {
+        ...linkStatusEvidence.viewports[0].link_statuses["a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']"],
+        total_count: 2,
+        ok_count: 1,
+        failed_count: 1,
+        status_counts: { 200: 1, 403: 1 },
+        results: [
+          linkStatusEvidence.viewports[0].link_statuses["a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']"].results[0],
+          { url: "https://example.com/proof/good-catches/artifacts/missing.png", status: 403, method: "HEAD", ok: false, error: null, content_length: 0, bytes: null },
+        ],
+      },
+    },
+  }],
+});
+assert.equal(failedLinkStatusAssessment.status, "product_regression");
+assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").status, "failed");
+assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").evidence.failures.length, 1);
 const selectorTextOrderEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "table-order-profile",

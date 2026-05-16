@@ -450,6 +450,29 @@ scroll width, client width, measured horizontal overflow, and top visible
 overflow offenders. This keeps embedded-player audits in profile mode instead
 of requiring bespoke iframe inspection scripts.
 
+Use `link_status` for public link or asset audits where selected `href` / `src`
+URLs must still resolve. This is useful for Good Catch pages, documentation
+indexes, saved-game galleries, and other public proof surfaces where stale
+artifact links should fail the profile:
+
+```json
+{
+  "type": "link_status",
+  "selector": "a[href*='/artifacts/'], img[src*='/artifacts/']",
+  "expected_count": 88,
+  "same_origin_only": true,
+  "require_nonzero_bytes": true,
+  "max_links": 150
+}
+```
+
+The check defaults to `a[href]`, deduplicates URLs, probes up to 100 selected
+URLs, and treats HTTP `2xx` / `3xx` responses as healthy. Use
+`allowed_statuses` or `expected_status` when a narrower status contract is
+intentional, `min_count` for lower-bound audits, and `max_links` when the
+selected set is intentionally larger than 100. `artifact_link_status` is an
+alias with the same behavior for profiles that want artifact-specific wording.
+
 Use the `route_inventory` check for source-page route coverage audits where a
 navigation surface must expose a known set of routes and each route must load
 both directly and through real link clicks:
