@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.104
+
+### Patch Changes
+
+- 4f557f8: Preserve mounted static Preview paths for root-relative profile `http_status` checks.
+
 ## 0.7.103
 
 ### Patch Changes
