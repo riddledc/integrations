@@ -1832,6 +1832,38 @@ assert.ok(linkStatusProfileScript.includes("results_compacted"));
 assert.ok(linkStatusProfileScript.includes("link_status: currentViewports"));
 assert.ok(linkStatusProfileScript.includes("profileCheckAppliesToViewport(check, viewport)"));
 assert.ok(linkStatusProfileScript.includes("waitForAnyVisibleSelector"));
+const httpStatusProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "direct-api-endpoint-status",
+  target: {
+    route: "/docs/scrape",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "http_status",
+    label: "scrape direct endpoint auth gate",
+    url: "https://api.example.com/v1/scrape",
+    method: "post",
+    body_json: {},
+    expected_status: 401,
+    allowed_content_types: ["application/json"],
+    require_nonzero_bytes: true,
+    min_bytes: 8,
+  }],
+}, { url: "https://example.com" });
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("http_status"));
+assert.equal(httpStatusProfile.checks[0].type, "http_status");
+assert.equal(httpStatusProfile.checks[0].url, "https://api.example.com/v1/scrape");
+assert.equal(httpStatusProfile.checks[0].method, "POST");
+assert.deepEqual(httpStatusProfile.checks[0].body_json, {});
+assert.equal(httpStatusProfile.checks[0].expected_status, 401);
+assert.equal(httpStatusProfile.checks[0].require_nonzero_bytes, true);
+assert.equal(httpStatusProfile.checks[0].min_bytes, 8);
+const httpStatusProfileScript = buildRiddleProofProfileScript(httpStatusProfile);
+assert.ok(httpStatusProfileScript.includes("collectHttpStatus"));
+assert.ok(httpStatusProfileScript.includes("riddle-proof.http-status.v1"));
+assert.ok(httpStatusProfileScript.includes("http_statuses"));
+assert.ok(httpStatusProfileScript.includes("http_status: currentViewports"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
@@ -2310,6 +2342,68 @@ assert.equal(linkStatusCheck.evidence.viewports[0].omitted_result_count, 0);
 assert.equal(linkStatusCheck.evidence.require_nonzero_bytes, true);
 assert.equal(linkStatusCheck.evidence.min_bytes, 32);
 assert.deepEqual(linkStatusCheck.evidence.allowed_content_types, ["image/*", "application/json"]);
+const httpStatusEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "direct-api-endpoint-status",
+  target_url: "https://example.com/docs/scrape",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-16T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    url: "https://example.com/docs/scrape",
+    route: { requested: "https://example.com/docs/scrape", observed: "/docs/scrape", expected_path: "/docs/scrape", matched: true, http_status: 200 },
+    body_text_sample: "Scrape API",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        version: "riddle-proof.http-status.v1",
+        url: "https://api.example.com/v1/scrape",
+        method: "POST",
+        status: 401,
+        status_text: "Unauthorized",
+        ok: true,
+        error: null,
+        content_type: "application/json",
+        content_length: 54,
+        bytes: 54,
+      },
+    },
+    screenshot_label: "direct-api-endpoint-status-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+};
+const httpStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, httpStatusEvidence);
+const httpStatusCheck = httpStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(httpStatusAssessment.status, "passed");
+assert.equal(httpStatusCheck.status, "passed");
+assert.equal(httpStatusCheck.evidence.url, "https://api.example.com/v1/scrape");
+assert.equal(httpStatusCheck.evidence.method, "POST");
+assert.deepEqual(httpStatusCheck.evidence.allowed_statuses, [401]);
+assert.equal(httpStatusCheck.evidence.viewports[0].status, 401);
+const failedHttpStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
+  ...httpStatusEvidence,
+  viewports: [{
+    ...httpStatusEvidence.viewports[0],
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        ...httpStatusEvidence.viewports[0].http_statuses["POST https://api.example.com/v1/scrape"],
+        status: 404,
+        status_text: "Not Found",
+        ok: false,
+      },
+    },
+  }],
+});
+const failedHttpStatusCheck = failedHttpStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(failedHttpStatusAssessment.status, "product_regression");
+assert.equal(failedHttpStatusCheck.status, "failed");
+assert.equal(failedHttpStatusCheck.evidence.failures[0].failure.status, 404);
 const linkStatusSelector = "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']";
 const highVolumeLinkStatusProfile = {
   ...linkStatusProfile,

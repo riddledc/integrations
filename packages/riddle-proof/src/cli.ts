@@ -396,6 +396,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (linkStatusSummaryLines.length) {
     lines.push("", "## Link Status", "", ...linkStatusSummaryLines);
   }
+  const httpStatusSummaryLines = profileHttpStatusSummaryMarkdown(result);
+  if (httpStatusSummaryLines.length) {
+    lines.push("", "## HTTP Status", "", ...httpStatusSummaryLines);
+  }
   const environmentBlockerLines = profileEnvironmentBlockerMarkdown(result);
   if (environmentBlockerLines.length) {
     lines.push("", "## Environment Blocker", "", ...environmentBlockerLines);
@@ -476,6 +480,15 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     const maxOverflow = cliFiniteNumber(evidence.max_overflow_px);
     if (selector && maxOverflow !== undefined) return `${markdownInlineCode(selector)} <= ${maxOverflow}px`;
     return selector ? markdownInlineCode(selector) : maxOverflow !== undefined ? `<= ${maxOverflow}px` : undefined;
+  }
+  if (check.type === "http_status") {
+    const url = cliString(evidence.url);
+    const method = cliString(evidence.method);
+    const statuses = Array.isArray(evidence.allowed_statuses)
+      ? evidence.allowed_statuses.map((status) => cliString(status) || String(status)).filter(Boolean)
+      : [];
+    const target = [method, url ? markdownInlineCode(url) : ""].filter(Boolean).join(" ");
+    return statuses.length ? `${target} -> ${statuses.join("/")}` : target || undefined;
   }
   if (check.type === "link_status" || check.type === "artifact_link_status") {
     const expectedCount = cliFiniteNumber(evidence.expected_count);
@@ -744,6 +757,31 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
     const countText = totals.length ? totals.join("/") : "unknown";
     lines.push(
       `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${omittedTotal ? `, compacted ${omittedTotal} result row(s)` : ""}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
+    );
+  }
+
+  return lines;
+}
+
+function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const httpStatusChecks = result.checks.filter((check) => check.type === "http_status");
+  const lines: string[] = [];
+
+  for (const check of httpStatusChecks) {
+    const evidence = cliRecord(check.evidence);
+    if (!evidence) continue;
+    const label = check.label || check.type;
+    const url = cliString(evidence.url);
+    const method = cliString(evidence.method) || "GET";
+    const viewports = Array.isArray(evidence.viewports)
+      ? evidence.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+      : [];
+    const statuses = viewports
+      .map((viewport) => cliFiniteNumber(viewport.status))
+      .map((status) => status === undefined ? "error" : String(status));
+    const failedTotal = Array.isArray(evidence.failures) ? evidence.failures.length : 0;
+    lines.push(
+      `- ${label}: ${method}${url ? ` ${markdownInlineCode(url)}` : ""}, statuses ${statuses.length ? statuses.join("/") : "unknown"}, failures ${failedTotal}`,
     );
   }
 
