@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.94
+
+### Patch Changes
+
+- 67a5afe: Add profile `selector_text_visible` and `selector_text_absent` checks for selector-scoped durable text assertions.
+
 ## 0.7.93
 
 ### Patch Changes
