@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.103
+
+### Patch Changes
+
+- 5db9782: Clarify that profile `http_status` body assertions match raw HTTP response bodies while `text_visible` and `selector_text_visible` check rendered browser text.
+
 ## 0.7.102
 
 ### Patch Changes
