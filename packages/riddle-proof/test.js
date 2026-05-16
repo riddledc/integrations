@@ -1755,6 +1755,8 @@ const routeInventoryProfileScript = buildRiddleProofProfileScript(routeInventory
 assert.ok(routeInventoryProfileScript.includes("collectRouteInventory"));
 assert.ok(routeInventoryProfileScript.includes("riddle-proof.route-inventory.v1"));
 assert.ok(routeInventoryProfileScript.includes("source_link_clickthrough_kept_source_surface"));
+assert.ok(routeInventoryProfileScript.includes("waitForInventoryLinkIndex"));
+assert.ok(routeInventoryProfileScript.includes("await waitForInventoryLinkIndex(check, expectedRoute.path)"));
 assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"));
 assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
 assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));

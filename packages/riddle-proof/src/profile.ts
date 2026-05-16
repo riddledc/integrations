@@ -5141,6 +5141,16 @@ async function findInventoryLinkIndex(check, expectedPath) {
   }
   return -1;
 }
+async function waitForInventoryLinkIndex(check, expectedPath) {
+  const timeout = Math.min(inventoryCheckTimeout(check), 15000);
+  const started = Date.now();
+  let index = await findInventoryLinkIndex(check, expectedPath);
+  while (index < 0 && Date.now() - started < timeout) {
+    await page.waitForTimeout(250);
+    index = await findInventoryLinkIndex(check, expectedPath);
+  }
+  return index;
+}
 async function collectRouteInventory(check, viewport) {
   const expectedRoutes = check.expected_routes || [];
   const expectedPaths = expectedRoutes.map((route) => normalizeRoutePath(route.path));
@@ -5197,7 +5207,7 @@ async function collectRouteInventory(check, viewport) {
         if (profile.target.wait_for_selector) {
           await waitForAnyVisibleSelector(page, profile.target.wait_for_selector, 15000).catch(() => {});
         }
-        const index = await findInventoryLinkIndex(check, expectedRoute.path);
+        const index = await waitForInventoryLinkIndex(check, expectedRoute.path);
         if (index < 0) {
           result.error = "source_link_not_found";
           failures.push({ code: "source_link_clickthrough_missing", name: expectedRoute.name || null, path: expectedRoute.path });
