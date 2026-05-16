@@ -707,6 +707,7 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
                 'changePercent': '1.45',
                 'diffPixelCount': 14094,
                 'totalPixels': 972000,
+                'diffBoundingBox': {'xMin': 10, 'yMin': 20, 'xMax': 110, 'yMax': 70},
             },
         },
     })
@@ -714,6 +715,28 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert visual_diff_delta['passed'] is True
     assert visual_diff_delta['change_percent'] == 1.45
     assert visual_diff_delta['changed_pixels'] == 14094
+    assert visual_diff_delta['changed_region']['x'] == 10
+    assert visual_diff_delta['changed_region']['width'] == 100
+    assert visual_diff_delta['changed_region']['height'] == 50
+
+    root_region_delta = namespace['extract_visual_delta']({
+        'ok': True,
+        'visual_diff': {
+            'diffPercentage': 0.04,
+            'differentPixels': 320,
+            'totalPixels': 972000,
+            'dimensions': {'width': 1080, 'height': 900},
+            'x1': 24,
+            'y1': 36,
+            'x2': 64,
+            'y2': 56,
+        },
+    })
+    assert root_region_delta['status'] == 'measured'
+    assert root_region_delta['changed_region']['x'] == 24
+    assert root_region_delta['changed_region']['y'] == 36
+    assert root_region_delta['changed_region']['width'] == 40
+    assert root_region_delta['changed_region']['height'] == 20
 
     viewport_status = namespace['capture_viewport_matrix_status'](
         {

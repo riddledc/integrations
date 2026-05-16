@@ -100,14 +100,40 @@ VISUAL_CHANGED_REGION_KEYS = {
     'changed_region', 'changedregion', 'diff_region', 'diffregion',
     'difference_region', 'differenceregion', 'changed_bounds',
     'changedbounds', 'diff_bounds', 'diffbounds', 'difference_bounds',
-    'differencebounds', 'bounding_box', 'boundingbox', 'bbox', 'bounds',
+    'differencebounds', 'changed_bounding_box', 'changedboundingbox',
+    'changed_bbox', 'changedbbox', 'diff_bounding_box', 'diffboundingbox',
+    'diff_bbox', 'diffbbox', 'difference_bounding_box',
+    'differenceboundingbox', 'difference_bbox', 'differencebbox',
+    'mismatch_region', 'mismatchregion', 'mismatch_bounds',
+    'mismatchbounds', 'mismatch_bounding_box', 'mismatchboundingbox',
+    'visual_diff_region', 'visualdiffregion', 'visual_diff_bounds',
+    'visualdiffbounds', 'visual_diff_bounding_box',
+    'visualdiffboundingbox', 'bounding_box', 'boundingbox',
+    'bounding_rect', 'boundingrect', 'bbox', 'bounds', 'box', 'rect',
+    'rectangle', 'region',
 }
-VISUAL_REGION_X_KEYS = {'x', 'left', 'min_x', 'minx'}
-VISUAL_REGION_Y_KEYS = {'y', 'top', 'min_y', 'miny'}
-VISUAL_REGION_WIDTH_KEYS = {'width', 'w'}
-VISUAL_REGION_HEIGHT_KEYS = {'height', 'h'}
-VISUAL_REGION_RIGHT_KEYS = {'right', 'max_x', 'maxx'}
-VISUAL_REGION_BOTTOM_KEYS = {'bottom', 'max_y', 'maxy'}
+VISUAL_REGION_X_KEYS = {
+    'x', 'x1', 'left', 'min_x', 'minx', 'x_min', 'xmin',
+    'start_x', 'startx', 'from_x', 'fromx',
+}
+VISUAL_REGION_Y_KEYS = {
+    'y', 'y1', 'top', 'min_y', 'miny', 'y_min', 'ymin',
+    'start_y', 'starty', 'from_y', 'fromy',
+}
+VISUAL_REGION_WIDTH_KEYS = {
+    'width', 'w', 'region_width', 'regionwidth', 'bbox_width', 'bboxwidth',
+}
+VISUAL_REGION_HEIGHT_KEYS = {
+    'height', 'h', 'region_height', 'regionheight', 'bbox_height', 'bboxheight',
+}
+VISUAL_REGION_RIGHT_KEYS = {
+    'right', 'x2', 'max_x', 'maxx', 'x_max', 'xmax',
+    'end_x', 'endx', 'to_x', 'tox',
+}
+VISUAL_REGION_BOTTOM_KEYS = {
+    'bottom', 'y2', 'max_y', 'maxy', 'y_max', 'ymax',
+    'end_y', 'endy', 'to_y', 'toy',
+}
 
 
 def capture_script_saves_screenshot(script):
@@ -1022,16 +1048,27 @@ def visual_delta_semantic_support(state=None, semantic_context=None):
     }
 
 
+def find_direct_metric_value(value, key_names):
+    if not isinstance(value, dict):
+        return None
+    for raw_key, raw_value in value.items():
+        if normalize_metric_key(raw_key) in key_names:
+            number = metric_number(raw_value)
+            if number is not None:
+                return number
+    return None
+
+
 def normalize_changed_region(value, total_pixels=None, changed_pixels=None, image_width=None, image_height=None, dimension_mismatch=False):
     if not isinstance(value, dict):
         return None
 
-    x = find_metric_value(value, VISUAL_REGION_X_KEYS)
-    y = find_metric_value(value, VISUAL_REGION_Y_KEYS)
-    width = find_metric_value(value, VISUAL_REGION_WIDTH_KEYS)
-    height = find_metric_value(value, VISUAL_REGION_HEIGHT_KEYS)
-    right = find_metric_value(value, VISUAL_REGION_RIGHT_KEYS)
-    bottom = find_metric_value(value, VISUAL_REGION_BOTTOM_KEYS)
+    x = find_direct_metric_value(value, VISUAL_REGION_X_KEYS)
+    y = find_direct_metric_value(value, VISUAL_REGION_Y_KEYS)
+    width = find_direct_metric_value(value, VISUAL_REGION_WIDTH_KEYS)
+    height = find_direct_metric_value(value, VISUAL_REGION_HEIGHT_KEYS)
+    right = find_direct_metric_value(value, VISUAL_REGION_RIGHT_KEYS)
+    bottom = find_direct_metric_value(value, VISUAL_REGION_BOTTOM_KEYS)
 
     if width is None and x is not None and right is not None and right > x:
         width = right - x
@@ -1091,10 +1128,31 @@ def normalize_changed_region(value, total_pixels=None, changed_pixels=None, imag
     }
 
 
+def looks_like_changed_region(value):
+    if not isinstance(value, dict):
+        return False
+    keys = {normalize_metric_key(key) for key in value.keys()}
+    has_x = bool(keys & VISUAL_REGION_X_KEYS)
+    has_y = bool(keys & VISUAL_REGION_Y_KEYS)
+    has_size = bool(keys & VISUAL_REGION_WIDTH_KEYS) and bool(keys & VISUAL_REGION_HEIGHT_KEYS)
+    has_edges = bool(keys & VISUAL_REGION_RIGHT_KEYS) and bool(keys & VISUAL_REGION_BOTTOM_KEYS)
+    return has_x and has_y and (has_size or has_edges)
+
+
 def find_changed_region(value, total_pixels=None, changed_pixels=None, image_width=None, image_height=None, depth=0):
     if depth > 7:
         return None
     if isinstance(value, dict):
+        if looks_like_changed_region(value):
+            region = normalize_changed_region(
+                value,
+                total_pixels=total_pixels,
+                changed_pixels=changed_pixels,
+                image_width=image_width,
+                image_height=image_height,
+            )
+            if region is not None:
+                return region
         for raw_key, raw_value in value.items():
             if normalize_metric_key(raw_key) in VISUAL_CHANGED_REGION_KEYS:
                 region = normalize_changed_region(
