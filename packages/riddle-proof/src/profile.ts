@@ -195,6 +195,8 @@ export interface RiddleProofProfileCheck {
   body?: string;
   body_json?: JsonValue;
   body_contains?: string[];
+  body_not_contains?: string[];
+  body_not_patterns?: string[];
   expected_texts?: string[];
   link_selector?: string;
   source_selector?: string;
@@ -1333,6 +1335,33 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
       `checks[${index}] body_contains`,
     )
     : undefined;
+  const bodyNotContains = isHttpStatusCheck
+    ? normalizeStringList(
+      input.body_not_contains
+        ?? input.bodyNotContains
+        ?? input.expected_body_not_contains
+        ?? input.expectedBodyNotContains
+        ?? input.response_body_not_contains
+        ?? input.responseBodyNotContains
+        ?? input.body_absent
+        ?? input.bodyAbsent,
+      `checks[${index}] body_not_contains`,
+    )
+    : undefined;
+  const bodyNotPatterns = isHttpStatusCheck
+    ? normalizeStringList(
+      input.body_not_patterns
+        ?? input.bodyNotPatterns
+        ?? input.expected_body_not_patterns
+        ?? input.expectedBodyNotPatterns
+        ?? input.response_body_not_patterns
+        ?? input.responseBodyNotPatterns
+        ?? input.body_forbidden_patterns
+        ?? input.bodyForbiddenPatterns,
+      `checks[${index}] body_not_patterns`,
+    )
+    : undefined;
+  if (bodyNotPatterns?.length) validateRegexPatterns(bodyNotPatterns, `checks[${index}] body_not_patterns`);
   if (isLinkStatusCheck) {
     if (minCount !== undefined && (!Number.isInteger(minCount) || minCount < 0)) {
       throw new Error(`checks[${index}] ${type} min_count must be a non-negative integer.`);
@@ -1356,6 +1385,8 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     body: isHttpStatusCheck ? stringValue(input.body) : undefined,
     body_json: isHttpStatusCheck && hasBodyJson ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : undefined,
     body_contains: bodyContains,
+    body_not_contains: bodyNotContains,
+    body_not_patterns: bodyNotPatterns,
     expected_texts: expectedTexts,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
@@ -1567,6 +1598,20 @@ function httpStatusBodyContainsFailures(result: Record<string, unknown>, check: 
   return expected.filter((text) => observed[text] !== true);
 }
 
+function httpStatusBodyNotContainsFailures(result: Record<string, unknown>, check: RiddleProofProfileCheck): string[] {
+  const forbidden = check.body_not_contains?.filter(Boolean) ?? [];
+  if (!forbidden.length) return [];
+  const observed = isRecord(result.body_not_contains) ? result.body_not_contains : {};
+  return forbidden.filter((text) => observed[text] !== false);
+}
+
+function httpStatusBodyNotPatternFailures(result: Record<string, unknown>, check: RiddleProofProfileCheck): string[] {
+  const forbidden = check.body_not_patterns?.filter(Boolean) ?? [];
+  if (!forbidden.length) return [];
+  const observed = isRecord(result.body_not_patterns) ? result.body_not_patterns : {};
+  return forbidden.filter((pattern) => observed[pattern] !== false);
+}
+
 function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const status = numberValue(result.status);
   if (!httpStatusIsAllowed(status, check)) return false;
@@ -1582,6 +1627,8 @@ function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofP
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
   if (httpStatusBodyContainsFailures(result, check).length) return false;
+  if (httpStatusBodyNotContainsFailures(result, check).length) return false;
+  if (httpStatusBodyNotPatternFailures(result, check).length) return false;
   return true;
 }
 
@@ -1612,6 +1659,8 @@ function summarizeHttpStatusEvidence(
   }
   const failures: Array<Record<string, unknown>> = [];
   const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
+  const bodyNotContainsFound = httpStatusBodyNotContainsFailures(statusEvidence, check);
+  const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -1626,6 +1675,10 @@ function summarizeHttpStatusEvidence(
       allowed_content_types: check.allowed_content_types ?? null,
       body_contains: check.body_contains ?? null,
       body_contains_missing: bodyContainsMissing,
+      body_not_contains: check.body_not_contains ?? null,
+      body_not_contains_found: bodyNotContainsFound,
+      body_not_patterns: check.body_not_patterns ?? null,
+      body_not_patterns_found: bodyNotPatternsFound,
       body_sample: stringValue(statusEvidence.body_sample) ?? null,
     });
   }
@@ -1643,6 +1696,10 @@ function summarizeHttpStatusEvidence(
     bytes: linkStatusObservedBytes(statusEvidence) ?? null,
     body_contains: isRecord(statusEvidence.body_contains) ? toJsonValue(statusEvidence.body_contains) : null,
     body_contains_missing: bodyContainsMissing,
+    body_not_contains: isRecord(statusEvidence.body_not_contains) ? toJsonValue(statusEvidence.body_not_contains) : null,
+    body_not_contains_found: bodyNotContainsFound,
+    body_not_patterns: isRecord(statusEvidence.body_not_patterns) ? toJsonValue(statusEvidence.body_not_patterns) : null,
+    body_not_patterns_found: bodyNotPatternsFound,
     body_sample: stringValue(statusEvidence.body_sample) ?? null,
     failures,
   };
@@ -2349,6 +2406,8 @@ function assessCheckFromEvidence(
         min_bytes: check.min_bytes ?? null,
         allowed_content_types: check.allowed_content_types ?? null,
         body_contains: check.body_contains ?? [],
+        body_not_contains: check.body_not_contains ?? [],
+        body_not_patterns: check.body_not_patterns ?? [],
         viewports: summaries.map((summary) => toJsonValue(summary)),
         failures: failed.flatMap((summary) => (
           Array.isArray(summary.failures)
@@ -5186,6 +5245,8 @@ async function collectHttpStatus(check) {
     body = check.body;
   }
   const bodyContains = Array.isArray(check.body_contains) ? check.body_contains.filter(Boolean) : [];
+  const bodyNotContains = Array.isArray(check.body_not_contains) ? check.body_not_contains.filter(Boolean) : [];
+  const bodyNotPatterns = Array.isArray(check.body_not_patterns) ? check.body_not_patterns.filter(Boolean) : [];
   const options = {
     method,
     redirect: "follow",
@@ -5211,15 +5272,17 @@ async function collectHttpStatus(check) {
     Object.assign(result, linkProbeResponseFields(response, method));
     result.url = url;
     result.status_text = response.statusText || "";
-    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || bodyContains.length > 0;
+    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || bodyContains.length > 0 || bodyNotContains.length > 0 || bodyNotPatterns.length > 0;
     if (shouldReadBody) {
       try {
         const buffer = await response.arrayBuffer();
         result.bytes = buffer.byteLength;
-        if (bodyContains.length) {
+        if (bodyContains.length || bodyNotContains.length || bodyNotPatterns.length) {
           const text = new TextDecoder().decode(buffer);
           result.body_sample = text.slice(0, 1000);
-          result.body_contains = Object.fromEntries(bodyContains.map((expected) => [expected, text.includes(expected)]));
+          if (bodyContains.length) result.body_contains = Object.fromEntries(bodyContains.map((expected) => [expected, text.includes(expected)]));
+          if (bodyNotContains.length) result.body_not_contains = Object.fromEntries(bodyNotContains.map((forbidden) => [forbidden, text.includes(forbidden)]));
+          if (bodyNotPatterns.length) result.body_not_patterns = Object.fromEntries(bodyNotPatterns.map((pattern) => [pattern, new RegExp(pattern).test(text)]));
         }
       } catch (error) {
         result.error = String(error && error.message ? error.message : error).slice(0, 500);
@@ -5230,6 +5293,8 @@ async function collectHttpStatus(check) {
       && (check.require_nonzero_bytes !== true || ((linkProbeObservedBytes(result) || 0) > 0))
       && (!(typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || ((linkProbeObservedBytes(result) || 0) >= check.min_bytes))
       && (!bodyContains.length || bodyContains.every((expected) => result.body_contains && result.body_contains[expected] === true))
+      && (!bodyNotContains.length || bodyNotContains.every((forbidden) => result.body_not_contains && result.body_not_contains[forbidden] === false))
+      && (!bodyNotPatterns.length || bodyNotPatterns.every((pattern) => result.body_not_patterns && result.body_not_patterns[pattern] === false))
       && !result.error;
     return result;
   } catch (error) {
