@@ -1805,6 +1805,8 @@ assert.ok(linkStatusProfileScript.includes("riddle-proof.link-status.v1"));
 assert.ok(linkStatusProfileScript.includes("link_statuses"));
 assert.ok(linkStatusProfileScript.includes("allowed_content_types"));
 assert.ok(linkStatusProfileScript.includes("min_bytes"));
+assert.ok(linkStatusProfileScript.includes("compactLinkProbeResults"));
+assert.ok(linkStatusProfileScript.includes("results_compacted"));
 assert.ok(linkStatusProfileScript.includes("link_status: currentViewports"));
 assert.ok(linkStatusProfileScript.includes("profileCheckAppliesToViewport(check, viewport)"));
 assert.ok(linkStatusProfileScript.includes("waitForAnyVisibleSelector"));
@@ -2280,9 +2282,58 @@ assert.equal(linkStatusAssessment.status, "passed");
 assert.equal(linkStatusCheck.status, "passed");
 assert.equal(linkStatusCheck.evidence.viewports[0].total_count, 2);
 assert.equal(linkStatusCheck.evidence.viewports[0].ok_count, 2);
+assert.equal(linkStatusCheck.evidence.viewports[0].result_count, 2);
+assert.equal(linkStatusCheck.evidence.viewports[0].stored_result_count, 2);
+assert.equal(linkStatusCheck.evidence.viewports[0].omitted_result_count, 0);
 assert.equal(linkStatusCheck.evidence.require_nonzero_bytes, true);
 assert.equal(linkStatusCheck.evidence.min_bytes, 32);
 assert.deepEqual(linkStatusCheck.evidence.allowed_content_types, ["image/*", "application/json"]);
+const linkStatusSelector = "a[href*='/proof/good-catches/artifacts/'], img[src*='/proof/good-catches/artifacts/']";
+const highVolumeLinkStatusProfile = {
+  ...linkStatusProfile,
+  checks: [{ ...linkStatusProfile.checks[0], expected_count: undefined, min_count: 25 }],
+};
+const compactedSuccessResults = Array.from({ length: 5 }, (_, index) => ({
+  url: `https://example.com/proof/good-catches/artifacts/success-${index}.png`,
+  status: 200,
+  method: "HEAD",
+  ok: true,
+  content_type: "image/png",
+  content_length: 64,
+  bytes: null,
+}));
+const compactedLinkStatusAssessment = assessRiddleProofProfileEvidence(highVolumeLinkStatusProfile, {
+  ...linkStatusEvidence,
+  viewports: [{
+    ...linkStatusEvidence.viewports[0],
+    link_statuses: {
+      [linkStatusSelector]: {
+        ...linkStatusEvidence.viewports[0].link_statuses[linkStatusSelector],
+        discovered_count: 25,
+        total_count: 25,
+        ok_count: 25,
+        failed_count: 0,
+        status_counts: { 200: 25 },
+        result_count: 25,
+        stored_result_count: 5,
+        omitted_result_count: 20,
+        omitted_success_count: 20,
+        results_compacted: true,
+        results: compactedSuccessResults,
+      },
+    },
+  }],
+});
+const compactedLinkStatusCheck = compactedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status");
+assert.equal(compactedLinkStatusAssessment.status, "passed");
+assert.equal(compactedLinkStatusCheck.status, "passed");
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].total_count, 25);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].ok_count, 25);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].result_count, 25);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].stored_result_count, 5);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].omitted_result_count, 20);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].omitted_success_count, 20);
+assert.equal(compactedLinkStatusCheck.evidence.viewports[0].results_compacted, true);
 const failedLinkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, {
   ...linkStatusEvidence,
   viewports: [{
@@ -2306,6 +2357,41 @@ const failedLinkStatusAssessment = assessRiddleProofProfileEvidence(linkStatusPr
 assert.equal(failedLinkStatusAssessment.status, "product_regression");
 assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").status, "failed");
 assert.equal(failedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status").evidence.failures.length, 1);
+const compactedFailedLink = { url: "https://example.com/proof/good-catches/artifacts/missing.png", status: 403, method: "HEAD", ok: false, error: null, content_length: 0, bytes: null };
+const compactedFailedLinkStatusAssessment = assessRiddleProofProfileEvidence(highVolumeLinkStatusProfile, {
+  ...linkStatusEvidence,
+  viewports: [{
+    ...linkStatusEvidence.viewports[0],
+    link_statuses: {
+      [linkStatusSelector]: {
+        ...linkStatusEvidence.viewports[0].link_statuses[linkStatusSelector],
+        discovered_count: 25,
+        total_count: 25,
+        ok_count: 24,
+        failed_count: 1,
+        status_counts: { 200: 24, 403: 1 },
+        result_count: 25,
+        stored_result_count: 6,
+        omitted_result_count: 19,
+        omitted_success_count: 19,
+        results_compacted: true,
+        results: [
+          compactedSuccessResults[0],
+          compactedSuccessResults[1],
+          compactedFailedLink,
+          compactedSuccessResults[2],
+          compactedSuccessResults[3],
+          compactedSuccessResults[4],
+        ],
+      },
+    },
+  }],
+});
+const compactedFailedLinkStatusCheck = compactedFailedLinkStatusAssessment.checks.find((check) => check.type === "artifact_link_status");
+assert.equal(compactedFailedLinkStatusAssessment.status, "product_regression");
+assert.equal(compactedFailedLinkStatusCheck.status, "failed");
+assert.equal(compactedFailedLinkStatusCheck.evidence.failures.length, 1);
+assert.equal(compactedFailedLinkStatusCheck.evidence.failures[0].failure.url, compactedFailedLink.url);
 const weakArtifactAssessment = assessRiddleProofProfileEvidence(linkStatusProfile, {
   ...linkStatusEvidence,
   viewports: [{

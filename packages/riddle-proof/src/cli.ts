@@ -734,13 +734,14 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
     const okTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.ok_count) || 0), 0);
     const failedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.failed_count) || 0), 0);
     const truncatedTotal = viewports.filter((viewport) => viewport.truncated === true).length;
+    const omittedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.omitted_result_count) || 0), 0);
     const minBytes = cliFiniteNumber(evidence.min_bytes);
     const allowedContentTypes = Array.isArray(evidence.allowed_content_types)
       ? evidence.allowed_content_types.map(cliString).filter((value): value is string => Boolean(value))
       : [];
     const countText = totals.length ? totals.join("/") : "unknown";
     lines.push(
-      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
+      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${omittedTotal ? `, compacted ${omittedTotal} result row(s)` : ""}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
     );
   }
 
