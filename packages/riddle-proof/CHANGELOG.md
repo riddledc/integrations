@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.99
+
+### Patch Changes
+
+- fe5845b: Add `body_contains` assertions to profile `http_status` checks so API profiles can verify response body content alongside status, content type, and byte evidence.
+
 ## 0.7.98
 
 ### Patch Changes
