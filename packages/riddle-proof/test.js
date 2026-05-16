@@ -1849,6 +1849,7 @@ const httpStatusProfile = normalizeRiddleProofProfile({
     allowed_content_types: ["application/json"],
     require_nonzero_bytes: true,
     min_bytes: 8,
+    body_contains: ["UNAUTHORIZED"],
   }],
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("http_status"));
@@ -1859,11 +1860,13 @@ assert.deepEqual(httpStatusProfile.checks[0].body_json, {});
 assert.equal(httpStatusProfile.checks[0].expected_status, 401);
 assert.equal(httpStatusProfile.checks[0].require_nonzero_bytes, true);
 assert.equal(httpStatusProfile.checks[0].min_bytes, 8);
+assert.deepEqual(httpStatusProfile.checks[0].body_contains, ["UNAUTHORIZED"]);
 const httpStatusProfileScript = buildRiddleProofProfileScript(httpStatusProfile);
 assert.ok(httpStatusProfileScript.includes("collectHttpStatus"));
 assert.ok(httpStatusProfileScript.includes("riddle-proof.http-status.v1"));
 assert.ok(httpStatusProfileScript.includes("http_statuses"));
 assert.ok(httpStatusProfileScript.includes("http_status: currentViewports"));
+assert.ok(httpStatusProfileScript.includes("body_contains"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "table-order-profile",
@@ -2370,6 +2373,8 @@ const httpStatusEvidence = {
         content_type: "application/json",
         content_length: 54,
         bytes: 54,
+        body_contains: { UNAUTHORIZED: true },
+        body_sample: '{"error":{"code":"UNAUTHORIZED"}}',
       },
     },
     screenshot_label: "direct-api-endpoint-status-desktop",
@@ -2385,7 +2390,28 @@ assert.equal(httpStatusCheck.status, "passed");
 assert.equal(httpStatusCheck.evidence.url, "https://api.example.com/v1/scrape");
 assert.equal(httpStatusCheck.evidence.method, "POST");
 assert.deepEqual(httpStatusCheck.evidence.allowed_statuses, [401]);
+assert.deepEqual(httpStatusCheck.evidence.body_contains, ["UNAUTHORIZED"]);
 assert.equal(httpStatusCheck.evidence.viewports[0].status, 401);
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains, { UNAUTHORIZED: true });
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains_missing, []);
+const failedBodyStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
+  ...httpStatusEvidence,
+  viewports: [{
+    ...httpStatusEvidence.viewports[0],
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        ...httpStatusEvidence.viewports[0].http_statuses["POST https://api.example.com/v1/scrape"],
+        body_contains: { UNAUTHORIZED: false },
+        body_sample: '{"error":{"code":"FORBIDDEN"}}',
+        ok: false,
+      },
+    },
+  }],
+});
+const failedBodyStatusCheck = failedBodyStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(failedBodyStatusAssessment.status, "product_regression");
+assert.equal(failedBodyStatusCheck.status, "failed");
+assert.deepEqual(failedBodyStatusCheck.evidence.failures[0].failure.body_contains_missing, ["UNAUTHORIZED"]);
 const failedHttpStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
   ...httpStatusEvidence,
   viewports: [{

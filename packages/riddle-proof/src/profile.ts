@@ -194,6 +194,7 @@ export interface RiddleProofProfileCheck {
   headers?: Record<string, string>;
   body?: string;
   body_json?: JsonValue;
+  body_contains?: string[];
   expected_texts?: string[];
   link_selector?: string;
   source_selector?: string;
@@ -1319,6 +1320,19 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
       `checks[${index}] allowed_content_types`,
     ) ?? (expectedContentType ? [expectedContentType] : undefined)
     : undefined;
+  const bodyContains = isHttpStatusCheck
+    ? normalizeStringList(
+      input.body_contains
+        ?? input.bodyContains
+        ?? input.expected_body_contains
+        ?? input.expectedBodyContains
+        ?? input.response_body_contains
+        ?? input.responseBodyContains
+        ?? input.body_includes
+        ?? input.bodyIncludes,
+      `checks[${index}] body_contains`,
+    )
+    : undefined;
   if (isLinkStatusCheck) {
     if (minCount !== undefined && (!Number.isInteger(minCount) || minCount < 0)) {
       throw new Error(`checks[${index}] ${type} min_count must be a non-negative integer.`);
@@ -1341,6 +1355,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     headers: isHttpStatusCheck ? stringRecord(input.headers) : undefined,
     body: isHttpStatusCheck ? stringValue(input.body) : undefined,
     body_json: isHttpStatusCheck && hasBodyJson ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : undefined,
+    body_contains: bodyContains,
     expected_texts: expectedTexts,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
@@ -1545,6 +1560,13 @@ function linkStatusContentTypeOk(result: Record<string, unknown>, check: RiddleP
   });
 }
 
+function httpStatusBodyContainsFailures(result: Record<string, unknown>, check: RiddleProofProfileCheck): string[] {
+  const expected = check.body_contains?.filter(Boolean) ?? [];
+  if (!expected.length) return [];
+  const observed = isRecord(result.body_contains) ? result.body_contains : {};
+  return expected.filter((text) => observed[text] !== true);
+}
+
 function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const status = numberValue(result.status);
   if (!httpStatusIsAllowed(status, check)) return false;
@@ -1559,6 +1581,7 @@ function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofP
     const observedBytes = linkStatusObservedBytes(result);
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
+  if (httpStatusBodyContainsFailures(result, check).length) return false;
   return true;
 }
 
@@ -1588,6 +1611,7 @@ function summarizeHttpStatusEvidence(
     };
   }
   const failures: Array<Record<string, unknown>> = [];
+  const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -1600,6 +1624,9 @@ function summarizeHttpStatusEvidence(
       allowed_statuses: httpStatusAllowedStatuses(check) ?? ["2xx", "3xx"],
       min_bytes: check.min_bytes ?? null,
       allowed_content_types: check.allowed_content_types ?? null,
+      body_contains: check.body_contains ?? null,
+      body_contains_missing: bodyContainsMissing,
+      body_sample: stringValue(statusEvidence.body_sample) ?? null,
     });
   }
   return {
@@ -1614,6 +1641,9 @@ function summarizeHttpStatusEvidence(
     content_type: stringValue(statusEvidence.content_type) ?? null,
     content_length: numberValue(statusEvidence.content_length) ?? null,
     bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+    body_contains: isRecord(statusEvidence.body_contains) ? toJsonValue(statusEvidence.body_contains) : null,
+    body_contains_missing: bodyContainsMissing,
+    body_sample: stringValue(statusEvidence.body_sample) ?? null,
     failures,
   };
 }
@@ -2318,6 +2348,7 @@ function assessCheckFromEvidence(
         require_nonzero_bytes: check.require_nonzero_bytes === true,
         min_bytes: check.min_bytes ?? null,
         allowed_content_types: check.allowed_content_types ?? null,
+        body_contains: check.body_contains ?? [],
         viewports: summaries.map((summary) => toJsonValue(summary)),
         failures: failed.flatMap((summary) => (
           Array.isArray(summary.failures)
@@ -3085,6 +3116,14 @@ function linkStatusContentTypeOk(result, check) {
     return actual === normalized;
   });
 }
+function httpStatusBodyContainsFailures(result, check) {
+  const expected = Array.isArray(check.body_contains) ? check.body_contains.filter(Boolean) : [];
+  if (!expected.length) return [];
+  const observed = result && typeof result.body_contains === "object" && !Array.isArray(result.body_contains)
+    ? result.body_contains
+    : {};
+  return expected.filter((text) => observed[text] !== true);
+}
 function linkStatusResultOk(result, check) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return false;
   if (!httpStatusIsAllowed(result.status, check)) return false;
@@ -3099,6 +3138,7 @@ function linkStatusResultOk(result, check) {
     const observedBytes = linkStatusObservedBytes(result);
     if (observedBytes === undefined || observedBytes < check.min_bytes) return false;
   }
+  if (httpStatusBodyContainsFailures(result, check).length) return false;
   return true;
 }
 function summarizeHttpStatusEvidence(viewport, check) {
@@ -3116,6 +3156,7 @@ function summarizeHttpStatusEvidence(viewport, check) {
     };
   }
   const failures = [];
+  const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -3128,6 +3169,9 @@ function summarizeHttpStatusEvidence(viewport, check) {
       allowed_statuses: httpStatusAllowedStatuses(check) || ["2xx", "3xx"],
       min_bytes: typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes) ? check.min_bytes : null,
       allowed_content_types: Array.isArray(check.allowed_content_types) ? check.allowed_content_types : null,
+      body_contains: Array.isArray(check.body_contains) ? check.body_contains : null,
+      body_contains_missing: bodyContainsMissing,
+      body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     });
   }
   return {
@@ -3142,6 +3186,11 @@ function summarizeHttpStatusEvidence(viewport, check) {
     content_type: typeof statusEvidence.content_type === "string" ? statusEvidence.content_type : null,
     content_length: typeof statusEvidence.content_length === "number" && Number.isFinite(statusEvidence.content_length) ? statusEvidence.content_length : null,
     bytes: linkStatusObservedBytes(statusEvidence) ?? null,
+    body_contains: statusEvidence.body_contains && typeof statusEvidence.body_contains === "object" && !Array.isArray(statusEvidence.body_contains)
+      ? statusEvidence.body_contains
+      : null,
+    body_contains_missing: bodyContainsMissing,
+    body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     failures,
   };
 }
@@ -5136,6 +5185,7 @@ async function collectHttpStatus(check) {
   } else if (typeof check.body === "string") {
     body = check.body;
   }
+  const bodyContains = Array.isArray(check.body_contains) ? check.body_contains.filter(Boolean) : [];
   const options = {
     method,
     redirect: "follow",
@@ -5161,11 +5211,16 @@ async function collectHttpStatus(check) {
     Object.assign(result, linkProbeResponseFields(response, method));
     result.url = url;
     result.status_text = response.statusText || "";
-    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes));
+    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || bodyContains.length > 0;
     if (shouldReadBody) {
       try {
         const buffer = await response.arrayBuffer();
         result.bytes = buffer.byteLength;
+        if (bodyContains.length) {
+          const text = new TextDecoder().decode(buffer);
+          result.body_sample = text.slice(0, 1000);
+          result.body_contains = Object.fromEntries(bodyContains.map((expected) => [expected, text.includes(expected)]));
+        }
       } catch (error) {
         result.error = String(error && error.message ? error.message : error).slice(0, 500);
       }
@@ -5174,6 +5229,7 @@ async function collectHttpStatus(check) {
       && linkProbeContentTypeAllowed(result, check)
       && (check.require_nonzero_bytes !== true || ((linkProbeObservedBytes(result) || 0) > 0))
       && (!(typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || ((linkProbeObservedBytes(result) || 0) >= check.min_bytes))
+      && (!bodyContains.length || bodyContains.every((expected) => result.body_contains && result.body_contains[expected] === true))
       && !result.error;
     return result;
   } catch (error) {
