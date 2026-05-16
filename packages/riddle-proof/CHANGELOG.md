@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.102
+
+### Patch Changes
+
+- 2372a74: Clarify in CLI help that hosted `run-profile` defaults to `strict=false`.
+
 ## 0.7.101
 
 ### Patch Changes
