@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.89
+
+### Patch Changes
+
+- 3cdd49d: Broaden visual-delta changed-region parsing so common visual-diff bounding-box field names can drive targeted visual thresholds.
+
 ## 0.7.88
 
 ### Patch Changes
