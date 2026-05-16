@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.107
+
+### Patch Changes
+
+- be452d5: Include selector text candidates in failed selector-text profile evidence so receipt samples explain mismatches such as rendered case changes.
+
 ## 0.7.106
 
 ### Patch Changes
