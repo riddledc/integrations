@@ -167,7 +167,8 @@ or as a stronger proof base before a change loop.
     { "type": "text_visible", "text": "Start building" },
     { "type": "text_visible", "text": "Compare plans", "viewports": ["desktop"] },
     { "type": "no_mobile_horizontal_overflow" },
-    { "type": "no_fatal_console_errors" }
+    { "type": "no_fatal_console_errors" },
+    { "type": "no_console_warnings" }
   ],
   "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
   "failure_policy": {
@@ -376,6 +377,11 @@ Use `allowed_page_error_patterns`, `allowed_console_texts`, or
 match both the console text and the event location URL, which is useful for
 expected resource probes where the browser message is generic but the URL is
 specific.
+
+Use `no_console_warnings` when warning hygiene is part of the contract, such as
+a docs or evidence page that should not accumulate preload or image warnings.
+It supports the same `allowed_console_patterns` and `allowed_console_texts`
+fields, but only unallowed `warning` console events fail the check.
 
 Use `selector_absent` when a forbidden element must not render, and
 `selector_count_equals` / `selector_count_equal` / `selector_count_eq` when a
