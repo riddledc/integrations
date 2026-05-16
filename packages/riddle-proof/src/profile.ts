@@ -4368,11 +4368,21 @@ function setupFiniteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
 }
+function normalizeSetupMatchText(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
 function setupTextMatches(sample, action) {
+  const rawSample = String(sample || "");
   if (action.pattern) {
-    try { return new RegExp(action.pattern, action.flags || "").test(sample || ""); } catch { return false; }
+    try {
+      const rawPattern = new RegExp(action.pattern, action.flags || "");
+      if (rawPattern.test(rawSample)) return true;
+      return new RegExp(action.pattern, action.flags || "").test(normalizeSetupMatchText(rawSample));
+    } catch { return false; }
   }
-  return String(sample || "").includes(action.text || "");
+  const expected = String(action.text || "");
+  return rawSample.includes(expected)
+    || normalizeSetupMatchText(rawSample).includes(normalizeSetupMatchText(expected));
 }
 async function waitForAnyVisibleSelector(context, selector, timeout) {
   const deadline = Date.now() + setupNumber(timeout, 15000);

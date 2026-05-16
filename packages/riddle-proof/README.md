@@ -309,6 +309,8 @@ proof state must expose a terminal flag. `assert_selector_count` accepts
 `expected_count`; `assert_text_visible` and `assert_text_absent` prefer rendered
 selector text (`innerText`) so casing from CSS `text-transform` matches
 `selector_text_visible`, with a `textContent` fallback for non-HTML elements.
+Literal setup text matching also checks a whitespace-normalized form, so visible
+phrases split across rendered line breaks can still satisfy the assertion.
 `assert_window_value` accepts `path` / `state_path` plus
 `expected_value` / `expected` and compares JSON-safe values exactly.
 `assert_window_number` accepts `path` / `state_path` plus `expected_value`,
