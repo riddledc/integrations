@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.95
+
+### Patch Changes
+
+- deb3a5c: Add `min_bytes` and `allowed_content_types` to profile `link_status` and `artifact_link_status` checks so artifact audits can prove response size and MIME type, not only nonzero link reachability.
+
 ## 0.7.94
 
 ### Patch Changes
