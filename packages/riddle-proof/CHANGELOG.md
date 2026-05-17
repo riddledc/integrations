@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.114
+
+### Patch Changes
+
+- 7d17d61: Recover Riddle Preview deploys when publish returns a transient server error after the preview has already reached ready.
+
 ## 0.7.113
 
 ### Patch Changes
