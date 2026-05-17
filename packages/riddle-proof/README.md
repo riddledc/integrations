@@ -203,6 +203,7 @@ The package includes generic starter profiles:
 - `examples/profiles/page-content-basic.json` for route/content/layout smoke profiles.
 - `examples/profiles/route-inventory-basic.json` for source-link and direct-route audits.
 - `examples/profiles/handled-recovery-list-load.json` for malformed list-load recovery profiles.
+- `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
 
 Copy one of those shapes into a repository profile directory and replace the
 routes, selectors, mock URLs, and text checks with app-specific invariants.
@@ -219,6 +220,15 @@ when the list failed to load; and keep `no_fatal_console_errors` plus
 `no_console_warnings` in the final checks. This pattern catches both visible
 recovery-quality bugs and hidden browser-health debt without requiring a
 separate CI or wrapper-specific path.
+
+For handled action recovery profiles, assert the action itself as well as the
+recovery UI. Capture the request body when the action payload matters, preserve
+the surrounding page state, and reject the success modal, toast, or row that
+would imply the action completed. A useful malformed-success profile returns a
+successful HTTP status with an invalid JSON body, waits for one generic failure
+message, captures a recovery screenshot, and keeps parser text plus browser
+console/page errors out of the final proof. This catches action paths that look
+recovered to a user but still poison the browser evidence stream.
 
 Checks normally apply to every captured viewport. Add `viewports` (or
 `viewport_names`) to a check when responsive UI intentionally exposes an
