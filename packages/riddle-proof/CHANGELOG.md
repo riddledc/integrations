@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.118
+
+### Patch Changes
+
+- 878f937: Add a reusable handled action recovery profile example and README guidance for malformed success responses that must recover visibly without leaking parser or browser-console debt.
+
 ## 0.7.117
 
 ### Patch Changes
