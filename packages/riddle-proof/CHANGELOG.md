@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.115
+
+### Patch Changes
+
+- 37b8677: Add profile checks for total, accepted, and dismissed browser dialog counts so destructive-action proofs can assert dialog handling directly.
+
 ## 0.7.114
 
 ### Patch Changes
