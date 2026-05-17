@@ -495,8 +495,8 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     const minCount = cliFiniteNumber(evidence.min_count);
     const minBytes = cliFiniteNumber(evidence.min_bytes);
     const parts: string[] = [];
-    if (expectedCount !== undefined) parts.push(`links = ${expectedCount}`);
-    else if (minCount !== undefined) parts.push(`links >= ${minCount}`);
+    if (expectedCount !== undefined) parts.push(`probed links = ${expectedCount}`);
+    else if (minCount !== undefined) parts.push(`probed links >= ${minCount}`);
     if (minBytes !== undefined) parts.push(`bytes >= ${minBytes}`);
     if (selector && parts.length) return `${markdownInlineCode(selector)} ${parts.join(", ")}`;
     return selector ? markdownInlineCode(selector) : parts.join(", ") || undefined;
@@ -750,6 +750,7 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
       ? evidence.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
       : [];
     const totals = viewports.map((viewport) => cliFiniteNumber(viewport.total_count)).filter((count): count is number => count !== undefined);
+    const discoveredTotals = viewports.map((viewport) => cliFiniteNumber(viewport.discovered_count)).filter((count): count is number => count !== undefined);
     const okTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.ok_count) || 0), 0);
     const failedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.failed_count) || 0), 0);
     const truncatedTotal = viewports.filter((viewport) => viewport.truncated === true).length;
@@ -759,8 +760,11 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
       ? evidence.allowed_content_types.map(cliString).filter((value): value is string => Boolean(value))
       : [];
     const countText = totals.length ? totals.join("/") : "unknown";
+    const discoveredText = discoveredTotals.length && discoveredTotals.some((count, index) => count !== totals[index])
+      ? `, discovered ${discoveredTotals.join("/")}`
+      : "";
     lines.push(
-      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: links ${countText}, ok ${okTotal}, failures ${failedTotal}${omittedTotal ? `, compacted ${omittedTotal} result row(s)` : ""}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
+      `- ${label}${selector ? ` ${markdownInlineCode(selector)}` : ""}: probed links ${countText}${discoveredText}, ok ${okTotal}, failures ${failedTotal}${omittedTotal ? `, compacted ${omittedTotal} result row(s)` : ""}${truncatedTotal ? `, truncated viewports ${truncatedTotal}` : ""}${minBytes !== undefined ? `, min bytes ${minBytes}` : ""}${allowedContentTypes.length ? `, content types ${allowedContentTypes.map((value) => markdownInlineCode(value)).join(", ")}` : ""}`,
     );
   }
 
