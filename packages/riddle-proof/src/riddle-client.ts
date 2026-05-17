@@ -54,6 +54,8 @@ export interface RiddlePreviewDeployResult {
   file_count?: number;
   total_bytes?: number;
   expires_at?: string;
+  publish_recovered?: boolean;
+  publish_error?: string;
   raw?: Record<string, unknown>;
 }
 
@@ -120,6 +122,10 @@ export class RiddleApiError extends Error {
   }
 }
 
+const PREVIEW_PUBLISH_RECOVERY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const PREVIEW_PUBLISH_RECOVERY_ATTEMPTS = 30;
+const PREVIEW_PUBLISH_RECOVERY_INTERVAL_MS = 2000;
+
 function normalizeBaseUrl(value?: string) {
   return (value || DEFAULT_RIDDLE_API_BASE_URL).replace(/\/$/, "");
 }
@@ -163,6 +169,65 @@ export async function riddleRequestJson<T = unknown>(
   return (json ?? text) as T;
 }
 
+function previewDeployResultFromRecord(input: {
+  record: Record<string, unknown>;
+  id: string;
+  label: string;
+  framework: RiddlePreviewFramework;
+  expiresAt?: string;
+  publishRecovered?: boolean;
+  publishError?: string;
+}): RiddlePreviewDeployResult {
+  const { record, id, label, framework, expiresAt, publishRecovered, publishError } = input;
+  return {
+    ok: true,
+    id: String(record.id || record.preview_id || id),
+    label,
+    framework,
+    preview_url: String(record.preview_url || ""),
+    file_count: typeof record.file_count === "number" ? record.file_count : undefined,
+    total_bytes: typeof record.total_bytes === "number" ? record.total_bytes : undefined,
+    expires_at: expiresAt,
+    publish_recovered: publishRecovered || undefined,
+    publish_error: publishError,
+    raw: record,
+  };
+}
+
+function canRecoverPreviewPublish(error: unknown): error is RiddleApiError {
+  return error instanceof RiddleApiError && PREVIEW_PUBLISH_RECOVERY_STATUSES.has(error.status);
+}
+
+async function waitForPublishedPreview(
+  config: RiddleClientConfig,
+  input: {
+    id: string;
+    label: string;
+    framework: RiddlePreviewFramework;
+    expiresAt?: string;
+    publishError: RiddleApiError;
+  },
+) {
+  for (let attempt = 1; attempt <= PREVIEW_PUBLISH_RECOVERY_ATTEMPTS; attempt += 1) {
+    const status = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${input.id}`);
+    if (String(status.status || "") === "ready" && String(status.preview_url || "").trim()) {
+      return previewDeployResultFromRecord({
+        record: status,
+        id: input.id,
+        label: input.label,
+        framework: input.framework,
+        expiresAt: input.expiresAt,
+        publishRecovered: true,
+        publishError: input.publishError.message,
+      });
+    }
+    if (attempt < PREVIEW_PUBLISH_RECOVERY_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, PREVIEW_PUBLISH_RECOVERY_INTERVAL_MS));
+    }
+  }
+  throw input.publishError;
+}
+
 export async function deployRiddlePreview(
   config: RiddleClientConfig,
   directory: string,
@@ -197,20 +262,22 @@ export async function deployRiddlePreview(
     rmSync(scratch, { recursive: true, force: true });
   }
 
-  const published = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${id}/publish`, {
-    method: "POST",
-  });
-  return {
-    ok: true,
-    id: String(published.id || id),
-    label,
-    framework,
-    preview_url: String(published.preview_url || ""),
-    file_count: typeof published.file_count === "number" ? published.file_count : undefined,
-    total_bytes: typeof published.total_bytes === "number" ? published.total_bytes : undefined,
-    expires_at: typeof created.expires_at === "string" ? created.expires_at : undefined,
-    raw: published,
-  };
+  const expiresAt = typeof created.expires_at === "string" ? created.expires_at : undefined;
+  try {
+    const published = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${id}/publish`, {
+      method: "POST",
+    });
+    return previewDeployResultFromRecord({ record: published, id, label, framework, expiresAt });
+  } catch (error) {
+    if (!canRecoverPreviewPublish(error)) throw error;
+    return waitForPublishedPreview(config, {
+      id,
+      label,
+      framework,
+      expiresAt,
+      publishError: error,
+    });
+  }
 }
 
 export async function deployRiddleStaticPreview(

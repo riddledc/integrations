@@ -207,6 +207,51 @@ const deployedSpaPreview = await riddleClient.deployPreview(riddlePreviewDir, "u
 const previewCreateCalls = riddleClientCalls.filter((call) => call.url === "https://api.test/v1/preview");
 assert.equal(previewCreateCalls.at(-1)?.body?.framework, "spa");
 assert.equal(deployedSpaPreview.framework, "spa");
+const recoveredPreviewCalls = [];
+const recoveredPreviewClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.recovered-preview.test",
+  fetchImpl: async (url, init = {}) => {
+    recoveredPreviewCalls.push({ url: String(url), method: init.method || "GET" });
+    if (String(url) === "https://api.recovered-preview.test/v1/preview") {
+      return new Response(JSON.stringify({
+        id: "ps_recovered",
+        upload_url: "https://upload.test/ps_recovered",
+        expires_at: "2026-05-09T00:00:00.000Z",
+      }), { status: 200 });
+    }
+    if (String(url) === "https://upload.test/ps_recovered") {
+      return new Response("", { status: 200 });
+    }
+    if (String(url) === "https://api.recovered-preview.test/v1/preview/ps_recovered/publish") {
+      return new Response(JSON.stringify({ message: "Service Unavailable" }), { status: 503 });
+    }
+    if (String(url) === "https://api.recovered-preview.test/v1/preview/ps_recovered") {
+      return new Response(JSON.stringify({
+        id: "ps_recovered",
+        status: "ready",
+        preview_url: "https://preview.riddledc.com/s/ps_recovered/",
+        file_count: 3,
+        total_bytes: 120,
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const recoveredPreview = await recoveredPreviewClient.deployStaticPreview(riddlePreviewDir, "unit-recovered-preview");
+assert.equal(recoveredPreview.preview_url, "https://preview.riddledc.com/s/ps_recovered/");
+assert.equal(recoveredPreview.file_count, 3);
+assert.equal(recoveredPreview.publish_recovered, true);
+assert.match(recoveredPreview.publish_error, /HTTP 503/);
+assert.deepEqual(
+  recoveredPreviewCalls.map((call) => `${call.method} ${call.url}`),
+  [
+    "POST https://api.recovered-preview.test/v1/preview",
+    "PUT https://upload.test/ps_recovered",
+    "POST https://api.recovered-preview.test/v1/preview/ps_recovered/publish",
+    "GET https://api.recovered-preview.test/v1/preview/ps_recovered",
+  ],
+);
 assert.equal(typeof deployRiddlePreview, "function");
 assert.equal(typeof deployRiddleStaticPreview, "function");
 assert.deepEqual(parseRiddleViewport("390x844"), { width: 390, height: 844 });
