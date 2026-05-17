@@ -4606,6 +4606,14 @@ function networkMockShouldCaptureRequestBody(...sources) {
     || networkMockStringList(source.request_body_not_patterns).length > 0
   ));
 }
+function networkMockHasRequestBodyContract(source) {
+  return Boolean(source) && (
+    networkMockStringList(source.request_body_contains).length > 0
+    || networkMockStringList(source.request_body_patterns).length > 0
+    || networkMockStringList(source.request_body_not_contains).length > 0
+    || networkMockStringList(source.request_body_not_patterns).length > 0
+  );
+}
 function networkMockRequestBodyFailuresForSource(body, source) {
   const failures = [];
   if (!source) return failures;
@@ -4666,6 +4674,15 @@ function networkMockRequestBodyFailuresForSource(body, source) {
 function networkMockRequestBodyFailures(body, ...sources) {
   return sources.flatMap((source) => networkMockRequestBodyFailuresForSource(body, source));
 }
+function selectNetworkMockResponseByRequestBody(mock, responses, requestBody) {
+  if (!Array.isArray(responses) || !responses.length) return null;
+  const candidates = responses
+    .map((response, index) => ({ response, index }))
+    .filter((candidate) => networkMockHasRequestBodyContract(candidate.response));
+  if (!candidates.length) return null;
+  const matched = candidates.find((candidate) => networkMockRequestBodyFailures(requestBody, mock, candidate.response).length === 0);
+  return matched ? matched.index : null;
+}
 async function setupLocatorVisible(locator, index) {
   return await locator.nth(index).isVisible({ timeout: 1000 }).catch(() => false);
 }
@@ -4687,9 +4704,20 @@ async function registerNetworkMocks(mocks) {
         const responses = Array.isArray(mock.responses) ? mock.responses : [];
         const hitIndex = hitCount;
         hitCount += 1;
-        const responseIndex = responses.length
+        const sequenceResponseIndex = responses.length
           ? (mock.repeat_responses ? hitIndex % responses.length : Math.min(hitIndex, responses.length - 1))
           : null;
+        let responseIndex = sequenceResponseIndex;
+        let responseSelection = responseIndex === null ? "mock" : "sequence";
+        const shouldCaptureRequestBodyForAnyResponse = networkMockShouldCaptureRequestBody(mock, ...responses);
+        const requestBody = shouldCaptureRequestBodyForAnyResponse && request.postData ? request.postData() || "" : "";
+        const requestBodyResponseIndex = shouldCaptureRequestBodyForAnyResponse
+          ? selectNetworkMockResponseByRequestBody(mock, responses, requestBody)
+          : null;
+        if (requestBodyResponseIndex !== null) {
+          responseIndex = requestBodyResponseIndex;
+          responseSelection = "request_body";
+        }
         const response = responseIndex === null ? mock : responses[responseIndex];
         const headers = { ...(response.headers || mock.headers || {}) };
         let body = response.body || "";
@@ -4699,8 +4727,7 @@ async function registerNetworkMocks(mocks) {
           contentType = response.content_type || headers["content-type"] || headers["Content-Type"] || "application/json";
         }
         const responseBodyContract = responseIndex === null ? null : response;
-        const shouldCaptureRequestBody = networkMockShouldCaptureRequestBody(mock, responseBodyContract);
-        const requestBody = shouldCaptureRequestBody && request.postData ? request.postData() || "" : "";
+        const shouldCaptureRequestBody = shouldCaptureRequestBodyForAnyResponse || networkMockShouldCaptureRequestBody(mock, responseBodyContract);
         const requestBodyFailures = shouldCaptureRequestBody ? networkMockRequestBodyFailures(requestBody, mock, responseBodyContract) : [];
         const status = response.status || mock.status || 200;
         const delayMs = numberValue(response.delay_ms) || 0;
@@ -4710,8 +4737,10 @@ async function registerNetworkMocks(mocks) {
           response_label: response.label || null,
           hit_index: hitIndex,
           response_index: responseIndex,
-          sequence_reused: responseIndex !== null && !mock.repeat_responses && hitIndex >= responses.length,
-          sequence_cycle: responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
+          sequence_response_index: responseSelection === "request_body" ? sequenceResponseIndex : undefined,
+          response_selection: responseIndex === null ? null : responseSelection,
+          sequence_reused: responseSelection === "sequence" && responseIndex !== null && !mock.repeat_responses && hitIndex >= responses.length,
+          sequence_cycle: responseSelection === "sequence" && responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
           url: request.url(),
           method,
           status,

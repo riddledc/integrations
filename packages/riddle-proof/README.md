@@ -276,6 +276,14 @@ request-body fields may also be placed on individual `responses[]` entries when
 each step has a different request contract, such as a fail-then-success retry
 where the second request must carry newer state.
 
+When `responses[]` entries include request-body predicates, the runner selects
+the first response whose request-body contract matches the actual request before
+falling back to sequence order. This keeps repeated multi-viewport profiles from
+misrouting interleaved requests while preserving sequence behavior for response
+lists that do not declare body-specific contracts. The proof evidence records
+`response_selection: "request_body"` and the original `sequence_response_index`
+when body matching overrides sequence order.
+
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
