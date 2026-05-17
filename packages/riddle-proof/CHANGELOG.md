@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.116
+
+### Patch Changes
+
+- 4fabf91: Clarify hosted profile strict-mode blocks for endpoint and artifact-link probes.
+
 ## 0.7.115
 
 ### Patch Changes
