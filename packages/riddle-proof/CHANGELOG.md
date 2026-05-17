@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.111
+
+### Patch Changes
+
+- ddf0506: Report the actual unallowed fatal-console count in profile summary markdown instead of a static zero.
+
 ## 0.7.110
 
 ### Patch Changes
