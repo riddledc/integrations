@@ -23,6 +23,9 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_count_equals",
   "selector_count_equal",
   "selector_count_eq",
+  "dialog_count_equals",
+  "dialog_accept_count_equals",
+  "dialog_dismiss_count_equals",
   "selector_text_visible",
   "selector_text_absent",
   "selector_text_order",
@@ -1271,6 +1274,18 @@ function validateRegexPatterns(patterns: string[] | undefined, label: string): v
   }
 }
 
+function isDialogCountCheckType(type: string): boolean {
+  return type === "dialog_count_equals"
+    || type === "dialog_accept_count_equals"
+    || type === "dialog_dismiss_count_equals";
+}
+
+function dialogCountFieldForCheckType(type: string): "dialog_count" | "dialog_accept_count" | "dialog_dismiss_count" {
+  if (type === "dialog_accept_count_equals") return "dialog_accept_count";
+  if (type === "dialog_dismiss_count_equals") return "dialog_dismiss_count";
+  return "dialog_count";
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -1278,6 +1293,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (!isSupportedCheckType(type)) {
     throw new Error(`checks[${index}].type ${type} is not supported. Supported checks: ${RIDDLE_PROOF_PROFILE_CHECK_TYPES.join(", ")}`);
   }
+  const isDialogCountCheck = isDialogCountCheckType(type);
   if (
     (
       type === "selector_visible"
@@ -1332,9 +1348,13 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
       type === "selector_count_equals"
       || type === "selector_count_equal"
       || type === "selector_count_eq"
+      || isDialogCountCheck
     ) && expectedCount === undefined
   ) {
     throw new Error(`checks[${index}] ${type} requires expected_count.`);
+  }
+  if (isDialogCountCheck && (expectedCount === undefined || !Number.isInteger(expectedCount) || expectedCount < 0)) {
+    throw new Error(`checks[${index}] ${type} expected_count must be a non-negative integer.`);
   }
   const expectedTexts = normalizeExpectedTexts(input.expected_texts ?? input.expectedTexts, index);
   if (type === "selector_text_order") {
@@ -2160,6 +2180,25 @@ function assessCheckFromEvidence(
       message: check.viewports?.length
         ? `No matching viewport evidence was captured for ${check.viewports.join(", ")}.`
         : "No viewport evidence was captured.",
+    };
+  }
+
+  if (isDialogCountCheckType(check.type)) {
+    const field = dialogCountFieldForCheckType(check.type);
+    const expectedCount = check.expected_count ?? 0;
+    const actualCount = numberValue(evidence.dom_summary?.[field]) ?? 0;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: actualCount === expectedCount ? "passed" : "failed",
+      evidence: {
+        field,
+        expected_count: expectedCount,
+        count: actualCount,
+      },
+      message: actualCount === expectedCount
+        ? undefined
+        : `${field} did not equal ${expectedCount}; observed ${actualCount}.`,
     };
   }
 
@@ -3539,6 +3578,16 @@ function summarizeRouteInventory(viewport, inventory) {
 function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
+function isDialogCountCheckType(type) {
+  return type === "dialog_count_equals"
+    || type === "dialog_accept_count_equals"
+    || type === "dialog_dismiss_count_equals";
+}
+function dialogCountFieldForCheckType(type) {
+  if (type === "dialog_accept_count_equals") return "dialog_accept_count";
+  if (type === "dialog_dismiss_count_equals") return "dialog_dismiss_count";
+  return "dialog_count";
+}
 function maxPositiveNumber() {
   let max = 0;
   for (const value of arguments) {
@@ -3907,6 +3956,19 @@ function assessProfile(profile, evidence) {
         message: Array.isArray(check.viewports) && check.viewports.length
           ? "No matching viewport evidence was captured for " + check.viewports.join(", ") + "."
           : "No viewport evidence was captured.",
+      });
+      continue;
+    }
+    if (isDialogCountCheckType(check.type)) {
+      const field = dialogCountFieldForCheckType(check.type);
+      const expectedCount = check.expected_count == null ? 0 : check.expected_count;
+      const actualCount = numberValue(evidence.dom_summary && evidence.dom_summary[field]) ?? 0;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: actualCount === expectedCount ? "passed" : "failed",
+        evidence: { field, expected_count: expectedCount, count: actualCount },
+        message: actualCount === expectedCount ? undefined : field + " did not equal " + expectedCount + "; observed " + actualCount + ".",
       });
       continue;
     }

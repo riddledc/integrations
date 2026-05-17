@@ -951,6 +951,9 @@ assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only cop
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("no_console_warnings"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_count_equals"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_accept_count_equals"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_dismiss_count_equals"));
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
@@ -965,6 +968,82 @@ assert.equal(
   resolveRiddleProofProfileRouteUrl("https://example.com/base/", "/pricing"),
   "https://example.com/pricing",
 );
+assert.throws(
+  () => normalizeRiddleProofProfile({
+    version: "riddle-proof.profile.v1",
+    name: "dialog-count-missing-expected",
+    target: {
+      route: "/danger-zone",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "dialog_count_equals" }],
+  }, { url: "https://example.com" }),
+  /dialog_count_equals requires expected_count/,
+);
+const dialogCountProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "dialog-count-profile",
+  target: {
+    route: "/danger-zone",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [
+    { type: "dialog_count_equals", expected_count: 2 },
+    { type: "dialog_accept_count_equals", expected_count: 1 },
+    { type: "dialog_dismiss_count_equals", expected_count: 1 },
+  ],
+}, { url: "https://example.com" });
+const dialogCountEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "dialog-count-profile",
+  target_url: "https://example.com/danger-zone",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-17T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: {
+      requested: "https://example.com/danger-zone",
+      observed: "/danger-zone",
+      expected_path: "/danger-zone",
+      matched: true,
+      http_status: 200,
+    },
+    selectors: {},
+    text_matches: {},
+    overflow_px: 0,
+    bounds_overflow_px: 0,
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: {
+    dialog_count: 2,
+    dialog_accept_count: 1,
+    dialog_dismiss_count: 1,
+  },
+};
+const dialogCountAssessment = assessRiddleProofProfileEvidence(dialogCountProfile, dialogCountEvidence);
+assert.equal(dialogCountAssessment.status, "passed");
+assert.equal(dialogCountAssessment.checks.find((check) => check.type === "dialog_count_equals").evidence.count, 2);
+assert.equal(dialogCountAssessment.checks.find((check) => check.type === "dialog_accept_count_equals").evidence.field, "dialog_accept_count");
+const dialogMismatchProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "dialog-count-mismatch-profile",
+  target: {
+    route: "/danger-zone",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{ type: "dialog_accept_count_equals", expected_count: 2 }],
+}, { url: "https://example.com" });
+const dialogMismatchAssessment = assessRiddleProofProfileEvidence(dialogMismatchProfile, dialogCountEvidence);
+assert.equal(dialogMismatchAssessment.status, "product_regression");
+assert.equal(dialogMismatchAssessment.checks[0].status, "failed");
+assert.equal(dialogMismatchAssessment.checks[0].evidence.count, 1);
+assert.match(dialogMismatchAssessment.checks[0].message, /dialog_accept_count did not equal 2; observed 1/);
+const dialogCountProfileScript = buildRiddleProofProfileScript(dialogCountProfile);
+assert.ok(dialogCountProfileScript.includes("dialog_count_equals"));
+assert.ok(dialogCountProfileScript.includes("dialog_accept_count"));
 const mountedPreviewProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "preview-playground-basic",
