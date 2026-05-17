@@ -462,6 +462,14 @@ const cliRunProfileServer = createServer((request, response) => {
         }, 402);
         return;
       }
+      if (String(body.url || "").includes("/strict-safety-blocked")) {
+        sendJson({
+          error: "Script contains potentially unsafe operations",
+          warnings: ["Direct network operations detected", "Script unusually large (potential code injection)"],
+          hint: "Set strict: false to bypass this check (use with caution)",
+        }, 400);
+        return;
+      }
       if (String(body.url || "").includes("/fatal-console-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -911,6 +919,49 @@ try {
   assert.match(blockedProfileSummary, /## Environment Blocker/);
   assert.match(blockedProfileSummary, /reason: insufficient_balance/);
   assert.match(blockedProfileSummary, /seconds: required 90, available 47, deficit 43/);
+
+  const strictSafetyBlockedProfileFile = path.join(riddlePreviewDir, "cli-profile-strict-safety-blocked.json");
+  const strictSafetyBlockedOutputDir = path.join(riddlePreviewDir, "cli-profile-strict-safety-blocked-output");
+  writeFileSync(strictSafetyBlockedProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-strict-safety-blocked",
+    target: {
+      route: "/strict-safety-blocked",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/strict-safety-blocked" },
+      { type: "http_status", url: "/proof/good-catches/evidence/", expected_status: 200 },
+      { type: "link_status", selector: "a[href*='/proof/good-catches/artifacts/']", min_count: 1 },
+    ],
+  }));
+  const cliStrictSafetyBlockedResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    strictSafetyBlockedProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output-dir",
+    strictSafetyBlockedOutputDir,
+    "--strict=true",
+  ]);
+  const parsedStrictSafetyBlockedResult = JSON.parse(cliStrictSafetyBlockedResult.stdout);
+  assert.equal(parsedStrictSafetyBlockedResult.status, "environment_blocked");
+  assert.equal(parsedStrictSafetyBlockedResult.environment_blocker.http_status, 400);
+  assert.deepEqual(parsedStrictSafetyBlockedResult.environment_blocker.warnings, [
+    "Direct network operations detected",
+    "Script unusually large (potential code injection)",
+  ]);
+  assert.match(parsedStrictSafetyBlockedResult.warnings.join("\n"), /hosted profile runner with 1 http_status and 1 link_status\/artifact_link_status check\(s\)/);
+  const strictSafetyBlockedSummary = readFileSync(path.join(strictSafetyBlockedOutputDir, "summary.md"), "utf8");
+  assert.match(strictSafetyBlockedSummary, /## Profile Warnings/);
+  assert.match(strictSafetyBlockedSummary, /omit --strict=true or rerun with --strict=false/);
 } finally {
   cliRunProfileServer.close();
   await once(cliRunProfileServer, "close");

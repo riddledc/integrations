@@ -1189,6 +1189,48 @@ export function collectRiddleProofProfileWarnings(profile: RiddleProofProfile): 
   return warnings;
 }
 
+function profileStatusProbeCounts(profile: RiddleProofProfile): { httpStatus: number; linkStatus: number } {
+  let httpStatus = 0;
+  let linkStatus = 0;
+  for (const check of profile.checks || []) {
+    if (check.type === "http_status") httpStatus += 1;
+    if (check.type === "link_status" || check.type === "artifact_link_status") linkStatus += 1;
+  }
+  return { httpStatus, linkStatus };
+}
+
+function riddleApiStrictSafetyWarnings(blocker: Record<string, JsonValue> | undefined): string[] {
+  const rawWarnings = Array.isArray(blocker?.warnings)
+    ? blocker.warnings.filter((warning): warning is string => typeof warning === "string")
+    : [];
+  const errorText = typeof blocker?.error === "string" ? blocker.error.toLowerCase() : "";
+  const hasSafetyError = errorText.includes("potentially unsafe operations");
+  const hasDirectNetworkWarning = rawWarnings.some((warning) => warning.toLowerCase().includes("direct network operations"));
+  return hasSafetyError || hasDirectNetworkWarning ? rawWarnings : [];
+}
+
+function collectRiddleProofProfileEnvironmentBlockedWarnings(
+  profile: RiddleProofProfile,
+  blocker: Record<string, JsonValue> | undefined,
+): string[] {
+  const warnings = collectRiddleProofProfileWarnings(profile);
+  const safetyWarnings = riddleApiStrictSafetyWarnings(blocker);
+  if (!safetyWarnings.length) return warnings;
+
+  const counts = profileStatusProbeCounts(profile);
+  const statusProbeCount = counts.httpStatus + counts.linkStatus;
+  if (!statusProbeCount) return warnings;
+
+  const parts = [
+    counts.httpStatus ? `${counts.httpStatus} http_status` : "",
+    counts.linkStatus ? `${counts.linkStatus} link_status/artifact_link_status` : "",
+  ].filter(Boolean);
+  warnings.push(
+    `Riddle API strict script validation blocked a hosted profile runner with ${parts.join(" and ")} check(s). These checks intentionally collect endpoint/link evidence from inside the generated browser runner; hosted run-profile defaults to --strict=false, so omit --strict=true or rerun with --strict=false for trusted generated profile runs.`,
+  );
+  return warnings;
+}
+
 function normalizeRouteInventoryPath(value: unknown, label: string): string {
   const path = stringValue(value);
   if (!path) throw new Error(`${label} requires path.`);
@@ -3021,7 +3063,7 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
 }): RiddleProofProfileResult {
   const message = input.error instanceof Error ? input.error.message : input.error ? String(input.error) : "Riddle runner did not complete successfully.";
   const environmentBlocker = extractRiddleRunnerBlocker(message);
-  const warnings = collectRiddleProofProfileWarnings(input.profile);
+  const warnings = collectRiddleProofProfileEnvironmentBlockedWarnings(input.profile, environmentBlocker);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: input.profile.name,
@@ -3068,6 +3110,12 @@ function extractRiddleRunnerBlocker(message: string): Record<string, JsonValue> 
 
   for (const key of ["error", "required_seconds", "available_seconds", "deficit_seconds", "minimum_purchase_dollars"]) {
     copyScalar(key);
+  }
+
+  const warnings = payload?.warnings;
+  if (Array.isArray(warnings)) {
+    const warningStrings = warnings.filter((warning): warning is string => typeof warning === "string");
+    if (warningStrings.length) details.warnings = warningStrings;
   }
 
   const httpStatus = typeof details.http_status === "number" ? details.http_status : undefined;
