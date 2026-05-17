@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.117
+
+### Patch Changes
+
+- c9b9197: Add a reusable handled list-load recovery profile example and README guidance for parser-clean, browser-clean recovery proofs.
+
 ## 0.7.116
 
 ### Patch Changes
