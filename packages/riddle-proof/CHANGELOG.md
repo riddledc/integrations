@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.113
+
+### Patch Changes
+
+- dbd1d27: Treat common YAML content-type aliases as compatible in profile response checks.
+
 ## 0.7.112
 
 ### Patch Changes
