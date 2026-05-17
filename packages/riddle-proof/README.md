@@ -406,6 +406,19 @@ These checks are useful for audit/no-diff profiles where the product should
 show a fallback state and avoid rendering stale loaders, duplicate rows, or
 missing-resource iframes.
 
+Use `dialog_count_equals`, `dialog_accept_count_equals`, and
+`dialog_dismiss_count_equals` when destructive-action profiles need to prove
+browser confirm/prompt handling directly. The counts come from the captured
+dialog summary and use `expected_count`:
+
+```json
+[
+  { "type": "dialog_count_equals", "expected_count": 2 },
+  { "type": "dialog_accept_count_equals", "expected_count": 1 },
+  { "type": "dialog_dismiss_count_equals", "expected_count": 1 }
+]
+```
+
 Use `url_search_param_equals` and `url_search_param_absent` when the final URL
 is part of the contract, such as deep-link recovery that must drop a stale
 local identifier while preserving shareable query state:
