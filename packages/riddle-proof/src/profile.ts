@@ -340,6 +340,7 @@ export interface RiddleProofProfileResult {
   checks: RiddleProofProfileCheckResult[];
   summary: string;
   captured_at: string;
+  warnings?: string[];
   evidence?: RiddleProofProfileEvidence;
   riddle?: {
     job_id?: string;
@@ -1126,6 +1127,63 @@ function normalizeNetworkMocks(value: unknown): RiddleProofProfileNetworkMock[] 
   if (value === undefined) return undefined;
   if (!Array.isArray(value)) throw new Error("target.network_mocks must be an array.");
   return value.map(normalizeNetworkMock);
+}
+
+function profileStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+
+function responseHasRequestBodyContract(response: RiddleProofProfileNetworkMockResponse | undefined): boolean {
+  if (!response) return false;
+  return profileStringList(response.request_body_contains).length > 0
+    || profileStringList(response.request_body_patterns).length > 0
+    || profileStringList(response.request_body_not_contains).length > 0
+    || profileStringList(response.request_body_not_patterns).length > 0;
+}
+
+function responseHasOnlyPositiveTextSelector(response: RiddleProofProfileNetworkMockResponse | undefined): boolean {
+  if (!response) return false;
+  return profileStringList(response.request_body_contains).length > 0
+    && profileStringList(response.request_body_patterns).length === 0
+    && profileStringList(response.request_body_not_contains).length === 0
+    && profileStringList(response.request_body_not_patterns).length === 0;
+}
+
+function responseMayShadowLaterRequestBodyMatch(
+  earlier: RiddleProofProfileNetworkMockResponse,
+  later: RiddleProofProfileNetworkMockResponse,
+): boolean {
+  if (!responseHasOnlyPositiveTextSelector(earlier) || !responseHasRequestBodyContract(later)) return false;
+  const earlierContains = profileStringList(earlier.request_body_contains);
+  const laterContains = profileStringList(later.request_body_contains);
+  if (!laterContains.length) return false;
+  return earlierContains.every((fragment) => laterContains.includes(fragment));
+}
+
+function responseLabel(response: RiddleProofProfileNetworkMockResponse, index: number): string {
+  return response.label ? `"${response.label}"` : `responses[${index}]`;
+}
+
+export function collectRiddleProofProfileWarnings(profile: RiddleProofProfile): string[] {
+  const warnings: string[] = [];
+  for (const [mockIndex, mock] of (profile.target.network_mocks || []).entries()) {
+    const responses = Array.isArray(mock.responses) ? mock.responses : [];
+    if (responses.length < 2) continue;
+    for (let laterIndex = 1; laterIndex < responses.length; laterIndex += 1) {
+      const later = responses[laterIndex];
+      if (!responseHasRequestBodyContract(later)) continue;
+      for (let earlierIndex = 0; earlierIndex < laterIndex; earlierIndex += 1) {
+        const earlier = responses[earlierIndex];
+        if (!responseMayShadowLaterRequestBodyMatch(earlier, later)) continue;
+        const mockLabel = mock.label ? ` (${mock.label})` : "";
+        warnings.push(
+          `target.network_mocks[${mockIndex}]${mockLabel} ${responseLabel(earlier, earlierIndex)} can shadow ${responseLabel(later, laterIndex)} because the earlier request_body_contains fragments are a subset of the later response and have no negative or pattern disambiguator. First matching request-body response wins.`,
+        );
+        break;
+      }
+    }
+  }
+  return warnings;
 }
 
 function normalizeRouteInventoryPath(value: unknown, label: string): string {
@@ -2821,6 +2879,7 @@ export function assessRiddleProofProfileEvidence(
   options: { runner?: RiddleProofProfileRunner; riddle?: RiddleProofProfileResult["riddle"]; artifacts?: RiddleProofProfileArtifactRef[] } = {},
 ): RiddleProofProfileResult {
   const capturedAt = evidence?.captured_at || new Date().toISOString();
+  const warnings = collectRiddleProofProfileWarnings(profile);
   const checks = evidence
     ? [
       assessNetworkMocksFromEvidence(profile, evidence),
@@ -2848,6 +2907,7 @@ export function assessRiddleProofProfileEvidence(
     checks,
     summary: summarizeRiddleProofProfileResult({ profile_name: profile.name, status, checks, viewports: evidence?.viewports || [] }),
     captured_at: capturedAt,
+    warnings: warnings.length ? warnings : undefined,
     evidence,
     riddle: options.riddle,
   };
@@ -2915,6 +2975,7 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
 }): RiddleProofProfileResult {
   const message = input.error instanceof Error ? input.error.message : input.error ? String(input.error) : "Riddle runner did not complete successfully.";
   const environmentBlocker = extractRiddleRunnerBlocker(message);
+  const warnings = collectRiddleProofProfileWarnings(input.profile);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: input.profile.name,
@@ -2926,6 +2987,7 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
     checks: [],
     summary: summarizeEnvironmentBlockedRunner(input.profile.name, environmentBlocker),
     captured_at: new Date().toISOString(),
+    warnings: warnings.length ? warnings : undefined,
     riddle: input.riddle,
     environment_blocker: environmentBlocker,
     error: message,
@@ -2999,6 +3061,7 @@ export function createRiddleProofProfileInsufficientResult(input: {
   artifacts?: RiddleProofProfileArtifactRef[];
 }): RiddleProofProfileResult {
   const message = input.error instanceof Error ? input.error.message : input.error ? String(input.error) : "No proof.json profile result artifact was found.";
+  const warnings = collectRiddleProofProfileWarnings(input.profile);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: input.profile.name,
@@ -3010,6 +3073,7 @@ export function createRiddleProofProfileInsufficientResult(input: {
     checks: [],
     summary: `${input.profile.name} did not produce enough evidence for a profile judgment.`,
     captured_at: new Date().toISOString(),
+    warnings: warnings.length ? warnings : undefined,
     riddle: input.riddle,
     error: message,
   };
@@ -4317,6 +4381,7 @@ function assessProfile(profile, evidence) {
     checks,
     summary,
     captured_at: evidence.captured_at,
+    warnings: profileWarnings.length ? profileWarnings : undefined,
     evidence,
   };
 }
@@ -4326,11 +4391,14 @@ function assessProfile(profile, evidence) {
 export function buildRiddleProofProfileScript(profile: RiddleProofProfile) {
   const targetUrl = resolveRiddleProofProfileTargetUrl(profile);
   const slug = slugifyRiddleProofProfileName(profile.name);
+  const profileWarnings = collectRiddleProofProfileWarnings(profile);
   const serializableProfile = JSON.stringify(profile);
+  const serializableProfileWarnings = JSON.stringify(profileWarnings);
   const serializableTargetUrl = JSON.stringify(targetUrl);
   const serializableSlug = JSON.stringify(slug);
   return String.raw`
 const profile = ${serializableProfile};
+const profileWarnings = ${serializableProfileWarnings};
 const targetUrl = ${serializableTargetUrl};
 const profileSlug = ${serializableSlug};
 const capturedAt = new Date().toISOString();

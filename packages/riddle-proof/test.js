@@ -26,6 +26,7 @@ import {
   assessRiddleProofProfileEvidence,
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
+  collectRiddleProofProfileWarnings,
   createRunStatusSnapshot,
   createRunState,
   createRiddleProofRunCard,
@@ -87,6 +88,7 @@ assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
+assert.equal(typeof cjsProfile.collectRiddleProofProfileWarnings, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
@@ -1278,11 +1280,74 @@ assert.ok(networkMockProfileScript.includes("request_body_forbidden_text"));
 assert.ok(networkMockProfileScript.includes("request_body_forbidden_pattern_matched"));
 assert.ok(networkMockProfileScript.includes("max_hits_by_label"));
 assert.ok(networkMockProfileScript.includes("response_hits_by_label"));
+assert.ok(networkMockProfileScript.includes("profileWarnings"));
 assert.ok(networkMockProfileScript.includes("forbidden_mock_hit"));
 assert.ok(networkMockProfileScript.includes("delay_ms"));
 assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
 assert.ok(networkMockProfileScript.includes("route.fallback"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
+assert.deepEqual(collectRiddleProofProfileWarnings(networkMockProfile), []);
+const overlappingResponseProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "overlapping-response-profile",
+  target: {
+    route: "/create",
+    viewports: [{ name: "mobile", width: 390, height: 844 }],
+    network_mocks: [{
+      label: "save",
+      url: "**/api/save",
+      method: "POST",
+      responses: [
+        {
+          label: "invalid-save",
+          status: 200,
+          request_body_contains: ["\"buildId\":\"build-overlap\"", "\"name\":\"Same Save\""],
+          json: { gameId: "../escaped" },
+        },
+        {
+          label: "valid-save",
+          status: 200,
+          request_body_contains: ["\"buildId\":\"build-overlap\"", "\"name\":\"Same Save\"", "\"description\":\"retry\""],
+          json: { gameId: "safe" },
+        },
+      ],
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/create" }],
+}, { url: "https://example.com" });
+const overlappingWarnings = collectRiddleProofProfileWarnings(overlappingResponseProfile);
+assert.equal(overlappingWarnings.length, 1);
+assert.match(overlappingWarnings[0], /invalid-save.*shadow.*valid-save/);
+const overlappingScript = buildRiddleProofProfileScript(overlappingResponseProfile);
+assert.ok(overlappingScript.includes("First matching request-body response wins."));
+const overlappingResult = assessRiddleProofProfileEvidence(overlappingResponseProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "overlapping-response-profile",
+  target_url: "https://example.com/create",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-17T00:00:00.000Z",
+  viewports: [{
+    name: "mobile",
+    width: 390,
+    height: 844,
+    url: "https://example.com/create",
+    route: {
+      requested: "https://example.com/create",
+      observed: "/create",
+      expected_path: "/create",
+      matched: true,
+      http_status: 200,
+    },
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  network_mocks: [
+    { ok: true, label: "save", response_label: "invalid-save", url: "https://example.com/api/save", method: "POST", status: 200 },
+    { ok: true, label: "save", response_label: "valid-save", url: "https://example.com/api/save", method: "POST", status: 200 },
+  ],
+});
+assert.equal(overlappingResult.status, "passed");
+assert.equal(overlappingResult.warnings?.length, 1);
 assert.ok(networkMockProfileScript.includes("isExpectedFailedNetworkMockConsoleEvent"));
 assert.ok(networkMockProfileScript.includes("allowed_expected_network_mock_console_count"));
 const cappedNetworkMockProfile = normalizeRiddleProofProfile({
