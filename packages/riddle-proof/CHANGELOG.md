@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.112
+
+### Patch Changes
+
+- d434a44: Add nonblocking profile warnings for overlapping network-mock response request-body selectors that can shadow later responses.
+
 ## 0.7.111
 
 ### Patch Changes
