@@ -1,0 +1,95 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "handled-recovery-list-load",
+  "target": {
+    "route": "/account",
+    "viewports": [
+      { "name": "mobile", "width": 390, "height": 844 },
+      { "name": "tablet", "width": 820, "height": 1180 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "timeout_sec": 300,
+    "wait_ms": 800,
+    "network_mocks": [
+      {
+        "label": "account-summary",
+        "url": "**/api/account/summary",
+        "method": "GET",
+        "status": 200,
+        "content_type": "application/json",
+        "required_hit_count": 3,
+        "json": {
+          "available_time": "4h 0m",
+          "active_jobs": 2
+        }
+      },
+      {
+        "label": "recent-jobs",
+        "url": "**/api/jobs?limit=10",
+        "method": "GET",
+        "status": 200,
+        "content_type": "application/json",
+        "required_hit_count": 3,
+        "json": {
+          "jobs": [
+            {
+              "id": "job_recovery_template_survives",
+              "status": "completed"
+            }
+          ]
+        }
+      },
+      {
+        "label": "saved-items-malformed-load",
+        "url": "**/api/saved-items",
+        "method": "GET",
+        "status": 200,
+        "content_type": "application/json",
+        "required_hit_count": 3,
+        "body": "{not valid saved items json"
+      }
+    ],
+    "setup_actions": [
+      { "type": "clear_storage", "storage": "both", "reload": true },
+      { "type": "wait_for_selector", "selector": "[data-testid='account-page']", "timeout_ms": 30000 },
+      { "type": "wait_for_text", "selector": "body", "text": "4h 0m", "timeout_ms": 30000 },
+      { "type": "wait_for_text", "selector": "body", "text": "job_recovery_template_survives", "timeout_ms": 30000 },
+      { "type": "wait_for_text", "selector": "body", "text": "Failed to load saved items", "timeout_ms": 30000 },
+      { "type": "screenshot", "label": "saved-items-malformed-load-visible-recovery" },
+      { "type": "assert_text_absent", "selector": "body", "text": "No saved items yet", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "Expected property name", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "SyntaxError", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "[object Object]", "timeout_ms": 1000 }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/account" },
+    { "type": "selector_visible", "selector": "[data-testid='account-page']" },
+    { "type": "selector_visible", "selector": "[data-testid='saved-items-error']" },
+    { "type": "text_visible", "text": "4h 0m" },
+    { "type": "text_visible", "text": "2 active" },
+    { "type": "text_visible", "text": "job_recovery_template_survives" },
+    { "type": "text_visible", "text": "Failed to load saved items" },
+    { "type": "text_absent", "text": "No saved items yet" },
+    { "type": "text_absent", "text": "Expected property name" },
+    { "type": "text_absent", "text": "SyntaxError" },
+    { "type": "text_absent", "text": "[object Object]" },
+    { "type": "text_absent", "text": "Application error" },
+    { "type": "selector_count_equals", "selector": "[data-testid='saved-items-error']", "expected_count": 1 },
+    { "type": "selector_count_equals", "selector": "[data-testid='recent-job-row']", "expected_count": 1 },
+    { "type": "selector_count_equals", "selector": "[data-testid='saved-item-row']", "expected_count": 0 },
+    { "type": "no_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_fatal_console_errors" },
+    { "type": "no_console_warnings" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "purpose": "Template for handled malformed list-load recovery: prove independent page data still renders, the failed list shows one recovery message, contradictory empty-state copy and raw parser text stay absent, and browser console evidence remains clean."
+  }
+}

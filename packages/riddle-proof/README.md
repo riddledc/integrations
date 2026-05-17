@@ -198,10 +198,27 @@ generic inline-script warning threshold. Use `--strict=true` when you
 deliberately want Riddle's non-critical script-safety warnings to block the run.
 Critical script-safety violations remain blocked by Riddle either way.
 
-The package includes a generic starter profile at
-`examples/profiles/page-content-basic.json`; copy that shape into a repository
-profile directory and replace the selector/text checks with app-specific
-invariants.
+The package includes generic starter profiles:
+
+- `examples/profiles/page-content-basic.json` for route/content/layout smoke profiles.
+- `examples/profiles/route-inventory-basic.json` for source-link and direct-route audits.
+- `examples/profiles/handled-recovery-list-load.json` for malformed list-load recovery profiles.
+
+Copy one of those shapes into a repository profile directory and replace the
+routes, selectors, mock URLs, and text checks with app-specific invariants.
+
+For handled recovery profiles, prefer proving the whole boundary instead of
+only checking that an error message appears. Mock one dependent endpoint into a
+malformed or failed response, keep independent endpoints healthy, and assert
+that the page still renders the independent evidence. Capture a setup
+screenshot immediately after the recovery state appears, before high-risk
+absence assertions, so failing runs keep durable visual evidence. Then reject
+raw parser text such as `SyntaxError`, `Expected property name`, and
+`[object Object]`; reject contradictory empty-state copy such as `No items yet`
+when the list failed to load; and keep `no_fatal_console_errors` plus
+`no_console_warnings` in the final checks. This pattern catches both visible
+recovery-quality bugs and hidden browser-health debt without requiring a
+separate CI or wrapper-specific path.
 
 Checks normally apply to every captured viewport. Add `viewports` (or
 `viewport_names`) to a check when responsive UI intentionally exposes an
