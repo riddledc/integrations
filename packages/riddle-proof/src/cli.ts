@@ -373,9 +373,16 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     "",
     result.summary,
     "",
-    "## Checks",
-    "",
   ];
+  if (Array.isArray(result.warnings) && result.warnings.length) {
+    lines.push("## Profile Warnings", "");
+    for (const warning of result.warnings.slice(0, 12)) {
+      lines.push(`- ${warning}`);
+    }
+    if (result.warnings.length > 12) lines.push(`- ${result.warnings.length - 12} additional warning(s) omitted.`);
+    lines.push("");
+  }
+  lines.push("## Checks", "");
   for (const check of result.checks) {
     lines.push(`- ${check.status}: ${profileCheckMarkdownLabel(check)}`);
     if (check.message) lines.push(`  ${check.message}`);
