@@ -526,8 +526,13 @@ artifact links should fail the profile:
 ```
 
 The check defaults to `a[href]`, deduplicates URLs, probes up to 100 selected
-URLs, and treats HTTP `2xx` / `3xx` responses as healthy. Use
-`allowed_statuses` or `expected_status` when a narrower status contract is
+URLs, and treats HTTP `2xx` / `3xx` responses as healthy. `expected_count` and
+`min_count` apply to the probed URL set after same-origin filtering, URL
+deduplication, and the `max_links` limit. The run summary also reports
+`discovered_count` when it differs, which helps explain cases where a page has
+two DOM nodes pointing at the same artifact URL. Use `dedupe: false` when the
+contract should count duplicate DOM candidates instead of unique artifact URLs.
+Use `allowed_statuses` or `expected_status` when a narrower status contract is
 intentional, `min_count` for lower-bound audits, `min_bytes` when a one-byte
 range response is too weak, `allowed_content_types` for MIME checks, and
 `max_links` when the selected set is intentionally larger than 100.

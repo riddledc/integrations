@@ -617,6 +617,29 @@ const cliRunProfileServer = createServer((request, response) => {
             failures: [],
           },
         },
+        {
+          type: "link_status",
+          label: "public artifacts",
+          status: "passed",
+          evidence: {
+            selector: "a[href*='/artifacts/'], img[src*='/artifacts/']",
+            expected_count: 9,
+            min_bytes: 32,
+            allowed_content_types: ["image/*", "application/json"],
+            viewports: [
+              {
+                viewport: "desktop",
+                total_count: 9,
+                discovered_count: 10,
+                ok_count: 9,
+                failed_count: 0,
+                truncated: false,
+                omitted_result_count: 0,
+              },
+            ],
+            failures: [],
+          },
+        },
       ],
       summary: "cli-profile-progress passed.",
       captured_at: "2026-05-13T23:21:20.000Z",
@@ -699,6 +722,9 @@ try {
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
+  assert.match(profileSummaryMarkdown, /passed: public artifacts \(`a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]` probed links = 9, bytes >= 32\)/);
+  assert.match(profileSummaryMarkdown, /## Link Status/);
+  assert.match(profileSummaryMarkdown, /public artifacts `a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]`: probed links 9, discovered 10, ok 9, failures 0, min bytes 32, content types `image\/\*`, `application\/json`/);
 
   cliRunProfilePollCount = 0;
   const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");
