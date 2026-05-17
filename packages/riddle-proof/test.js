@@ -415,6 +415,40 @@ const cliRunProfileServer = createServer((request, response) => {
         }, 402);
         return;
       }
+      if (String(body.url || "").includes("/fatal-console-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-fatal-console-summary",
+          runner: "riddle",
+          status: "product_regression",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/fatal-console-summary",
+            observed: "/fatal-console-summary",
+            expected_path: "/fatal-console-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["cli-fatal-console-summary-desktop"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "no_fatal_console_errors",
+              status: "failed",
+              evidence: {
+                console_fatal_count: 4,
+                page_error_count: 0,
+                total_console_fatal_count: 8,
+                total_page_error_count: 0,
+                allowed_console_fatal_count: 4,
+                allowed_page_error_count: 0,
+              },
+            },
+          ],
+          summary: "cli-fatal-console-summary failed.",
+          captured_at: "2026-05-17T04:10:00.000Z",
+        });
+        return;
+      }
       sendJson({ job_id: "job_cli_profile_progress" });
     });
     return;
@@ -755,6 +789,42 @@ try {
   assert.equal(cliRunProfileRequests.length, 2);
   assert.equal(cliRunProfileRequests[1].body.strict, true);
   assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
+
+  const fatalConsoleProfileFile = path.join(riddlePreviewDir, "cli-fatal-console-summary.json");
+  const fatalConsoleOutputDir = path.join(riddlePreviewDir, "cli-fatal-console-summary-output");
+  writeFileSync(fatalConsoleProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-fatal-console-summary",
+    target: {
+      route: "/fatal-console-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "no_fatal_console_errors" }],
+  }));
+  let fatalConsoleCliError;
+  try {
+    await runCli([
+      "run-profile",
+      "--api-base-url",
+      `http://127.0.0.1:${address.port}`,
+      "--api-key",
+      "cli-riddle-key",
+      "--profile",
+      fatalConsoleProfileFile,
+      "--url",
+      "https://example.com",
+      "--runner",
+      "riddle",
+      "--output",
+      fatalConsoleOutputDir,
+      "--quiet",
+    ]);
+  } catch (error) {
+    fatalConsoleCliError = error;
+  }
+  assert.equal(fatalConsoleCliError?.code, 1);
+  const fatalConsoleSummaryMarkdown = readFileSync(path.join(fatalConsoleOutputDir, "summary.md"), "utf8");
+  assert.match(fatalConsoleSummaryMarkdown, /failed: no_fatal_console_errors \(4 unallowed fatal errors, 4\/8 console fatal allowed\)/);
 
   const blockedProfileFile = path.join(riddlePreviewDir, "cli-profile-balance-blocked.json");
   const blockedProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-balance-blocked-output");

@@ -506,7 +506,16 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     return maxOverflow !== undefined ? `<= ${maxOverflow}px` : undefined;
   }
   if (check.type === "no_fatal_console_errors") {
-    return "0 unallowed fatal errors";
+    const fatalCount = cliFiniteNumber(evidence.console_fatal_count)
+      ?? cliFiniteNumber(evidence.fatal_error_count)
+      ?? 0;
+    const totalConsoleCount = cliFiniteNumber(evidence.total_console_fatal_count);
+    const allowedConsoleCount = cliFiniteNumber(evidence.allowed_console_fatal_count);
+    const parts = [`${fatalCount} unallowed fatal error${fatalCount === 1 ? "" : "s"}`];
+    if (totalConsoleCount !== undefined && allowedConsoleCount !== undefined) {
+      parts.push(`${allowedConsoleCount}/${totalConsoleCount} console fatal allowed`);
+    }
+    return parts.join(", ");
   }
   if (check.type === "no_console_warnings") {
     const warningCount = cliFiniteNumber(evidence.console_warning_count) ?? 0;
