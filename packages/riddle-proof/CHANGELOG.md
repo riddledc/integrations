@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.110
+
+### Patch Changes
+
+- daee70f: Select sequenced network mock responses by request-body contract before falling back to hit order.
+
 ## 0.7.109
 
 ### Patch Changes
