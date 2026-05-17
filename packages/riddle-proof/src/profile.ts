@@ -1648,6 +1648,14 @@ function normalizeLinkStatusContentType(value: string | undefined): string | und
   return normalized || undefined;
 }
 
+function linkStatusContentTypesMatch(actual: string | undefined, expected: string | undefined): boolean {
+  if (!actual || !expected) return false;
+  if (expected.endsWith("/*")) return actual.startsWith(expected.slice(0, -1));
+  if (actual === expected) return true;
+  const yamlTypes = new Set(["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"]);
+  return yamlTypes.has(actual) && yamlTypes.has(expected);
+}
+
 function linkStatusContentTypeOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const expected = check.allowed_content_types;
   if (!expected?.length) return true;
@@ -1656,8 +1664,7 @@ function linkStatusContentTypeOk(result: Record<string, unknown>, check: RiddleP
   return expected.some((contentType) => {
     const normalized = normalizeLinkStatusContentType(contentType);
     if (!normalized) return false;
-    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
-    return actual === normalized;
+    return linkStatusContentTypesMatch(actual, normalized);
   });
 }
 
@@ -3279,6 +3286,13 @@ function normalizeLinkStatusContentType(value) {
   const normalized = (value.split(";")[0] || "").trim().toLowerCase();
   return normalized || undefined;
 }
+function linkStatusContentTypesMatch(actual, expected) {
+  if (!actual || !expected) return false;
+  if (expected.endsWith("/*")) return actual.startsWith(expected.slice(0, -1));
+  if (actual === expected) return true;
+  const yamlTypes = new Set(["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"]);
+  return yamlTypes.has(actual) && yamlTypes.has(expected);
+}
 function linkStatusContentTypeOk(result, check) {
   if (!Array.isArray(check.allowed_content_types) || !check.allowed_content_types.length) return true;
   const actual = normalizeLinkStatusContentType(result.content_type);
@@ -3286,8 +3300,7 @@ function linkStatusContentTypeOk(result, check) {
   return check.allowed_content_types.some((contentType) => {
     const normalized = normalizeLinkStatusContentType(contentType);
     if (!normalized) return false;
-    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
-    return actual === normalized;
+    return linkStatusContentTypesMatch(actual, normalized);
   });
 }
 function httpStatusBodyContainsFailures(result, check) {
@@ -5424,6 +5437,13 @@ function normalizeLinkProbeContentType(value) {
   const normalized = (value.split(";")[0] || "").trim().toLowerCase();
   return normalized || undefined;
 }
+function linkProbeContentTypesMatch(actual, expected) {
+  if (!actual || !expected) return false;
+  if (expected.endsWith("/*")) return actual.startsWith(expected.slice(0, -1));
+  if (actual === expected) return true;
+  const yamlTypes = new Set(["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml"]);
+  return yamlTypes.has(actual) && yamlTypes.has(expected);
+}
 function linkProbeContentTypeAllowed(result, check) {
   if (!Array.isArray(check.allowed_content_types) || !check.allowed_content_types.length) return true;
   const actual = normalizeLinkProbeContentType(result.content_type);
@@ -5431,8 +5451,7 @@ function linkProbeContentTypeAllowed(result, check) {
   return check.allowed_content_types.some((contentType) => {
     const normalized = normalizeLinkProbeContentType(contentType);
     if (!normalized) return false;
-    if (normalized.endsWith("/*")) return actual.startsWith(normalized.slice(0, -1));
-    return actual === normalized;
+    return linkProbeContentTypesMatch(actual, normalized);
   });
 }
 function linkProbeResponseFields(response, method) {

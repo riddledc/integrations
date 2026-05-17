@@ -2680,6 +2680,113 @@ assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains, { FORB
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains_found, []);
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns, { '"debug"\\s*:': false });
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns_found, []);
+const yamlHttpStatusProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "yaml-http-status",
+  target: {
+    route: "/openapi",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "http_status",
+    label: "yaml alias",
+    url: "https://example.com/openapi.yaml",
+    expected_status: 200,
+    allowed_content_types: ["application/yaml"],
+    min_bytes: 10,
+    body_contains: ["openapi: 3.1.0"],
+  }],
+}, { url: "https://example.com" });
+const yamlHttpStatusAssessment = assessRiddleProofProfileEvidence(yamlHttpStatusProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "yaml-http-status",
+  target_url: "https://example.com/openapi",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-17T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    url: "https://example.com/openapi",
+    route: { requested: "https://example.com/openapi", observed: "/openapi", expected_path: "/openapi", matched: true, http_status: 200 },
+    body_text_sample: "OpenAPI",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    http_statuses: {
+      "GET https://example.com/openapi.yaml": {
+        version: "riddle-proof.http-status.v1",
+        url: "https://example.com/openapi.yaml",
+        method: "GET",
+        status: 200,
+        ok: true,
+        content_type: "text/x-yaml; charset=utf-8",
+        content_length: 128,
+        bytes: 128,
+        body_contains: { "openapi: 3.1.0": true },
+      },
+    },
+    screenshot_label: "yaml-http-status-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const yamlHttpStatusCheck = yamlHttpStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(yamlHttpStatusAssessment.status, "passed");
+assert.equal(yamlHttpStatusCheck.status, "passed");
+const yamlLinkStatusProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "yaml-link-status",
+  target: {
+    route: "/",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+  },
+  checks: [{
+    type: "link_status",
+    selector: "a[href$='.yaml']",
+    expected_count: 1,
+    allowed_content_types: ["text/yaml"],
+    min_bytes: 10,
+  }],
+}, { url: "https://example.com" });
+const yamlLinkStatusAssessment = assessRiddleProofProfileEvidence(yamlLinkStatusProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "yaml-link-status",
+  target_url: "https://example.com/",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-17T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/", observed: "/", expected_path: "/", matched: true, http_status: 200 },
+    body_text_sample: "Home",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    link_statuses: {
+      "a[href$='.yaml']": {
+        version: "riddle-proof.link-status.v1",
+        selector: "a[href$='.yaml']",
+        discovered_count: 1,
+        total_count: 1,
+        ok_count: 1,
+        failed_count: 0,
+        results: [
+          { url: "https://example.com/openapi.yaml", status: 200, method: "GET", ok: true, content_type: "application/x-yaml", content_length: 128, bytes: 128 },
+        ],
+      },
+    },
+    screenshot_label: "yaml-link-status-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const yamlLinkStatusCheck = yamlLinkStatusAssessment.checks.find((check) => check.type === "link_status");
+assert.equal(yamlLinkStatusAssessment.status, "passed");
+assert.equal(yamlLinkStatusCheck.status, "passed");
 const failedBodyStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
   ...httpStatusEvidence,
   viewports: [{
