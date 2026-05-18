@@ -202,7 +202,7 @@ The package includes generic starter profiles:
 
 - `examples/profiles/page-content-basic.json` for route/content/layout smoke profiles.
 - `examples/profiles/route-inventory-basic.json` for source-link and direct-route audits.
-- `examples/profiles/handled-recovery-list-load.json` for malformed list-load recovery profiles.
+- `examples/profiles/handled-recovery-list-load.json` for failed or malformed list-load recovery profiles.
 - `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
 
 Copy one of those shapes into a repository profile directory and replace the
@@ -210,13 +210,19 @@ routes, selectors, mock URLs, and text checks with app-specific invariants.
 
 For handled recovery profiles, prefer proving the whole boundary instead of
 only checking that an error message appears. Mock one dependent endpoint into a
-malformed or failed response, keep independent endpoints healthy, and assert
-that the page still renders the independent evidence. Capture a setup
+failed HTTP response, transport failure, or malformed body, keep independent
+endpoints healthy, and assert that the page still renders the independent
+evidence. For idempotent GET mocks, use `required_hit_count` to prove the mock
+was exercised, but avoid `max_hit_count` unless exact request count is itself
+the product contract; multi-viewport runs, React Strict Mode, retries, and
+client refreshes can legitimately call the same GET more than once. Capture a setup
 screenshot immediately after the recovery state appears, before high-risk
 absence assertions, so failing runs keep durable visual evidence. Then reject
-raw parser text such as `SyntaxError`, `Expected property name`, and
-`[object Object]`; reject contradictory empty-state copy such as `No items yet`
-when the list failed to load; and keep `no_fatal_console_errors` plus
+raw backend text and error codes as well as parser text such as `SyntaxError`,
+`Expected property name`, and `[object Object]`; reject contradictory empty-state
+copy such as `No items yet` when the list failed to load; require the failed
+list's explicit unavailable message and error element count; and keep
+`no_fatal_console_errors` plus
 `no_console_warnings` in the final checks. This pattern catches both visible
 recovery-quality bugs and hidden browser-health debt without requiring a
 separate CI or wrapper-specific path.
