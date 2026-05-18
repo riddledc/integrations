@@ -1462,6 +1462,50 @@ assert.ok(networkMockProfileScript.includes("setTimeout(resolve, delayMs)"));
 assert.ok(networkMockProfileScript.includes("route.fallback"));
 assert.ok(networkMockProfileScript.includes("consoleEvents.length = 0"));
 assert.deepEqual(collectRiddleProofProfileWarnings(networkMockProfile), []);
+const networkAbortMockProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "network-abort-mock",
+  target: {
+    route: "/settings",
+    viewports: [{ name: "desktop", width: 1280, height: 720 }],
+    network_mocks: [
+      {
+        label: "revoke-transport-failure",
+        url: "**/api/revoke",
+        method: "DELETE",
+        abort: true,
+        abort_error_code: "failed",
+      },
+      {
+        label: "sequence-abort",
+        url: "**/api/sequence-abort",
+        method: "POST",
+        required: false,
+        responses: [
+          { label: "first-network-fails", abort: "connectionreset" },
+          { label: "second-succeeds", status: 200, json: { ok: true } },
+        ],
+      },
+    ],
+  },
+  checks: [{ type: "no_fatal_console_errors" }],
+}, { url: "https://example.com" });
+assert.equal(networkAbortMockProfile.target.network_mocks[0].abort, true);
+assert.equal(networkAbortMockProfile.target.network_mocks[0].abort_error_code, "failed");
+assert.equal(networkAbortMockProfile.target.network_mocks[1].responses[0].abort, true);
+assert.equal(networkAbortMockProfile.target.network_mocks[1].responses[0].abort_error_code, "connectionreset");
+assert.equal(networkAbortMockProfile.target.network_mocks[1].responses[1].abort, undefined);
+const networkAbortMockProfileScript = buildRiddleProofProfileScript(networkAbortMockProfile);
+assert.ok(networkAbortMockProfileScript.includes("route.abort(abortErrorCode)"));
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "network-abort-mock-invalid",
+  target: {
+    route: "/settings",
+    network_mocks: [{ label: "bad-abort", url: "**/api/revoke", abort: true, abort_error_code: "madeup" }],
+  },
+  checks: [{ type: "route_loaded" }],
+}, { url: "https://example.com" }), /abort_error_code must be one of/);
 const overlappingResponseProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "overlapping-response-profile",
@@ -3495,6 +3539,45 @@ assert.equal(expectedFailedMockConsoleCheck.evidence.explicitly_allowed_console_
 assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_count, 1);
 assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].label, "build-retry");
 assert.equal(expectedFailedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].response_label, "first-build-fails");
+const expectedAbortedMockConsoleAssessment = assessRiddleProofProfileEvidence(networkAbortMockProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "network-abort-mock",
+  target_url: "https://example.com/settings",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-13T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 720,
+    route: { requested: "https://example.com/settings", observed: "/settings", expected_path: "/settings", matched: true, http_status: 200 },
+    body_text_sample: "Settings",
+    overflow_px: 0,
+    selectors: {},
+    text_matches: {},
+    screenshot_label: "network-abort-mock-desktop",
+  }],
+  console: {
+    events: [{
+      type: "error",
+      text: "Failed to load resource: net::ERR_FAILED",
+      location: { url: "https://example.com/api/revoke" },
+    }],
+    fatal_count: 1,
+  },
+  page_errors: [],
+  network_mocks: [
+    { ok: true, label: "revoke-transport-failure", url: "https://example.com/api/revoke", method: "DELETE", abort: true, abort_error_code: "failed" },
+    { ok: true, label: "sequence-abort", response_label: "first-network-fails", hit_index: 0, response_index: 0, url: "https://example.com/api/sequence-abort", method: "POST", abort: true, abort_error_code: "connectionreset" },
+  ],
+  dom_summary: { viewport_count: 1, network_mock_hit_count: 2 },
+});
+const expectedAbortedMockConsoleCheck = expectedAbortedMockConsoleAssessment.checks.find((check) => check.type === "no_fatal_console_errors");
+assert.equal(expectedAbortedMockConsoleAssessment.status, "passed");
+assert.equal(expectedAbortedMockConsoleCheck.status, "passed");
+assert.equal(expectedAbortedMockConsoleCheck.evidence.console_fatal_count, 0);
+assert.equal(expectedAbortedMockConsoleCheck.evidence.allowed_expected_network_mock_console_count, 1);
+assert.equal(expectedAbortedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].label, "revoke-transport-failure");
+assert.equal(expectedAbortedMockConsoleCheck.evidence.allowed_expected_network_mock_console_events[0].abort_error_code, "failed");
 const expectedFailedMockRuntimeErrorAssessment = assessRiddleProofProfileEvidence(networkMockProfile, {
   ...networkMockProfileAssessment.evidence,
   console: {

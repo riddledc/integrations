@@ -71,6 +71,23 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
 export type RiddleProofProfileStatus = typeof RIDDLE_PROOF_PROFILE_STATUSES[number];
 export type RiddleProofProfileCheckType = typeof RIDDLE_PROOF_PROFILE_CHECK_TYPES[number];
 export type RiddleProofProfileSetupActionType = typeof RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES[number];
+export const RIDDLE_PROOF_PROFILE_NETWORK_ABORT_ERROR_CODES = [
+  "aborted",
+  "accessdenied",
+  "addressunreachable",
+  "blockedbyclient",
+  "blockedbyresponse",
+  "connectionaborted",
+  "connectionclosed",
+  "connectionfailed",
+  "connectionrefused",
+  "connectionreset",
+  "internetdisconnected",
+  "namenotresolved",
+  "timedout",
+  "failed",
+] as const;
+export type RiddleProofProfileNetworkAbortErrorCode = typeof RIDDLE_PROOF_PROFILE_NETWORK_ABORT_ERROR_CODES[number];
 export type RiddleProofProfileRunner =
   | "riddle"
   | "local-playwright"
@@ -143,6 +160,8 @@ export interface RiddleProofProfileNetworkMockResponse {
   body?: string;
   body_json?: JsonValue;
   delay_ms?: number;
+  abort?: boolean;
+  abort_error_code?: RiddleProofProfileNetworkAbortErrorCode;
   capture_request_body?: boolean;
   request_body_contains?: string[];
   request_body_patterns?: string[];
@@ -1061,6 +1080,7 @@ function normalizeNetworkMockResponsePayload(
     || Object.prototype.hasOwnProperty.call(input, "bodyJson")
     || Object.prototype.hasOwnProperty.call(input, "json");
   const requestBody = normalizeNetworkMockRequestBodyConstraints(input, label);
+  const abort = normalizeNetworkMockAbort(input, label, defaults.abort, defaults.abort_error_code);
   return {
     label: stringValue(input.label) || stringValue(input.name) || defaults.label,
     status,
@@ -1069,12 +1089,44 @@ function normalizeNetworkMockResponsePayload(
     body,
     body_json: hasJsonBody ? toJsonValue(input.body_json ?? input.bodyJson ?? input.json) : defaults.body_json,
     delay_ms: normalizeNetworkMockDelay(input, label, defaults.delay_ms),
+    abort: abort.abort,
+    abort_error_code: abort.abort_error_code,
     capture_request_body: requestBody.capture_request_body,
     request_body_contains: requestBody.request_body_contains,
     request_body_patterns: requestBody.request_body_patterns,
     request_body_not_contains: requestBody.request_body_not_contains,
     request_body_not_patterns: requestBody.request_body_not_patterns,
   };
+}
+
+function normalizeNetworkMockAbort(
+  input: Record<string, unknown>,
+  label: string,
+  defaultAbort?: boolean,
+  defaultErrorCode?: RiddleProofProfileNetworkAbortErrorCode,
+): Pick<RiddleProofProfileNetworkMockResponse, "abort" | "abort_error_code"> {
+  const abortInput = input.abort ?? input.route_abort ?? input.routeAbort;
+  const explicitAbort = typeof abortInput === "string"
+    ? abortInput.trim().length > 0
+    : abortInput === true;
+  const abort = explicitAbort || defaultAbort === true;
+  if (!abort) return {};
+
+  const codeInput = stringValue(
+    typeof abortInput === "string"
+      ? abortInput
+      : input.abort_error_code
+        ?? input.abortErrorCode
+        ?? input.abort_error
+        ?? input.abortError
+        ?? input.network_error
+        ?? input.networkError,
+  ) || defaultErrorCode || "failed";
+  const abort_error_code = codeInput.toLowerCase() as RiddleProofProfileNetworkAbortErrorCode;
+  if (!RIDDLE_PROOF_PROFILE_NETWORK_ABORT_ERROR_CODES.includes(abort_error_code)) {
+    throw new Error(`${label}.abort_error_code must be one of ${RIDDLE_PROOF_PROFILE_NETWORK_ABORT_ERROR_CODES.join(", ")}.`);
+  }
+  return { abort: true, abort_error_code };
 }
 
 function normalizeNetworkMockDelay(
@@ -1113,6 +1165,8 @@ function normalizeNetworkMockResponses(
     body: defaults.body,
     body_json: defaults.body_json,
     delay_ms: defaults.delay_ms,
+    abort: defaults.abort,
+    abort_error_code: defaults.abort_error_code,
   };
   return value.map((response, responseIndex) => {
     if (!isRecord(response)) {
@@ -2048,7 +2102,9 @@ function expectedFailedNetworkMockEvents(evidence: RiddleProofProfileEvidence): 
   return (evidence.network_mocks || []).filter((event) => {
     if (!isRecord(event) || event.ok === false) return false;
     const status = numberValue(event.status);
-    return status !== undefined && status >= 400 && Boolean(stringValue(event.url));
+    const isHttpFailure = status !== undefined && status >= 400;
+    const isAbortedMock = event.abort === true && Boolean(stringValue(event.abort_error_code));
+    return (isHttpFailure || isAbortedMock) && Boolean(stringValue(event.url));
   });
 }
 
@@ -2062,9 +2118,12 @@ function matchingExpectedFailedNetworkMockConsoleEvent(
   if (!eventUrl) return undefined;
   return expectedFailedNetworkMockEvents(evidence).find((mockEvent) => {
     const status = numberValue(mockEvent.status);
+    const abortErrorCode = stringValue(mockEvent.abort_error_code);
     return stringValue(mockEvent.url) === eventUrl
-      && status !== undefined
-      && sample.includes(String(status));
+      && (
+        (status !== undefined && sample.includes(String(status)))
+        || (Boolean(abortErrorCode) && /Failed to load resource/i.test(sample))
+      );
   });
 }
 
@@ -2081,6 +2140,7 @@ function expectedFailedNetworkMockConsoleEventSummary(
   return {
     url: consoleEventLocationUrl(event) ?? null,
     status: match ? numberValue(match.status) ?? null : null,
+    abort_error_code: match ? stringValue(match.abort_error_code) ?? null : null,
     label: match ? stringValue(match.label) ?? null : null,
     response_label: match ? stringValue(match.response_label) ?? null : null,
     text: isRecord(event) && typeof event.text === "string" ? event.text.slice(0, 300) : sample.slice(0, 300),
@@ -3265,7 +3325,8 @@ function expectedFailedNetworkMockEvents(evidence) {
     if (!event || typeof event !== "object" || Array.isArray(event) || event.ok === false) return false;
     const status = typeof event.status === "number" && Number.isFinite(event.status) ? event.status : undefined;
     const url = typeof event.url === "string" && event.url.trim() ? event.url.trim() : undefined;
-    return status !== undefined && status >= 400 && Boolean(url);
+    const abortErrorCode = typeof event.abort_error_code === "string" && event.abort_error_code.trim() ? event.abort_error_code.trim() : undefined;
+    return ((status !== undefined && status >= 400) || (event.abort === true && Boolean(abortErrorCode))) && Boolean(url);
   });
 }
 function matchingExpectedFailedNetworkMockConsoleEvent(event, evidence) {
@@ -3276,7 +3337,8 @@ function matchingExpectedFailedNetworkMockConsoleEvent(event, evidence) {
   return expectedFailedNetworkMockEvents(evidence).find((mockEvent) => {
     const status = typeof mockEvent.status === "number" && Number.isFinite(mockEvent.status) ? mockEvent.status : undefined;
     const mockUrl = typeof mockEvent.url === "string" && mockEvent.url.trim() ? mockEvent.url.trim() : undefined;
-    return mockUrl === eventUrl && status !== undefined && sample.includes(String(status));
+    const abortErrorCode = typeof mockEvent.abort_error_code === "string" && mockEvent.abort_error_code.trim() ? mockEvent.abort_error_code.trim() : undefined;
+    return mockUrl === eventUrl && ((status !== undefined && sample.includes(String(status))) || (Boolean(abortErrorCode) && /Failed to load resource/i.test(sample)));
   });
 }
 function isExpectedFailedNetworkMockConsoleEvent(event, evidence) {
@@ -3288,6 +3350,7 @@ function expectedFailedNetworkMockConsoleEventSummary(event, evidence) {
   return {
     url: consoleEventLocationUrl(event) || null,
     status: match && typeof match.status === "number" && Number.isFinite(match.status) ? match.status : null,
+    abort_error_code: match && typeof match.abort_error_code === "string" && match.abort_error_code.trim() ? match.abort_error_code.trim() : null,
     label: match && typeof match.label === "string" && match.label.trim() ? match.label.trim() : null,
     response_label: match && typeof match.response_label === "string" && match.response_label.trim() ? match.response_label.trim() : null,
     text: event && typeof event === "object" && !Array.isArray(event) && typeof event.text === "string" ? event.text.slice(0, 300) : sample.slice(0, 300),
@@ -4922,6 +4985,10 @@ async function registerNetworkMocks(mocks) {
         const requestBodyFailures = shouldCaptureRequestBody ? networkMockRequestBodyFailures(requestBody, mock, responseBodyContract) : [];
         const status = response.status || mock.status || 200;
         const delayMs = numberValue(response.delay_ms) || 0;
+        const shouldAbort = response.abort === true;
+        const abortErrorCode = typeof response.abort_error_code === "string" && response.abort_error_code.trim()
+          ? response.abort_error_code.trim()
+          : "failed";
         const event = {
           ok: true,
           label: mock.label,
@@ -4934,8 +5001,13 @@ async function registerNetworkMocks(mocks) {
           sequence_cycle: responseSelection === "sequence" && responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
           url: request.url(),
           method,
-          status,
         };
+        if (shouldAbort) {
+          event.abort = true;
+          event.abort_error_code = abortErrorCode;
+        } else {
+          event.status = status;
+        }
         if (delayMs) event.delay_ms = delayMs;
         if (shouldCaptureRequestBody) {
           event.request_body_matches = requestBodyFailures.length === 0;
@@ -4945,6 +5017,10 @@ async function registerNetworkMocks(mocks) {
         }
         networkMockEvents.push(event);
         if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (shouldAbort) {
+          await route.abort(abortErrorCode);
+          return;
+        }
         await route.fulfill({
           status,
           headers,

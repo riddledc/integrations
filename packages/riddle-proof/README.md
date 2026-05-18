@@ -239,10 +239,11 @@ layouts keep the same route, link, and overflow contracts.
 before navigation, records each hit, and adds an implicit
 `network_mocks_succeeded` check when mocks are present. A mock supports
 `url`/`glob`/`pattern`, optional `method`, `status`, `content_type`, `headers`,
-string `body`, JSON `json` / `body_json`, and `required: false` for
-best-effort mocks. Use `responses` for retry or recovery profiles where the
-same endpoint should return a sequence, such as first `503` and then `200`.
-Each response accepts the same payload fields plus an optional label:
+string `body`, JSON `json` / `body_json`, `abort: true` for fetch-level network
+failures, and `required: false` for best-effort mocks. Use `responses` for
+retry or recovery profiles where the same endpoint should return a sequence,
+such as first `503` and then `200`. Each response accepts the same payload
+fields plus an optional label:
 
 ```json
 {
@@ -263,6 +264,26 @@ Each response accepts the same payload fields plus an optional label:
   ]
 }
 ```
+
+Use `abort: true` when the product must recover from a transport failure rather
+than an HTTP error response. The default Playwright abort code is `failed`; set
+`abort_error_code` (or use `abort: "connectionreset"`) for a specific browser
+network error:
+
+```json
+{
+  "label": "api-key-revoke-network-failure",
+  "url": "**/billing/api-keys/key_123",
+  "method": "DELETE",
+  "abort": true,
+  "abort_error_code": "failed"
+}
+```
+
+Aborted mocks count as intentional mock hits. Matching browser
+`Failed to load resource` console entries for the mocked URL are allowed by
+`no_fatal_console_errors`; app-level `console.error(...)` calls still fail unless
+explicitly allowlisted.
 
 When `responses` is present, `network_mocks_succeeded` requires each configured
 response to be hit at least once by default and records `hit_index`,
