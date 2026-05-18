@@ -4720,6 +4720,25 @@ function readJson(relativePath) {
   return JSON.parse(readFileSync(new URL(relativePath, import.meta.url), "utf8"));
 }
 
+const handledListLoadProfile = readJson("./examples/profiles/handled-recovery-list-load.json");
+assert.equal(handledListLoadProfile.name, "handled-recovery-list-load");
+const savedItemsUnavailableMock = handledListLoadProfile.target.network_mocks.find(
+  (mock) => mock.label === "saved-items-unavailable-load",
+);
+assert.equal(savedItemsUnavailableMock.status, 503);
+assert.equal(savedItemsUnavailableMock.required_hit_count, 3);
+assert.equal(Object.hasOwn(savedItemsUnavailableMock, "max_hit_count"), false);
+assert.ok(handledListLoadProfile.checks.some(
+  (check) => check.type === "text_visible" && check.text === "Failed to load saved items",
+));
+assert.ok(handledListLoadProfile.checks.some(
+  (check) => check.type === "text_absent" && check.text === "No saved items yet",
+));
+assert.ok(handledListLoadProfile.checks.some(
+  (check) => check.type === "text_absent" && check.text === "Synthetic saved items unavailable",
+));
+assert.ok(handledListLoadProfile.metadata.purpose.includes("Do not add max_hit_count to idempotent GET mocks"));
+
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
 const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
 const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");

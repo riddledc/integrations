@@ -40,13 +40,15 @@
         }
       },
       {
-        "label": "saved-items-malformed-load",
+        "label": "saved-items-unavailable-load",
         "url": "**/api/saved-items",
         "method": "GET",
-        "status": 200,
+        "status": 503,
         "content_type": "application/json",
         "required_hit_count": 3,
-        "body": "{not valid saved items json"
+        "json": {
+          "error": "Synthetic saved items unavailable"
+        }
       }
     ],
     "setup_actions": [
@@ -57,6 +59,8 @@
       { "type": "wait_for_text", "selector": "body", "text": "Failed to load saved items", "timeout_ms": 30000 },
       { "type": "screenshot", "label": "saved-items-malformed-load-visible-recovery" },
       { "type": "assert_text_absent", "selector": "body", "text": "No saved items yet", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "Synthetic saved items unavailable", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "saved_items_temporarily_unavailable", "timeout_ms": 1000 },
       { "type": "assert_text_absent", "selector": "body", "text": "Expected property name", "timeout_ms": 1000 },
       { "type": "assert_text_absent", "selector": "body", "text": "SyntaxError", "timeout_ms": 1000 },
       { "type": "assert_text_absent", "selector": "body", "text": "[object Object]", "timeout_ms": 1000 }
@@ -71,6 +75,8 @@
     { "type": "text_visible", "text": "job_recovery_template_survives" },
     { "type": "text_visible", "text": "Failed to load saved items" },
     { "type": "text_absent", "text": "No saved items yet" },
+    { "type": "text_absent", "text": "Synthetic saved items unavailable" },
+    { "type": "text_absent", "text": "saved_items_temporarily_unavailable" },
     { "type": "text_absent", "text": "Expected property name" },
     { "type": "text_absent", "text": "SyntaxError" },
     { "type": "text_absent", "text": "[object Object]" },
@@ -90,6 +96,6 @@
     "product_regression": "fail"
   },
   "metadata": {
-    "purpose": "Template for handled malformed list-load recovery: prove independent page data still renders, the failed list shows one recovery message, contradictory empty-state copy and raw parser text stay absent, and browser console evidence remains clean."
+    "purpose": "Template for handled list-load recovery: prove independent page data still renders, the failed list shows one recovery message, contradictory empty-state copy, raw backend text, parser text, and object leakage stay absent, and browser console evidence remains clean. Do not add max_hit_count to idempotent GET mocks unless exact call count is the product contract."
   }
 }
