@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.119
+
+### Patch Changes
+
+- 364800c: Add profile network mock abort support for transport-failure recovery proofs.
+
 ## 0.7.118
 
 ### Patch Changes
