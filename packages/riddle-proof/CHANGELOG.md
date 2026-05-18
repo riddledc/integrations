@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.120
+
+### Patch Changes
+
+- 045542a: Strengthen the handled list-load recovery example and docs around failed HTTP loads, explicit unavailable states, raw backend text absence, and avoiding brittle max-hit caps on idempotent GET mocks.
+
 ## 0.7.119
 
 ### Patch Changes
