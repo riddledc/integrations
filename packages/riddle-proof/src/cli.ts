@@ -17,7 +17,9 @@ import {
 import {
   createRiddleApiClient,
   parseRiddleViewport,
+  type RiddlePollJobResult,
   type RiddlePollProgressSnapshot,
+  type RiddlePollSummary,
   type RiddleClientConfig,
 } from "./riddle-client";
 import {
@@ -450,6 +452,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (environmentBlockerLines.length) {
     lines.push("", "## Environment Blocker", "", ...environmentBlockerLines);
   }
+  const riddleJobLines = profileRiddleJobMarkdown(result);
+  if (riddleJobLines.length) {
+    lines.push("", "## Riddle Job", "", ...riddleJobLines);
+  }
   if (result.artifacts.riddle_artifacts?.length) {
     lines.push("", "## Riddle Artifacts", "");
     for (const artifact of result.artifacts.riddle_artifacts.slice(0, 40)) {
@@ -457,6 +463,35 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
+  const riddle = cliRecord(result.riddle);
+  if (!riddle) return [];
+  const jobId = cliString(riddle.job_id);
+  const status = cliString(riddle.status);
+  const terminal = typeof riddle.terminal === "boolean" ? riddle.terminal : undefined;
+  const queueElapsedMs = cliFiniteNumber(riddle.queue_elapsed_ms);
+  const elapsedMs = cliFiniteNumber(riddle.elapsed_ms);
+  const attempt = cliFiniteNumber(riddle.attempt);
+  const attempts = cliFiniteNumber(riddle.attempts);
+  const submittedAt = cliString(riddle.submitted_at);
+  const completedAt = cliString(riddle.completed_at);
+  const parts = [
+    jobId ? `job ${markdownInlineCode(jobId)}` : "",
+    status ? `status ${markdownInlineCode(status)}` : "",
+    terminal === undefined ? "" : `terminal ${terminal ? "true" : "false"}`,
+  ].filter(Boolean);
+  const lines = parts.length ? [`- ${parts.join(", ")}`] : [];
+  if (queueElapsedMs !== undefined || elapsedMs !== undefined || attempt !== undefined || attempts !== undefined) {
+    lines.push(
+      `- poll: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${attempt === undefined ? "" : `, attempt ${attempt}${attempts === undefined ? "" : `/${attempts}`}`}`,
+    );
+  }
+  if (submittedAt || completedAt) {
+    lines.push(`- timing:${submittedAt ? ` submitted ${markdownInlineCode(submittedAt)}` : ""}${completedAt ? ` completed ${markdownInlineCode(completedAt)}` : ""}`);
+  }
+  return lines;
 }
 
 function markdownInlineCode(value: string, maxLength = 80): string {
@@ -1108,9 +1143,11 @@ function withRiddleMetadata(
     job_id?: string;
     status?: string | null;
     terminal?: boolean;
+    poll?: RiddlePollSummary;
     artifacts?: RiddleProofProfileArtifactRef[];
   },
 ): RiddleProofProfileResult {
+  const poll = input.poll;
   return {
     ...result,
     riddle: {
@@ -1118,11 +1155,38 @@ function withRiddleMetadata(
       job_id: input.job_id || result.riddle?.job_id,
       status: input.status ?? result.riddle?.status,
       terminal: input.terminal ?? result.riddle?.terminal,
+      created_at: poll?.created_at ?? result.riddle?.created_at,
+      submitted_at: poll?.submitted_at ?? result.riddle?.submitted_at,
+      completed_at: poll?.completed_at ?? result.riddle?.completed_at,
+      queue_elapsed_ms: poll?.queue_elapsed_ms ?? result.riddle?.queue_elapsed_ms,
+      elapsed_ms: poll?.elapsed_ms ?? result.riddle?.elapsed_ms,
+      attempt: poll?.attempt ?? result.riddle?.attempt,
+      attempts: poll?.attempts ?? result.riddle?.attempts,
+      timed_out: poll?.timed_out ?? result.riddle?.timed_out,
     },
     artifacts: {
       ...result.artifacts,
       riddle_artifacts: input.artifacts || result.artifacts.riddle_artifacts,
     },
+  };
+}
+
+function riddleMetadataFromPoll(
+  jobId: string,
+  poll: RiddlePollJobResult,
+): RiddleProofProfileResult["riddle"] {
+  return {
+    job_id: jobId,
+    status: poll.status,
+    terminal: poll.terminal,
+    created_at: poll.poll?.created_at,
+    submitted_at: poll.poll?.submitted_at,
+    completed_at: poll.poll?.completed_at,
+    queue_elapsed_ms: poll.poll?.queue_elapsed_ms,
+    elapsed_ms: poll.poll?.elapsed_ms,
+    attempt: poll.poll?.attempt,
+    attempts: poll.poll?.attempts,
+    timed_out: poll.poll?.timed_out,
   };
 }
 
@@ -1179,7 +1243,7 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
       profile,
       runner,
       error: `Riddle job ${jobId} ended with status ${poll.status || "unknown"}.`,
-      riddle: { job_id: jobId, status: poll.status, terminal: poll.terminal },
+      riddle: riddleMetadataFromPoll(jobId, poll),
       artifacts,
     });
   }
@@ -1189,7 +1253,7 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
     return createRiddleProofProfileInsufficientResult({
       profile,
       runner,
-      riddle: { job_id: jobId, status: poll.status, terminal: poll.terminal },
+      riddle: riddleMetadataFromPoll(jobId, poll),
       artifacts,
     });
   }
@@ -1197,6 +1261,7 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
     job_id: jobId,
     status: poll.status,
     terminal: poll.terminal,
+    poll: poll.poll,
     artifacts,
   });
 }

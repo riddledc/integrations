@@ -524,6 +524,14 @@ export interface RiddleProofProfileResult {
     job_id?: string;
     status?: string | null;
     terminal?: boolean;
+    created_at?: string | null;
+    submitted_at?: string | null;
+    completed_at?: string | null;
+    queue_elapsed_ms?: number | null;
+    elapsed_ms?: number;
+    attempt?: number;
+    attempts?: number;
+    timed_out?: boolean;
   };
   environment_blocker?: Record<string, JsonValue>;
   error?: string;
