@@ -401,7 +401,7 @@ transport control, or other bounded interaction. Supported setup actions are
 `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
 `assert_window_number`, `local_storage`, `session_storage`, `clear_storage`,
 `clear_console`, `screenshot`, `wait`, `wait_for_selector`, `wait_for_text`,
-and `window_call`;
+`window_call`, and `window_call_until`;
 a failed setup action is recorded as a failed `setup_actions_succeeded` check so
 the profile cannot pass without reaching the intended state. Text-matched `click` actions prefer
 visible matching elements, which keeps responsive layouts from selecting hidden
@@ -447,6 +447,11 @@ errors, but keeps network mock hit evidence intact. Any setup action can include
 with `repeat_index` and `repeat_count`, and `after_ms` runs after each
 repetition. Use it for bounded game proof helpers, retry controls, or other
 workflows where one declarative action needs to advance the app several times.
+Use `window_call_until` when a proof helper needs to advance randomized or
+progressive state until a window-state receipt is true. It accepts `path` plus
+optional `args`, `until_path`, `until_expected_value`, `max_calls` from 1 to
+100, and optional `interval_ms`; the action stops early when the predicate is
+met and records `call_count`, final `returned`, and final `until_value`.
 Use `screenshot` with an optional `label` to capture durable Riddle screenshots
 at important setup milestones, such as after a route switch, terminal state, or
 reset. These labels are recorded in setup evidence and included in profile

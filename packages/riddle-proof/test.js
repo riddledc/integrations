@@ -2032,6 +2032,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_console"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("dialog_response"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call_until"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("drag"));
 const formSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
@@ -2191,6 +2192,38 @@ assert.ok(windowCallSetupProfileScript.includes("unexpected_return_value"));
 assert.ok(windowCallSetupProfileScript.includes("setupValuesEqual"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_index"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_count"));
+const windowCallUntilSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-window-call-until-action",
+  target: {
+    route: "/games/circle-maze",
+    setup_actions: [
+      {
+        type: "window-call-until",
+        path: "__circleMazeProofStep",
+        args: [200],
+        until_path: "__circleMazeProof.won",
+        until_expected_value: true,
+        max_calls: 15,
+        interval_ms: 50,
+        timeout_ms: 10000,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/circle-maze" }],
+}, { url: "https://example.com" });
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].type, "window_call_until");
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].path, "__circleMazeProofStep");
+assert.deepEqual(windowCallUntilSetupProfile.target.setup_actions[0].args, [200]);
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].until_path, "__circleMazeProof.won");
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].until_expected_value, true);
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].max_calls, 15);
+assert.equal(windowCallUntilSetupProfile.target.setup_actions[0].interval_ms, 50);
+const windowCallUntilSetupProfileScript = buildRiddleProofProfileScript(windowCallUntilSetupProfile);
+assert.ok(windowCallUntilSetupProfileScript.includes('type === "window_call_until"'));
+assert.ok(windowCallUntilSetupProfileScript.includes("setupCallWindowFunction"));
+assert.ok(windowCallUntilSetupProfileScript.includes("until_condition_not_met"));
+assert.ok(windowCallUntilSetupProfileScript.includes("call_count"));
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-window-call",
@@ -2209,6 +2242,33 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /window_call args must be an array/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-call-until-path",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-call-until", path: "__proof.step", until_expected_value: true, max_calls: 3 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_call_until requires until_path/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-call-until-expected",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-call-until", path: "__proof.step", until_path: "__proof.done", max_calls: 3 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_call_until requires until_expected_value/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-call-until-max",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-call-until", path: "__proof.step", until_path: "__proof.done", until_expected_value: true, max_calls: 101 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /max_calls must be an integer from 1 to 100/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-setup-repeat",
