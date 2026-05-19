@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.138
+
+### Patch Changes
+
+- 5cf45b9: Allow profile setup screenshot actions to request viewport-only captures with `full_page: false`, `fullPage: false`, or `mode: "viewport"` so fixed and sticky page chrome does not pollute full-page milestone screenshots.
+
 ## 0.7.137
 
 ### Patch Changes
