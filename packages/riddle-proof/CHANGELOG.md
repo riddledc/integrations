@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.149
+
+### Patch Changes
+
+- a6b56da: Show compact `set_range_value` setup-action receipts in profile `summary.md` output.
+
 ## 0.7.148
 
 ### Patch Changes
