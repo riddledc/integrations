@@ -897,6 +897,13 @@ const cliRunProfileServer = createServer((request, response) => {
           status: "passed",
           evidence: {
             expected_count: 5,
+            expected_routes: [
+              { name: "Pricing", path: "/pricing" },
+              { name: "Billing", path: "/billing" },
+              { name: "Register", path: "/register" },
+              { name: "Docs", path: "/docs" },
+              { name: "Dashboard", path: "/dashboard" },
+            ],
             source_link_count: 8,
             source_unique_link_count: 5,
             duplicate_source_link_count: 3,
@@ -1070,6 +1077,7 @@ try {
   assert.match(profileSummaryMarkdown, /## Route Inventory/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory expected routes: Pricing \(\/pricing\); Billing \(\/billing\); Register \(\/register\); Docs \(\/docs\); Dashboard \(\/dashboard\)/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /## Riddle Job/);
   assert.match(profileSummaryMarkdown, /job `job_cli_profile_progress`, status `completed`, terminal true/);
@@ -3315,6 +3323,10 @@ assert.equal(routeInventoryAssessment.status, "passed");
 const routeInventoryCheck = routeInventoryAssessment.checks.find((check) => check.type === "route_inventory");
 assert.equal(routeInventoryCheck.status, "passed");
 assert.equal(routeInventoryCheck.evidence.expected_count, 2);
+assert.deepEqual(routeInventoryCheck.evidence.expected_routes, [
+  { name: "Gem Mine", path: "/games/gem-mine" },
+  { name: "Coin Clicker", path: "/games/coin-clicker" },
+]);
 assert.equal(routeInventoryCheck.evidence.source_link_count, 2);
 assert.equal(routeInventoryCheck.evidence.source_unique_link_count, 2);
 assert.equal(routeInventoryCheck.evidence.duplicate_source_link_count, 0);

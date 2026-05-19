@@ -638,6 +638,34 @@ function cliStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())) : [];
 }
 
+type CliRouteInventoryRoute = { name?: string; path: string };
+
+function cliRouteInventoryRoutes(value: unknown): CliRouteInventoryRoute[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    if (typeof entry === "string") {
+      const pathValue = entry.trim();
+      return pathValue ? { path: pathValue } : undefined;
+    }
+    const route = cliRecord(entry);
+    if (!route) return undefined;
+    const pathValue = cliString(route.path);
+    if (!pathValue) return undefined;
+    const nameValue = cliString(route.name);
+    return nameValue ? { name: nameValue, path: pathValue } : { path: pathValue };
+  }).filter((route): route is CliRouteInventoryRoute => Boolean(route));
+}
+
+function cliRouteInventoryRouteLabel(route: CliRouteInventoryRoute): string {
+  return route.name && route.name !== route.path ? `${route.name} (${route.path})` : route.path;
+}
+
+function cliRouteInventoryRouteList(routes: CliRouteInventoryRoute[]): string {
+  const visible = routes.slice(0, 12).map(cliRouteInventoryRouteLabel);
+  const omitted = routes.length > 12 ? `; ${routes.length - 12} more` : "";
+  return `${visible.join("; ")}${omitted}`;
+}
+
 function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): string[] {
   const blocker = cliRecord(result.environment_blocker);
   if (!blocker) return [];
@@ -921,6 +949,11 @@ function profileRouteInventorySummaryMarkdown(result: RiddleProofProfileResult):
     if (duplicateCount || duplicateLinks.length) {
       const duplicateText = duplicateLinks.length ? `: ${duplicateLinks.slice(0, 8).join(", ")}${duplicateLinks.length > 8 ? `, ${duplicateLinks.length - 8} more` : ""}` : "";
       lines.push(`- ${label} duplicate source links: ${duplicateCount}${evidence.duplicates_allowed === true ? " allowed" : ""}${duplicateText}`);
+    }
+
+    const expectedRoutes = cliRouteInventoryRoutes(evidence.expected_routes);
+    if (expectedRoutes.length) {
+      lines.push(`- ${label} expected routes: ${cliRouteInventoryRouteList(expectedRoutes)}`);
     }
 
     for (const viewport of viewports.slice(0, 8)) {

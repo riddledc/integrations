@@ -2985,6 +2985,21 @@ function summarizeRouteInventory(viewport: string, inventory: Record<string, unk
   };
 }
 
+function routeInventoryExpectedRouteSummaries(value: unknown, fallback?: RiddleProofProfileRouteInventoryRoute[]) {
+  const rawRoutes = Array.isArray(value) ? value : Array.isArray(fallback) ? fallback : [];
+  return rawRoutes.map((route) => {
+    if (typeof route === "string") {
+      const path = route.trim();
+      return path ? { path } : undefined;
+    }
+    if (!isRecord(route)) return undefined;
+    const path = stringValue(route.path);
+    if (!path) return undefined;
+    const name = stringValue(route.name);
+    return name ? { name, path } : { path };
+  }).filter((route): route is { name?: string; path: string } => Boolean(route));
+}
+
 function matchText(sample: string, check: RiddleProofProfileCheck) {
   if (check.pattern) {
     try {
@@ -3697,7 +3712,10 @@ function assessCheckFromEvidence(
         type: check.type,
         label: checkLabel(check),
         status: "failed",
-        evidence: { expected_count: check.expected_routes?.length || 0 },
+        evidence: {
+          expected_count: check.expected_routes?.length || 0,
+          expected_routes: routeInventoryExpectedRouteSummaries(undefined, check.expected_routes),
+        },
         message: "No route inventory evidence was captured.",
       };
     }
@@ -3719,12 +3737,14 @@ function assessCheckFromEvidence(
       : [];
     const duplicateSourceLinkCount = numberValue(first?.duplicate_source_link_count)
       ?? (sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null);
+    const expectedRoutes = routeInventoryExpectedRouteSummaries(first?.expected_routes, check.expected_routes);
     return {
       type: check.type,
       label: checkLabel(check),
       status: failures.length ? "failed" : "passed",
       evidence: {
         expected_count: check.expected_routes?.length || 0,
+        expected_routes: expectedRoutes,
         source_link_count: sourceLinkCount,
         source_unique_link_count: sourceUniqueLinkCount,
         duplicate_source_link_count: duplicateSourceLinkCount,
@@ -4815,6 +4835,20 @@ function summarizeRouteInventory(viewport, inventory) {
     failure_count: failures.length,
   };
 }
+function routeInventoryExpectedRouteSummaries(value, fallback) {
+  const rawRoutes = Array.isArray(value) ? value : Array.isArray(fallback) ? fallback : [];
+  return rawRoutes.map((route) => {
+    if (typeof route === "string") {
+      const path = route.trim();
+      return path ? { path } : null;
+    }
+    if (!route || typeof route !== "object" || Array.isArray(route)) return null;
+    const path = typeof route.path === "string" && route.path.trim() ? route.path.trim() : "";
+    if (!path) return null;
+    const name = typeof route.name === "string" && route.name.trim() ? route.name.trim() : "";
+    return name ? { name, path } : { path };
+  }).filter(Boolean);
+}
 function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
@@ -5642,7 +5676,10 @@ function assessProfile(profile, evidence) {
           type: check.type,
           label: check.label || check.type,
           status: "failed",
-          evidence: { expected_count: (check.expected_routes || []).length },
+          evidence: {
+            expected_count: (check.expected_routes || []).length,
+            expected_routes: routeInventoryExpectedRouteSummaries(undefined, check.expected_routes),
+          },
           message: "No route inventory evidence was captured.",
         });
         continue;
@@ -5661,12 +5698,14 @@ function assessProfile(profile, evidence) {
       const sourceUniqueLinkCount = typeof first.source_unique_link_count === "number" ? first.source_unique_link_count : typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : null;
       const duplicateSourceLinks = Array.isArray(first.duplicate_source_link_paths) ? first.duplicate_source_link_paths.map((path) => String(path)) : [];
       const duplicateSourceLinkCount = typeof first.duplicate_source_link_count === "number" ? first.duplicate_source_link_count : sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null;
+      const expectedRoutes = routeInventoryExpectedRouteSummaries(first.expected_routes, check.expected_routes);
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failures.length ? "failed" : "passed",
         evidence: {
           expected_count: (check.expected_routes || []).length,
+          expected_routes: expectedRoutes,
           source_link_count: sourceLinkCount,
           source_unique_link_count: sourceUniqueLinkCount,
           duplicate_source_link_count: duplicateSourceLinkCount,
