@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.125
+
+### Patch Changes
+
+- b3a19ea: Infer hosted `http_status` body assertion counts from per-viewport evidence maps when top-level assertion arrays are absent.
+
 ## 0.7.124
 
 ### Patch Changes
