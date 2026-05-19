@@ -890,9 +890,6 @@ const cliRunProfileServer = createServer((request, response) => {
             url: "https://example.com/proof.json",
             method: "GET",
             allowed_statuses: [200],
-            body_contains: ["passed", "partial results available"],
-            body_not_contains: ["raw-secret"],
-            body_not_patterns: ["Traceback"],
             viewports: [
               {
                 viewport: "desktop",
