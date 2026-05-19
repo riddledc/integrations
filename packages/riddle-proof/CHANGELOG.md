@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.165
+
+### Patch Changes
+
+- 5d1dfa0: Surface drag setup-action receipts in profile setup summaries, including pointer type and browser input-dispatch evidence.
+
 ## 0.7.164
 
 ### Patch Changes
