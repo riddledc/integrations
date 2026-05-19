@@ -398,10 +398,11 @@ when body matching overrides sequence order.
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
 `click`, `drag`, `press`, `fill`, `set_input_value`, `set_range_value`,
-`assert_text_visible`, `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
-`assert_window_number`, `local_storage`, `session_storage`, `clear_storage`,
-`clear_console`, `screenshot`, `wait`, `wait_for_selector`, `wait_for_text`,
-`window_eval`, `window_call`, and `window_call_until`;
+`canvas_signature`, `assert_text_visible`, `assert_text_absent`,
+`assert_selector_count`, `assert_window_value`, `assert_window_number`,
+`local_storage`, `session_storage`, `clear_storage`, `clear_console`,
+`screenshot`, `wait`, `wait_for_selector`, `wait_for_text`, `window_eval`,
+`window_call`, and `window_call_until`;
 a failed setup action is recorded as a failed `setup_actions_succeeded` check so
 the profile cannot pass without reaching the intended state. Text-matched `click` actions prefer
 visible matching elements, which keeps responsive layouts from selecting hidden
@@ -422,6 +423,13 @@ events, and records the requested value plus the browser's actual normalized
 value, numeric value, `min`, `max`, and `step`. The action is intentionally
 strict: if the target is not an `input[type="range"]`, setup fails with
 `not_range_input` instead of silently treating the control like a text field.
+Use `canvas_signature` for canvas-only proof surfaces. It requires `selector`,
+reads the selected canvas with `toDataURL("image/png")`, records a sampled hash,
+canvas dimensions, CSS dimensions, and data length, and can store the result
+with `store_return_to` or `store_signature_to`. Add `compare_to` plus
+`expect_changed: true` to assert that the current canvas signature differs from
+a previously stored signature, for example menu -> active play or terminal ->
+restart.
 Use `drag` for pointer-driven controls such as canvas launch areas, sliders, or
 drag-to-aim games. Provide `selector`, `from_x`, `from_y`, `to_x`, and `to_y`;
 coordinates are element-relative pixels by default. Set `coordinate_mode:
@@ -489,7 +497,9 @@ sequences include `clicked_total` and `clicked_truncated`; the compact `clicked`
 list keeps the first and last clicked targets so later route switches and reset
 actions stay visible. Click actions with `click_count` greater than `1` are
 included in clicked-target evidence and rolled up as `click_count_action_total`
-and `click_count_value_total`.
+and `click_count_value_total`. Setup receipt sampling favors both first and last
+per-viewport receipts before filling remaining space, so late lifecycle phases
+such as terminal or restart remain visible in compact summaries.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`

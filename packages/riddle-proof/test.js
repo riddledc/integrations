@@ -1389,18 +1389,18 @@ const cliRunProfileServer = createServer((request, response) => {
           type: "setup_actions_succeeded",
           status: "passed",
           evidence: {
-            action_count: 3,
-            viewports: [{ name: "desktop", ok: true, result_count: 5 }],
+            action_count: 4,
+            viewports: [{ name: "desktop", ok: true, result_count: 6 }],
             setup_summary: {
               viewport_count: 1,
-              action_count: 3,
+              action_count: 4,
               final_screenshot_count: 1,
               final_screenshot_full_page: false,
               final_screenshot_mode: "viewport",
               viewports: [{
                 name: "desktop",
                 ok: true,
-                result_count: 5,
+                result_count: 6,
                 observed_path: "/profile",
                 final_screenshot: "cli-profile-progress-desktop",
                 final_screenshot_full_page: false,
@@ -1422,6 +1422,25 @@ const cliRunProfileServer = createServer((request, response) => {
                   min: "0.01",
                   max: "0.5",
                   step: "0.001",
+                  reason: null,
+                }],
+                canvas_signature_total: 1,
+                canvas_signature_truncated: false,
+                canvas_signature: [{
+                  ordinal: 5,
+                  ok: true,
+                  selector: ".game-canvas",
+                  label: "ready",
+                  hash: "123456789",
+                  data_length: 2048,
+                  width: 800,
+                  height: 450,
+                  css_width: 800,
+                  css_height: 450,
+                  compare_to: "__proof.previousCanvas",
+                  previous_hash: "987654321",
+                  changed: true,
+                  return_stored_to: "__proof.canvasReady",
                   reason: null,
                 }],
                 window_call_total: 1,
@@ -1719,15 +1738,17 @@ try {
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
   assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
-  assert.match(profileSummaryMarkdown, /setup actions: 3 declared, 5 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /setup actions: 4 declared, 6 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /canvas_signature: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 5 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
   assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, summary `ok=true, moves=16`, returned `\{"ok":true,"sum":5,"nested":\{"moves":16\}\}`/);
@@ -1791,8 +1812,9 @@ try {
   for (const viewport of ["desktop", "phone", "ipad-mini", "ipad"]) {
     assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=1\``));
     assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=2\``));
-    assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=3\``));
+    assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=5\``));
   }
+  assert.doesNotMatch(balancedSetupSummaryMarkdown, /step=3/);
   assert.doesNotMatch(balancedSetupSummaryMarkdown, /step=4/);
   assert.match(balancedSetupSummaryMarkdown, /8 additional window_eval receipt\(s\) omitted\./);
 
@@ -3116,6 +3138,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_range_value"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("canvas_signature"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_selector_count"));
@@ -3213,6 +3236,40 @@ assert.ok(rangeSetupProfileScript.includes("HTMLInputElement.prototype"));
 assert.ok(rangeSetupProfileScript.includes('new Event("input"'));
 assert.ok(rangeSetupProfileScript.includes('new Event("change"'));
 assert.ok(rangeSetupProfileScript.includes("not_range_input"));
+const canvasSignatureProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-canvas-signature-action",
+  target: {
+    route: "/games/moose-runner",
+    setup_actions: [
+      {
+        type: "capture-canvas-signature",
+        selector: ".game-canvas",
+        label: "menu",
+        storeSignatureTo: "__proof.menuCanvas",
+      },
+      {
+        type: "canvas-signature",
+        selector: ".game-canvas",
+        label: "playing",
+        compareTo: "__proof.menuCanvas",
+        expectChanged: true,
+        storeReturnTo: "__proof.playingCanvas",
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/moose-runner" }],
+}, { url: "https://example.com" });
+assert.equal(canvasSignatureProfile.target.setup_actions[0].type, "canvas_signature");
+assert.equal(canvasSignatureProfile.target.setup_actions[0].store_return_to, "__proof.menuCanvas");
+assert.equal(canvasSignatureProfile.target.setup_actions[1].type, "canvas_signature");
+assert.equal(canvasSignatureProfile.target.setup_actions[1].compare_to, "__proof.menuCanvas");
+assert.equal(canvasSignatureProfile.target.setup_actions[1].expect_changed, true);
+const canvasSignatureProfileScript = buildRiddleProofProfileScript(canvasSignatureProfile);
+assert.ok(canvasSignatureProfileScript.includes('type === "canvas_signature"'));
+assert.ok(canvasSignatureProfileScript.includes("toDataURL"));
+assert.ok(canvasSignatureProfileScript.includes("canvas_signature_unchanged"));
+assert.ok(canvasSignatureProfileScript.includes("return_stored_to"));
 const dialogSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-dialog-response-action",

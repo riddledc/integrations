@@ -745,26 +745,40 @@ function balancedSetupReceiptDetails(groups: CliSetupReceiptDetail[][], limit: n
   if (total <= limit) return groups.flat();
 
   const selected: CliSetupReceiptDetail[] = [];
+  const selectedKeys = new Set<string>();
   const indexes = new Array(groups.length).fill(0);
   const nonEmptyIndexes = groups
     .map((group, index) => group.length ? index : -1)
     .filter((index) => index >= 0);
 
+  const pushReceipt = (groupIndex: number, itemIndex: number, advance = true) => {
+    const receipt = groups[groupIndex][itemIndex];
+    if (!receipt) return false;
+    const key = `${groupIndex}:${itemIndex}`;
+    if (selectedKeys.has(key)) return false;
+    selected.push(receipt);
+    selectedKeys.add(key);
+    if (advance) indexes[groupIndex] = Math.max(indexes[groupIndex], itemIndex + 1);
+    return true;
+  };
+
   for (const index of nonEmptyIndexes) {
     if (selected.length >= limit) return selected;
-    selected.push(groups[index][0]);
-    indexes[index] = 1;
+    pushReceipt(index, 0);
+  }
+
+  for (const index of nonEmptyIndexes) {
+    if (selected.length >= limit) return selected;
+    const lastIndex = groups[index].length - 1;
+    if (lastIndex > 0) pushReceipt(index, lastIndex, false);
   }
 
   while (selected.length < limit) {
     let progressed = false;
     for (const index of nonEmptyIndexes) {
       const nextIndex = indexes[index];
-      const next = groups[index][nextIndex];
-      if (!next) continue;
-      selected.push(next);
-      indexes[index] = nextIndex + 1;
-      progressed = true;
+      if (nextIndex >= groups[index].length) continue;
+      progressed = pushReceipt(index, nextIndex) || progressed;
       if (selected.length >= limit) break;
     }
     if (!progressed) break;
@@ -895,6 +909,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const windowCallUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_total) || 0), 0);
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
   const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
+  const canvasSignatureTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.canvas_signature_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
     sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
   ), 0);
@@ -920,6 +935,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (rangeValueTotal) {
     lines.push(`- set_range_value: ${rangeValueTotal} action(s)`);
   }
+  if (canvasSignatureTotal) {
+    lines.push(`- canvas_signature: ${canvasSignatureTotal} action(s)`);
+  }
 
   for (const viewport of viewports.slice(0, 8)) {
     const name = cliString(viewport.name) || "viewport";
@@ -939,9 +957,39 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const windowCallUntilActions = cliFiniteNumber(viewport.window_call_until_total) || 0;
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
     const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
+    const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
+  const canvasSignatureGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.canvas_signature)
+      ? viewport.canvas_signature.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  const canvasSignatureDetails = canvasSignatureGroups.flat();
+  const sampledCanvasSignatureDetails = balancedSetupReceiptDetails(canvasSignatureGroups, 12);
+  for (const { name, receipt } of sampledCanvasSignatureDetails) {
+    const selector = cliString(receipt.selector) || "canvas";
+    const label = cliString(receipt.label);
+    const hash = cliString(receipt.hash);
+    const dataLength = cliFiniteNumber(receipt.data_length);
+    const width = cliFiniteNumber(receipt.width);
+    const height = cliFiniteNumber(receipt.height);
+    const cssWidth = cliFiniteNumber(receipt.css_width);
+    const cssHeight = cliFiniteNumber(receipt.css_height);
+    const compareTo = cliString(receipt.compare_to);
+    const previousHash = cliString(receipt.previous_hash);
+    const changed = typeof receipt.changed === "boolean" ? receipt.changed : undefined;
+    const storedTo = cliString(receipt.return_stored_to);
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    const sizeText = width === undefined || height === undefined ? "" : `, ${width}x${height}`;
+    const cssSizeText = cssWidth === undefined || cssHeight === undefined ? "" : `, css ${cssWidth}x${cssHeight}`;
+    lines.push(`- ${name} canvas_signature: ${ok}, ${markdownInlineCode(selector)}${label ? ` ${markdownInlineCode(label, 80)}` : ""}${hash ? ` hash ${markdownInlineCode(hash, 80)}` : ""}${sizeText}${cssSizeText}${dataLength === undefined ? "" : `, data chars ${dataLength}`}${compareTo ? `, compared ${markdownInlineCode(compareTo)}` : ""}${previousHash ? ` previous ${markdownInlineCode(previousHash, 80)}` : ""}${changed === undefined ? "" : `, changed ${changed}`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (canvasSignatureDetails.length > sampledCanvasSignatureDetails.length) lines.push(`- ${canvasSignatureDetails.length - sampledCanvasSignatureDetails.length} additional canvas_signature receipt(s) omitted.`);
   const rangeValueGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.set_range_value)

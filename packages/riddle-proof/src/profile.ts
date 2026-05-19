@@ -53,6 +53,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "fill",
   "set_input_value",
   "set_range_value",
+  "canvas_signature",
   "assert_text_visible",
   "assert_text_absent",
   "assert_selector_count",
@@ -278,6 +279,8 @@ export interface RiddleProofProfileSetupAction {
   store_return_to?: string;
   capture_return?: boolean;
   return_summary_fields?: RiddleProofProfileReturnSummaryField[];
+  compare_to?: string;
+  expect_changed?: boolean;
   until_path?: string;
   until_expected_value?: JsonValue;
   max_calls?: number;
@@ -1093,6 +1096,29 @@ function profileSetupRangeValueReceipts(results: Array<Record<string, JsonValue>
     }));
 }
 
+function profileSetupCanvasSignatureReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "canvas_signature")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      label: result.label ?? null,
+      hash: result.hash ?? null,
+      data_length: result.data_length ?? null,
+      width: result.width ?? null,
+      height: result.height ?? null,
+      css_width: result.css_width ?? null,
+      css_height: result.css_height ?? null,
+      compare_to: result.compare_to ?? null,
+      previous_hash: result.previous_hash ?? null,
+      changed: result.changed ?? null,
+      return_stored_to: result.return_stored_to ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
@@ -1156,6 +1182,8 @@ function profileSetupSummary(
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
+      const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
+      const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -1217,6 +1245,9 @@ function profileSetupSummary(
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
+        canvas_signature_total: canvasSignatureReceipts.length,
+        canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
+        canvas_signature: sampledCanvasSignatureReceipts,
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -1289,6 +1320,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "press"
     : normalizedInput === "set_slider_value" || normalizedInput === "slider_value" || normalizedInput === "set_slider" || normalizedInput === "set_range" || normalizedInput === "range_value" || normalizedInput === "range_input" || normalizedInput === "set_range_input"
       ? "set_range_value"
+    : normalizedInput === "canvas_hash" || normalizedInput === "capture_canvas_hash" || normalizedInput === "capture_canvas_signature" || normalizedInput === "canvas_state_signature"
+      ? "canvas_signature"
     : normalizedInput === "capture_screenshot" || normalizedInput === "save_screenshot" || normalizedInput === "setup_screenshot"
       ? "screenshot"
     : normalizedInput === "accept_dialog" || normalizedInput === "accept_dialogs" || normalizedInput === "confirm_dialog" || normalizedInput === "set_dialog_response"
@@ -1442,7 +1475,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (frameIndex !== undefined && (!Number.isInteger(frameIndex) || frameIndex < 0)) {
     throw new Error(`target.setup_actions[${index}].frame_index must be a non-negative integer.`);
   }
-  if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
+  if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "canvas_signature" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
   const fromX = numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
@@ -1545,6 +1578,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     "assignReturnTo",
     "return_state_path",
     "returnStatePath",
+    "store_signature_to",
+    "storeSignatureTo",
+    "signature_path",
+    "signaturePath",
   );
   const captureReturn = input.capture_return === false
     || input.captureReturn === false
@@ -1615,6 +1652,8 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     store_return_to: storeReturnTo,
     capture_return: captureReturn,
     return_summary_fields: normalizeReturnSummaryFields(input, index),
+    compare_to: stringFromOwn(input, "compare_to", "compareTo", "previous_signature_path", "previousSignaturePath", "previous_path", "previousPath", "changed_from", "changedFrom"),
+    expect_changed: booleanValue(valueFromOwn(input, "expect_changed", "expectChanged", "should_change", "shouldChange", "changed")),
     until_path: untilPath,
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
     max_calls: maxCalls,
@@ -5288,6 +5327,28 @@ function profileSetupRangeValueReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupCanvasSignatureReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "canvas_signature")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      label: result.label ?? null,
+      hash: result.hash ?? null,
+      data_length: result.data_length ?? null,
+      width: result.width ?? null,
+      height: result.height ?? null,
+      css_width: result.css_width ?? null,
+      css_height: result.css_height ?? null,
+      compare_to: result.compare_to ?? null,
+      previous_hash: result.previous_hash ?? null,
+      changed: result.changed ?? null,
+      return_stored_to: result.return_stored_to ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -5346,6 +5407,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
+      const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
+      const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -5407,6 +5470,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
+        canvas_signature_total: canvasSignatureReceipts.length,
+        canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
+        canvas_signature: sampledCanvasSignatureReceipts,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({
@@ -7421,6 +7487,156 @@ async function executeSetupAction(action, ordinal, viewport) {
         tag: rangeResult?.tag,
         input_type: rangeResult?.input_type,
         reason: rangeResult && rangeResult.ok === true ? undefined : rangeResult?.reason || "range_value_not_set",
+      };
+    }
+    if (type === "canvas_signature") {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, ...setupScopeEvidence(scope), reason: "selector_not_found", count };
+      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, ...setupScopeEvidence(scope), reason: "index_out_of_range", count, target_index: targetIndex };
+      const target = locator.nth(targetIndex);
+      await target.waitFor({ state: "visible", timeout });
+      const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.store_signature_to || action.storeSignatureTo || action.signature_path || action.signaturePath || "").trim();
+      const compareTo = String(action.compare_to || action.compareTo || action.previous_signature_path || action.previousSignaturePath || action.previous_path || action.previousPath || action.changed_from || action.changedFrom || "").trim();
+      const expectChanged = action.expect_changed === true || action.expectChanged === true || action.should_change === true || action.shouldChange === true || action.changed === true
+        ? true
+        : action.expect_changed === false || action.expectChanged === false || action.should_change === false || action.shouldChange === false || action.changed === false
+          ? false
+          : undefined;
+      const signatureResult = await target.evaluate((element, payload) => {
+        const toJsonValue = (value) => {
+          if (value === null || value === undefined) return null;
+          if (typeof value === "string" || typeof value === "boolean") return value;
+          if (typeof value === "number") return Number.isFinite(value) ? value : null;
+          if (Array.isArray(value)) return value.map(toJsonValue);
+          if (typeof value === "object") {
+            return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
+          }
+          return String(value);
+        };
+        const pathParts = (path) => String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
+        const readWindowPath = (path) => {
+          const parts = pathParts(path);
+          if (parts[0] === "window") parts.shift();
+          if (!parts.length) return { ok: false, reason: "missing_path" };
+          let current = window;
+          for (const part of parts) {
+            if (current === null || current === undefined) return { ok: false, reason: "path_not_found", missing_part: part };
+            current = current[part];
+            if (current === undefined) return { ok: false, reason: "path_not_found", missing_part: part };
+          }
+          return { ok: true, value: toJsonValue(current) };
+        };
+        const storeWindowValue = (path, value) => {
+          const parts = pathParts(path);
+          if (parts[0] === "window") parts.shift();
+          if (!parts.length) return { ok: false, reason: "missing_store_path" };
+          let target = window;
+          for (let index = 0; index < parts.length - 1; index += 1) {
+            const part = parts[index];
+            if (target[part] === null || typeof target[part] !== "object") target[part] = {};
+            target = target[part];
+          }
+          target[parts[parts.length - 1]] = value;
+          return { ok: true, path: parts.join(".") };
+        };
+        const hashText = (text) => {
+          let hash = 2166136261;
+          const step = Math.max(1, Math.floor((text.length || 1) / 4000));
+          for (let index = 0; index < text.length; index += step) {
+            hash ^= text.charCodeAt(index);
+            hash = Math.imul(hash, 16777619) >>> 0;
+          }
+          return String(hash);
+        };
+        const tag = String(element && element.tagName ? element.tagName : "").toLowerCase();
+        if (tag !== "canvas") return { ok: false, reason: "not_canvas_element", tag };
+        const rect = element.getBoundingClientRect();
+        let data = "";
+        try {
+          data = element.toDataURL("image/png");
+        } catch (error) {
+          return {
+            ok: false,
+            reason: "canvas_read_failed",
+            error: String(error && error.message ? error.message : error).slice(0, 1000),
+            width: element.width || 0,
+            height: element.height || 0,
+            css_width: Math.round(rect.width || 0),
+            css_height: Math.round(rect.height || 0),
+          };
+        }
+        const result = {
+          ok: Boolean(element.width > 0 && element.height > 0 && data.length > 0),
+          reason: element.width > 0 && element.height > 0 && data.length > 0 ? undefined : "empty_canvas_signature",
+          hash: hashText(data),
+          data_length: data.length,
+          width: element.width || 0,
+          height: element.height || 0,
+          css_width: Math.round(rect.width || 0),
+          css_height: Math.round(rect.height || 0),
+          compare_to: payload.compareTo || undefined,
+          previous_hash: null,
+          changed: null,
+        };
+        if (payload.compareTo) {
+          const previous = readWindowPath(payload.compareTo);
+          if (!previous.ok) {
+            result.ok = false;
+            result.reason = previous.reason || "compare_path_not_found";
+            result.missing_part = previous.missing_part || undefined;
+          } else {
+            const previousValue = previous.value;
+            const previousHash = previousValue && typeof previousValue === "object" && !Array.isArray(previousValue)
+              ? previousValue.hash || previousValue.signature || previousValue.canvas_hash || null
+              : typeof previousValue === "string"
+                ? previousValue
+                : null;
+            result.previous_hash = previousHash === null || previousHash === undefined ? null : String(previousHash);
+            result.changed = result.previous_hash === null ? null : result.previous_hash !== result.hash;
+            if (payload.expectChanged === true && result.changed !== true) {
+              result.ok = false;
+              result.reason = "canvas_signature_unchanged";
+            } else if (payload.expectChanged === false && result.changed !== false) {
+              result.ok = false;
+              result.reason = "canvas_signature_changed";
+            }
+          }
+        }
+        if (payload.storeReturnTo) {
+          const stored = storeWindowValue(payload.storeReturnTo, result);
+          if (!stored.ok) {
+            return { ...result, ok: false, reason: "signature_store_failed", store_reason: stored.reason };
+          }
+          return { ...result, return_stored_to: stored.path };
+        }
+        return result;
+      }, { compareTo, expectChanged, storeReturnTo });
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: signatureResult && signatureResult.ok === true,
+        count,
+        target_index: targetIndex,
+        label: action.label || action.name || undefined,
+        hash: signatureResult?.hash,
+        data_length: signatureResult?.data_length,
+        width: signatureResult?.width,
+        height: signatureResult?.height,
+        css_width: signatureResult?.css_width,
+        css_height: signatureResult?.css_height,
+        compare_to: signatureResult?.compare_to || compareTo || undefined,
+        previous_hash: signatureResult?.previous_hash,
+        changed: signatureResult?.changed,
+        return_stored_to: signatureResult?.return_stored_to || storeReturnTo || undefined,
+        missing_part: signatureResult?.missing_part || undefined,
+        store_reason: signatureResult?.store_reason || undefined,
+        tag: signatureResult?.tag,
+        reason: signatureResult && signatureResult.ok === true ? undefined : signatureResult?.reason || "canvas_signature_failed",
+        error: signatureResult?.error || undefined,
       };
     }
     if (type === "assert_selector_count") {
