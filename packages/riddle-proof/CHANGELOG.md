@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.155
+
+### Patch Changes
+
+- bb3819a: Balance setup receipt detail sampling across viewports in profile summaries so
+  large matrix runs do not omit later viewport receipts before showing early
+  viewport details.
+
 ## 0.7.154
 
 ### Patch Changes
