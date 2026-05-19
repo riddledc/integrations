@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.124
+
+### Patch Changes
+
+- ff5c461: Show `http_status` body assertion pass counts in hosted profile summary markdown.
+
 ## 0.7.123
 
 ### Patch Changes
