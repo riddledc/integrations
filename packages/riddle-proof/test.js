@@ -1513,6 +1513,29 @@ const setupScreenshotProfile = normalizeRiddleProofProfile({
 }, { url: "https://example.com" });
 assert.equal(setupScreenshotProfile.target.setup_actions[0].type, "screenshot");
 assert.equal(setupScreenshotProfile.target.setup_actions[0].label, "After Pricing Click");
+const viewportSetupScreenshotProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "viewport-setup-screenshot-profile",
+  target: {
+    route: "/pricing",
+    setup_actions: [
+      { type: "screenshot", label: "Viewport Ready", mode: "viewport" },
+      { type: "screenshot", label: "Full Ready", viewport_only: false },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/pricing" }],
+}, { url: "https://example.com" });
+assert.equal(viewportSetupScreenshotProfile.target.setup_actions[0].full_page, false);
+assert.equal(viewportSetupScreenshotProfile.target.setup_actions[1].full_page, true);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "conflicting-setup-screenshot-profile",
+  target: {
+    route: "/pricing",
+    setup_actions: [{ type: "screenshot", label: "Conflict", full_page: false, mode: "full_page" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/pricing" }],
+}, { url: "https://example.com" }), /conflicting screenshot full_page/);
 const clickCountSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-click-count-profile",
@@ -1539,7 +1562,8 @@ assert.ok(clickCountProfileScript.includes("clickOptions.clickCount = clickCount
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel)'));
-assert.ok(profileScript.includes('saveScreenshot(label)'));
+assert.ok(profileScript.includes('saveScreenshot(label, screenshotOptions)'));
+assert.ok(profileScript.includes("screenshotOptions.fullPage = action.full_page !== false"));
 assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setupActionsForViewport(profile.target.setup_actions || [], viewport.name)"));
 assert.ok(profileScript.includes("expected_action_count"));

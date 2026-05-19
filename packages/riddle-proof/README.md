@@ -455,7 +455,10 @@ met and records `call_count`, final `returned`, and final `until_value`.
 Use `screenshot` with an optional `label` to capture durable Riddle screenshots
 at important setup milestones, such as after a route switch, terminal state, or
 reset. These labels are recorded in setup evidence and included in profile
-artifact summaries alongside final viewport screenshots.
+artifact summaries alongside final viewport screenshots. Setup screenshots are
+full-page by default; set `full_page: false`, `fullPage: false`, or
+`mode: "viewport"` when fixed or sticky page chrome would make full-page
+captures harder to review.
 Add `frame_selector` / `frameSelector` to a setup action when the interaction
 target lives inside an embedded iframe, such as a community game player or
 hosted preview surface. Selector-based actions, storage actions, window calls,
