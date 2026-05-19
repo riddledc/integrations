@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.145
+
+### Patch Changes
+
+- 6140b0e: Report route-inventory source scope and selector candidate counts in profile evidence and summaries.
+
 ## 0.7.144
 
 ### Patch Changes
