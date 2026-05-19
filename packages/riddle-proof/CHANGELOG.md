@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.131
+
+### Patch Changes
+
+- e3a48b8: Add case-insensitive candidate samples to failed text assertions and setup text actions so CSS-rendered casing mismatches are easier to diagnose without changing pass/fail semantics.
+
 ## 0.7.130
 
 ### Patch Changes
