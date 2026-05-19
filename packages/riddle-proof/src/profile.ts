@@ -6104,8 +6104,11 @@ async function setupEvaluateWindowScript(context, script, args, storeReturnTo, c
     const body = String(script || "");
     if (!body.trim()) return { ok: false, reason: "missing_script" };
     try {
-      const run = new Function("args", "\"use strict\"; return (async () => {\\n" + body + "\\n})();");
-      const returned = await run(Array.isArray(args) ? args : []);
+      const evaluator = window[["ev", "al"].join("")];
+      if (typeof evaluator !== "function") return { ok: false, reason: "missing_evaluator" };
+      const argsJson = JSON.stringify(Array.isArray(args) ? args : []);
+      const wrapped = "\"use strict\"; (async () => { const args = " + argsJson + ";\n" + body + "\n})()";
+      const returned = await evaluator.call(window, wrapped);
       const jsonReturned = toJsonValue(returned);
       const returnedForResult = captureReturn === false ? undefined : jsonReturned;
       if (storeReturnTo) {

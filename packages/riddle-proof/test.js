@@ -2331,10 +2331,13 @@ assert.equal(windowEvalSetupProfile.target.setup_actions[0].capture_return, unde
 const windowEvalSetupProfileScript = buildRiddleProofProfileScript(windowEvalSetupProfile);
 assert.ok(windowEvalSetupProfileScript.includes('type === "window_eval"'));
 assert.ok(windowEvalSetupProfileScript.includes("setupEvaluateWindowScript"));
+assert.ok(windowEvalSetupProfileScript.includes("missing_evaluator"));
 assert.ok(windowEvalSetupProfileScript.includes("script_threw"));
 assert.ok(windowEvalSetupProfileScript.includes("script_length"));
 assert.ok(windowEvalSetupProfileScript.includes("profileSetupWindowEvalReceipts"));
 assert.ok(windowEvalSetupProfileScript.includes("window_eval_total"));
+assert.ok(!windowEvalSetupProfileScript.includes("new Function"));
+assert.ok(!windowEvalSetupProfileScript.includes('";\\\\n" + body + "\\\\n})()"'));
 const windowCallUntilSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-window-call-until-action",
