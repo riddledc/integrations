@@ -4752,6 +4752,21 @@ function profileSetupScreenshotLabels(results) {
     .map((result) => result.screenshot_label)
     .filter(Boolean);
 }
+function profileSetupWindowCallUntilReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "window_call_until")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      path: result.path ?? null,
+      until_path: result.until_path ?? null,
+      until_value: result.until_value ?? null,
+      until_expected_value: result.until_expected_value ?? null,
+      call_count: result.call_count ?? null,
+      max_calls: result.max_calls ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -4781,6 +4796,11 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const clickCountValues = successfulClicks
         .map((result) => typeof result.click_count === "number" && Number.isFinite(result.click_count) && result.click_count > 1 ? result.click_count : undefined)
         .filter((value) => value !== undefined);
+      const windowCallUntilReceipts = profileSetupWindowCallUntilReceipts(results);
+      const windowCallUntilCallCounts = windowCallUntilReceipts
+        .map((result) => typeof result.call_count === "number" && Number.isFinite(result.call_count) ? result.call_count : undefined)
+        .filter((value) => value !== undefined);
+      const sampledWindowCallUntilReceipts = sampleProfileSetupSummaryItems(windowCallUntilReceipts, 8);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -4823,6 +4843,10 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         clicked_truncated: clickedItems.length > clicked.length,
         click_count_action_total: clickCountValues.length,
         click_count_value_total: clickCountValues.reduce((sum, value) => sum + value, 0),
+        window_call_until_total: windowCallUntilReceipts.length,
+        window_call_until_call_total: windowCallUntilCallCounts.reduce((sum, value) => sum + value, 0),
+        window_call_until_truncated: windowCallUntilReceipts.length > sampledWindowCallUntilReceipts.length,
+        window_call_until: sampledWindowCallUntilReceipts,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({
