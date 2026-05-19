@@ -126,7 +126,7 @@ function runProfileSplitViewportsOption(options: CliOptions) {
 }
 
 const DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 90_000;
-const DEFAULT_PROFILE_UNSUBMITTED_RETRIES = 1;
+const DEFAULT_PROFILE_UNSUBMITTED_RETRIES = 2;
 
 function optionNumber(options: CliOptions, ...keys: string[]) {
   for (const key of keys) {

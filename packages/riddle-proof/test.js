@@ -706,6 +706,8 @@ let cliRunProfilePollCount = 0;
 let cliRunProfileArtifactRecoveryPollCount = 0;
 let cliRunProfileUnsubmittedRunCount = 0;
 let cliRunProfileUnsubmittedPollCount = 0;
+let cliRunProfileDoubleUnsubmittedRunCount = 0;
+let cliRunProfileDoubleUnsubmittedPollCount = 0;
 let cliRunProfilePort = 0;
 function cliRunProfileSplitResult(viewportName, width, height) {
   return {
@@ -898,6 +900,17 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/unsubmitted-double-retry-profile")) {
+        cliRunProfileDoubleUnsubmittedRunCount += 1;
+        sendJson({
+          job_id: cliRunProfileDoubleUnsubmittedRunCount === 1
+            ? "job_cli_profile_unsubmitted_stale_a"
+            : cliRunProfileDoubleUnsubmittedRunCount === 2
+              ? "job_cli_profile_unsubmitted_stale_b"
+              : "job_cli_profile_unsubmitted_double_retry",
+        });
+        return;
+      }
       if (String(body.url || "").includes("/balanced-setup-summary")) {
         sendJson(cliBalancedSetupSummaryResult());
         return;
@@ -980,6 +993,24 @@ const cliRunProfileServer = createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && (
+    request.url === "/v1/jobs/job_cli_profile_unsubmitted_stale_a"
+    || request.url === "/v1/jobs/job_cli_profile_unsubmitted_stale_b"
+  )) {
+    cliRunProfileDoubleUnsubmittedPollCount += 1;
+    const jobId = request.url.endsWith("_a") ? "job_cli_profile_unsubmitted_stale_a" : "job_cli_profile_unsubmitted_stale_b";
+    setTimeout(() => {
+      sendJson({
+        job_id: jobId,
+        status: "queued",
+        created_at: null,
+        submitted_at: null,
+        completed_at: null,
+      });
+    }, 5);
+    return;
+  }
+
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_retry") {
     sendJson({
       job_id: "job_cli_profile_unsubmitted_retry",
@@ -991,12 +1022,35 @@ const cliRunProfileServer = createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_double_retry") {
+    sendJson({
+      job_id: "job_cli_profile_unsubmitted_double_retry",
+      status: "completed",
+      created_at: "2026-05-19T18:58:00.000Z",
+      submitted_at: "2026-05-19T18:58:02.000Z",
+      completed_at: "2026-05-19T18:58:10.000Z",
+    });
+    return;
+  }
+
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_retry/artifacts") {
     sendJson({
       artifacts: [
         {
           name: "proof.json",
           url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-retry-proof.json`,
+        },
+      ],
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_double_retry/artifacts") {
+    sendJson({
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-double-retry-proof.json`,
         },
       ],
     });
@@ -1028,6 +1082,35 @@ const cliRunProfileServer = createServer((request, response) => {
       ],
       summary: "cli-profile-unsubmitted-retry passed.",
       captured_at: "2026-05-19T18:20:10.000Z",
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/unsubmitted-double-retry-proof.json") {
+    sendJson({
+      version: "riddle-proof.profile-result.v1",
+      profile_name: "cli-profile-unsubmitted-double-retry",
+      runner: "riddle",
+      status: "passed",
+      baseline_policy: "invariant_only",
+      route: {
+        requested: "https://example.com/unsubmitted-double-retry-profile",
+        observed: "/unsubmitted-double-retry-profile",
+        expected_path: "/unsubmitted-double-retry-profile",
+        matched: true,
+        http_status: 200,
+      },
+      artifacts: { screenshots: ["unsubmitted-double-retry-profile"], proof_json: "proof.json" },
+      checks: [
+        {
+          type: "route_loaded",
+          label: "route_loaded",
+          status: "passed",
+          evidence: { expected_path: "/unsubmitted-double-retry-profile", observed_paths: ["/unsubmitted-double-retry-profile"], http_statuses: [200] },
+        },
+      ],
+      summary: "cli-profile-unsubmitted-double-retry passed.",
+      captured_at: "2026-05-19T18:58:10.000Z",
     });
     return;
   }
@@ -1674,6 +1757,53 @@ try {
   assert.match(unsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale stayed unsubmitted/);
   const unsubmittedRetrySummary = readFileSync(path.join(unsubmittedRetryOutputDir, "summary.md"), "utf8");
   assert.match(unsubmittedRetrySummary, /retry recovery: replaced 1 unsubmitted job \(`job_cli_profile_unsubmitted_stale`\)/);
+
+  const doubleUnsubmittedRetryProfileFile = path.join(riddlePreviewDir, "cli-profile-unsubmitted-double-retry.json");
+  const doubleUnsubmittedRetryOutputDir = path.join(riddlePreviewDir, "cli-profile-unsubmitted-double-retry-output");
+  writeFileSync(doubleUnsubmittedRetryProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-unsubmitted-double-retry",
+    target: {
+      route: "/unsubmitted-double-retry-profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/unsubmitted-double-retry-profile" }],
+  }));
+  const doubleUnsubmittedRetryResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    doubleUnsubmittedRetryProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    doubleUnsubmittedRetryOutputDir,
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--unsubmitted-timeout-ms",
+    "1",
+  ]);
+  const parsedDoubleUnsubmittedRetryResult = JSON.parse(doubleUnsubmittedRetryResult.stdout);
+  assert.equal(parsedDoubleUnsubmittedRetryResult.status, "passed");
+  assert.equal(parsedDoubleUnsubmittedRetryResult.riddle.job_id, "job_cli_profile_unsubmitted_double_retry");
+  assert.equal(parsedDoubleUnsubmittedRetryResult.riddle.retry_count, 2);
+  assert.deepEqual(parsedDoubleUnsubmittedRetryResult.riddle.stale_job_ids, [
+    "job_cli_profile_unsubmitted_stale_a",
+    "job_cli_profile_unsubmitted_stale_b",
+  ]);
+  assert.equal(cliRunProfileDoubleUnsubmittedRunCount, 3);
+  assert.equal(cliRunProfileDoubleUnsubmittedPollCount, 2);
+  assert.match(doubleUnsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale_a stayed unsubmitted/);
+  assert.match(doubleUnsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale_b stayed unsubmitted/);
+  const doubleUnsubmittedRetrySummary = readFileSync(path.join(doubleUnsubmittedRetryOutputDir, "summary.md"), "utf8");
+  assert.match(doubleUnsubmittedRetrySummary, /retry recovery: replaced 2 unsubmitted jobs \(`job_cli_profile_unsubmitted_stale_a`, `job_cli_profile_unsubmitted_stale_b`\)/);
 
   cliRunProfilePollCount = 0;
   const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");
