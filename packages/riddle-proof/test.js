@@ -1037,6 +1037,17 @@ const cliRunProfileServer = createServer((request, response) => {
           },
         },
         {
+          type: "observe_within",
+          status: "passed",
+          evidence: {
+            selector: ".dashboard-content",
+            text: "Started",
+            pattern: null,
+            timeout_ms: 1500,
+            viewports: [{ viewport: "desktop", matched: true, elapsed_ms: 120, attempts: 3, selector_count: 1, visible_count: 1, matched_count: 1, sample: "Started" }],
+          },
+        },
+        {
           type: "selector_count_equals",
           status: "passed",
           evidence: { selector: ".jobs-list tbody tr", expected_count: 3, counts: [3] },
@@ -1233,6 +1244,7 @@ try {
   assert.match(profileSummaryMarkdown, /passed: selector_visible \(`\.dashboard-content`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_text_visible \(`\.dashboard-content` contains `Start building`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_text_absent \(`\.dashboard-content` does not contain pattern `NaN\|undefined`\)/);
+  assert.match(profileSummaryMarkdown, /passed: observe_within \(`\.dashboard-content` observes `Started` within 1500ms\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_count_equals \(`\.jobs-list tbody tr` = 3\)/);
   assert.match(profileSummaryMarkdown, /passed: text_visible \(`Failed`\)/);
   assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
@@ -1517,6 +1529,7 @@ const profile = normalizeRiddleProofProfile({
     { type: "selector_count_equals", selector: "[data-testid='pricing-cards']", expected_count: 1 },
     { type: "selector_text_visible", selector: "[data-testid='pricing-cards']", text: "Start building" },
     { type: "selector_text_absent", selector: "[data-testid='pricing-cards']", text: "Enterprise-only" },
+    { type: "observe_within", selector: "[data-testid='pricing-cards']", text: "Start building", within_ms: 1500 },
     { type: "text_visible", text: "Start building" },
     { type: "text_visible", text: "Desktop-only copy", viewports: ["desktop"] },
     { type: "no_mobile_horizontal_overflow" },
@@ -1530,6 +1543,7 @@ assert.equal(profile.target.screenshot_full_page, false);
 assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("observe_within"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_count_equals"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_accept_count_equals"));
@@ -1906,9 +1920,12 @@ assert.ok(profileScript.includes('overflowX === "hidden" || overflowX === "clip"
 assert.ok(profileScript.includes("body_text: text"));
 assert.ok(profileScript.includes("const text_match_samples = {}"));
 assert.ok(profileScript.includes("text_match_samples[key] = textMatchSamples(sample, check)"));
+assert.ok(profileScript.includes("observeWithin(check)"));
+assert.ok(profileScript.includes("observations[key] = observations[key] || await observeWithin(check)"));
 assert.ok(profileScript.includes('check.type === "selector_absent"'));
 assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
 assert.ok(profileScript.includes('check.type === "selector_text_visible"'));
+assert.ok(profileScript.includes('check.type === "observe_within"'));
 assert.ok(profileScript.includes('check.type === "url_search_param_equals"'));
 assert.ok(profileScript.includes('check.type === "url_search_param_absent"'));
 assert.ok(profileScript.includes("force: true"));
@@ -3248,6 +3265,18 @@ const profileEvidence = {
         },
       },
       text_matches: { "text:Start building": true, "text:Desktop-only copy": false },
+      observations: {
+        "selector:[data-testid='pricing-cards']|text:Start building|within:1500": {
+          matched: true,
+          timeout_ms: 1500,
+          elapsed_ms: 120,
+          attempts: 3,
+          selector_count: 1,
+          visible_count: 1,
+          matched_count: 1,
+          sample: "Pricing Start building",
+        },
+      },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']", click_count: 2 },
         { ok: true, action: "screenshot", label: "after-click", screenshot_label: "pricing-page-basic-mobile-after-click" },
@@ -3277,6 +3306,18 @@ const profileEvidence = {
         },
       },
       text_matches: { "text:Start building": true, "text:Desktop-only copy": true },
+      observations: {
+        "selector:[data-testid='pricing-cards']|text:Start building|within:1500": {
+          matched: true,
+          timeout_ms: 1500,
+          elapsed_ms: 80,
+          attempts: 2,
+          selector_count: 1,
+          visible_count: 1,
+          matched_count: 1,
+          sample: "Pricing Start building Desktop-only copy",
+        },
+      },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
@@ -3291,7 +3332,7 @@ const profileEvidence = {
 const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence);
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
-assert.equal(profileAssessment.checks.length, 12);
+assert.equal(profileAssessment.checks.length, 13);
 const profileSetupCheck = profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
 assert.equal(profileSetupCheck.status, "passed");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewport_count, 2);
@@ -3347,6 +3388,10 @@ assert.equal(selectorTextVisibleAssessment.status, "passed");
 assert.equal(selectorTextVisibleAssessment.evidence.selector, "[data-testid='pricing-cards']");
 assert.deepEqual(selectorTextVisibleAssessment.evidence.viewports.map((viewport) => viewport.matched_count), [1, 1]);
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
+const observeWithinAssessment = profileAssessment.checks.find((check) => check.type === "observe_within");
+assert.equal(observeWithinAssessment.status, "passed");
+assert.equal(observeWithinAssessment.evidence.timeout_ms, 1500);
+assert.deepEqual(observeWithinAssessment.evidence.viewports.map((viewport) => viewport.elapsed_ms), [120, 80]);
 const desktopOnlyAssessment = profileAssessment.checks.find((check) => check.evidence?.text === "Desktop-only copy");
 assert.equal(desktopOnlyAssessment.status, "passed");
 assert.deepEqual(desktopOnlyAssessment.evidence.matches, [true]);
@@ -3400,6 +3445,28 @@ assert.deepEqual(
   ["Pricing"],
 );
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
+const failedObserveWithinAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    observations: {
+      "selector:[data-testid='pricing-cards']|text:Start building|within:1500": {
+        matched: false,
+        timeout_ms: 1500,
+        elapsed_ms: 1505,
+        attempts: 16,
+        selector_count: 1,
+        visible_count: 1,
+        matched_count: 0,
+        sample: "Pricing",
+      },
+    },
+  }, profileEvidence.viewports[1]],
+});
+assert.equal(failedObserveWithinAssessment.status, "product_regression");
+const failedObserveWithinCheck = failedObserveWithinAssessment.checks.find((check) => check.type === "observe_within");
+assert.equal(failedObserveWithinCheck.status, "failed");
+assert.match(failedObserveWithinCheck.message, /Observation did not match within 1500ms/);
 const caseMismatchSelectorTextAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [{

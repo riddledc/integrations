@@ -29,6 +29,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_text_visible",
   "selector_text_absent",
   "selector_text_order",
+  "observe_within",
   "frame_text_visible",
   "frame_url_equals",
   "frame_url_matches",
@@ -468,6 +469,7 @@ export interface RiddleProofProfileViewportEvidence {
   text_matches?: Record<string, boolean>;
   text_match_samples?: Record<string, string[]>;
   text_case_insensitive_samples?: Record<string, string[]>;
+  observations?: Record<string, Record<string, JsonValue>>;
   http_statuses?: Record<string, Record<string, JsonValue>>;
   link_statuses?: Record<string, Record<string, JsonValue>>;
   route_inventory?: Record<string, JsonValue>;
@@ -2137,6 +2139,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
       || type === "selector_count_eq"
       || type === "selector_text_visible"
       || type === "selector_text_absent"
+      || (type === "observe_within" && !stringValue(input.text) && !stringValue(input.pattern))
     ) && !stringValue(input.selector)
   ) {
     throw new Error(`checks[${index}] ${type} requires selector.`);
@@ -2341,7 +2344,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     allowed_content_types: allowedContentTypes,
     allow_get_fallback: isLinkStatusCheck ? input.allow_get_fallback === false || input.allowGetFallback === false ? false : true : undefined,
     max_overflow_px: numberValue(input.max_overflow_px),
-    timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
+    timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs) ?? numberValue(input.within_ms) ?? numberValue(input.withinMs),
     run_direct_routes: input.run_direct_routes === false || input.runDirectRoutes === false ? false : true,
     run_clickthroughs: input.run_clickthroughs === false || input.runClickthroughs === false ? false : true,
     run_all_viewports: input.run_all_viewports === true || input.runAllViewports === true,
@@ -2960,6 +2963,22 @@ function textKey(check: RiddleProofProfileCheck) {
   return check.pattern ? `pattern:${check.pattern}/${check.flags || ""}` : `text:${check.text || ""}`;
 }
 
+function observeWithinTimeoutMs(check: RiddleProofProfileCheck) {
+  const raw = check.timeout_ms;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return Math.min(Math.round(raw), 60_000);
+  return 2_000;
+}
+
+function observeWithinKey(check: RiddleProofProfileCheck) {
+  const target = check.selector ? `selector:${check.selector}` : "page";
+  const expectation = check.pattern
+    ? `pattern:${check.pattern}/${check.flags || ""}`
+    : check.text
+      ? `text:${check.text}`
+      : "visible";
+  return `${target}|${expectation}|within:${observeWithinTimeoutMs(check)}`;
+}
+
 function textSequenceForCheck(viewport: RiddleProofProfileViewportEvidence, check: RiddleProofProfileCheck): string[] {
   const key = selectorKey(check);
   const sequence = viewport.text_sequences?.[key];
@@ -3557,6 +3576,41 @@ function assessCheckFromEvidence(
         viewports: results.map((result) => toJsonValue(result)),
       },
       message: failed ? `Selector ${key} text order failed in ${failed} viewport(s).` : undefined,
+    };
+  }
+
+  if (check.type === "observe_within") {
+    const key = observeWithinKey(check);
+    const timeoutMs = observeWithinTimeoutMs(check);
+    const results = viewports.map((viewport) => {
+      const observation = viewport.observations?.[key];
+      const matched = observation?.matched === true;
+      return {
+        viewport: viewport.name,
+        matched,
+        elapsed_ms: numberValue(observation?.elapsed_ms) ?? null,
+        timeout_ms: numberValue(observation?.timeout_ms) ?? timeoutMs,
+        attempts: numberValue(observation?.attempts) ?? null,
+        selector_count: numberValue(observation?.selector_count) ?? null,
+        visible_count: numberValue(observation?.visible_count) ?? null,
+        matched_count: numberValue(observation?.matched_count) ?? null,
+        sample: stringValue(observation?.sample) ?? null,
+        error: stringValue(observation?.error) ?? null,
+      };
+    });
+    const failed = results.filter((result) => !result.matched).length;
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status: failed ? "failed" : "passed",
+      evidence: {
+        selector: check.selector || null,
+        text: check.text || null,
+        pattern: check.pattern || null,
+        timeout_ms: timeoutMs,
+        viewports: results.map((result) => toJsonValue(result)),
+      },
+      message: failed ? `Observation did not match within ${timeoutMs}ms in ${failed} viewport(s).` : undefined,
     };
   }
 
@@ -5588,6 +5642,36 @@ function assessProfile(profile, evidence) {
       });
       continue;
     }
+    if (check.type === "observe_within") {
+      const key = observeWithinKey(check);
+      const timeoutMs = observeWithinTimeoutMs(check);
+      const results = checkViewports.map((viewport) => {
+        const observation = viewport.observations && viewport.observations[key] && typeof viewport.observations[key] === "object"
+          ? viewport.observations[key]
+          : {};
+        return {
+          viewport: viewport.name,
+          matched: observation.matched === true,
+          elapsed_ms: typeof observation.elapsed_ms === "number" && Number.isFinite(observation.elapsed_ms) ? observation.elapsed_ms : null,
+          timeout_ms: typeof observation.timeout_ms === "number" && Number.isFinite(observation.timeout_ms) ? observation.timeout_ms : timeoutMs,
+          attempts: typeof observation.attempts === "number" && Number.isFinite(observation.attempts) ? observation.attempts : null,
+          selector_count: typeof observation.selector_count === "number" && Number.isFinite(observation.selector_count) ? observation.selector_count : null,
+          visible_count: typeof observation.visible_count === "number" && Number.isFinite(observation.visible_count) ? observation.visible_count : null,
+          matched_count: typeof observation.matched_count === "number" && Number.isFinite(observation.matched_count) ? observation.matched_count : null,
+          sample: typeof observation.sample === "string" && observation.sample.trim() ? observation.sample.trim() : null,
+          error: typeof observation.error === "string" && observation.error.trim() ? observation.error.trim() : null,
+        };
+      });
+      const failed = results.filter((result) => !result.matched).length;
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: failed ? "failed" : "passed",
+        evidence: { selector: check.selector || null, text: check.text || null, pattern: check.pattern || null, timeout_ms: timeoutMs, viewports: results },
+        message: failed ? "Observation did not match within " + timeoutMs + "ms in " + failed + " viewport(s)." : undefined,
+      });
+      continue;
+    }
     if (check.type === "frame_text_visible") {
       const selector = check.selector || "";
       const results = checkViewports.map((viewport) => {
@@ -6020,6 +6104,19 @@ function ensureDialogHandler() {
 }
 function textKey(check) {
   return check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
+}
+function observeWithinTimeoutMs(check) {
+  const raw = Number(check && check.timeout_ms);
+  return Number.isFinite(raw) && raw > 0 ? Math.min(Math.round(raw), 60000) : 2000;
+}
+function observeWithinKey(check) {
+  const target = check && check.selector ? "selector:" + check.selector : "page";
+  const expectation = check && check.pattern
+    ? "pattern:" + check.pattern + "/" + (check.flags || "")
+    : check && check.text
+      ? "text:" + check.text
+      : "visible";
+  return target + "|" + expectation + "|within:" + observeWithinTimeoutMs(check);
 }
 function textMatches(sample, check) {
   if (check.pattern) {
@@ -7336,6 +7433,104 @@ async function selectorTextSequence(selector) {
     };
   }).catch((error) => ({ count: 0, visible_count: 0, texts: [], visible_texts: [], match_texts: [], visible_match_texts: [], error: String(error && error.message ? error.message : error).slice(0, 500) }));
 }
+async function observeWithinSnapshot(check) {
+  const payload = {
+    selector: check.selector || "",
+    text: check.text || "",
+    pattern: check.pattern || "",
+    flags: check.flags || "",
+    wants_text: Boolean(check.text || check.pattern),
+  };
+  if (payload.selector) {
+    return page.locator(payload.selector).evaluateAll((elements, input) => {
+      const compact = (value) => String(value || "").replace(/\s+/g, " ").trim();
+      const matchText = (value) => {
+        const source = compact(value);
+        if (input.pattern) {
+          try { return new RegExp(input.pattern, input.flags || "").test(source); } catch { return false; }
+        }
+        return source.includes(input.text || "");
+      };
+      const isVisible = (element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style && style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+      };
+      const rows = elements.map((element, index) => {
+        const text = compact(element.innerText || element.textContent || "");
+        const visible = isVisible(element);
+        return { index, text, visible, matched: input.wants_text ? matchText(text) : visible };
+      });
+      const visibleRows = rows.filter((row) => row.visible);
+      const matches = input.wants_text ? visibleRows.filter((row) => row.matched) : visibleRows;
+      const sampleRow = matches[0] || visibleRows[0] || rows[0] || null;
+      return {
+        selector: input.selector,
+        text: input.text || null,
+        pattern: input.pattern || null,
+        selector_count: rows.length,
+        visible_count: visibleRows.length,
+        matched_count: matches.length,
+        matched: matches.length > 0,
+        sample: sampleRow && sampleRow.text ? sampleRow.text.slice(0, 240) : null,
+      };
+    }, payload).catch((error) => ({
+      selector: payload.selector,
+      text: payload.text || null,
+      pattern: payload.pattern || null,
+      selector_count: 0,
+      visible_count: 0,
+      matched_count: 0,
+      matched: false,
+      sample: null,
+      error: String(error && error.message ? error.message : error).slice(0, 500),
+    }));
+  }
+  return page.evaluate((input) => {
+    const compact = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const sample = compact(document.body ? document.body.innerText || document.body.textContent || "" : "");
+    let matched = false;
+    if (input.pattern) {
+      try { matched = new RegExp(input.pattern, input.flags || "").test(sample); } catch { matched = false; }
+    } else {
+      matched = sample.includes(input.text || "");
+    }
+    return {
+      selector: null,
+      text: input.text || null,
+      pattern: input.pattern || null,
+      matched,
+      matched_count: matched ? 1 : 0,
+      sample: sample.slice(0, 240),
+    };
+  }, payload).catch((error) => ({
+    selector: null,
+    text: payload.text || null,
+    pattern: payload.pattern || null,
+    matched: false,
+    matched_count: 0,
+    sample: null,
+    error: String(error && error.message ? error.message : error).slice(0, 500),
+  }));
+}
+async function observeWithin(check) {
+  const timeoutMs = observeWithinTimeoutMs(check);
+  const startedAt = Date.now();
+  let attempts = 0;
+  let last = null;
+  while (true) {
+    attempts += 1;
+    last = await observeWithinSnapshot(check);
+    const elapsedMs = Date.now() - startedAt;
+    if (last && last.matched === true) {
+      return { ...last, timeout_ms: timeoutMs, elapsed_ms: elapsedMs, attempts };
+    }
+    if (elapsedMs >= timeoutMs) {
+      return { ...(last || {}), matched: false, timeout_ms: timeoutMs, elapsed_ms: elapsedMs, attempts };
+    }
+    await page.waitForTimeout(Math.min(100, Math.max(25, timeoutMs - elapsedMs)));
+  }
+}
 function linkProbeMaxLinks(check) {
   const value = Number(check.max_links || check.maxLinks || check.limit || 100);
   return Number.isInteger(value) && value > 0 ? Math.min(value, 500) : 100;
@@ -8388,6 +8583,7 @@ async function captureViewport(viewport) {
   const text_matches = {};
   const text_match_samples = {};
   const text_case_insensitive_samples = {};
+  const observations = {};
   const http_statuses = {};
   const link_statuses = {};
   for (const check of profile.checks || []) {
@@ -8407,6 +8603,10 @@ async function captureViewport(viewport) {
     if ((check.type === "selector_text_order" || check.type === "selector_text_visible" || check.type === "selector_text_absent") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
       text_sequences[check.selector] = await selectorTextSequence(check.selector);
+    }
+    if (check.type === "observe_within") {
+      const key = observeWithinKey(check);
+      observations[key] = observations[key] || await observeWithin(check);
     }
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
       const key = textKey(check);
@@ -8501,6 +8701,7 @@ async function captureViewport(viewport) {
     text_matches,
     text_match_samples,
     text_case_insensitive_samples,
+    observations,
     http_statuses,
     link_statuses,
     route_inventory: routeInventory,
