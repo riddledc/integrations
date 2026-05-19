@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.128
+
+### Patch Changes
+
+- e566eca: Compact large array and object observations in HTTP JSON assertion evidence.
+
 ## 0.7.127
 
 ### Patch Changes
