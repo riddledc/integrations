@@ -26,6 +26,7 @@ export interface RiddlePollProgressSnapshot {
   submitted_at: string | null;
   completed_at: string | null;
   queue_elapsed_ms: number | null;
+  pre_submission_elapsed_ms: number;
   running_without_submission: boolean;
 }
 
@@ -433,7 +434,7 @@ function parseTimestampMs(value: string | null) {
 function buildPollSnapshot(
   jobId: string,
   job: Record<string, unknown> | null,
-  input: { attempt: number; attempts: number; startedAt: number; observedAt: number },
+  input: { attempt: number; attempts: number; startedAt: number; observedAt: number; preSubmissionElapsedMs?: number },
 ): RiddlePollProgressSnapshot {
   const status = job?.status ? String(job.status) : null;
   const terminal = isTerminalRiddleJobStatus(status);
@@ -459,6 +460,7 @@ function buildPollSnapshot(
     submitted_at: submittedAt,
     completed_at: completedAt,
     queue_elapsed_ms: queueElapsedMs,
+    pre_submission_elapsed_ms: Math.max(0, Math.floor(input.preSubmissionElapsedMs ?? 0)),
     running_without_submission: Boolean(status && !terminal && !submittedAt),
   };
 }
@@ -469,7 +471,10 @@ function pollMessage(snapshot: RiddlePollProgressSnapshot, timedOut: boolean) {
   const queue = snapshot.queue_elapsed_ms !== null
     ? ` queue_elapsed_ms=${snapshot.queue_elapsed_ms}`
     : "";
-  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${queue}`;
+  const preSubmit = snapshot.pre_submission_elapsed_ms > 0
+    ? ` pre_submission_elapsed_ms=${snapshot.pre_submission_elapsed_ms}`
+    : "";
+  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${queue}${preSubmit}`;
 }
 
 export async function pollRiddleJob(
@@ -486,16 +491,25 @@ export async function pollRiddleJob(
   let lastSnapshot: RiddlePollProgressSnapshot | null = null;
   let lastProgressAt = 0;
   let lastProgressKey = "";
+  let preSubmissionElapsedMs = 0;
 
   for (let index = 0; index < attempts; index += 1) {
     job = await riddleRequestJson<Record<string, unknown>>(config, `/v1/jobs/${jobId}`);
     const observedAt = Date.now();
-    lastSnapshot = buildPollSnapshot(jobId, job, {
+    const nextSnapshot = buildPollSnapshot(jobId, job, {
       attempt: index + 1,
       attempts,
       startedAt,
       observedAt,
+      preSubmissionElapsedMs,
     });
+    if (nextSnapshot.running_without_submission) {
+      preSubmissionElapsedMs = Math.max(preSubmissionElapsedMs, nextSnapshot.elapsed_ms);
+    }
+    lastSnapshot = {
+      ...nextSnapshot,
+      pre_submission_elapsed_ms: preSubmissionElapsedMs,
+    };
     const progressKey = [
       lastSnapshot.status || "unknown",
       lastSnapshot.terminal ? "terminal" : "nonterminal",

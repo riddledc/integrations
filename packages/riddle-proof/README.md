@@ -941,11 +941,14 @@ shape, and errors without rerunning blind.
 
 `riddle-proof-loop riddle-poll <job-id> --wait` keeps stdout as JSON and writes
 human progress lines to stderr while waiting. The JSON result includes
-`poll.timed_out`, `poll.elapsed_ms`, `poll.queue_elapsed_ms`, and
-`poll.running_without_submission` so delayed dispatch is distinguishable from a
-terminal proof failure. If `--wait` exhausts its attempts before a terminal job
-status, the command exits non-zero and the result explains the last observed
-status and `submitted_at` state.
+`poll.timed_out`, `poll.elapsed_ms`, `poll.queue_elapsed_ms`,
+`poll.pre_submission_elapsed_ms`, and `poll.running_without_submission` so
+delayed dispatch is distinguishable from a terminal proof failure.
+`queue_elapsed_ms` reflects Riddle's `created_at` to `submitted_at` timestamps;
+`pre_submission_elapsed_ms` preserves how long the CLI actually observed the
+job before `submitted_at` appeared. If `--wait` exhausts its attempts before a
+terminal job status, the command exits non-zero and the result explains the
+last observed status and `submitted_at` state.
 
 ## Base vs OpenClaw Wrapper Boundary
 

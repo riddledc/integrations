@@ -489,10 +489,65 @@ assert.equal(delayedPollResult.poll.timed_out, true);
 assert.equal(delayedPollResult.poll.running_without_submission, true);
 assert.equal(delayedPollResult.poll.submitted_at, null);
 assert(delayedPollResult.poll.queue_elapsed_ms >= 45_000);
+assert(delayedPollResult.poll.pre_submission_elapsed_ms >= 0);
 assert.match(delayedPollResult.poll.message, /not submitted/);
 assert.equal(delayedPollCount, 2);
 assert.equal(delayedProgress.length, 2);
 assert.equal(delayedProgress[0].running_without_submission, true);
+
+const originalDateNowForPreSubmit = Date.now;
+let preSubmitPollCount = 0;
+let preSubmitNowIndex = 0;
+const preSubmitNowValues = [1_000_000, 1_001_000, 1_006_000];
+Date.now = () => preSubmitNowValues[Math.min(preSubmitNowIndex++, preSubmitNowValues.length - 1)];
+try {
+  const preSubmitProgress = [];
+  const preSubmitPollClient = createRiddleApiClient({
+    apiKey: "test-riddle-key",
+    apiBaseUrl: "https://api.pre-submit.test",
+    fetchImpl: async (url) => {
+      if (String(url) === "https://api.pre-submit.test/v1/jobs/job_pre_submit") {
+        preSubmitPollCount += 1;
+        if (preSubmitPollCount === 1) {
+          return new Response(JSON.stringify({
+            job_id: "job_pre_submit",
+            status: "queued",
+            created_at: null,
+            submitted_at: null,
+            completed_at: null,
+          }), { status: 200 });
+        }
+        return new Response(JSON.stringify({
+          job_id: "job_pre_submit",
+          status: "completed",
+          created_at: "2026-05-19T16:20:11.000Z",
+          submitted_at: "2026-05-19T16:20:18.000Z",
+          completed_at: "2026-05-19T16:20:18.000Z",
+        }), { status: 200 });
+      }
+      if (String(url) === "https://api.pre-submit.test/v1/jobs/job_pre_submit/artifacts") {
+        return new Response(JSON.stringify({ artifacts: [] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+    },
+  });
+  const preSubmitPollResult = await preSubmitPollClient.pollJob("job_pre_submit", {
+    wait: true,
+    attempts: 2,
+    intervalMs: 0,
+    progressEveryMs: 0,
+    onProgress: (snapshot) => preSubmitProgress.push(snapshot),
+  });
+  assert.equal(preSubmitPollResult.ok, true);
+  assert.equal(preSubmitPollResult.poll.queue_elapsed_ms, 7_000);
+  assert.equal(preSubmitPollResult.poll.elapsed_ms, 6_000);
+  assert.equal(preSubmitPollResult.poll.pre_submission_elapsed_ms, 1_000);
+  assert.equal(preSubmitProgress[0].running_without_submission, true);
+  assert.equal(preSubmitProgress[0].pre_submission_elapsed_ms, 1_000);
+  assert.equal(preSubmitProgress[1].pre_submission_elapsed_ms, 1_000);
+} finally {
+  Date.now = originalDateNowForPreSubmit;
+}
 
 let recoveredPollCount = 0;
 const recoveredPollClient = createRiddleApiClient({
@@ -1148,6 +1203,7 @@ try {
   assert.equal(parsedProfileResult.riddle.submitted_at, "2026-05-13T23:21:00.000Z");
   assert.equal(parsedProfileResult.riddle.completed_at, "2026-05-13T23:21:20.000Z");
   assert.equal(parsedProfileResult.riddle.queue_elapsed_ms, 60_000);
+  assert.equal(typeof parsedProfileResult.riddle.pre_submission_elapsed_ms, "number");
   assert.equal(parsedProfileResult.riddle.attempt, 2);
   assert.equal(parsedProfileResult.riddle.attempts, 4);
   assert.equal(cliRunProfileRequests.length, 1);

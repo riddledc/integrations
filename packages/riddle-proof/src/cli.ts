@@ -169,7 +169,7 @@ function formatPollDuration(ms: number | null | undefined) {
 function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
   const submittedAt = snapshot.submitted_at || "not-submitted";
   const queuePart = snapshot.running_without_submission
-    ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}`
+    ? ` waiting_for_submit=${formatPollDuration(snapshot.pre_submission_elapsed_ms)}${snapshot.queue_elapsed_ms !== null ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""}`
     : snapshot.queue_elapsed_ms !== null
       ? ` queue=${formatPollDuration(snapshot.queue_elapsed_ms)}`
       : "";
@@ -481,6 +481,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const terminal = typeof riddle.terminal === "boolean" ? riddle.terminal : undefined;
   const queueElapsedMs = cliFiniteNumber(riddle.queue_elapsed_ms);
   const elapsedMs = cliFiniteNumber(riddle.elapsed_ms);
+  const preSubmissionElapsedMs = cliFiniteNumber(riddle.pre_submission_elapsed_ms);
   const attempt = cliFiniteNumber(riddle.attempt);
   const attempts = cliFiniteNumber(riddle.attempts);
   const submittedAt = cliString(riddle.submitted_at);
@@ -495,7 +496,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const lines = parts.length ? [`- ${parts.join(", ")}`] : [];
   if (queueElapsedMs !== undefined || elapsedMs !== undefined || attempt !== undefined || attempts !== undefined) {
     lines.push(
-      `- poll: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${attempt === undefined ? "" : `, attempt ${attempt}${attempts === undefined ? "" : `/${attempts}`}`}`,
+      `- poll: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${preSubmissionElapsedMs === undefined || preSubmissionElapsedMs < 1000 ? "" : `, pre-submit ${formatPollDuration(preSubmissionElapsedMs)}`}${attempt === undefined ? "" : `, attempt ${attempt}${attempts === undefined ? "" : `/${attempts}`}`}`,
     );
   }
   if (submittedAt || completedAt) {
@@ -509,11 +510,15 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
     const splitJobId = cliString(job.job_id);
     const splitStatus = cliString(job.status);
     const splitTerminal = typeof job.terminal === "boolean" ? job.terminal : undefined;
+    const splitElapsedMs = cliFiniteNumber(job.elapsed_ms);
+    const splitPreSubmissionElapsedMs = cliFiniteNumber(job.pre_submission_elapsed_ms);
     lines.push(
       `- ${viewport}: ${[
         splitJobId ? `job ${markdownInlineCode(splitJobId)}` : "",
         splitStatus ? `status ${markdownInlineCode(splitStatus)}` : "",
         splitTerminal === undefined ? "" : `terminal ${splitTerminal ? "true" : "false"}`,
+        splitElapsedMs === undefined ? "" : `elapsed ${formatPollDuration(splitElapsedMs)}`,
+        splitPreSubmissionElapsedMs === undefined || splitPreSubmissionElapsedMs < 1000 ? "" : `pre-submit ${formatPollDuration(splitPreSubmissionElapsedMs)}`,
       ].filter(Boolean).join(", ") || "job metadata unavailable"}`,
     );
   }
@@ -1238,6 +1243,7 @@ function withRiddleMetadata(
       submitted_at: poll?.submitted_at ?? result.riddle?.submitted_at,
       completed_at: poll?.completed_at ?? result.riddle?.completed_at,
       queue_elapsed_ms: poll?.queue_elapsed_ms ?? result.riddle?.queue_elapsed_ms,
+      pre_submission_elapsed_ms: poll?.pre_submission_elapsed_ms ?? result.riddle?.pre_submission_elapsed_ms,
       elapsed_ms: poll?.elapsed_ms ?? result.riddle?.elapsed_ms,
       attempt: poll?.attempt ?? result.riddle?.attempt,
       attempts: poll?.attempts ?? result.riddle?.attempts,
@@ -1262,6 +1268,7 @@ function riddleMetadataFromPoll(
     submitted_at: poll.poll?.submitted_at,
     completed_at: poll.poll?.completed_at,
     queue_elapsed_ms: poll.poll?.queue_elapsed_ms,
+    pre_submission_elapsed_ms: poll.poll?.pre_submission_elapsed_ms,
     elapsed_ms: poll.poll?.elapsed_ms,
     attempt: poll.poll?.attempt,
     attempts: poll.poll?.attempts,
@@ -1322,6 +1329,7 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     status: result.riddle?.status,
     terminal: result.riddle?.terminal,
     queue_elapsed_ms: result.riddle?.queue_elapsed_ms,
+    pre_submission_elapsed_ms: result.riddle?.pre_submission_elapsed_ms,
     elapsed_ms: result.riddle?.elapsed_ms,
     attempt: result.riddle?.attempt,
     attempts: result.riddle?.attempts,
@@ -1333,6 +1341,7 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     status: "split-viewports",
     terminal: childRuns.every(({ result }) => result.riddle?.terminal !== false),
     queue_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.queue_elapsed_ms)),
+    pre_submission_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.pre_submission_elapsed_ms)),
     elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.elapsed_ms)),
     split_jobs: splitJobs,
   };
