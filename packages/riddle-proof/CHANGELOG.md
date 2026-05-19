@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.122
+
+### Patch Changes
+
+- 5ad75af: Add terminal-result partial-evidence starter profile for API-console error and timeout receipt proofs.
+
 ## 0.7.121
 
 ### Patch Changes
