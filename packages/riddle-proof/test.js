@@ -4809,6 +4809,47 @@ assert.ok(handledListLoadProfile.checks.some(
 ));
 assert.ok(handledListLoadProfile.metadata.purpose.includes("Do not add max_hit_count to idempotent GET mocks"));
 
+const terminalResultProfile = readJson("./examples/profiles/terminal-result-partial-evidence.json");
+assert.equal(terminalResultProfile.name, "terminal-result-partial-evidence");
+const terminalResultMock = terminalResultProfile.target.network_mocks.find(
+  (mock) => mock.label === "api-console-sync-terminal-error-with-partial-evidence",
+);
+assert.equal(terminalResultMock.status, 200);
+assert.equal(terminalResultMock.json.status, "completed_error");
+assert.equal(terminalResultMock.json.success, false);
+assert.equal(terminalResultMock.required_hit_count, 3);
+assert.equal(terminalResultMock.max_hit_count, 3);
+assert.deepEqual(terminalResultMock.request_body_contains, [
+  "\"sync\":true",
+  "\"include\":[\"screenshots\",\"console\",\"har\"]",
+  "terminal-result-template-screenshot",
+]);
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "text_visible" && check.text === "partial results available",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "text_absent" && check.text === "Success",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "selector_text_visible" && check.selector === "[data-testid='api-console-screenshots']",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "selector_text_visible" && check.selector === "[data-testid='api-console-output']",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "selector_text_visible" && check.selector === "[data-testid='api-console-har']",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "selector_count_equals" && check.selector === "[data-testid='api-console-success-indicator']" && check.expected_count === 0,
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "no_fatal_console_errors",
+));
+assert.ok(terminalResultProfile.checks.some(
+  (check) => check.type === "no_console_warnings",
+));
+assert.ok(terminalResultProfile.metadata.purpose.includes("terminal error or timeout"));
+
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
 const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
 const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");

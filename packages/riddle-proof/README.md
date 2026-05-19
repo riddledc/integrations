@@ -222,6 +222,7 @@ The package includes generic starter profiles:
 - `examples/profiles/route-inventory-basic.json` for source-link and direct-route audits.
 - `examples/profiles/handled-recovery-list-load.json` for failed or malformed list-load recovery profiles.
 - `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
+- `examples/profiles/terminal-result-partial-evidence.json` for API-console terminal error or timeout receipts that preserve partial screenshot, console, and HAR evidence.
 
 Copy one of those shapes into a repository profile directory and replace the
 routes, selectors, mock URLs, and text checks with app-specific invariants.
@@ -253,6 +254,16 @@ successful HTTP status with an invalid JSON body, waits for one generic failure
 message, captures a recovery screenshot, and keeps parser text plus browser
 console/page errors out of the final proof. This catches action paths that look
 recovered to a user but still poison the browser evidence stream.
+
+For terminal result profiles, prove status honesty separately from artifact
+presence. A page can preserve screenshots, console output, HAR, billing, and raw
+response evidence while still lying about the terminal state or omitting that
+the evidence is partial. Return a terminal `completed_error` or
+`completed_timeout` response with partial evidence, require the visible status
+and `partial results available` copy, assert each artifact class, reject Success
+and contradictory empty-evidence copy, assert success/error/timeout selector
+polarity, and keep `no_horizontal_overflow`, `no_fatal_console_errors`, and
+`no_console_warnings` in the same profile.
 
 Checks normally apply to every captured viewport. Add `viewports` (or
 `viewport_names`) to a check when responsive UI intentionally exposes an
