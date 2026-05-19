@@ -2967,6 +2967,9 @@ function summarizeRouteInventory(viewport: string, inventory: Record<string, unk
   const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
   const sourceLinkCount = numberValue(inventory.source_link_count) ?? numberValue(inventory.home_game_link_count) ?? null;
   const sourceUniqueLinkCount = numberValue(inventory.source_unique_link_count) ?? numberValue(inventory.home_unique_game_link_count) ?? null;
+  const sourceCandidateCount = numberValue(inventory.source_candidate_count);
+  const sourceCandidateUniqueLinkCount = numberValue(inventory.source_candidate_unique_link_count);
+  const sourceLinkScope = stringValue(inventory.source_link_scope);
   const duplicateSourceLinks = Array.isArray(inventory.duplicate_source_link_paths)
     ? inventory.duplicate_source_link_paths.map((path) => String(path))
     : [];
@@ -2975,6 +2978,9 @@ function summarizeRouteInventory(viewport: string, inventory: Record<string, unk
   const failures = Array.isArray(inventory.failures) ? inventory.failures : [];
   return {
     viewport,
+    source_link_scope: sourceLinkScope ?? null,
+    source_candidate_count: sourceCandidateCount ?? sourceLinkCount,
+    source_candidate_unique_link_count: sourceCandidateUniqueLinkCount ?? sourceUniqueLinkCount,
     source_link_count: sourceLinkCount,
     source_unique_link_count: sourceUniqueLinkCount,
     duplicate_source_link_count: duplicateSourceLinkCount,
@@ -3732,6 +3738,9 @@ function assessCheckFromEvidence(
     const clickthroughs = Array.isArray(first?.clickthroughs) ? first.clickthroughs : [];
     const sourceLinkCount = numberValue(first?.source_link_count) ?? numberValue(first?.home_game_link_count) ?? null;
     const sourceUniqueLinkCount = numberValue(first?.source_unique_link_count) ?? numberValue(first?.home_unique_game_link_count) ?? null;
+    const sourceCandidateCount = numberValue(first?.source_candidate_count);
+    const sourceCandidateUniqueLinkCount = numberValue(first?.source_candidate_unique_link_count);
+    const sourceLinkScope = stringValue(first?.source_link_scope);
     const duplicateSourceLinks = Array.isArray(first?.duplicate_source_link_paths)
       ? first.duplicate_source_link_paths.map((path) => String(path))
       : [];
@@ -3745,6 +3754,9 @@ function assessCheckFromEvidence(
       evidence: {
         expected_count: check.expected_routes?.length || 0,
         expected_routes: expectedRoutes,
+        source_link_scope: sourceLinkScope ?? null,
+        source_candidate_count: sourceCandidateCount ?? sourceLinkCount,
+        source_candidate_unique_link_count: sourceCandidateUniqueLinkCount ?? sourceUniqueLinkCount,
         source_link_count: sourceLinkCount,
         source_unique_link_count: sourceUniqueLinkCount,
         duplicate_source_link_count: duplicateSourceLinkCount,
@@ -4821,11 +4833,17 @@ function summarizeRouteInventory(viewport, inventory) {
   const clickthroughs = Array.isArray(inventory.clickthroughs) ? inventory.clickthroughs : [];
   const sourceLinkCount = typeof inventory.source_link_count === "number" ? inventory.source_link_count : typeof inventory.home_game_link_count === "number" ? inventory.home_game_link_count : null;
   const sourceUniqueLinkCount = typeof inventory.source_unique_link_count === "number" ? inventory.source_unique_link_count : typeof inventory.home_unique_game_link_count === "number" ? inventory.home_unique_game_link_count : null;
+  const sourceCandidateCount = typeof inventory.source_candidate_count === "number" ? inventory.source_candidate_count : null;
+  const sourceCandidateUniqueLinkCount = typeof inventory.source_candidate_unique_link_count === "number" ? inventory.source_candidate_unique_link_count : null;
+  const sourceLinkScope = typeof inventory.source_link_scope === "string" ? inventory.source_link_scope : null;
   const duplicateSourceLinks = Array.isArray(inventory.duplicate_source_link_paths) ? inventory.duplicate_source_link_paths.map((path) => String(path)) : [];
   const duplicateSourceLinkCount = typeof inventory.duplicate_source_link_count === "number" ? inventory.duplicate_source_link_count : sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null;
   const failures = Array.isArray(inventory.failures) ? inventory.failures : [];
   return {
     viewport,
+    source_link_scope: sourceLinkScope,
+    source_candidate_count: sourceCandidateCount == null ? sourceLinkCount : sourceCandidateCount,
+    source_candidate_unique_link_count: sourceCandidateUniqueLinkCount == null ? sourceUniqueLinkCount : sourceCandidateUniqueLinkCount,
     source_link_count: sourceLinkCount,
     source_unique_link_count: sourceUniqueLinkCount,
     duplicate_source_link_count: duplicateSourceLinkCount,
@@ -5696,6 +5714,9 @@ function assessProfile(profile, evidence) {
       const clickthroughs = Array.isArray(first.clickthroughs) ? first.clickthroughs : [];
       const sourceLinkCount = typeof first.source_link_count === "number" ? first.source_link_count : typeof first.home_game_link_count === "number" ? first.home_game_link_count : null;
       const sourceUniqueLinkCount = typeof first.source_unique_link_count === "number" ? first.source_unique_link_count : typeof first.home_unique_game_link_count === "number" ? first.home_unique_game_link_count : null;
+      const sourceCandidateCount = typeof first.source_candidate_count === "number" ? first.source_candidate_count : null;
+      const sourceCandidateUniqueLinkCount = typeof first.source_candidate_unique_link_count === "number" ? first.source_candidate_unique_link_count : null;
+      const sourceLinkScope = typeof first.source_link_scope === "string" ? first.source_link_scope : null;
       const duplicateSourceLinks = Array.isArray(first.duplicate_source_link_paths) ? first.duplicate_source_link_paths.map((path) => String(path)) : [];
       const duplicateSourceLinkCount = typeof first.duplicate_source_link_count === "number" ? first.duplicate_source_link_count : sourceLinkCount !== null && sourceUniqueLinkCount !== null ? Math.max(0, sourceLinkCount - sourceUniqueLinkCount) : null;
       const expectedRoutes = routeInventoryExpectedRouteSummaries(first.expected_routes, check.expected_routes);
@@ -5706,6 +5727,9 @@ function assessProfile(profile, evidence) {
         evidence: {
           expected_count: (check.expected_routes || []).length,
           expected_routes: expectedRoutes,
+          source_link_scope: sourceLinkScope,
+          source_candidate_count: sourceCandidateCount == null ? sourceLinkCount : sourceCandidateCount,
+          source_candidate_unique_link_count: sourceCandidateUniqueLinkCount == null ? sourceUniqueLinkCount : sourceCandidateUniqueLinkCount,
           source_link_count: sourceLinkCount,
           source_unique_link_count: sourceUniqueLinkCount,
           duplicate_source_link_count: duplicateSourceLinkCount,
@@ -7878,9 +7902,15 @@ async function collectInventoryHomeLinks(check) {
         app_path: appPath,
       };
     });
-    return links.filter((link) => (
+    const selectedLinks = links.filter((link) => (
       routePathPrefix ? link.app_path.startsWith(routePathPrefix) : expectedSet.has(link.app_path)
     ));
+    return {
+      links: selectedLinks,
+      candidate_count: links.length,
+      candidate_unique_link_count: Array.from(new Set(links.map((link) => link.app_path))).length,
+      source_link_scope: routePathPrefix ? "route_path_prefix" : "expected_routes",
+    };
   }, { linkSelector, expectedPaths, routePathPrefix, targetUrl });
 }
 async function waitForInventoryRouteHealth(check, expectedPath) {
@@ -8021,7 +8051,11 @@ async function collectRouteInventory(check, viewport) {
   const expectedPaths = expectedRoutes.map((route) => normalizeRoutePath(route.path));
   const expectedSet = new Set(expectedPaths);
   const failures = [];
-  const homeLinks = await collectInventoryHomeLinks(check);
+  const homeLinkCapture = await collectInventoryHomeLinks(check);
+  const homeLinks = Array.isArray(homeLinkCapture) ? homeLinkCapture : Array.isArray(homeLinkCapture && homeLinkCapture.links) ? homeLinkCapture.links : [];
+  const sourceCandidateCount = typeof homeLinkCapture?.candidate_count === "number" ? homeLinkCapture.candidate_count : homeLinks.length;
+  const sourceCandidateUniqueLinkCount = typeof homeLinkCapture?.candidate_unique_link_count === "number" ? homeLinkCapture.candidate_unique_link_count : new Set(homeLinks.map((link) => link.app_path)).size;
+  const sourceLinkScope = typeof homeLinkCapture?.source_link_scope === "string" ? homeLinkCapture.source_link_scope : check.route_path_prefix ? "route_path_prefix" : "expected_routes";
   const homeLinkPaths = homeLinks.map((link) => link.app_path);
   const uniqueHomeLinkPaths = Array.from(new Set(homeLinkPaths));
   const duplicateHomeLinkPaths = homeLinkPaths.filter((path, index) => homeLinkPaths.indexOf(path) !== index);
@@ -8103,6 +8137,9 @@ async function collectRouteInventory(check, viewport) {
     expected_routes: expectedRoutes,
     link_selector: check.link_selector || "a[href]",
     source_selector: check.source_selector || null,
+    source_link_scope: sourceLinkScope,
+    source_candidate_count: sourceCandidateCount,
+    source_candidate_unique_link_count: sourceCandidateUniqueLinkCount,
     source_link_count: homeLinkPaths.length,
     source_unique_link_count: uniqueHomeLinkPaths.length,
     duplicate_source_link_count: duplicateHomeLinkPaths.length,
@@ -8299,6 +8336,9 @@ async function captureViewport(viewport) {
         expected_routes: routeInventoryCheck.expected_routes || [],
         link_selector: routeInventoryCheck.link_selector || "a[href]",
         source_selector: routeInventoryCheck.source_selector || null,
+        source_link_scope: routeInventoryCheck.route_path_prefix ? "route_path_prefix" : "expected_routes",
+        source_candidate_count: 0,
+        source_candidate_unique_link_count: 0,
         source_link_count: 0,
         source_unique_link_count: 0,
         duplicate_source_link_count: 0,
@@ -8425,6 +8465,9 @@ function buildProfileEvidence(currentViewports) {
         .map((viewport) => ({
           viewport: viewport.name,
           expected_count: (viewport.route_inventory.expected_routes || []).length,
+          source_link_scope: viewport.route_inventory.source_link_scope,
+          source_candidate_count: viewport.route_inventory.source_candidate_count,
+          source_candidate_unique_link_count: viewport.route_inventory.source_candidate_unique_link_count,
           source_link_count: viewport.route_inventory.source_link_count == null ? viewport.route_inventory.home_game_link_count : viewport.route_inventory.source_link_count,
           source_unique_link_count: viewport.route_inventory.source_unique_link_count == null ? viewport.route_inventory.home_unique_game_link_count : viewport.route_inventory.source_unique_link_count,
           duplicate_source_link_count: viewport.route_inventory.duplicate_source_link_count,
