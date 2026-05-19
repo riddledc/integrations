@@ -3335,6 +3335,10 @@ assert.ok(dragSetupProfileScript.includes("page.mouse.up"));
 assert.ok(dragSetupProfileScript.includes("new PointerEvent"));
 assert.ok(dragSetupProfileScript.includes("pointer_type"));
 assert.ok(dragSetupProfileScript.includes('payload.pointerType === "touch"'));
+assert.ok(dragSetupProfileScript.includes("setPointerCapture"));
+assert.ok(dragSetupProfileScript.includes("releasePointerCapture"));
+assert.ok(dragSetupProfileScript.includes("hasPointerCapture"));
+assert.ok(dragSetupProfileScript.includes("pointer_capture_polyfill"));
 assert.ok(dragSetupProfileScript.includes("bounding_box_unavailable"));
 assert.ok(dragSetupProfileScript.includes("coordinate_mode"));
 const windowCallSetupProfile = normalizeRiddleProofProfile({
