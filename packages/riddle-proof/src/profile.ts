@@ -253,6 +253,7 @@ export interface RiddleProofProfileSetupAction {
   selector?: string;
   frame_selector?: string;
   frame_index?: number;
+  full_page?: boolean;
   force?: boolean;
   click_count?: number;
   coordinate_mode?: "pixels" | "ratio";
@@ -1213,6 +1214,40 @@ function normalizeSetupActionPointerType(value: unknown, type: RiddleProofProfil
   throw new Error(`target.setup_actions[${index}].pointer_type ${String(value)} is not supported. Supported pointer types: mouse, touch, pen.`);
 }
 
+function normalizeSetupActionScreenshotFullPage(input: Record<string, unknown>, type: RiddleProofProfileSetupActionType, index: number): boolean | undefined {
+  const directFullPage = booleanValue(valueFromOwn(input, "full_page", "fullPage"));
+  const viewportOnly = booleanValue(valueFromOwn(input, "viewport_only", "viewportOnly", "viewport_screenshot", "viewportScreenshot"));
+  if (type !== "screenshot") {
+    if (
+      directFullPage !== undefined
+      || viewportOnly !== undefined
+      || valueFromOwn(input, "screenshot_mode", "screenshotMode", "capture_mode", "captureMode") !== undefined
+    ) {
+      throw new Error(`target.setup_actions[${index}].full_page is only supported for screenshot actions.`);
+    }
+    return undefined;
+  }
+  const modeInput = stringFromOwn(input, "mode", "screenshot_mode", "screenshotMode", "capture_mode", "captureMode");
+  let modeFullPage: boolean | undefined;
+  if (modeInput) {
+    const mode = modeInput.trim().toLowerCase().replace(/[-\s]+/g, "_");
+    if (mode === "full_page" || mode === "fullpage" || mode === "page" || mode === "document") {
+      modeFullPage = true;
+    } else if (mode === "viewport" || mode === "view") {
+      modeFullPage = false;
+    } else {
+      throw new Error(`target.setup_actions[${index}].mode ${modeInput} is not supported for screenshot actions. Supported modes: full_page, viewport.`);
+    }
+  }
+  const values = [directFullPage, viewportOnly === undefined ? undefined : !viewportOnly, modeFullPage]
+    .filter((value): value is boolean => value !== undefined);
+  if (!values.length) return undefined;
+  if (values.some((value) => value !== values[0])) {
+    throw new Error(`target.setup_actions[${index}] has conflicting screenshot full_page / viewport mode options.`);
+  }
+  return values[0];
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -1366,6 +1401,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     selector,
     frame_selector: frameSelector,
     frame_index: frameIndex,
+    full_page: normalizeSetupActionScreenshotFullPage(input, type, index),
     force: type === "click" && (
       input.force === true
       || input.force_click === true
@@ -6216,8 +6252,10 @@ async function executeSetupAction(action, ordinal, viewport) {
       const viewportName = viewport && viewport.name ? viewport.name : "viewport";
       const label = profileSlug + "-" + viewportName + "-" + labelPart;
       if (typeof saveScreenshot !== "function") return { ...base, reason: "save_screenshot_unavailable", label: rawLabel };
-      await saveScreenshot(label);
-      return { ...base, ok: true, label: rawLabel, screenshot_label: label };
+      const screenshotOptions = {};
+      if (action.full_page !== undefined) screenshotOptions.fullPage = action.full_page !== false;
+      await saveScreenshot(label, screenshotOptions);
+      return { ...base, ok: true, label: rawLabel, screenshot_label: label, full_page: action.full_page === undefined ? null : action.full_page !== false };
     }
     if (type === "clear_console") {
       const cleared_console_event_count = consoleEvents.length;
