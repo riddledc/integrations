@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.150
+
+### Patch Changes
+
+- 7834c30: Add an `observe_within` profile check for transient UI evidence.
+
 ## 0.7.149
 
 ### Patch Changes
