@@ -530,6 +530,7 @@ export interface RiddleProofProfileResult {
     submitted_at?: string | null;
     completed_at?: string | null;
     queue_elapsed_ms?: number | null;
+    pre_submission_elapsed_ms?: number;
     elapsed_ms?: number;
     attempt?: number;
     attempts?: number;
@@ -540,6 +541,7 @@ export interface RiddleProofProfileResult {
       status?: string | null;
       terminal?: boolean;
       queue_elapsed_ms?: number | null;
+      pre_submission_elapsed_ms?: number;
       elapsed_ms?: number;
       attempt?: number;
       attempts?: number;
