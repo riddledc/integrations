@@ -781,6 +781,18 @@ const cliRunProfileServer = createServer((request, response) => {
                 clicked_truncated: false,
                 click_count_action_total: 1,
                 click_count_value_total: 2,
+                window_call_total: 1,
+                window_call_stored_total: 1,
+                window_call_captured_total: 0,
+                window_call_truncated: false,
+                window_call: [{
+                  ordinal: 1,
+                  ok: true,
+                  path: "__proof.capture",
+                  return_captured: false,
+                  return_stored_to: "__proof.lastCapture",
+                  reason: null,
+                }],
                 window_call_until_total: 1,
                 window_call_until_call_total: 3,
                 window_call_until_truncated: false,
@@ -1016,8 +1028,10 @@ try {
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
+  assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
   assert.match(profileSummaryMarkdown, /desktop window_call_until: ok, `__proof\.step` until `__proof\.done` == `true` in 3\/5 call\(s\), observed `true`/);
   assert.match(profileSummaryMarkdown, /## Network Mocks/);
   assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
@@ -2216,6 +2230,9 @@ assert.ok(windowCallSetupProfileScript.includes("return_captured"));
 assert.ok(windowCallSetupProfileScript.includes("capture_return"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_index"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_count"));
+assert.ok(windowCallSetupProfileScript.includes("profileSetupWindowCallReceipts"));
+assert.ok(windowCallSetupProfileScript.includes("window_call_total"));
+assert.ok(windowCallSetupProfileScript.includes("window_call_stored_total"));
 const windowCallUntilSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-window-call-until-action",

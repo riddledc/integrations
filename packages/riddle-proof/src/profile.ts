@@ -957,6 +957,24 @@ function profileSetupWindowCallUntilReceipts(results: Array<Record<string, JsonV
     }));
 }
 
+function profileSetupWindowCallReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "window_call")
+    .map((result) => {
+      const receipt: Record<string, JsonValue> = {
+        ordinal: result.ordinal ?? null,
+        ok: result.ok !== false,
+        path: result.path ?? null,
+        return_captured: result.return_captured ?? null,
+        return_stored_to: result.return_stored_to ?? null,
+        reason: result.reason ?? result.error ?? result.store_reason ?? null,
+      };
+      if (result.returned !== undefined) receipt.returned = result.returned;
+      if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      return receipt;
+    });
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
@@ -995,6 +1013,10 @@ function profileSetupSummary(
         .map((result) => typeof result.call_count === "number" && Number.isFinite(result.call_count) ? result.call_count : undefined)
         .filter((value): value is number => value !== undefined);
       const sampledWindowCallUntilReceipts = sampleProfileSetupSummaryItems(windowCallUntilReceipts, 8);
+      const windowCallReceipts = profileSetupWindowCallReceipts(results);
+      const windowCallStoredTotal = windowCallReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
+      const windowCallCapturedTotal = windowCallReceipts.filter((result) => result.return_captured === true).length;
+      const sampledWindowCallReceipts = sampleProfileSetupSummaryItems(windowCallReceipts, 8);
       const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -1041,6 +1063,11 @@ function profileSetupSummary(
         window_call_until_call_total: windowCallUntilCallCounts.reduce((sum, value) => sum + value, 0),
         window_call_until_truncated: windowCallUntilReceipts.length > sampledWindowCallUntilReceipts.length,
         window_call_until: sampledWindowCallUntilReceipts,
+        window_call_total: windowCallReceipts.length,
+        window_call_stored_total: windowCallStoredTotal,
+        window_call_captured_total: windowCallCapturedTotal,
+        window_call_truncated: windowCallReceipts.length > sampledWindowCallReceipts.length,
+        window_call: sampledWindowCallReceipts,
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -4790,6 +4817,23 @@ function profileSetupWindowCallUntilReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupWindowCallReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "window_call")
+    .map((result) => {
+      const receipt = {
+        ordinal: result.ordinal ?? null,
+        ok: result.ok !== false,
+        path: result.path ?? null,
+        return_captured: result.return_captured ?? null,
+        return_stored_to: result.return_stored_to ?? null,
+        reason: result.reason || result.error || result.store_reason || null,
+      };
+      if (result.returned !== undefined) receipt.returned = result.returned;
+      if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      return receipt;
+    });
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -4824,6 +4868,10 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         .map((result) => typeof result.call_count === "number" && Number.isFinite(result.call_count) ? result.call_count : undefined)
         .filter((value) => value !== undefined);
       const sampledWindowCallUntilReceipts = sampleProfileSetupSummaryItems(windowCallUntilReceipts, 8);
+      const windowCallReceipts = profileSetupWindowCallReceipts(results);
+      const windowCallStoredTotal = windowCallReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
+      const windowCallCapturedTotal = windowCallReceipts.filter((result) => result.return_captured === true).length;
+      const sampledWindowCallReceipts = sampleProfileSetupSummaryItems(windowCallReceipts, 8);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -4870,6 +4918,11 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         window_call_until_call_total: windowCallUntilCallCounts.reduce((sum, value) => sum + value, 0),
         window_call_until_truncated: windowCallUntilReceipts.length > sampledWindowCallUntilReceipts.length,
         window_call_until: sampledWindowCallUntilReceipts,
+        window_call_total: windowCallReceipts.length,
+        window_call_stored_total: windowCallStoredTotal,
+        window_call_captured_total: windowCallCapturedTotal,
+        window_call_truncated: windowCallReceipts.length > sampledWindowCallReceipts.length,
+        window_call: sampledWindowCallReceipts,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({

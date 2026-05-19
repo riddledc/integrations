@@ -675,6 +675,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const clickedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0);
   const clickCountActionTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_action_total) || 0), 0);
   const clickCountValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_value_total) || 0), 0);
+  const windowCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_total) || 0), 0);
+  const windowCallStoredTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_stored_total) || 0), 0);
+  const windowCallCapturedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_captured_total) || 0), 0);
   const windowCallUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_total) || 0), 0);
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
@@ -689,6 +692,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (clickCountActionTotal) {
     lines.push(`- click counts: ${clickCountActionTotal} action(s), click_count total ${clickCountValueTotal}`);
   }
+  if (windowCallTotal) {
+    lines.push(`- window_call: ${windowCallTotal} action(s), stored returns ${windowCallStoredTotal}, captured returns ${windowCallCapturedTotal}`);
+  }
   if (windowCallUntilTotal) {
     lines.push(`- window_call_until: ${windowCallUntilTotal} action(s), call_count total ${windowCallUntilCallTotal}`);
   }
@@ -702,11 +708,32 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
       : 0;
     const clicked = cliFiniteNumber(viewport.clicked_total) || 0;
     const clickCountActions = cliFiniteNumber(viewport.click_count_action_total) || 0;
+    const windowCallActions = cliFiniteNumber(viewport.window_call_total) || 0;
+    const windowCallStored = cliFiniteNumber(viewport.window_call_stored_total) || 0;
+    const windowCallCaptured = cliFiniteNumber(viewport.window_call_captured_total) || 0;
     const windowCallUntilActions = cliFiniteNumber(viewport.window_call_until_total) || 0;
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
+  const windowCallDetails = viewports.flatMap((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.window_call)
+      ? viewport.window_call.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  for (const { name, receipt } of windowCallDetails.slice(0, 12)) {
+    const path = cliString(receipt.path) || "window_function";
+    const storedTo = cliString(receipt.return_stored_to);
+    const returned = cliValueLabel(receipt.returned);
+    const expected = cliValueLabel(receipt.expected_return);
+    const captured = receipt.return_captured === true ? "captured" : receipt.return_captured === false ? "not captured" : "capture unknown";
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    lines.push(`- ${name} window_call: ${ok}, ${markdownInlineCode(path)}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (windowCallDetails.length > 12) lines.push(`- ${windowCallDetails.length - 12} additional window_call receipt(s) omitted.`);
   const windowCallUntilDetails = viewports.flatMap((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_call_until)
