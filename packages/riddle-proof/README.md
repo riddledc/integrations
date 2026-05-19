@@ -587,6 +587,8 @@ JSON, YAML, robots, sitemap, or other machine-readable endpoint:
 text. Use `text_visible` or `selector_text_visible` when CSS transforms,
 hydration, client rendering, hidden elements, or layout-specific copy should be
 judged exactly as the browser exposes it to users.
+Hosted `summary.md` includes `http_status` body assertion pass counts so a
+reviewer can see raw body proof coverage without opening `proof.json`.
 
 When the profile target is a mounted Riddle static Preview such as
 `https://preview.riddledc.com/s/ps_1234abcd/docs/`, root-relative
