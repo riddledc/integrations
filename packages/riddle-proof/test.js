@@ -4153,6 +4153,32 @@ assert.deepEqual(
   ["Pricing"],
 );
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
+const hiddenSelectorTextVisibleAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    selectors: {
+      ...profileEvidence.viewports[0].selectors,
+      "[data-testid='pricing-cards']": { count: 1, visible_count: 0 },
+    },
+    text_sequences: {
+      "[data-testid='pricing-cards']": {
+        count: 1,
+        visible_count: 0,
+        texts: ["Pricing Start building"],
+        visible_texts: ["Pricing"],
+        match_texts: ["Pricing Start building"],
+        visible_match_texts: [],
+      },
+    },
+  }, profileEvidence.viewports[1]],
+});
+const hiddenSelectorTextVisibleCheck = hiddenSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_visible");
+assert.equal(hiddenSelectorTextVisibleAssessment.status, "product_regression");
+assert.equal(hiddenSelectorTextVisibleCheck.status, "failed");
+assert.equal(hiddenSelectorTextVisibleCheck.evidence.viewports[0].matched, false);
+assert.equal(hiddenSelectorTextVisibleCheck.evidence.viewports[0].matched_count, 0);
+assert.deepEqual(hiddenSelectorTextVisibleCheck.evidence.viewports[0].samples, ["Pricing"]);
 const failedObserveWithinAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [{
