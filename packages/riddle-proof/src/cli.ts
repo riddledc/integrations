@@ -681,6 +681,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const windowCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_total) || 0), 0);
   const windowCallStoredTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_stored_total) || 0), 0);
   const windowCallCapturedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_captured_total) || 0), 0);
+  const windowEvalTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_total) || 0), 0);
+  const windowEvalStoredTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_stored_total) || 0), 0);
+  const windowEvalCapturedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_captured_total) || 0), 0);
   const windowCallUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_total) || 0), 0);
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
@@ -699,6 +702,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (windowCallTotal) {
     lines.push(`- window_call: ${windowCallTotal} action(s), stored returns ${windowCallStoredTotal}, captured returns ${windowCallCapturedTotal}`);
   }
+  if (windowEvalTotal) {
+    lines.push(`- window_eval: ${windowEvalTotal} action(s), stored returns ${windowEvalStoredTotal}, captured returns ${windowEvalCapturedTotal}`);
+  }
   if (windowCallUntilTotal) {
     lines.push(`- window_call_until: ${windowCallUntilTotal} action(s), call_count total ${windowCallUntilCallTotal}`);
   }
@@ -715,10 +721,13 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const windowCallActions = cliFiniteNumber(viewport.window_call_total) || 0;
     const windowCallStored = cliFiniteNumber(viewport.window_call_stored_total) || 0;
     const windowCallCaptured = cliFiniteNumber(viewport.window_call_captured_total) || 0;
+    const windowEvalActions = cliFiniteNumber(viewport.window_eval_total) || 0;
+    const windowEvalStored = cliFiniteNumber(viewport.window_eval_stored_total) || 0;
+    const windowEvalCaptured = cliFiniteNumber(viewport.window_eval_captured_total) || 0;
     const windowCallUntilActions = cliFiniteNumber(viewport.window_call_until_total) || 0;
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   const windowCallDetails = viewports.flatMap((viewport) => {
     const name = cliString(viewport.name) || "viewport";
@@ -738,6 +747,24 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} window_call: ${ok}, ${markdownInlineCode(path)}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (windowCallDetails.length > 12) lines.push(`- ${windowCallDetails.length - 12} additional window_call receipt(s) omitted.`);
+  const windowEvalDetails = viewports.flatMap((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.window_eval)
+      ? viewport.window_eval.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  for (const { name, receipt } of windowEvalDetails.slice(0, 12)) {
+    const scriptLength = cliFiniteNumber(receipt.script_length);
+    const storedTo = cliString(receipt.return_stored_to);
+    const returned = cliValueLabel(receipt.returned);
+    const expected = cliValueLabel(receipt.expected_return);
+    const captured = receipt.return_captured === true ? "captured" : receipt.return_captured === false ? "not captured" : "capture unknown";
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    lines.push(`- ${name} window_eval: ${ok}${scriptLength === undefined ? "" : `, script ${scriptLength} chars`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (windowEvalDetails.length > 12) lines.push(`- ${windowEvalDetails.length - 12} additional window_eval receipt(s) omitted.`);
   const windowCallUntilDetails = viewports.flatMap((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_call_until)

@@ -766,18 +766,18 @@ const cliRunProfileServer = createServer((request, response) => {
           type: "setup_actions_succeeded",
           status: "passed",
           evidence: {
-            action_count: 2,
-            viewports: [{ name: "desktop", ok: true, result_count: 3 }],
+            action_count: 3,
+            viewports: [{ name: "desktop", ok: true, result_count: 4 }],
             setup_summary: {
               viewport_count: 1,
-              action_count: 2,
+              action_count: 3,
               final_screenshot_count: 1,
               final_screenshot_full_page: false,
               final_screenshot_mode: "viewport",
               viewports: [{
                 name: "desktop",
                 ok: true,
-                result_count: 3,
+                result_count: 4,
                 observed_path: "/profile",
                 final_screenshot: "cli-profile-progress-desktop",
                 final_screenshot_full_page: false,
@@ -796,6 +796,19 @@ const cliRunProfileServer = createServer((request, response) => {
                   path: "__proof.capture",
                   return_captured: false,
                   return_stored_to: "__proof.lastCapture",
+                  reason: null,
+                }],
+                window_eval_total: 1,
+                window_eval_stored_total: 1,
+                window_eval_captured_total: 1,
+                window_eval_truncated: false,
+                window_eval: [{
+                  ordinal: 3,
+                  ok: true,
+                  script_length: 52,
+                  return_captured: true,
+                  return_stored_to: "__proof.lastEval",
+                  returned: { ok: true },
                   reason: null,
                 }],
                 window_call_until_total: 1,
@@ -1030,14 +1043,16 @@ try {
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
   assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
-  assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /setup actions: 3 declared, 4 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
+  assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 3 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 4 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
+  assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, returned `\{"ok":true\}`/);
   assert.match(profileSummaryMarkdown, /desktop window_call_until: ok, `__proof\.step` until `__proof\.done` == `true` in 3\/5 call\(s\), observed `true`/);
   assert.match(profileSummaryMarkdown, /## Network Mocks/);
   assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
@@ -2117,6 +2132,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_storage"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("clear_console"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("dialog_response"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_eval"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("window_call_until"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("drag"));
 const formSetupProfile = normalizeRiddleProofProfile({
@@ -2288,6 +2304,37 @@ assert.ok(windowCallSetupProfileScript.includes("repeat_count"));
 assert.ok(windowCallSetupProfileScript.includes("profileSetupWindowCallReceipts"));
 assert.ok(windowCallSetupProfileScript.includes("window_call_total"));
 assert.ok(windowCallSetupProfileScript.includes("window_call_stored_total"));
+const windowEvalSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-window-eval-action",
+  target: {
+    route: "/games/emoji-mind-gym",
+    setup_actions: [
+      {
+        type: "browser-evaluate",
+        script: "const sum = args[0] + args[1]; return { ok: sum === 5, sum };",
+        args: [2, 3],
+        expectReturn: { ok: true, sum: 5 },
+        storeReturnTo: "__proof.lastEval",
+        captureReturn: true,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/emoji-mind-gym" }],
+}, { url: "https://example.com" });
+assert.equal(windowEvalSetupProfile.target.setup_actions[0].type, "window_eval");
+assert.equal(windowEvalSetupProfile.target.setup_actions[0].script, "const sum = args[0] + args[1]; return { ok: sum === 5, sum };");
+assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].args, [2, 3]);
+assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].expect_return, { ok: true, sum: 5 });
+assert.equal(windowEvalSetupProfile.target.setup_actions[0].store_return_to, "__proof.lastEval");
+assert.equal(windowEvalSetupProfile.target.setup_actions[0].capture_return, undefined);
+const windowEvalSetupProfileScript = buildRiddleProofProfileScript(windowEvalSetupProfile);
+assert.ok(windowEvalSetupProfileScript.includes('type === "window_eval"'));
+assert.ok(windowEvalSetupProfileScript.includes("setupEvaluateWindowScript"));
+assert.ok(windowEvalSetupProfileScript.includes("script_threw"));
+assert.ok(windowEvalSetupProfileScript.includes("script_length"));
+assert.ok(windowEvalSetupProfileScript.includes("profileSetupWindowEvalReceipts"));
+assert.ok(windowEvalSetupProfileScript.includes("window_eval_total"));
 const windowCallUntilSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-window-call-until-action",
@@ -2338,7 +2385,25 @@ assert.throws(() => normalizeRiddleProofProfile({
     setup_actions: [{ type: "window-call", path: "__proof.force", args: "bad" }],
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
-}, { url: "https://example.com" }), /window_call args must be an array/);
+}, { url: "https://example.com" }), /window_call\/window_eval args must be an array/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-eval",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-eval" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_eval requires script/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-window-eval-args",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "window-eval", script: "return true;", args: "bad" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /window_call\/window_eval args must be an array/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-window-call-until-path",

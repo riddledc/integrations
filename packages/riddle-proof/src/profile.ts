@@ -65,6 +65,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "wait",
   "wait_for_selector",
   "wait_for_text",
+  "window_eval",
   "window_call",
   "window_call_until",
 ] as const;
@@ -268,6 +269,7 @@ export interface RiddleProofProfileSetupAction {
   value?: string;
   value_json?: JsonValue;
   label?: string;
+  script?: string;
   path?: string;
   args?: JsonValue[];
   expect_return?: JsonValue;
@@ -978,6 +980,24 @@ function profileSetupWindowCallReceipts(results: Array<Record<string, JsonValue>
     });
 }
 
+function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "window_eval")
+    .map((result) => {
+      const receipt: Record<string, JsonValue> = {
+        ordinal: result.ordinal ?? null,
+        ok: result.ok !== false,
+        script_length: result.script_length ?? null,
+        return_captured: result.return_captured ?? null,
+        return_stored_to: result.return_stored_to ?? null,
+        reason: result.reason ?? result.error ?? result.store_reason ?? null,
+      };
+      if (result.returned !== undefined) receipt.returned = result.returned;
+      if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      return receipt;
+    });
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
@@ -1035,6 +1055,10 @@ function profileSetupSummary(
       const windowCallStoredTotal = windowCallReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowCallCapturedTotal = windowCallReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowCallReceipts = sampleProfileSetupSummaryItems(windowCallReceipts, 8);
+      const windowEvalReceipts = profileSetupWindowEvalReceipts(results);
+      const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
+      const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
+      const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -1088,6 +1112,11 @@ function profileSetupSummary(
         window_call_captured_total: windowCallCapturedTotal,
         window_call_truncated: windowCallReceipts.length > sampledWindowCallReceipts.length,
         window_call: sampledWindowCallReceipts,
+        window_eval_total: windowEvalReceipts.length,
+        window_eval_stored_total: windowEvalStoredTotal,
+        window_eval_captured_total: windowEvalCapturedTotal,
+        window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
+        window_eval: sampledWindowEvalReceipts,
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -1166,6 +1195,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "dialog_response"
     : normalizedInput === "window_call_until" || normalizedInput === "call_until" || normalizedInput === "window_call_repeat_until" || normalizedInput === "repeat_window_call_until"
       ? "window_call_until"
+    : normalizedInput === "window_evaluate" || normalizedInput === "browser_eval" || normalizedInput === "browser_evaluate" || normalizedInput === "evaluate_script" || normalizedInput === "profile_script"
+      ? "window_eval"
       : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
@@ -1186,7 +1217,7 @@ function normalizeSetupActionArgs(input: Record<string, unknown>, index: number)
   const argsInput = valueFromOwn(input, "args", "arguments", "args_json", "argsJson");
   if (argsInput === undefined) return undefined;
   if (!Array.isArray(argsInput)) {
-    throw new Error(`target.setup_actions[${index}] window_call args must be an array.`);
+    throw new Error(`target.setup_actions[${index}] window_call/window_eval args must be an array.`);
   }
   return argsInput.map(toJsonValue);
 }
@@ -1341,7 +1372,11 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if ((type === "window_call" || type === "window_call_until" || type === "assert_window_value" || type === "assert_window_number") && !path) {
     throw new Error(`target.setup_actions[${index}] ${type} requires path.`);
   }
-  const args = type === "window_call" || type === "window_call_until" ? normalizeSetupActionArgs(input, index) : undefined;
+  const script = stringFromOwn(input, "script", "code", "source", "body");
+  if (type === "window_eval" && !script) {
+    throw new Error(`target.setup_actions[${index}] window_eval requires script.`);
+  }
+  const args = type === "window_call" || type === "window_call_until" || type === "window_eval" ? normalizeSetupActionArgs(input, index) : undefined;
   const hasExpectedValue = hasOwn(input, "expected_value")
     || hasOwn(input, "expectedValue")
     || hasOwn(input, "expected")
@@ -1439,6 +1474,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
     label: stringFromOwn(input, "label", "name", "screenshot_label", "screenshotLabel"),
+    script,
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
@@ -4928,6 +4964,23 @@ function profileSetupWindowCallReceipts(results) {
       return receipt;
     });
 }
+function profileSetupWindowEvalReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "window_eval")
+    .map((result) => {
+      const receipt = {
+        ordinal: result.ordinal ?? null,
+        ok: result.ok !== false,
+        script_length: result.script_length ?? null,
+        return_captured: result.return_captured ?? null,
+        return_stored_to: result.return_stored_to ?? null,
+        reason: result.reason || result.error || result.store_reason || null,
+      };
+      if (result.returned !== undefined) receipt.returned = result.returned;
+      if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      return receipt;
+    });
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -4980,6 +5033,10 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const windowCallStoredTotal = windowCallReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowCallCapturedTotal = windowCallReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowCallReceipts = sampleProfileSetupSummaryItems(windowCallReceipts, 8);
+      const windowEvalReceipts = profileSetupWindowEvalReceipts(results);
+      const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
+      const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
+      const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -5033,6 +5090,11 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         window_call_captured_total: windowCallCapturedTotal,
         window_call_truncated: windowCallReceipts.length > sampledWindowCallReceipts.length,
         window_call: sampledWindowCallReceipts,
+        window_eval_total: windowEvalReceipts.length,
+        window_eval_stored_total: windowEvalStoredTotal,
+        window_eval_captured_total: windowEvalCapturedTotal,
+        window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
+        window_eval: sampledWindowEvalReceipts,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({
@@ -6014,6 +6076,49 @@ async function setupCallWindowFunction(context, path, args, storeReturnTo, captu
     }
   }, { path, args, storeReturnTo, captureReturn });
 }
+async function setupEvaluateWindowScript(context, script, args, storeReturnTo, captureReturn) {
+  return await context.evaluate(async ({ script, args, storeReturnTo, captureReturn }) => {
+    const toJsonValue = (value) => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string" || typeof value === "boolean") return value;
+      if (typeof value === "number") return Number.isFinite(value) ? value : null;
+      if (Array.isArray(value)) return value.map(toJsonValue);
+      if (typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
+      }
+      return String(value);
+    };
+    const storeWindowReturn = (storePath, value) => {
+      const pathParts = String(storePath || "").split(".").map((part) => part.trim()).filter(Boolean);
+      if (pathParts[0] === "window") pathParts.shift();
+      if (!pathParts.length) return { ok: false, reason: "missing_store_path" };
+      let target = window;
+      for (let index = 0; index < pathParts.length - 1; index += 1) {
+        const part = pathParts[index];
+        if (target[part] === null || typeof target[part] !== "object") target[part] = {};
+        target = target[part];
+      }
+      target[pathParts[pathParts.length - 1]] = value;
+      return { ok: true, path: pathParts.join(".") };
+    };
+    const body = String(script || "");
+    if (!body.trim()) return { ok: false, reason: "missing_script" };
+    try {
+      const run = new Function("args", "\"use strict\"; return (async () => {\\n" + body + "\\n})();");
+      const returned = await run(Array.isArray(args) ? args : []);
+      const jsonReturned = toJsonValue(returned);
+      const returnedForResult = captureReturn === false ? undefined : jsonReturned;
+      if (storeReturnTo) {
+        const stored = storeWindowReturn(storeReturnTo, jsonReturned);
+        if (!stored.ok) return { ok: false, reason: "return_store_failed", store_reason: stored.reason, returned: returnedForResult };
+        return { ok: true, returned: returnedForResult, return_stored_to: stored.path };
+      }
+      return { ok: true, returned: returnedForResult };
+    } catch (error) {
+      return { ok: false, reason: "script_threw", error: String(error && error.message ? error.message : error).slice(0, 1000) };
+    }
+  }, { script, args, storeReturnTo, captureReturn });
+}
 function setupFrameSelector(action) {
   return String(action?.frame_selector || action?.frameSelector || action?.iframe_selector || action?.iframeSelector || "").trim();
 }
@@ -6526,6 +6631,44 @@ async function executeSetupAction(action, ordinal, viewport) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
       return { ...base, ...setupScopeEvidence(scope), ok: true, storage, reload: action.reload === true };
+    }
+    if (type === "window_eval") {
+      const script = String(action.script || action.code || action.source || action.body || "");
+      const args = Array.isArray(action.args) ? action.args : [];
+      const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.assign_return_to || action.assignReturnTo || action.return_state_path || action.returnStatePath || "").trim();
+      if (!script.trim()) return { ...base, reason: "missing_script" };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const hasExpectation = setupHasOwn(action, "expect_return")
+        || setupHasOwn(action, "expectReturn")
+        || setupHasOwn(action, "expected_return")
+        || setupHasOwn(action, "expectedReturn");
+      const expected = setupHasOwn(action, "expect_return")
+        ? action.expect_return
+        : setupHasOwn(action, "expectReturn")
+          ? action.expectReturn
+        : setupHasOwn(action, "expected_return")
+          ? action.expected_return
+          : action.expectedReturn;
+      const captureReturn = action.capture_return === false || action.captureReturn === false || action.include_return === false || action.includeReturn === false || action.omit_return === true || action.omitReturn === true
+        ? hasExpectation
+        : true;
+      const result = await setupEvaluateWindowScript(scope.context, script, args, storeReturnTo, captureReturn);
+      const expectationMet = !hasExpectation || setupValuesEqual(result.returned, expected);
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: Boolean(result.ok && expectationMet),
+        script_length: script.length,
+        arg_count: args.length,
+        returned: captureReturn ? setupJsonValue(result.returned) : undefined,
+        return_captured: captureReturn,
+        expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
+        return_stored_to: result.return_stored_to || storeReturnTo || undefined,
+        reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
+        store_reason: result.store_reason || undefined,
+        error: result.error || undefined,
+      };
     }
     if (type === "window_call") {
       const path = String(action.path || action.function_path || action.functionPath || "");
