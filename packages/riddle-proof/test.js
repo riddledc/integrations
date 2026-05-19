@@ -1303,7 +1303,7 @@ try {
   assert.match(profileSummaryMarkdown, /passed: selector_visible \(`\.dashboard-content`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_text_visible \(`\.dashboard-content` contains `Start building`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_text_absent \(`\.dashboard-content` does not contain pattern `NaN\|undefined`\)/);
-  assert.match(profileSummaryMarkdown, /passed: observe_within \(`\.dashboard-content` observes `Started` within 1500ms\)/);
+  assert.match(profileSummaryMarkdown, /passed: observe_within \(`\.dashboard-content` observes `Started` within 1500ms; desktop matched in 120ms, 3 attempts, sample `Started`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_count_equals \(`\.jobs-list tbody tr` = 3\)/);
   assert.match(profileSummaryMarkdown, /passed: text_visible \(`Failed`\)/);
   assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
