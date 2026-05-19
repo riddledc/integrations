@@ -3305,6 +3305,8 @@ const canvasSignatureProfileScript = buildRiddleProofProfileScript(canvasSignatu
 assert.ok(canvasSignatureProfileScript.includes('type === "canvas_signature"'));
 assert.ok(canvasSignatureProfileScript.includes("toDataURL"));
 assert.ok(canvasSignatureProfileScript.includes("canvas_signature_unchanged"));
+assert.ok(canvasSignatureProfileScript.includes("stable_canvas_signature_hash"));
+assert.ok(canvasSignatureProfileScript.includes("canvas_signature_stable_hash_groups"));
 assert.ok(canvasSignatureProfileScript.includes("return_stored_to"));
 const dialogSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
