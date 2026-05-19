@@ -843,6 +843,24 @@ function profileHttpStatusAssertionCount(
   return { passed, total: expected.length * viewports.length };
 }
 
+function profileHttpStatusAssertionKeys(
+  evidence: Record<string, unknown>,
+  viewports: Record<string, unknown>[],
+  field: string,
+): string[] {
+  const explicit = cliStringArray(evidence[field]);
+  if (explicit.length) return explicit;
+  const keys = new Set<string>();
+  for (const viewport of viewports) {
+    const observed = cliRecord(viewport[field]);
+    if (!observed) continue;
+    for (const key of Object.keys(observed)) {
+      if (key) keys.add(key);
+    }
+  }
+  return [...keys];
+}
+
 function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): string[] {
   const httpStatusChecks = result.checks.filter((check) => check.type === "http_status");
   const lines: string[] = [];
@@ -860,9 +878,24 @@ function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): str
       .map((viewport) => cliFiniteNumber(viewport.status))
       .map((status) => status === undefined ? "error" : String(status));
     const failedTotal = Array.isArray(evidence.failures) ? evidence.failures.length : 0;
-    const bodyContains = profileHttpStatusAssertionCount(viewports, "body_contains", cliStringArray(evidence.body_contains), true);
-    const bodyNotContains = profileHttpStatusAssertionCount(viewports, "body_not_contains", cliStringArray(evidence.body_not_contains), false);
-    const bodyNotPatterns = profileHttpStatusAssertionCount(viewports, "body_not_patterns", cliStringArray(evidence.body_not_patterns), false);
+    const bodyContains = profileHttpStatusAssertionCount(
+      viewports,
+      "body_contains",
+      profileHttpStatusAssertionKeys(evidence, viewports, "body_contains"),
+      true,
+    );
+    const bodyNotContains = profileHttpStatusAssertionCount(
+      viewports,
+      "body_not_contains",
+      profileHttpStatusAssertionKeys(evidence, viewports, "body_not_contains"),
+      false,
+    );
+    const bodyNotPatterns = profileHttpStatusAssertionCount(
+      viewports,
+      "body_not_patterns",
+      profileHttpStatusAssertionKeys(evidence, viewports, "body_not_patterns"),
+      false,
+    );
     const bodyParts = [
       bodyContains ? `body_contains ${bodyContains.passed}/${bodyContains.total}` : "",
       bodyNotContains ? `body_not_contains clean ${bodyNotContains.passed}/${bodyNotContains.total}` : "",
