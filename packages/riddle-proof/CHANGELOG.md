@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.159
+
+### Patch Changes
+
+- 9af97ae: Make `selector_text_visible` require visible selector text instead of passing on hidden or offscreen selector text captured in fallback match samples.
+
 ## 0.7.158
 
 ### Patch Changes
