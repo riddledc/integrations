@@ -157,6 +157,10 @@ export interface RiddleProofProfileHttpStatusBodyJsonAssertionResult {
   ok: boolean;
   exists: boolean;
   observed?: JsonValue;
+  observed_sample?: JsonValue;
+  observed_length?: number;
+  observed_key_count?: number;
+  observed_omitted_count?: number;
   observed_type: RiddleProofProfileJsonValueType | "missing";
   expected_exists?: boolean;
   equals?: JsonValue;
@@ -684,6 +688,42 @@ function jsonValueType(value: unknown): RiddleProofProfileJsonValueType {
   return "object";
 }
 
+function compactJsonAssertionSample(value: unknown, depth = 0): JsonValue {
+  if (typeof value === "string") return value.length > 240 ? `${value.slice(0, 237)}...` : value;
+  if (value === null || typeof value === "boolean" || typeof value === "number") return toJsonValue(value);
+  if (Array.isArray(value)) {
+    if (depth >= 2) return `[array:${value.length}]`;
+    return value.slice(0, 3).map((item) => compactJsonAssertionSample(item, depth + 1));
+  }
+  if (isRecord(value)) {
+    const entries = Object.entries(value).slice(0, 8);
+    if (depth >= 2) return `[object:${Object.keys(value).length} keys]`;
+    return Object.fromEntries(entries.map(([key, child]) => [key, compactJsonAssertionSample(child, depth + 1)]));
+  }
+  return String(value);
+}
+
+function attachJsonAssertionObservedValue(
+  result: RiddleProofProfileHttpStatusBodyJsonAssertionResult,
+  value: unknown,
+): void {
+  const type = jsonValueType(value);
+  if (type === "array" && Array.isArray(value)) {
+    result.observed_length = value.length;
+    result.observed_omitted_count = Math.max(0, value.length - 3);
+    result.observed_sample = compactJsonAssertionSample(value);
+    return;
+  }
+  if (type === "object" && isRecord(value)) {
+    const keyCount = Object.keys(value).length;
+    result.observed_key_count = keyCount;
+    result.observed_omitted_count = Math.max(0, keyCount - 8);
+    result.observed_sample = compactJsonAssertionSample(value);
+    return;
+  }
+  result.observed = toJsonValue(value);
+}
+
 function deepJsonEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (typeof left !== typeof right) return false;
@@ -797,7 +837,7 @@ function evaluateHttpStatusBodyJsonAssertion(
     exists: resolved.exists,
     observed_type: resolved.exists ? jsonValueType(resolved.value) : "missing",
   };
-  if (resolved.exists) result.observed = toJsonValue(resolved.value);
+  if (resolved.exists) attachJsonAssertionObservedValue(result, resolved.value);
   if (resolved.error) errors.push(resolved.error);
 
   if (hasOwn(assertion, "exists")) {
@@ -2232,6 +2272,10 @@ function httpStatusBodyJsonAssertionFailures(
       ok: false,
       exists: assertion.exists === true,
       observed: hasOwn(assertion, "observed") ? toJsonValue(assertion.observed) : undefined,
+      observed_sample: hasOwn(assertion, "observed_sample") ? toJsonValue(assertion.observed_sample) : undefined,
+      observed_length: numberValue(assertion.observed_length),
+      observed_key_count: numberValue(assertion.observed_key_count),
+      observed_omitted_count: numberValue(assertion.observed_omitted_count),
       observed_type: (stringValue(assertion.observed_type) as RiddleProofProfileJsonValueType | "missing") || "missing",
       expected_exists: booleanValue(assertion.expected_exists),
       equals: hasOwn(assertion, "equals") ? toJsonValue(assertion.equals) : undefined,
@@ -4112,6 +4156,10 @@ function httpStatusBodyJsonAssertionFailures(result, check) {
       ok: false,
       exists: assertion.exists === true,
       observed: Object.hasOwn(assertion, "observed") ? assertion.observed : undefined,
+      observed_sample: Object.hasOwn(assertion, "observed_sample") ? assertion.observed_sample : undefined,
+      observed_length: typeof assertion.observed_length === "number" && Number.isFinite(assertion.observed_length) ? assertion.observed_length : undefined,
+      observed_key_count: typeof assertion.observed_key_count === "number" && Number.isFinite(assertion.observed_key_count) ? assertion.observed_key_count : undefined,
+      observed_omitted_count: typeof assertion.observed_omitted_count === "number" && Number.isFinite(assertion.observed_omitted_count) ? assertion.observed_omitted_count : undefined,
       observed_type: typeof assertion.observed_type === "string" && assertion.observed_type ? assertion.observed_type : "missing",
       expected_exists: typeof assertion.expected_exists === "boolean" ? assertion.expected_exists : undefined,
       equals: Object.hasOwn(assertion, "equals") ? assertion.equals : undefined,
@@ -6320,6 +6368,38 @@ function jsonProbeValueType(value) {
   if (typeof value === "string") return "string";
   return "object";
 }
+function compactJsonProbeSample(value, depth) {
+  const level = typeof depth === "number" ? depth : 0;
+  if (typeof value === "string") return value.length > 240 ? value.slice(0, 237) + "..." : value;
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (Array.isArray(value)) {
+    if (level >= 2) return "[array:" + value.length + "]";
+    return value.slice(0, 3).map((item) => compactJsonProbeSample(item, level + 1));
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value);
+    if (level >= 2) return "[object:" + entries.length + " keys]";
+    return Object.fromEntries(entries.slice(0, 8).map(([key, child]) => [key, compactJsonProbeSample(child, level + 1)]));
+  }
+  return String(value);
+}
+function attachJsonProbeObservedValue(result, value) {
+  const type = jsonProbeValueType(value);
+  if (type === "array" && Array.isArray(value)) {
+    result.observed_length = value.length;
+    result.observed_omitted_count = Math.max(0, value.length - 3);
+    result.observed_sample = compactJsonProbeSample(value, 0);
+    return;
+  }
+  if (type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
+    const keyCount = Object.keys(value).length;
+    result.observed_key_count = keyCount;
+    result.observed_omitted_count = Math.max(0, keyCount - 8);
+    result.observed_sample = compactJsonProbeSample(value, 0);
+    return;
+  }
+  result.observed = value;
+}
 function jsonProbeDeepEqual(left, right) {
   if (left === right) return true;
   if (typeof left !== typeof right) return false;
@@ -6416,7 +6496,7 @@ function evaluateJsonProbeAssertion(root, assertion) {
     exists: resolved.exists,
     observed_type: resolved.exists ? jsonProbeValueType(resolved.value) : "missing",
   };
-  if (resolved.exists) result.observed = resolved.value;
+  if (resolved.exists) attachJsonProbeObservedValue(result, resolved.value);
   if (resolved.error) errors.push(resolved.error);
   if (Object.hasOwn(assertion, "exists")) {
     result.expected_exists = assertion.exists;
