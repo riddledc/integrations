@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.142
+
+### Patch Changes
+
+- f756e21: Avoid emitting a literal Function constructor in generated window_eval runner scripts so Riddle API validation can accept first-class evaluated profile actions.
+
 ## 0.7.141
 
 ### Patch Changes
