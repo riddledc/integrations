@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.154
+
+### Patch Changes
+
+- 0f060c6: Add setup return summary fields so `window_call` and `window_eval` profile
+  actions can promote selected returned JSON paths into compact `summary.md`
+  receipts.
+
 ## 0.7.153
 
 ### Patch Changes
