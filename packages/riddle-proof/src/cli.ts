@@ -788,6 +788,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const windowEvalCapturedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_captured_total) || 0), 0);
   const windowCallUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_total) || 0), 0);
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
+  const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
     sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
   ), 0);
@@ -810,6 +811,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (windowCallUntilTotal) {
     lines.push(`- window_call_until: ${windowCallUntilTotal} action(s), call_count total ${windowCallUntilCallTotal}`);
   }
+  if (rangeValueTotal) {
+    lines.push(`- set_range_value: ${rangeValueTotal} action(s)`);
+  }
 
   for (const viewport of viewports.slice(0, 8)) {
     const name = cliString(viewport.name) || "viewport";
@@ -828,9 +832,31 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const windowEvalCaptured = cliFiniteNumber(viewport.window_eval_captured_total) || 0;
     const windowCallUntilActions = cliFiniteNumber(viewport.window_call_until_total) || 0;
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
+    const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
+  const rangeValueDetails = viewports.flatMap((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.set_range_value)
+      ? viewport.set_range_value.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  for (const { name, receipt } of rangeValueDetails.slice(0, 12)) {
+    const selector = cliString(receipt.selector) || "input[type=range]";
+    const requested = cliValueLabel(receipt.requested_value);
+    const actual = cliValueLabel(receipt.actual_value);
+    const before = cliValueLabel(receipt.before_value);
+    const valueAsNumber = cliFiniteNumber(receipt.value_as_number);
+    const min = cliValueLabel(receipt.min);
+    const max = cliValueLabel(receipt.max);
+    const step = cliValueLabel(receipt.step);
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    lines.push(`- ${name} set_range_value: ${ok}, ${markdownInlineCode(selector)}${requested === undefined ? "" : ` requested ${markdownInlineCode(requested, 80)}`}${actual === undefined ? "" : ` -> ${markdownInlineCode(actual, 80)}`}${before === undefined ? "" : `, before ${markdownInlineCode(before, 80)}`}${valueAsNumber === undefined ? "" : `, number ${valueAsNumber}`}${min === undefined && max === undefined ? "" : `, range ${min === undefined ? "?" : markdownInlineCode(min, 40)}..${max === undefined ? "?" : markdownInlineCode(max, 40)}`}${step === undefined ? "" : ` step ${markdownInlineCode(step, 40)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (rangeValueDetails.length > 12) lines.push(`- ${rangeValueDetails.length - 12} additional set_range_value receipt(s) omitted.`);
   const windowCallDetails = viewports.flatMap((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_call)

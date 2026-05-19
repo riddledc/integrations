@@ -1022,6 +1022,25 @@ function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>
     });
 }
 
+function profileSetupRangeValueReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "set_range_value")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      requested_value: result.requested_value ?? null,
+      actual_value: result.actual_value ?? null,
+      before_value: result.before_value ?? null,
+      value_as_number: result.value_as_number ?? null,
+      min: result.min ?? null,
+      max: result.max ?? null,
+      step: result.step ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
@@ -1083,6 +1102,8 @@ function profileSetupSummary(
       const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
+      const rangeValueReceipts = profileSetupRangeValueReceipts(results);
+      const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
       const clickedItems = results
         .filter((result) => profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -1141,6 +1162,9 @@ function profileSetupSummary(
         window_eval_captured_total: windowEvalCapturedTotal,
         window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
         window_eval: sampledWindowEvalReceipts,
+        set_range_value_total: rangeValueReceipts.length,
+        set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
+        set_range_value: sampledRangeValueReceipts,
         clicked,
         text_samples,
         failed: failed.map((result) => ({
@@ -5059,6 +5083,24 @@ function profileSetupWindowEvalReceipts(results) {
       return receipt;
     });
 }
+function profileSetupRangeValueReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "set_range_value")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      requested_value: result.requested_value ?? null,
+      actual_value: result.actual_value ?? null,
+      before_value: result.before_value ?? null,
+      value_as_number: result.value_as_number ?? null,
+      min: result.min ?? null,
+      max: result.max ?? null,
+      step: result.step ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -5115,6 +5157,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
+      const rangeValueReceipts = profileSetupRangeValueReceipts(results);
+      const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
       const clickedItems = results
         .filter((result) => result && profileSetupResultAction(result) === "click" && result.ok !== false)
         .map((result) => {
@@ -5173,6 +5217,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         window_eval_captured_total: windowEvalCapturedTotal,
         window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
         window_eval: sampledWindowEvalReceipts,
+        set_range_value_total: rangeValueReceipts.length,
+        set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
+        set_range_value: sampledRangeValueReceipts,
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({

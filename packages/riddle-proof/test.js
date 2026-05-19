@@ -927,7 +927,7 @@ const cliRunProfileServer = createServer((request, response) => {
           status: "passed",
           evidence: {
             action_count: 3,
-            viewports: [{ name: "desktop", ok: true, result_count: 4 }],
+            viewports: [{ name: "desktop", ok: true, result_count: 5 }],
             setup_summary: {
               viewport_count: 1,
               action_count: 3,
@@ -937,7 +937,7 @@ const cliRunProfileServer = createServer((request, response) => {
               viewports: [{
                 name: "desktop",
                 ok: true,
-                result_count: 4,
+                result_count: 5,
                 observed_path: "/profile",
                 final_screenshot: "cli-profile-progress-desktop",
                 final_screenshot_full_page: false,
@@ -946,6 +946,21 @@ const cliRunProfileServer = createServer((request, response) => {
                 clicked_truncated: false,
                 click_count_action_total: 1,
                 click_count_value_total: 2,
+                set_range_value_total: 1,
+                set_range_value_truncated: false,
+                set_range_value: [{
+                  ordinal: 4,
+                  ok: true,
+                  selector: "input[type='range']",
+                  requested_value: "0.500",
+                  actual_value: "0.5",
+                  before_value: "0.129",
+                  value_as_number: 0.5,
+                  min: "0.01",
+                  max: "0.5",
+                  step: "0.001",
+                  reason: null,
+                }],
                 window_call_total: 1,
                 window_call_stored_total: 1,
                 window_call_captured_total: 0,
@@ -1225,14 +1240,16 @@ try {
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
   assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
-  assert.match(profileSummaryMarkdown, /setup actions: 3 declared, 4 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /setup actions: 3 declared, 5 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
+  assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 4 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 5 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
   assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, returned `\{"ok":true\}`/);
   assert.match(profileSummaryMarkdown, /desktop window_call_until: ok, `__proof\.step` until `__proof\.done` == `true` in 3\/5 call\(s\), observed `true`/);
