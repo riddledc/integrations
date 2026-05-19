@@ -219,6 +219,11 @@ const httpStatusPreflightProfile = normalizeRiddleProofProfile({
       body_contains: ["passed", "missing-snippet"],
       body_not_contains: ["raw-secret"],
       body_not_patterns: ["Traceback"],
+      body_json_assertions: [
+        { label: "status field", path: "status", equals: "passed" },
+        { label: "first check status", path: "checks[0].status", equals: "passed" },
+        { label: "debug absent", path: "debug", exists: false },
+      ],
     },
   ],
 });
@@ -226,7 +231,7 @@ const httpStatusPreflight = await preflightRiddleProofProfileHttpStatusChecks(ht
   fetchImpl: async (url, init = {}) => {
     assert.equal(url, "https://example.test/proof.json");
     assert.equal(init.method, "GET");
-    const body = JSON.stringify({ status: "passed", leak: "raw-secret" });
+    const body = JSON.stringify({ status: "passed", checks: [{ status: "passed" }], leak: "raw-secret" });
     return new Response(body, {
       status: 200,
       headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(body)) },
@@ -239,6 +244,8 @@ assert.equal(httpStatusPreflight.failed, 1);
 assert.deepEqual(httpStatusPreflight.checks[0].body_contains_missing, ["missing-snippet"]);
 assert.deepEqual(httpStatusPreflight.checks[0].body_not_contains_found, ["raw-secret"]);
 assert.deepEqual(httpStatusPreflight.checks[0].body_not_patterns_found, []);
+assert.equal(httpStatusPreflight.checks[0].body_json_assertions.length, 3);
+assert.deepEqual(httpStatusPreflight.checks[0].body_json_assertions_failed, []);
 assert.match(httpStatusPreflight.summary, /failed 1 of 1/);
 
 const httpStatusPreflightServer = createServer((request, response) => {
@@ -268,6 +275,10 @@ try {
         allowed_content_types: ["application/json"],
         body_contains: ["passed", "partial results available"],
         body_not_contains: ["raw-secret"],
+        body_json_assertions: [
+          { path: "status", equals: "passed" },
+          { path: "missing", exists: false },
+        ],
       },
     ],
   }, null, 2));
@@ -2522,6 +2533,10 @@ const httpStatusProfile = normalizeRiddleProofProfile({
     body_contains: ["UNAUTHORIZED"],
     body_not_contains: ["FORBIDDEN"],
     body_not_patterns: ['"debug"\\s*:'],
+    body_json_assertions: [
+      { label: "auth code", path: "error.code", equals: "UNAUTHORIZED" },
+      { label: "debug absent", path: "debug", exists: false },
+    ],
   }],
 }, { url: "https://example.com" });
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("http_status"));
@@ -2535,6 +2550,10 @@ assert.equal(httpStatusProfile.checks[0].min_bytes, 8);
 assert.deepEqual(httpStatusProfile.checks[0].body_contains, ["UNAUTHORIZED"]);
 assert.deepEqual(httpStatusProfile.checks[0].body_not_contains, ["FORBIDDEN"]);
 assert.deepEqual(httpStatusProfile.checks[0].body_not_patterns, ['"debug"\\s*:']);
+assert.deepEqual(httpStatusProfile.checks[0].body_json_assertions, [
+  { label: "auth code", path: "error.code", equals: "UNAUTHORIZED" },
+  { label: "debug absent", path: "debug", exists: false },
+]);
 const httpStatusProfileScript = buildRiddleProofProfileScript(httpStatusProfile);
 assert.ok(httpStatusProfileScript.includes("collectHttpStatus"));
 assert.ok(httpStatusProfileScript.includes("riddle-proof.http-status.v1"));
@@ -2545,6 +2564,7 @@ assert.ok(httpStatusProfileScript.includes("body_not_contains"));
 assert.ok(httpStatusProfileScript.includes("body_not_patterns"));
 assert.ok(httpStatusProfileScript.includes("body_not_contains_found"));
 assert.ok(httpStatusProfileScript.includes("body_not_patterns_found"));
+assert.ok(httpStatusProfileScript.includes("body_json_assertions"));
 assert.ok(httpStatusProfileScript.includes("joinMountedRoutePath(mountPrefix, requested.pathname)"));
 const selectorTextOrderProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
@@ -3059,6 +3079,10 @@ const httpStatusEvidence = {
         body_contains: { UNAUTHORIZED: true },
         body_not_contains: { FORBIDDEN: false },
         body_not_patterns: { '"debug"\\s*:': false },
+        body_json_assertions: [
+          { label: "auth code", path: "error.code", ok: true, exists: true, observed: "UNAUTHORIZED", observed_type: "string", equals: "UNAUTHORIZED" },
+          { label: "debug absent", path: "debug", ok: true, exists: false, observed_type: "missing", expected_exists: false },
+        ],
         body_sample: '{"error":{"code":"UNAUTHORIZED"}}',
       },
     },
@@ -3078,6 +3102,10 @@ assert.deepEqual(httpStatusCheck.evidence.allowed_statuses, [401]);
 assert.deepEqual(httpStatusCheck.evidence.body_contains, ["UNAUTHORIZED"]);
 assert.deepEqual(httpStatusCheck.evidence.body_not_contains, ["FORBIDDEN"]);
 assert.deepEqual(httpStatusCheck.evidence.body_not_patterns, ['"debug"\\s*:']);
+assert.deepEqual(httpStatusCheck.evidence.body_json_assertions, [
+  { label: "auth code", path: "error.code", equals: "UNAUTHORIZED" },
+  { label: "debug absent", path: "debug", exists: false },
+]);
 assert.equal(httpStatusCheck.evidence.viewports[0].status, 401);
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains, { UNAUTHORIZED: true });
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_contains_missing, []);
@@ -3085,6 +3113,8 @@ assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains, { FORB
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_contains_found, []);
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns, { '"debug"\\s*:': false });
 assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_not_patterns_found, []);
+assert.equal(httpStatusCheck.evidence.viewports[0].body_json_assertions[0].ok, true);
+assert.deepEqual(httpStatusCheck.evidence.viewports[0].body_json_assertions_failed, []);
 const yamlHttpStatusProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "yaml-http-status",
@@ -3246,6 +3276,27 @@ const failedForbiddenPatternStatusCheck = failedForbiddenPatternStatusAssessment
 assert.equal(failedForbiddenPatternStatusAssessment.status, "product_regression");
 assert.equal(failedForbiddenPatternStatusCheck.status, "failed");
 assert.deepEqual(failedForbiddenPatternStatusCheck.evidence.failures[0].failure.body_not_patterns_found, ['"debug"\\s*:']);
+const failedJsonAssertionStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
+  ...httpStatusEvidence,
+  viewports: [{
+    ...httpStatusEvidence.viewports[0],
+    http_statuses: {
+      "POST https://api.example.com/v1/scrape": {
+        ...httpStatusEvidence.viewports[0].http_statuses["POST https://api.example.com/v1/scrape"],
+        body_json_assertions: [
+          { label: "auth code", path: "error.code", ok: false, exists: true, observed: "FORBIDDEN", observed_type: "string", equals: "UNAUTHORIZED", errors: ["expected JSON value equality"] },
+          { label: "debug absent", path: "debug", ok: true, exists: false, observed_type: "missing", expected_exists: false },
+        ],
+        ok: false,
+      },
+    },
+  }],
+});
+const failedJsonAssertionStatusCheck = failedJsonAssertionStatusAssessment.checks.find((check) => check.type === "http_status");
+assert.equal(failedJsonAssertionStatusAssessment.status, "product_regression");
+assert.equal(failedJsonAssertionStatusCheck.status, "failed");
+assert.equal(failedJsonAssertionStatusCheck.evidence.failures[0].failure.body_json_assertions_failed[0].path, "error.code");
+assert.equal(failedJsonAssertionStatusCheck.evidence.failures[0].failure.body_json_assertions_failed[0].observed, "FORBIDDEN");
 const failedHttpStatusAssessment = assessRiddleProofProfileEvidence(httpStatusProfile, {
   ...httpStatusEvidence,
   viewports: [{

@@ -133,6 +133,39 @@ export type RiddleProofProfileHttpStatusPreflightFetch = (
   init?: Record<string, unknown>,
 ) => Promise<RiddleProofProfileHttpStatusPreflightFetchResponse>;
 
+export type RiddleProofProfileJsonValueType =
+  | "array"
+  | "boolean"
+  | "null"
+  | "number"
+  | "object"
+  | "string";
+
+export interface RiddleProofProfileHttpStatusBodyJsonAssertion {
+  label?: string;
+  path: string;
+  exists?: boolean;
+  equals?: JsonValue;
+  not_equals?: JsonValue;
+  contains?: JsonValue;
+  type?: RiddleProofProfileJsonValueType;
+}
+
+export interface RiddleProofProfileHttpStatusBodyJsonAssertionResult {
+  label: string;
+  path: string;
+  ok: boolean;
+  exists: boolean;
+  observed?: JsonValue;
+  observed_type: RiddleProofProfileJsonValueType | "missing";
+  expected_exists?: boolean;
+  equals?: JsonValue;
+  not_equals?: JsonValue;
+  contains?: JsonValue;
+  type?: RiddleProofProfileJsonValueType;
+  errors?: string[];
+}
+
 export interface RiddleProofProfileHttpStatusPreflightOptions {
   fetchImpl?: RiddleProofProfileHttpStatusPreflightFetch;
   target_url?: string;
@@ -156,6 +189,8 @@ export interface RiddleProofProfileHttpStatusPreflightCheckResult {
   body_not_contains_found: string[];
   body_not_patterns: Record<string, boolean> | null;
   body_not_patterns_found: string[];
+  body_json_assertions: RiddleProofProfileHttpStatusBodyJsonAssertionResult[] | null;
+  body_json_assertions_failed: RiddleProofProfileHttpStatusBodyJsonAssertionResult[];
 }
 
 export interface RiddleProofProfileHttpStatusPreflightResult {
@@ -321,6 +356,7 @@ export interface RiddleProofProfileCheck {
   body_contains?: string[];
   body_not_contains?: string[];
   body_not_patterns?: string[];
+  body_json_assertions?: RiddleProofProfileHttpStatusBodyJsonAssertion[];
   expected_texts?: string[];
   link_selector?: string;
   source_selector?: string;
@@ -526,6 +562,10 @@ function numberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function horizontalBoundsOverflowPx(value: unknown): number {
   if (!isRecord(value)) return 0;
   let max = maxPositiveNumber(
@@ -633,6 +673,180 @@ function toJsonValue(value: unknown): JsonValue {
   if (Array.isArray(value)) return value.map(toJsonValue);
   if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
   return String(value);
+}
+
+function jsonValueType(value: unknown): RiddleProofProfileJsonValueType {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") return "string";
+  return "object";
+}
+
+function deepJsonEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (typeof left !== typeof right) return false;
+  if (left === null || right === null) return left === right;
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => deepJsonEqual(item, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (!deepJsonEqual(leftKeys, rightKeys)) return false;
+  return leftKeys.every((key) => deepJsonEqual(left[key], right[key]));
+}
+
+function jsonContains(observed: unknown, expected: unknown): boolean {
+  if (typeof observed === "string" && typeof expected === "string") {
+    return observed.includes(expected);
+  }
+  if (Array.isArray(observed)) {
+    return observed.some((item) => deepJsonEqual(item, expected));
+  }
+  if (isRecord(observed) && isRecord(expected)) {
+    return Object.entries(expected).every(([key, value]) => hasOwn(observed, key) && deepJsonEqual(observed[key], value));
+  }
+  return false;
+}
+
+function parseJsonPathSegments(path: string): Array<string | number> {
+  let input = path.trim();
+  if (!input) throw new Error("path is empty");
+  if (input === "$") return [];
+  if (input.startsWith("$.")) input = input.slice(2);
+  else if (input.startsWith("$[")) input = input.slice(1);
+
+  const segments: Array<string | number> = [];
+  let token = "";
+  const pushToken = () => {
+    if (!token) return;
+    segments.push(token);
+    token = "";
+  };
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === ".") {
+      pushToken();
+      continue;
+    }
+    if (char !== "[") {
+      token += char;
+      continue;
+    }
+
+    pushToken();
+    const closeIndex = input.indexOf("]", index + 1);
+    if (closeIndex === -1) throw new Error(`unterminated bracket at ${index}`);
+    const bracket = input.slice(index + 1, closeIndex).trim();
+    if (!bracket) throw new Error(`empty bracket at ${index}`);
+    if (/^\d+$/.test(bracket)) {
+      segments.push(Number(bracket));
+    } else if (
+      (bracket.startsWith("\"") && bracket.endsWith("\""))
+      || (bracket.startsWith("'") && bracket.endsWith("'"))
+    ) {
+      const quoted = bracket.startsWith("'")
+        ? `"${bracket.slice(1, -1).replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`
+        : bracket;
+      segments.push(String(JSON.parse(quoted)));
+    } else {
+      segments.push(bracket);
+    }
+    index = closeIndex;
+  }
+  pushToken();
+  return segments;
+}
+
+function resolveJsonPath(root: unknown, path: string): { exists: boolean; value?: unknown; error?: string } {
+  let segments: Array<string | number>;
+  try {
+    segments = parseJsonPathSegments(path);
+  } catch (error) {
+    return { exists: false, error: String(error instanceof Error ? error.message : error) };
+  }
+
+  let current = root;
+  for (const segment of segments) {
+    if (typeof segment === "number") {
+      if (!Array.isArray(current) || segment < 0 || segment >= current.length) return { exists: false };
+      current = current[segment];
+      continue;
+    }
+    if (!isRecord(current) || !hasOwn(current, segment)) return { exists: false };
+    current = current[segment];
+  }
+  return { exists: true, value: current };
+}
+
+function evaluateHttpStatusBodyJsonAssertion(
+  root: unknown,
+  assertion: RiddleProofProfileHttpStatusBodyJsonAssertion,
+): RiddleProofProfileHttpStatusBodyJsonAssertionResult {
+  const resolved = resolveJsonPath(root, assertion.path);
+  const errors: string[] = [];
+  const result: RiddleProofProfileHttpStatusBodyJsonAssertionResult = {
+    label: assertion.label || assertion.path,
+    path: assertion.path,
+    ok: true,
+    exists: resolved.exists,
+    observed_type: resolved.exists ? jsonValueType(resolved.value) : "missing",
+  };
+  if (resolved.exists) result.observed = toJsonValue(resolved.value);
+  if (resolved.error) errors.push(resolved.error);
+
+  if (hasOwn(assertion, "exists")) {
+    result.expected_exists = assertion.exists;
+    if (resolved.exists !== assertion.exists) errors.push(`expected exists=${assertion.exists}`);
+  }
+  if (hasOwn(assertion, "type")) {
+    result.type = assertion.type;
+    if (!resolved.exists || jsonValueType(resolved.value) !== assertion.type) errors.push(`expected type ${assertion.type}`);
+  }
+  if (hasOwn(assertion, "equals")) {
+    result.equals = assertion.equals;
+    if (!resolved.exists || !deepJsonEqual(resolved.value, assertion.equals)) errors.push("expected JSON value equality");
+  }
+  if (hasOwn(assertion, "not_equals")) {
+    result.not_equals = assertion.not_equals;
+    if (resolved.exists && deepJsonEqual(resolved.value, assertion.not_equals)) errors.push("expected JSON value inequality");
+  }
+  if (hasOwn(assertion, "contains")) {
+    result.contains = assertion.contains;
+    if (!resolved.exists || !jsonContains(resolved.value, assertion.contains)) errors.push("expected JSON value containment");
+  }
+
+  result.ok = errors.length === 0;
+  if (errors.length) result.errors = errors;
+  return result;
+}
+
+function evaluateHttpStatusBodyJsonAssertions(
+  bodyText: string,
+  assertions: RiddleProofProfileHttpStatusBodyJsonAssertion[] | undefined,
+): RiddleProofProfileHttpStatusBodyJsonAssertionResult[] {
+  const expected = assertions?.filter((assertion) => assertion.path) ?? [];
+  if (!expected.length) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(bodyText);
+  } catch (error) {
+    const message = `response body is not valid JSON: ${String(error instanceof Error ? error.message : error).slice(0, 200)}`;
+    return expected.map((assertion) => ({
+      label: assertion.label || assertion.path,
+      path: assertion.path,
+      ok: false,
+      exists: false,
+      observed_type: "missing",
+      errors: [message],
+    }));
+  }
+  return expected.map((assertion) => evaluateHttpStatusBodyJsonAssertion(parsed, assertion));
 }
 
 function compactProfileSetupSummaryText(value: unknown, limit = 160): string | undefined {
@@ -1489,6 +1703,60 @@ function validateRegexPatterns(patterns: string[] | undefined, label: string): v
   }
 }
 
+function normalizeHttpStatusBodyJsonAssertions(
+  value: unknown,
+  label: string,
+): RiddleProofProfileHttpStatusBodyJsonAssertion[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array.`);
+  if (!value.length) throw new Error(`${label} must not be empty.`);
+  return value.map((item, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (typeof item === "string") {
+      const path = stringValue(item);
+      if (!path) throw new Error(`${itemLabel} path must not be empty.`);
+      return { path, exists: true };
+    }
+    if (!isRecord(item)) throw new Error(`${itemLabel} must be an object or JSON path string.`);
+    const path = stringFromOwn(item, "path", "json_path", "jsonPath", "key");
+    if (!path) throw new Error(`${itemLabel}.path is required.`);
+
+    const assertion: RiddleProofProfileHttpStatusBodyJsonAssertion = {
+      label: stringValue(item.label),
+      path,
+    };
+    const exists = booleanValue(valueFromOwn(item, "exists", "present"));
+    if (exists !== undefined) assertion.exists = exists;
+
+    const type = stringValue(valueFromOwn(item, "type", "value_type", "valueType"));
+    if (type !== undefined) {
+      const allowedTypes: RiddleProofProfileJsonValueType[] = ["array", "boolean", "null", "number", "object", "string"];
+      if (!allowedTypes.includes(type as RiddleProofProfileJsonValueType)) {
+        throw new Error(`${itemLabel}.type must be one of ${allowedTypes.join(", ")}.`);
+      }
+      assertion.type = type as RiddleProofProfileJsonValueType;
+    }
+
+    const equalsValue = valueFromOwn(item, "equals", "expected", "expected_value", "expectedValue", "value");
+    if (equalsValue !== undefined) assertion.equals = toJsonValue(equalsValue);
+    const notEqualsValue = valueFromOwn(item, "not_equals", "notEquals", "forbidden", "forbidden_value", "forbiddenValue");
+    if (notEqualsValue !== undefined) assertion.not_equals = toJsonValue(notEqualsValue);
+    const containsValue = valueFromOwn(item, "contains", "includes", "contains_value", "containsValue", "include");
+    if (containsValue !== undefined) assertion.contains = toJsonValue(containsValue);
+
+    if (
+      assertion.exists === undefined
+      && assertion.type === undefined
+      && !hasOwn(assertion, "equals")
+      && !hasOwn(assertion, "not_equals")
+      && !hasOwn(assertion, "contains")
+    ) {
+      assertion.exists = true;
+    }
+    return assertion;
+  });
+}
+
 function isDialogCountCheckType(type: string): boolean {
   return type === "dialog_count_equals"
     || type === "dialog_accept_count_equals"
@@ -1656,6 +1924,19 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     )
     : undefined;
   if (bodyNotPatterns?.length) validateRegexPatterns(bodyNotPatterns, `checks[${index}] body_not_patterns`);
+  const bodyJsonAssertions = isHttpStatusCheck
+    ? normalizeHttpStatusBodyJsonAssertions(
+      input.body_json_assertions
+        ?? input.bodyJsonAssertions
+        ?? input.json_body_assertions
+        ?? input.jsonBodyAssertions
+        ?? input.json_assertions
+        ?? input.jsonAssertions
+        ?? input.response_json_assertions
+        ?? input.responseJsonAssertions,
+      `checks[${index}] body_json_assertions`,
+    )
+    : undefined;
   if (isLinkStatusCheck) {
     if (minCount !== undefined && (!Number.isInteger(minCount) || minCount < 0)) {
       throw new Error(`checks[${index}] ${type} min_count must be a non-negative integer.`);
@@ -1681,6 +1962,7 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     body_contains: bodyContains,
     body_not_contains: bodyNotContains,
     body_not_patterns: bodyNotPatterns,
+    body_json_assertions: bodyJsonAssertions,
     expected_texts: expectedTexts,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
@@ -1924,6 +2206,42 @@ function httpStatusBodyNotPatternFailures(result: Record<string, unknown>, check
   return forbidden.filter((pattern) => observed[pattern] !== false);
 }
 
+function httpStatusBodyJsonAssertionFailures(
+  result: Record<string, unknown>,
+  check: RiddleProofProfileCheck,
+): RiddleProofProfileHttpStatusBodyJsonAssertionResult[] {
+  const expected = check.body_json_assertions?.filter((assertion) => assertion.path) ?? [];
+  if (!expected.length) return [];
+  if (!Array.isArray(result.body_json_assertions)) {
+    return expected.map((assertion) => ({
+      label: assertion.label || assertion.path,
+      path: assertion.path,
+      ok: false,
+      exists: false,
+      observed_type: "missing",
+      errors: ["body_json_assertions evidence missing"],
+    }));
+  }
+  return result.body_json_assertions
+    .filter((assertion): assertion is RiddleProofProfileHttpStatusBodyJsonAssertionResult => (
+      isRecord(assertion) && assertion.ok !== true
+    ))
+    .map((assertion) => ({
+      label: stringValue(assertion.label) || stringValue(assertion.path) || "json assertion",
+      path: stringValue(assertion.path) || "",
+      ok: false,
+      exists: assertion.exists === true,
+      observed: hasOwn(assertion, "observed") ? toJsonValue(assertion.observed) : undefined,
+      observed_type: (stringValue(assertion.observed_type) as RiddleProofProfileJsonValueType | "missing") || "missing",
+      expected_exists: booleanValue(assertion.expected_exists),
+      equals: hasOwn(assertion, "equals") ? toJsonValue(assertion.equals) : undefined,
+      not_equals: hasOwn(assertion, "not_equals") ? toJsonValue(assertion.not_equals) : undefined,
+      contains: hasOwn(assertion, "contains") ? toJsonValue(assertion.contains) : undefined,
+      type: stringValue(assertion.type) as RiddleProofProfileJsonValueType | undefined,
+      errors: Array.isArray(assertion.errors) ? assertion.errors.map(String) : undefined,
+    }));
+}
+
 function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofProfileCheck): boolean {
   const status = numberValue(result.status);
   if (!httpStatusIsAllowed(status, check)) return false;
@@ -1941,6 +2259,7 @@ function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofP
   if (httpStatusBodyContainsFailures(result, check).length) return false;
   if (httpStatusBodyNotContainsFailures(result, check).length) return false;
   if (httpStatusBodyNotPatternFailures(result, check).length) return false;
+  if (httpStatusBodyJsonAssertionFailures(result, check).length) return false;
   return true;
 }
 
@@ -2031,7 +2350,8 @@ async function preflightHttpStatusCheck(
       || typeof check.min_bytes === "number"
       || Boolean(check.body_contains?.length)
       || Boolean(check.body_not_contains?.length)
-      || Boolean(check.body_not_patterns?.length);
+      || Boolean(check.body_not_patterns?.length)
+      || Boolean(check.body_json_assertions?.length);
     if (shouldReadBody && method !== "HEAD") {
       const body = await responseBodyText(response);
       result.bytes = body.bytes;
@@ -2044,6 +2364,9 @@ async function preflightHttpStatusCheck(
       if (check.body_not_patterns?.length) {
         result.body_not_patterns = Object.fromEntries(check.body_not_patterns.filter(Boolean).map((pattern) => [pattern, new RegExp(pattern).test(body.text)]));
       }
+      if (check.body_json_assertions?.length) {
+        result.body_json_assertions = evaluateHttpStatusBodyJsonAssertions(body.text, check.body_json_assertions);
+      }
     }
   } catch (caught) {
     error = String(caught instanceof Error ? caught.message : caught).slice(0, 500);
@@ -2053,6 +2376,7 @@ async function preflightHttpStatusCheck(
   const bodyContainsMissing = httpStatusBodyContainsFailures(result, check);
   const bodyNotContainsFound = httpStatusBodyNotContainsFailures(result, check);
   const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(result, check);
+  const bodyJsonAssertionsFailed = httpStatusBodyJsonAssertionFailures(result, check);
   const ok = !error && linkStatusResultOk(result, check);
 
   return {
@@ -2073,6 +2397,8 @@ async function preflightHttpStatusCheck(
     body_not_contains_found: bodyNotContainsFound,
     body_not_patterns: isRecord(result.body_not_patterns) ? Object.fromEntries(Object.entries(result.body_not_patterns).map(([key, value]) => [key, value === true])) : null,
     body_not_patterns_found: bodyNotPatternsFound,
+    body_json_assertions: Array.isArray(result.body_json_assertions) ? result.body_json_assertions as unknown as RiddleProofProfileHttpStatusBodyJsonAssertionResult[] : null,
+    body_json_assertions_failed: bodyJsonAssertionsFailed,
   };
 }
 
@@ -2136,6 +2462,7 @@ function summarizeHttpStatusEvidence(
   const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
   const bodyNotContainsFound = httpStatusBodyNotContainsFailures(statusEvidence, check);
   const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(statusEvidence, check);
+  const bodyJsonAssertionsFailed = httpStatusBodyJsonAssertionFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -2154,6 +2481,8 @@ function summarizeHttpStatusEvidence(
       body_not_contains_found: bodyNotContainsFound,
       body_not_patterns: check.body_not_patterns ?? null,
       body_not_patterns_found: bodyNotPatternsFound,
+      body_json_assertions: check.body_json_assertions ?? null,
+      body_json_assertions_failed: bodyJsonAssertionsFailed.map((assertion) => toJsonValue(assertion)),
       body_sample: stringValue(statusEvidence.body_sample) ?? null,
     });
   }
@@ -2175,6 +2504,8 @@ function summarizeHttpStatusEvidence(
     body_not_contains_found: bodyNotContainsFound,
     body_not_patterns: isRecord(statusEvidence.body_not_patterns) ? toJsonValue(statusEvidence.body_not_patterns) : null,
     body_not_patterns_found: bodyNotPatternsFound,
+    body_json_assertions: Array.isArray(statusEvidence.body_json_assertions) ? toJsonValue(statusEvidence.body_json_assertions) : null,
+    body_json_assertions_failed: bodyJsonAssertionsFailed.map((assertion) => toJsonValue(assertion)),
     body_sample: stringValue(statusEvidence.body_sample) ?? null,
     failures,
   };
@@ -2911,6 +3242,7 @@ function assessCheckFromEvidence(
         body_contains: check.body_contains ?? [],
         body_not_contains: check.body_not_contains ?? [],
         body_not_patterns: check.body_not_patterns ?? [],
+        body_json_assertions: toJsonValue(check.body_json_assertions ?? []),
         viewports: summaries.map((summary) => toJsonValue(summary)),
         failures: failed.flatMap((summary) => (
           Array.isArray(summary.failures)
@@ -3759,6 +4091,36 @@ function httpStatusBodyNotPatternFailures(result, check) {
     : {};
   return forbidden.filter((pattern) => observed[pattern] !== false);
 }
+function httpStatusBodyJsonAssertionFailures(result, check) {
+  const expected = Array.isArray(check.body_json_assertions) ? check.body_json_assertions.filter((assertion) => assertion && assertion.path) : [];
+  if (!expected.length) return [];
+  if (!Array.isArray(result.body_json_assertions)) {
+    return expected.map((assertion) => ({
+      label: assertion.label || assertion.path,
+      path: assertion.path,
+      ok: false,
+      exists: false,
+      observed_type: "missing",
+      errors: ["body_json_assertions evidence missing"],
+    }));
+  }
+  return result.body_json_assertions
+    .filter((assertion) => assertion && typeof assertion === "object" && assertion.ok !== true)
+    .map((assertion) => ({
+      label: typeof assertion.label === "string" && assertion.label ? assertion.label : typeof assertion.path === "string" && assertion.path ? assertion.path : "json assertion",
+      path: typeof assertion.path === "string" ? assertion.path : "",
+      ok: false,
+      exists: assertion.exists === true,
+      observed: Object.hasOwn(assertion, "observed") ? assertion.observed : undefined,
+      observed_type: typeof assertion.observed_type === "string" && assertion.observed_type ? assertion.observed_type : "missing",
+      expected_exists: typeof assertion.expected_exists === "boolean" ? assertion.expected_exists : undefined,
+      equals: Object.hasOwn(assertion, "equals") ? assertion.equals : undefined,
+      not_equals: Object.hasOwn(assertion, "not_equals") ? assertion.not_equals : undefined,
+      contains: Object.hasOwn(assertion, "contains") ? assertion.contains : undefined,
+      type: typeof assertion.type === "string" ? assertion.type : undefined,
+      errors: Array.isArray(assertion.errors) ? assertion.errors.map(String) : undefined,
+    }));
+}
 function linkStatusResultOk(result, check) {
   if (!result || typeof result !== "object" || Array.isArray(result)) return false;
   if (!httpStatusIsAllowed(result.status, check)) return false;
@@ -3776,6 +4138,7 @@ function linkStatusResultOk(result, check) {
   if (httpStatusBodyContainsFailures(result, check).length) return false;
   if (httpStatusBodyNotContainsFailures(result, check).length) return false;
   if (httpStatusBodyNotPatternFailures(result, check).length) return false;
+  if (httpStatusBodyJsonAssertionFailures(result, check).length) return false;
   return true;
 }
 function summarizeHttpStatusEvidence(viewport, check) {
@@ -3796,6 +4159,7 @@ function summarizeHttpStatusEvidence(viewport, check) {
   const bodyContainsMissing = httpStatusBodyContainsFailures(statusEvidence, check);
   const bodyNotContainsFound = httpStatusBodyNotContainsFailures(statusEvidence, check);
   const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(statusEvidence, check);
+  const bodyJsonAssertionsFailed = httpStatusBodyJsonAssertionFailures(statusEvidence, check);
   if (!linkStatusResultOk(statusEvidence, check)) {
     failures.push({
       code: "http_status_failed",
@@ -3814,6 +4178,8 @@ function summarizeHttpStatusEvidence(viewport, check) {
       body_not_contains_found: bodyNotContainsFound,
       body_not_patterns: Array.isArray(check.body_not_patterns) ? check.body_not_patterns : null,
       body_not_patterns_found: bodyNotPatternsFound,
+      body_json_assertions: Array.isArray(check.body_json_assertions) ? check.body_json_assertions : null,
+      body_json_assertions_failed: bodyJsonAssertionsFailed,
       body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     });
   }
@@ -3841,6 +4207,8 @@ function summarizeHttpStatusEvidence(viewport, check) {
       ? statusEvidence.body_not_patterns
       : null,
     body_not_patterns_found: bodyNotPatternsFound,
+    body_json_assertions: Array.isArray(statusEvidence.body_json_assertions) ? statusEvidence.body_json_assertions : null,
+    body_json_assertions_failed: bodyJsonAssertionsFailed,
     body_sample: typeof statusEvidence.body_sample === "string" ? statusEvidence.body_sample : null,
     failures,
   };
@@ -5944,6 +6312,155 @@ function linkProbeResponseFields(response, method) {
     content_length: contentLength,
   };
 }
+function jsonProbeValueType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") return "string";
+  return "object";
+}
+function jsonProbeDeepEqual(left, right) {
+  if (left === right) return true;
+  if (typeof left !== typeof right) return false;
+  if (left === null || right === null) return left === right;
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((item, index) => jsonProbeDeepEqual(item, right[index]));
+  }
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (!jsonProbeDeepEqual(leftKeys, rightKeys)) return false;
+  return leftKeys.every((key) => jsonProbeDeepEqual(left[key], right[key]));
+}
+function jsonProbeContains(observed, expected) {
+  if (typeof observed === "string" && typeof expected === "string") return observed.includes(expected);
+  if (Array.isArray(observed)) return observed.some((item) => jsonProbeDeepEqual(item, expected));
+  if (observed && expected && typeof observed === "object" && typeof expected === "object" && !Array.isArray(observed) && !Array.isArray(expected)) {
+    return Object.entries(expected).every(([key, value]) => Object.hasOwn(observed, key) && jsonProbeDeepEqual(observed[key], value));
+  }
+  return false;
+}
+function parseJsonProbePathSegments(path) {
+  let input = String(path || "").trim();
+  if (!input) throw new Error("path is empty");
+  if (input === "$") return [];
+  if (input.startsWith("$.")) input = input.slice(2);
+  else if (input.startsWith("$[")) input = input.slice(1);
+  const segments = [];
+  let token = "";
+  const pushToken = () => {
+    if (!token) return;
+    segments.push(token);
+    token = "";
+  };
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === ".") {
+      pushToken();
+      continue;
+    }
+    if (char !== "[") {
+      token += char;
+      continue;
+    }
+    pushToken();
+    const closeIndex = input.indexOf("]", index + 1);
+    if (closeIndex === -1) throw new Error("unterminated bracket at " + index);
+    const bracket = input.slice(index + 1, closeIndex).trim();
+    if (!bracket) throw new Error("empty bracket at " + index);
+    if (/^\d+$/.test(bracket)) {
+      segments.push(Number(bracket));
+    } else if ((bracket.startsWith('"') && bracket.endsWith('"')) || (bracket.startsWith("'") && bracket.endsWith("'"))) {
+      const quoted = bracket.startsWith("'")
+        ? '"' + bracket.slice(1, -1).replace(/\\/g, "\\\\").replace(/"/g, "\\\"") + '"'
+        : bracket;
+      segments.push(String(JSON.parse(quoted)));
+    } else {
+      segments.push(bracket);
+    }
+    index = closeIndex;
+  }
+  pushToken();
+  return segments;
+}
+function resolveJsonProbePath(root, path) {
+  let segments;
+  try {
+    segments = parseJsonProbePathSegments(path);
+  } catch (error) {
+    return { exists: false, error: String(error && error.message ? error.message : error) };
+  }
+  let current = root;
+  for (const segment of segments) {
+    if (typeof segment === "number") {
+      if (!Array.isArray(current) || segment < 0 || segment >= current.length) return { exists: false };
+      current = current[segment];
+      continue;
+    }
+    if (!current || typeof current !== "object" || Array.isArray(current) || !Object.hasOwn(current, segment)) {
+      return { exists: false };
+    }
+    current = current[segment];
+  }
+  return { exists: true, value: current };
+}
+function evaluateJsonProbeAssertion(root, assertion) {
+  const resolved = resolveJsonProbePath(root, assertion.path);
+  const errors = [];
+  const result = {
+    label: assertion.label || assertion.path,
+    path: assertion.path,
+    ok: true,
+    exists: resolved.exists,
+    observed_type: resolved.exists ? jsonProbeValueType(resolved.value) : "missing",
+  };
+  if (resolved.exists) result.observed = resolved.value;
+  if (resolved.error) errors.push(resolved.error);
+  if (Object.hasOwn(assertion, "exists")) {
+    result.expected_exists = assertion.exists;
+    if (resolved.exists !== assertion.exists) errors.push("expected exists=" + assertion.exists);
+  }
+  if (Object.hasOwn(assertion, "type")) {
+    result.type = assertion.type;
+    if (!resolved.exists || jsonProbeValueType(resolved.value) !== assertion.type) errors.push("expected type " + assertion.type);
+  }
+  if (Object.hasOwn(assertion, "equals")) {
+    result.equals = assertion.equals;
+    if (!resolved.exists || !jsonProbeDeepEqual(resolved.value, assertion.equals)) errors.push("expected JSON value equality");
+  }
+  if (Object.hasOwn(assertion, "not_equals")) {
+    result.not_equals = assertion.not_equals;
+    if (resolved.exists && jsonProbeDeepEqual(resolved.value, assertion.not_equals)) errors.push("expected JSON value inequality");
+  }
+  if (Object.hasOwn(assertion, "contains")) {
+    result.contains = assertion.contains;
+    if (!resolved.exists || !jsonProbeContains(resolved.value, assertion.contains)) errors.push("expected JSON value containment");
+  }
+  result.ok = errors.length === 0;
+  if (errors.length) result.errors = errors;
+  return result;
+}
+function evaluateJsonProbeAssertions(text, assertions) {
+  const expected = Array.isArray(assertions) ? assertions.filter((assertion) => assertion && assertion.path) : [];
+  if (!expected.length) return [];
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    const message = "response body is not valid JSON: " + String(error && error.message ? error.message : error).slice(0, 200);
+    return expected.map((assertion) => ({
+      label: assertion.label || assertion.path,
+      path: assertion.path,
+      ok: false,
+      exists: false,
+      observed_type: "missing",
+      errors: [message],
+    }));
+  }
+  return expected.map((assertion) => evaluateJsonProbeAssertion(parsed, assertion));
+}
 async function collectHttpStatus(check) {
   const url = httpStatusRequestUrl(check, page.url() || targetUrl);
   const method = httpStatusMethod(check);
@@ -5960,6 +6477,7 @@ async function collectHttpStatus(check) {
   const bodyContains = Array.isArray(check.body_contains) ? check.body_contains.filter(Boolean) : [];
   const bodyNotContains = Array.isArray(check.body_not_contains) ? check.body_not_contains.filter(Boolean) : [];
   const bodyNotPatterns = Array.isArray(check.body_not_patterns) ? check.body_not_patterns.filter(Boolean) : [];
+  const bodyJsonAssertions = Array.isArray(check.body_json_assertions) ? check.body_json_assertions.filter((assertion) => assertion && assertion.path) : [];
   const options = {
     method,
     redirect: "follow",
@@ -5985,17 +6503,18 @@ async function collectHttpStatus(check) {
     Object.assign(result, linkProbeResponseFields(response, method));
     result.url = url;
     result.status_text = response.statusText || "";
-    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || bodyContains.length > 0 || bodyNotContains.length > 0 || bodyNotPatterns.length > 0;
+    const shouldReadBody = check.require_nonzero_bytes === true || (typeof check.min_bytes === "number" && Number.isFinite(check.min_bytes)) || bodyContains.length > 0 || bodyNotContains.length > 0 || bodyNotPatterns.length > 0 || bodyJsonAssertions.length > 0;
     if (shouldReadBody) {
       try {
         const buffer = await response.arrayBuffer();
         result.bytes = buffer.byteLength;
-        if (bodyContains.length || bodyNotContains.length || bodyNotPatterns.length) {
+        if (bodyContains.length || bodyNotContains.length || bodyNotPatterns.length || bodyJsonAssertions.length) {
           const text = new TextDecoder().decode(buffer);
           result.body_sample = text.slice(0, 1000);
           if (bodyContains.length) result.body_contains = Object.fromEntries(bodyContains.map((expected) => [expected, text.includes(expected)]));
           if (bodyNotContains.length) result.body_not_contains = Object.fromEntries(bodyNotContains.map((forbidden) => [forbidden, text.includes(forbidden)]));
           if (bodyNotPatterns.length) result.body_not_patterns = Object.fromEntries(bodyNotPatterns.map((pattern) => [pattern, new RegExp(pattern).test(text)]));
+          if (bodyJsonAssertions.length) result.body_json_assertions = evaluateJsonProbeAssertions(text, bodyJsonAssertions);
         }
       } catch (error) {
         result.error = String(error && error.message ? error.message : error).slice(0, 500);
@@ -6008,6 +6527,7 @@ async function collectHttpStatus(check) {
       && (!bodyContains.length || bodyContains.every((expected) => result.body_contains && result.body_contains[expected] === true))
       && (!bodyNotContains.length || bodyNotContains.every((forbidden) => result.body_not_contains && result.body_not_contains[forbidden] === false))
       && (!bodyNotPatterns.length || bodyNotPatterns.every((pattern) => result.body_not_patterns && result.body_not_patterns[pattern] === false))
+      && (!bodyJsonAssertions.length || (Array.isArray(result.body_json_assertions) && result.body_json_assertions.every((assertion) => assertion.ok === true)))
       && !result.error;
     return result;
   } catch (error) {

@@ -861,6 +861,24 @@ function profileHttpStatusAssertionKeys(
   return [...keys];
 }
 
+function profileHttpStatusJsonAssertionCount(
+  viewports: Record<string, unknown>[],
+): { passed: number; total: number } | undefined {
+  if (!viewports.length) return undefined;
+  let passed = 0;
+  let total = 0;
+  for (const viewport of viewports) {
+    if (!Array.isArray(viewport.body_json_assertions)) continue;
+    for (const assertion of viewport.body_json_assertions) {
+      const record = cliRecord(assertion);
+      if (!record) continue;
+      total += 1;
+      if (record.ok === true) passed += 1;
+    }
+  }
+  return total ? { passed, total } : undefined;
+}
+
 function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): string[] {
   const httpStatusChecks = result.checks.filter((check) => check.type === "http_status");
   const lines: string[] = [];
@@ -896,10 +914,12 @@ function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): str
       profileHttpStatusAssertionKeys(evidence, viewports, "body_not_patterns"),
       false,
     );
+    const bodyJsonAssertions = profileHttpStatusJsonAssertionCount(viewports);
     const bodyParts = [
       bodyContains ? `body_contains ${bodyContains.passed}/${bodyContains.total}` : "",
       bodyNotContains ? `body_not_contains clean ${bodyNotContains.passed}/${bodyNotContains.total}` : "",
       bodyNotPatterns ? `body_not_patterns clean ${bodyNotPatterns.passed}/${bodyNotPatterns.total}` : "",
+      bodyJsonAssertions ? `body_json_assertions ${bodyJsonAssertions.passed}/${bodyJsonAssertions.total}` : "",
     ].filter(Boolean);
     lines.push(
       `- ${label}: ${method}${url ? ` ${markdownInlineCode(url)}` : ""}, statuses ${statuses.length ? statuses.join("/") : "unknown"}${bodyParts.length ? `, ${bodyParts.join(", ")}` : ""}, failures ${failedTotal}`,
