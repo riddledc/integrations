@@ -771,6 +771,78 @@ function cliRunProfileSplitResult(viewportName, width, height) {
     },
   };
 }
+
+function cliBalancedSetupSummaryResult() {
+  const viewportNames = ["desktop", "phone", "ipad-mini", "ipad"];
+  const viewports = viewportNames.map((name) => ({
+    name,
+    ok: true,
+    result_count: 5,
+    observed_path: "/balanced-setup-summary",
+    setup_screenshots: [],
+    clicked_total: 0,
+    clicked_truncated: false,
+    window_eval_total: 5,
+    window_eval_stored_total: 5,
+    window_eval_captured_total: 5,
+    window_eval_truncated: false,
+    window_eval: Array.from({ length: 5 }, (_, index) => ({
+      ordinal: index + 1,
+      ok: true,
+      script_length: 10,
+      return_captured: true,
+      return_stored_to: `__proof.${name}.${index + 1}`,
+      returned: { viewport: name, step: index + 1 },
+      return_summary: [
+        { label: "viewport", path: "viewport", exists: true, value: name },
+        { label: "step", path: "step", exists: true, value: index + 1 },
+      ],
+      reason: null,
+    })),
+    failed: [],
+  }));
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: "cli-balanced-setup-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: "https://example.com/balanced-setup-summary",
+      observed: "/balanced-setup-summary",
+      expected_path: "/balanced-setup-summary",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: [], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 5,
+          viewports: viewports.map(({ name, result_count }) => ({ name, ok: true, result_count })),
+          setup_summary: {
+            viewport_count: 4,
+            action_count: 5,
+            final_screenshot_count: 0,
+            final_screenshot_full_page: false,
+            final_screenshot_mode: "viewport",
+            viewports,
+          },
+        },
+      },
+      {
+        type: "route_loaded",
+        status: "passed",
+        evidence: { expected_path: "/balanced-setup-summary", observed_paths: ["/balanced-setup-summary"], http_statuses: [200] },
+      },
+    ],
+    summary: "cli-balanced-setup-summary passed.",
+    captured_at: "2026-05-19T19:00:00.000Z",
+  };
+}
+
 const cliRunProfileServer = createServer((request, response) => {
   const sendJson = (payload, status = 200) => {
     response.writeHead(status, { "content-type": "application/json" });
@@ -824,6 +896,10 @@ const cliRunProfileServer = createServer((request, response) => {
             ? "job_cli_profile_unsubmitted_stale"
             : "job_cli_profile_unsubmitted_retry",
         });
+        return;
+      }
+      if (String(body.url || "").includes("/balanced-setup-summary")) {
+        sendJson(cliBalancedSetupSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/fatal-console-summary")) {
@@ -1467,6 +1543,48 @@ try {
   assert.match(profileSummaryMarkdown, /## HTTP Status/);
   assert.match(profileSummaryMarkdown, /public proof artifact: GET `https:\/\/example\.com\/proof\.json`, statuses 200, body_contains 2\/2, body_not_contains clean 1\/1, body_not_patterns clean 1\/1, failures 0/);
 
+  const balancedSetupProfileFile = path.join(riddlePreviewDir, "cli-balanced-setup-summary.json");
+  const balancedSetupOutputDir = path.join(riddlePreviewDir, "cli-balanced-setup-summary-output");
+  writeFileSync(balancedSetupProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-balanced-setup-summary",
+    target: {
+      route: "/balanced-setup-summary",
+      viewports: [
+        { name: "desktop", width: 1280, height: 900 },
+        { name: "phone", width: 390, height: 844 },
+        { name: "ipad-mini", width: 768, height: 1024 },
+        { name: "ipad", width: 820, height: 1180 },
+      ],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/balanced-setup-summary" }],
+  }));
+  const balancedSetupResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    balancedSetupProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    balancedSetupOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(balancedSetupResult.stdout).status, "passed");
+  const balancedSetupSummaryMarkdown = readFileSync(path.join(balancedSetupOutputDir, "summary.md"), "utf8");
+  for (const viewport of ["desktop", "phone", "ipad-mini", "ipad"]) {
+    assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=1\``));
+    assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=2\``));
+    assert.match(balancedSetupSummaryMarkdown, new RegExp(`${viewport} window_eval: ok, script 10 chars, stored .*summary \`viewport=${viewport}, step=3\``));
+  }
+  assert.doesNotMatch(balancedSetupSummaryMarkdown, /step=4/);
+  assert.match(balancedSetupSummaryMarkdown, /8 additional window_eval receipt\(s\) omitted\./);
+
   const artifactRecoveryProfileFile = path.join(riddlePreviewDir, "cli-profile-timeout-artifacts.json");
   const artifactRecoveryOutputDir = path.join(riddlePreviewDir, "cli-profile-timeout-artifacts-output");
   writeFileSync(artifactRecoveryProfileFile, JSON.stringify({
@@ -1583,8 +1701,8 @@ try {
     "--strict=true",
   ]);
   assert.equal(JSON.parse(cliProfileStrictTrueResult.stdout).status, "passed");
-  assert.equal(cliRunProfileRequests.length, 5);
-  assert.equal(cliRunProfileRequests[4].body.strict, true);
+  const strictTrueRequest = cliRunProfileRequests.findLast((item) => item.body?.url === "https://example.com/profile");
+  assert.equal(strictTrueRequest?.body.strict, true);
   assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
 
   const splitProfileFile = path.join(riddlePreviewDir, "cli-profile-split.json");
