@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.127
+
+### Patch Changes
+
+- 502a53b: Add structured JSON body assertions to `http_status` profile checks.
+
 ## 0.7.126
 
 ### Patch Changes
