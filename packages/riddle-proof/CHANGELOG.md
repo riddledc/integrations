@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.162
+
+### Patch Changes
+
+- 0ddd0a3: Dispatch touch and pen drag setup actions through browser input protocol events so pointer-capture apps do not throw page errors and hosted Riddle script validation does not reject the generated profile.
+
 ## 0.7.161
 
 ### Patch Changes
