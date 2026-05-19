@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.151
+
+### Patch Changes
+
+- 9172b64: Recover hosted profile evidence from the artifacts endpoint when status polling times out non-terminal.
+
 ## 0.7.150
 
 ### Patch Changes
