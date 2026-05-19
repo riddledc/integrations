@@ -51,6 +51,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "press",
   "fill",
   "set_input_value",
+  "set_range_value",
   "assert_text_visible",
   "assert_text_absent",
   "assert_selector_count",
@@ -1210,6 +1211,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "drag"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
       ? "press"
+    : normalizedInput === "set_slider_value" || normalizedInput === "slider_value" || normalizedInput === "set_slider" || normalizedInput === "set_range" || normalizedInput === "range_value" || normalizedInput === "range_input" || normalizedInput === "set_range_input"
+      ? "set_range_value"
     : normalizedInput === "capture_screenshot" || normalizedInput === "save_screenshot" || normalizedInput === "setup_screenshot"
       ? "screenshot"
     : normalizedInput === "accept_dialog" || normalizedInput === "accept_dialogs" || normalizedInput === "confirm_dialog" || normalizedInput === "set_dialog_response"
@@ -1331,7 +1334,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (frameIndex !== undefined && (!Number.isInteger(frameIndex) || frameIndex < 0)) {
     throw new Error(`target.setup_actions[${index}].frame_index must be a non-negative integer.`);
   }
-  if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
+  if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
   const fromX = numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
@@ -1363,7 +1366,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   }
   const value = stringFromOwn(input, "value", "input_value", "inputValue");
   const hasJsonValue = hasOwn(input, "value_json") || hasOwn(input, "valueJson") || hasOwn(input, "json");
-  if ((type === "fill" || type === "set_input_value") && value === undefined && !hasJsonValue) {
+  if ((type === "fill" || type === "set_input_value" || type === "set_range_value") && value === undefined && !hasJsonValue) {
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const key = stringValue(input.key);
@@ -7086,6 +7089,58 @@ async function executeSetupAction(action, ordinal, viewport) {
       const value = setupActionValue(action);
       await locator.nth(targetIndex).fill(value, { timeout });
       return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, value_length: value.length };
+    }
+    if (type === "set_range_value") {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const locator = scope.context.locator(action.selector);
+      const count = await locator.count();
+      if (!count) return { ...base, reason: "selector_not_found", count };
+      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+      if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
+      const target = locator.nth(targetIndex);
+      await target.waitFor({ state: "visible", timeout });
+      const requestedValue = setupActionValue(action);
+      const rangeResult = await target.evaluate((element, value) => {
+        const tag = String(element && element.tagName ? element.tagName : "").toLowerCase();
+        const inputType = tag === "input" ? String(element.type || "").toLowerCase() : "";
+        if (tag !== "input" || inputType !== "range") {
+          return { ok: false, reason: "not_range_input", tag, input_type: inputType };
+        }
+        const beforeValue = String(element.value);
+        const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+        if (typeof valueSetter === "function") valueSetter.call(element, String(value));
+        else element.value = String(value);
+        element.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        const valueAsNumber = Number(element.valueAsNumber);
+        return {
+          ok: true,
+          before_value: beforeValue,
+          actual_value: String(element.value),
+          value_as_number: Number.isFinite(valueAsNumber) ? valueAsNumber : null,
+          min: element.min || null,
+          max: element.max || null,
+          step: element.step || null,
+        };
+      }, requestedValue);
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: rangeResult && rangeResult.ok === true,
+        count,
+        target_index: targetIndex,
+        requested_value: requestedValue,
+        actual_value: rangeResult?.actual_value,
+        before_value: rangeResult?.before_value,
+        value_as_number: rangeResult?.value_as_number,
+        min: rangeResult?.min,
+        max: rangeResult?.max,
+        step: rangeResult?.step,
+        tag: rangeResult?.tag,
+        input_type: rangeResult?.input_type,
+        reason: rangeResult && rangeResult.ok === true ? undefined : rangeResult?.reason || "range_value_not_set",
+      };
     }
     if (type === "assert_selector_count") {
       const scope = await setupActionScope(action, timeout);

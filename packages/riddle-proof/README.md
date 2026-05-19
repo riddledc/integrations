@@ -397,8 +397,8 @@ when body matching overrides sequence order.
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
-`click`, `drag`, `press`, `fill`, `set_input_value`, `assert_text_visible`,
-`assert_text_absent`, `assert_selector_count`, `assert_window_value`,
+`click`, `drag`, `press`, `fill`, `set_input_value`, `set_range_value`,
+`assert_text_visible`, `assert_text_absent`, `assert_selector_count`, `assert_window_value`,
 `assert_window_number`, `local_storage`, `session_storage`, `clear_storage`,
 `clear_console`, `screenshot`, `wait`, `wait_for_selector`, `wait_for_text`,
 `window_eval`, `window_call`, and `window_call_until`;
@@ -415,6 +415,13 @@ Use `click_count` / `clickCount` / `clicks` from 1 to 10 on a single `click`
 action for atomic double-click or double-submit contracts where modeling the
 interaction as repeated setup actions would incorrectly require the target to
 remain in the DOM after the first click.
+Use `set_range_value` for HTML range inputs and React-controlled sliders. It
+accepts aliases such as `set-slider-value`, requires `selector` plus `value`,
+uses the native input value setter, dispatches bubbling `input` and `change`
+events, and records the requested value plus the browser's actual normalized
+value, numeric value, `min`, `max`, and `step`. The action is intentionally
+strict: if the target is not an `input[type="range"]`, setup fails with
+`not_range_input` instead of silently treating the control like a text field.
 Use `drag` for pointer-driven controls such as canvas launch areas, sliders, or
 drag-to-aim games. Provide `selector`, `from_x`, `from_y`, `to_x`, and `to_y`;
 coordinates are element-relative pixels by default. Set `coordinate_mode:
