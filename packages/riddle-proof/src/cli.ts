@@ -723,6 +723,20 @@ function cliValueLabel(value: unknown): string | undefined {
   }
 }
 
+function cliReturnSummaryLabel(value: unknown): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const parts = value
+    .map(cliRecord)
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const label = cliString(item.label) || cliString(item.path) || "value";
+      const observed = item.exists === false ? "missing" : cliValueLabel(item.value);
+      return `${label}=${observed ?? "null"}`;
+    })
+    .filter(Boolean);
+  return parts.length ? parts.join(", ") : undefined;
+}
+
 function cliStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())) : [];
 }
@@ -926,10 +940,11 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const storedTo = cliString(receipt.return_stored_to);
     const returned = cliValueLabel(receipt.returned);
     const expected = cliValueLabel(receipt.expected_return);
+    const returnSummary = cliReturnSummaryLabel(receipt.return_summary);
     const captured = receipt.return_captured === true ? "captured" : receipt.return_captured === false ? "not captured" : "capture unknown";
     const ok = receipt.ok === false ? "failed" : "ok";
     const reason = cliString(receipt.reason);
-    lines.push(`- ${name} window_call: ${ok}, ${markdownInlineCode(path)}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+    lines.push(`- ${name} window_call: ${ok}, ${markdownInlineCode(path)}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returnSummary ? `, summary ${markdownInlineCode(returnSummary, 140)}` : ""}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (windowCallDetails.length > 12) lines.push(`- ${windowCallDetails.length - 12} additional window_call receipt(s) omitted.`);
   const windowEvalDetails = viewports.flatMap((viewport) => {
@@ -944,10 +959,11 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const storedTo = cliString(receipt.return_stored_to);
     const returned = cliValueLabel(receipt.returned);
     const expected = cliValueLabel(receipt.expected_return);
+    const returnSummary = cliReturnSummaryLabel(receipt.return_summary);
     const captured = receipt.return_captured === true ? "captured" : receipt.return_captured === false ? "not captured" : "capture unknown";
     const ok = receipt.ok === false ? "failed" : "ok";
     const reason = cliString(receipt.reason);
-    lines.push(`- ${name} window_eval: ${ok}${scriptLength === undefined ? "" : `, script ${scriptLength} chars`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+    lines.push(`- ${name} window_eval: ${ok}${scriptLength === undefined ? "" : `, script ${scriptLength} chars`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returnSummary ? `, summary ${markdownInlineCode(returnSummary, 140)}` : ""}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (windowEvalDetails.length > 12) lines.push(`- ${windowEvalDetails.length - 12} additional window_eval receipt(s) omitted.`);
   const windowCallUntilDetails = viewports.flatMap((viewport) => {
