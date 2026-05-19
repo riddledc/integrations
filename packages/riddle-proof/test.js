@@ -882,6 +882,35 @@ const cliRunProfileServer = createServer((request, response) => {
             failures: [],
           },
         },
+        {
+          type: "http_status",
+          label: "public proof artifact",
+          status: "passed",
+          evidence: {
+            url: "https://example.com/proof.json",
+            method: "GET",
+            allowed_statuses: [200],
+            body_contains: ["passed", "partial results available"],
+            body_not_contains: ["raw-secret"],
+            body_not_patterns: ["Traceback"],
+            viewports: [
+              {
+                viewport: "desktop",
+                url: "https://example.com/proof.json",
+                method: "GET",
+                status: 200,
+                ok: true,
+                body_contains: { passed: true, "partial results available": true },
+                body_contains_missing: [],
+                body_not_contains: { "raw-secret": false },
+                body_not_contains_found: [],
+                body_not_patterns: { Traceback: false },
+                body_not_patterns_found: [],
+              },
+            ],
+            failures: [],
+          },
+        },
       ],
       summary: "cli-profile-progress passed.",
       captured_at: "2026-05-13T23:21:20.000Z",
@@ -967,6 +996,8 @@ try {
   assert.match(profileSummaryMarkdown, /passed: public artifacts \(`a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]` probed links = 9, bytes >= 32\)/);
   assert.match(profileSummaryMarkdown, /## Link Status/);
   assert.match(profileSummaryMarkdown, /public artifacts `a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]`: probed links 9, discovered 10, ok 9, failures 0, min bytes 32, content types `image\/\*`, `application\/json`/);
+  assert.match(profileSummaryMarkdown, /## HTTP Status/);
+  assert.match(profileSummaryMarkdown, /public proof artifact: GET `https:\/\/example\.com\/proof\.json`, statuses 200, body_contains 2\/2, body_not_contains clean 1\/1, body_not_patterns clean 1\/1, failures 0/);
 
   cliRunProfilePollCount = 0;
   const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");

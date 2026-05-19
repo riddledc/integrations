@@ -826,6 +826,23 @@ function profileLinkStatusSummaryMarkdown(result: RiddleProofProfileResult): str
   return lines;
 }
 
+function profileHttpStatusAssertionCount(
+  viewports: Record<string, unknown>[],
+  field: string,
+  expected: string[],
+  passValue: boolean,
+): { passed: number; total: number } | undefined {
+  if (!expected.length || !viewports.length) return undefined;
+  let passed = 0;
+  for (const viewport of viewports) {
+    const observed = cliRecord(viewport[field]);
+    for (const value of expected) {
+      if (observed?.[value] === passValue) passed += 1;
+    }
+  }
+  return { passed, total: expected.length * viewports.length };
+}
+
 function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): string[] {
   const httpStatusChecks = result.checks.filter((check) => check.type === "http_status");
   const lines: string[] = [];
@@ -843,8 +860,16 @@ function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): str
       .map((viewport) => cliFiniteNumber(viewport.status))
       .map((status) => status === undefined ? "error" : String(status));
     const failedTotal = Array.isArray(evidence.failures) ? evidence.failures.length : 0;
+    const bodyContains = profileHttpStatusAssertionCount(viewports, "body_contains", cliStringArray(evidence.body_contains), true);
+    const bodyNotContains = profileHttpStatusAssertionCount(viewports, "body_not_contains", cliStringArray(evidence.body_not_contains), false);
+    const bodyNotPatterns = profileHttpStatusAssertionCount(viewports, "body_not_patterns", cliStringArray(evidence.body_not_patterns), false);
+    const bodyParts = [
+      bodyContains ? `body_contains ${bodyContains.passed}/${bodyContains.total}` : "",
+      bodyNotContains ? `body_not_contains clean ${bodyNotContains.passed}/${bodyNotContains.total}` : "",
+      bodyNotPatterns ? `body_not_patterns clean ${bodyNotPatterns.passed}/${bodyNotPatterns.total}` : "",
+    ].filter(Boolean);
     lines.push(
-      `- ${label}: ${method}${url ? ` ${markdownInlineCode(url)}` : ""}, statuses ${statuses.length ? statuses.join("/") : "unknown"}, failures ${failedTotal}`,
+      `- ${label}: ${method}${url ? ` ${markdownInlineCode(url)}` : ""}, statuses ${statuses.length ? statuses.join("/") : "unknown"}${bodyParts.length ? `, ${bodyParts.join(", ")}` : ""}, failures ${failedTotal}`,
     );
   }
 
