@@ -4184,14 +4184,22 @@ const failedSetupProfileAssessment = assessRiddleProofProfileEvidence(profile, {
     {
       ...profileEvidence.viewports[0],
       setup_action_results: [
-        { ok: false, action: "click", selector: "[data-testid='open-pricing']", reason: "selector_not_found" },
+        {
+          ok: false,
+          action: "assert_text_visible",
+          selector: "body",
+          reason: "text_not_found",
+          case_insensitive_text: "START BUILDING",
+        },
       ],
     },
     profileEvidence.viewports[1],
   ],
 });
 assert.equal(failedSetupProfileAssessment.status, "product_regression");
-assert.equal(failedSetupProfileAssessment.checks.find((check) => check.type === "setup_actions_succeeded").status, "failed");
+const failedSetupCheck = failedSetupProfileAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
+assert.equal(failedSetupCheck.status, "failed");
+assert.equal(failedSetupCheck.evidence.setup_summary.viewports[0].failed[0].case_insensitive_text, "START BUILDING");
 const overflowingProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [

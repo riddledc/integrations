@@ -689,6 +689,21 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const observedPath = cliString(viewport.observed_path);
     lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
+  const failedDetails = viewports.flatMap((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const failed = Array.isArray(viewport.failed)
+      ? viewport.failed.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return failed.map((failure) => ({ name, failure }));
+  });
+  for (const { name, failure } of failedDetails.slice(0, 8)) {
+    const action = cliString(failure.action) || "setup_action";
+    const selector = cliString(failure.selector);
+    const reason = cliString(failure.reason);
+    const caseInsensitiveText = cliString(failure.case_insensitive_text);
+    lines.push(`- failed ${name}: ${action}${selector ? ` ${markdownInlineCode(selector)}` : ""}${reason ? ` reason ${markdownInlineCode(reason)}` : ""}${caseInsensitiveText ? `; case-insensitive sample ${markdownInlineCode(caseInsensitiveText, 140)}` : ""}`);
+  }
+  if (failedDetails.length > 8) lines.push(`- ${failedDetails.length - 8} additional failed setup action(s) omitted.`);
   if (viewports.length > 8) lines.push(`- ${viewports.length - 8} additional viewport(s) omitted from setup summary.`);
   return lines;
 }
