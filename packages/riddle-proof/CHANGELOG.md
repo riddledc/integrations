@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.141
+
+### Patch Changes
+
+- ad73e3a: Add `window_eval` profile setup actions for async browser-side helper scripts with JSON-safe stored-return receipts.
+
 ## 0.7.140
 
 ### Patch Changes
