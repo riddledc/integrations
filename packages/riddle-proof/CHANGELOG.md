@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.130
+
+### Patch Changes
+
+- 1322c1f: Add `pointer_type` support to drag setup actions so profile authors can dispatch touch or pen pointer drags when proving touch-specific interaction paths.
+
 ## 0.7.129
 
 ### Patch Changes
