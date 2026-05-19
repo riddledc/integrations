@@ -2137,6 +2137,7 @@ const dragSetupProfile = normalizeRiddleProofProfile({
         from_y: 0.5,
         to_x: 0.2,
         to_y: 0.5,
+        pointer_type: "finger",
         duration_ms: 120,
         steps: 6,
       },
@@ -2147,6 +2148,7 @@ const dragSetupProfile = normalizeRiddleProofProfile({
 assert.equal(dragSetupProfile.target.setup_actions[0].type, "drag");
 assert.equal(dragSetupProfile.target.setup_actions[0].frame_selector, ".game-player-root iframe");
 assert.equal(dragSetupProfile.target.setup_actions[0].coordinate_mode, "ratio");
+assert.equal(dragSetupProfile.target.setup_actions[0].pointer_type, "touch");
 assert.equal(dragSetupProfile.target.setup_actions[0].from_x, 0.5);
 assert.equal(dragSetupProfile.target.setup_actions[0].to_x, 0.2);
 assert.equal(dragSetupProfile.target.setup_actions[0].steps, 6);
@@ -2154,6 +2156,9 @@ const dragSetupProfileScript = buildRiddleProofProfileScript(dragSetupProfile);
 assert.ok(dragSetupProfileScript.includes('type === "drag"'));
 assert.ok(dragSetupProfileScript.includes("page.mouse.down"));
 assert.ok(dragSetupProfileScript.includes("page.mouse.up"));
+assert.ok(dragSetupProfileScript.includes("new PointerEvent"));
+assert.ok(dragSetupProfileScript.includes("pointer_type"));
+assert.ok(dragSetupProfileScript.includes('payload.pointerType === "touch"'));
 assert.ok(dragSetupProfileScript.includes("bounding_box_unavailable"));
 assert.ok(dragSetupProfileScript.includes("coordinate_mode"));
 const windowCallSetupProfile = normalizeRiddleProofProfile({
@@ -2249,6 +2254,24 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /drag ratio coordinates must be between 0 and 1/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-drag-pointer",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "drag", selector: ".game-area", pointer_type: "trackpad", from_x: 0, from_y: 0, to_x: 2, to_y: 1 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /pointer_type trackpad is not supported/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-click-pointer",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", selector: ".game-area", pointer_type: "touch" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /pointer_type is only supported for drag actions/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-steps",
