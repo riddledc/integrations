@@ -1417,50 +1417,62 @@ async function recoverProfileResultFromRiddleArtifacts(
     runner: RiddleProofProfileRunner;
     jobId: string;
     poll: RiddlePollJobResult;
+    attempts?: number;
+    intervalMs?: number;
   },
 ): Promise<RiddleProofProfileResult | undefined> {
   if (input.poll.poll?.timed_out !== true) return undefined;
-  let artifactPayload: Record<string, unknown>;
-  try {
-    artifactPayload = await input.client.requestJson<Record<string, unknown>>(`/v1/jobs/${input.jobId}/artifacts`);
-  } catch {
-    return undefined;
-  }
-  const artifacts = collectRiddleProfileArtifactRefs(artifactPayload);
-  if (!artifacts.length) return undefined;
-  const artifactStatus = riddleArtifactsPayloadStatus(artifactPayload);
-  const terminal = artifactStatus ? isTerminalRiddleJobStatus(artifactStatus) : true;
-  const recoveredPoll: RiddlePollSummary | undefined = input.poll.poll
-    ? {
-        ...input.poll.poll,
-        status: artifactStatus ?? input.poll.poll.status,
-        terminal,
+  const attempts = Math.max(1, Math.floor(input.attempts ?? 3));
+  const intervalMs = Math.max(0, Math.floor(input.intervalMs ?? 0));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    let artifactPayload: Record<string, unknown>;
+    try {
+      artifactPayload = await input.client.requestJson<Record<string, unknown>>(`/v1/jobs/${input.jobId}/artifacts`);
+    } catch {
+      artifactPayload = {};
+    }
+    const artifacts = collectRiddleProfileArtifactRefs(artifactPayload);
+    if (artifacts.length) {
+      const artifactStatus = riddleArtifactsPayloadStatus(artifactPayload);
+      const terminal = artifactStatus ? isTerminalRiddleJobStatus(artifactStatus) : true;
+      const recoveredPoll: RiddlePollSummary | undefined = input.poll.poll
+        ? {
+            ...input.poll.poll,
+            status: artifactStatus ?? input.poll.poll.status,
+            terminal,
+          }
+        : undefined;
+      const artifactResult = await profileResultFromRiddleArtifacts(profile, artifacts, [artifactPayload, input.poll.job]);
+      if (artifactResult) {
+        return withRiddleMetadata(artifactResult, {
+          job_id: input.jobId,
+          status: artifactStatus ?? input.poll.status,
+          terminal,
+          poll: recoveredPoll,
+          artifacts,
+          artifactRecovery: true,
+        });
       }
-    : undefined;
-  const artifactResult = await profileResultFromRiddleArtifacts(profile, artifacts, [artifactPayload, input.poll.job]);
-  if (artifactResult) {
-    return withRiddleMetadata(artifactResult, {
-      job_id: input.jobId,
-      status: artifactStatus ?? input.poll.status,
-      terminal,
-      poll: recoveredPoll,
-      artifacts,
-      artifactRecovery: true,
-    });
+      if (terminal) {
+        return createRiddleProofProfileInsufficientResult({
+          profile,
+          runner: input.runner,
+          error: `Riddle job ${input.jobId} timed out in status ${input.poll.status || "unknown"}, but artifacts were recovered without a proof result.`,
+          riddle: {
+            ...riddleMetadataFromPoll(input.jobId, input.poll),
+            status: artifactStatus ?? input.poll.status,
+            terminal,
+            artifact_recovery: true,
+          },
+          artifacts,
+        });
+      }
+    }
+    if (attempt + 1 < attempts && intervalMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
   }
-  if (!terminal) return undefined;
-  return createRiddleProofProfileInsufficientResult({
-    profile,
-    runner: input.runner,
-    error: `Riddle job ${input.jobId} timed out in status ${input.poll.status || "unknown"}, but artifacts were recovered without a proof result.`,
-    riddle: {
-      ...riddleMetadataFromPoll(input.jobId, input.poll),
-      status: artifactStatus ?? input.poll.status,
-      terminal,
-      artifact_recovery: true,
-    },
-    artifacts,
-  });
+  return undefined;
 }
 
 function riddleMetadataFromPoll(
@@ -1743,6 +1755,17 @@ async function runSingleRiddleProfileForCli(
 
     poll = await client.pollJob(jobId, pollOptions);
     if (attempt < retryLimit && shouldRetryUnsubmittedRiddleJob(poll)) {
+      const recoveredResult = await recoverProfileResultFromRiddleArtifacts(profile, {
+        client,
+        runner,
+        jobId,
+        poll,
+        attempts: 3,
+        intervalMs: Math.min(2000, Math.max(0, poll.poll?.interval_ms ?? 0)),
+      });
+      if (recoveredResult) {
+        return recoveredResult;
+      }
       staleJobIds.push(jobId);
       if (options.quiet !== true) {
         process.stderr.write(`[riddle-poll] ${jobId} stayed unsubmitted for ${formatPollDuration(poll.poll?.pre_submission_elapsed_ms)}; retrying hosted run ${attempt + 1}/${retryLimit}\n`);
@@ -1763,6 +1786,8 @@ async function runSingleRiddleProfileForCli(
       runner,
       jobId,
       poll,
+      attempts: 3,
+      intervalMs: Math.min(2000, Math.max(0, poll.poll?.interval_ms ?? 0)),
     });
     if (recoveredResult) {
       return withRiddleMetadata(recoveredResult, { retryCount, staleJobIds });
