@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.137
+
+### Patch Changes
+
+- d376d4d: Surface compact `window_call` setup receipts in profile setup summaries, including stored-return and return-capture counts.
+
 ## 0.7.136
 
 ### Patch Changes
