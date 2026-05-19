@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.135
+
+### Patch Changes
+
+- c8bee1a: Include `window_call_until` receipts in hosted browser-generated profile summaries.
+
 ## 0.7.134
 
 ### Patch Changes
