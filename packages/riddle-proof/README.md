@@ -216,6 +216,23 @@ required snippets make the command exit non-zero. This keeps Good Catch and
 audit-profile promotions tied to real artifacts instead of hand-authored token
 guesses.
 
+Before spending a hosted browser run on a public-promotion profile, preflight
+the profile-level `http_status` checks directly:
+
+```sh
+riddle-proof-loop profile-http-status-preflight \
+  --profile .riddle-proof/profiles/good-catch-promotion.json \
+  --url https://preview.riddledc.com/s/ps_12345678/ \
+  --format summary
+```
+
+The preflight resolves the profile's `http_status` URLs against the same base
+URL that `run-profile` would use, then verifies status, content type, byte
+requirements, `body_contains`, `body_not_contains`, and `body_not_patterns`.
+It exits non-zero if any body assertion is missing or any forbidden body text is
+present, which catches raw/escaped proof-artifact mistakes before a full
+viewport matrix run.
+
 The package includes generic starter profiles:
 
 - `examples/profiles/page-content-basic.json` for route/content/layout smoke profiles.

@@ -29,12 +29,14 @@ import {
   deriveRiddleProofArtifactBodyAssertions,
   extractRiddleProofProfileResult,
   normalizeRiddleProofProfile,
+  preflightRiddleProofProfileHttpStatusChecks,
   profileStatusExitCode,
   resolveRiddleProofProfileTargetUrl,
   resolveRiddleProofProfileTimeoutSec,
   type RiddleProofProfile,
   type RiddleProofProfileArtifactRef,
   type RiddleProofProfileEvidence,
+  type RiddleProofProfileHttpStatusPreflightResult,
   type RiddleProofProfileResult,
   type RiddleProofProfileRunner,
   type RiddleProofProfileViewport,
@@ -53,6 +55,7 @@ function usage() {
     "  riddle-proof-loop status --state-path <path>",
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
+    "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
@@ -376,6 +379,27 @@ function normalizeProfileForCli(options: CliOptions): RiddleProofProfile {
     route: optionString(options, "route"),
     viewports: parseProfileViewports(optionString(options, "viewports") || optionString(options, "viewport")),
   });
+}
+
+function profileHttpStatusPreflightSummary(result: RiddleProofProfileHttpStatusPreflightResult): string {
+  const lines = [
+    result.summary,
+    `Profile: ${result.profile_name}`,
+    `Target: ${result.target_url}`,
+    `Checked: ${result.checked}`,
+    `Failed: ${result.failed}`,
+  ];
+  for (const check of result.checks) {
+    lines.push(`- ${check.ok ? "passed" : "failed"}: ${check.method} ${check.url}`);
+    if (!check.ok) {
+      if (check.status !== null) lines.push(`  status: ${check.status}`);
+      if (check.error) lines.push(`  error: ${check.error}`);
+      if (check.body_contains_missing.length) lines.push(`  missing body_contains: ${check.body_contains_missing.join(", ")}`);
+      if (check.body_not_contains_found.length) lines.push(`  found body_not_contains: ${check.body_not_contains_found.join(", ")}`);
+      if (check.body_not_patterns_found.length) lines.push(`  found body_not_patterns: ${check.body_not_patterns_found.join(", ")}`);
+    }
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 function profileResultMarkdown(result: RiddleProofProfileResult) {
@@ -1050,6 +1074,21 @@ async function main() {
     }
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = profileStatusExitCode(profile, result.status);
+    return;
+  }
+
+  if (command === "profile-http-status-preflight") {
+    const profile = normalizeProfileForCli(options);
+    const result = await preflightRiddleProofProfileHttpStatusChecks(profile);
+    const format = optionString(options, "format") || "json";
+    if (format === "summary") {
+      process.stdout.write(profileHttpStatusPreflightSummary(result));
+    } else if (format === "json") {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      throw new Error("--format must be json or summary.");
+    }
+    process.exitCode = result.ok ? 0 : 1;
     return;
   }
 

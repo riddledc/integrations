@@ -118,6 +118,57 @@ export interface RiddleProofArtifactBodyAssertionResult {
   warnings: string[];
 }
 
+export interface RiddleProofProfileHttpStatusPreflightFetchResponse {
+  status?: number;
+  statusText?: string;
+  headers?: {
+    get?: (name: string) => string | null;
+  };
+  arrayBuffer?: () => Promise<ArrayBuffer>;
+  text?: () => Promise<string>;
+}
+
+export type RiddleProofProfileHttpStatusPreflightFetch = (
+  url: string,
+  init?: Record<string, unknown>,
+) => Promise<RiddleProofProfileHttpStatusPreflightFetchResponse>;
+
+export interface RiddleProofProfileHttpStatusPreflightOptions {
+  fetchImpl?: RiddleProofProfileHttpStatusPreflightFetch;
+  target_url?: string;
+}
+
+export interface RiddleProofProfileHttpStatusPreflightCheckResult {
+  index: number;
+  label: string;
+  url: string;
+  method: string;
+  ok: boolean;
+  status: number | null;
+  status_text: string;
+  error: string | null;
+  content_type: string | null;
+  content_length: number | null;
+  bytes: number | null;
+  body_contains: Record<string, boolean> | null;
+  body_contains_missing: string[];
+  body_not_contains: Record<string, boolean> | null;
+  body_not_contains_found: string[];
+  body_not_patterns: Record<string, boolean> | null;
+  body_not_patterns_found: string[];
+}
+
+export interface RiddleProofProfileHttpStatusPreflightResult {
+  version: "riddle-proof.profile-http-status-preflight.v1";
+  ok: boolean;
+  profile_name: string;
+  target_url: string;
+  checked: number;
+  failed: number;
+  checks: RiddleProofProfileHttpStatusPreflightCheckResult[];
+  summary: string;
+}
+
 function uniqueNonEmptyStrings(values: string[] | undefined): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -1872,6 +1923,169 @@ function linkStatusResultOk(result: Record<string, unknown>, check: RiddleProofP
   if (httpStatusBodyNotContainsFailures(result, check).length) return false;
   if (httpStatusBodyNotPatternFailures(result, check).length) return false;
   return true;
+}
+
+function responseHeader(
+  response: RiddleProofProfileHttpStatusPreflightFetchResponse,
+  name: string,
+): string | null {
+  const getter = response.headers?.get;
+  if (typeof getter !== "function") return null;
+  return getter.call(response.headers, name);
+}
+
+function responseContentLength(response: RiddleProofProfileHttpStatusPreflightFetchResponse): number | null {
+  const value = responseHeader(response, "content-length");
+  return value && /^\d+$/.test(value) ? Number(value) : null;
+}
+
+async function responseBodyText(response: RiddleProofProfileHttpStatusPreflightFetchResponse): Promise<{ text: string; bytes: number | null }> {
+  if (typeof response.arrayBuffer === "function") {
+    const buffer = await response.arrayBuffer();
+    return {
+      text: new TextDecoder().decode(buffer),
+      bytes: buffer.byteLength,
+    };
+  }
+  if (typeof response.text === "function") {
+    const text = await response.text();
+    return {
+      text,
+      bytes: new TextEncoder().encode(text).byteLength,
+    };
+  }
+  return { text: "", bytes: null };
+}
+
+function httpStatusRequestBody(check: RiddleProofProfileCheck): { headers: Record<string, string>; body?: string } {
+  const headers = isRecord(check.headers)
+    ? Object.fromEntries(Object.entries(check.headers).map(([key, value]) => [key, String(value)]).filter(([key]) => key.trim()))
+    : {};
+  if (check.body_json !== undefined) {
+    if (!Object.keys(headers).some((key) => key.toLowerCase() === "content-type")) {
+      headers["content-type"] = "application/json";
+    }
+    return { headers, body: JSON.stringify(check.body_json) };
+  }
+  if (typeof check.body === "string") {
+    return { headers, body: check.body };
+  }
+  return { headers };
+}
+
+async function preflightHttpStatusCheck(
+  check: RiddleProofProfileCheck,
+  index: number,
+  targetUrl: string,
+  fetchImpl: RiddleProofProfileHttpStatusPreflightFetch,
+): Promise<RiddleProofProfileHttpStatusPreflightCheckResult> {
+  const url = httpStatusRequestUrl(check, targetUrl);
+  const method = httpStatusMethod(check);
+  const request = httpStatusRequestBody(check);
+  const init: Record<string, unknown> = {
+    method,
+    redirect: "follow",
+    cache: "no-store",
+    headers: request.headers,
+  };
+  if (request.body !== undefined && method !== "GET" && method !== "HEAD") {
+    init.body = request.body;
+  }
+
+  const result: Record<string, unknown> = {
+    status: null,
+    content_type: null,
+    content_length: null,
+    bytes: null,
+  };
+  let error: string | null = null;
+  let statusText = "";
+
+  try {
+    const response = await fetchImpl(url, init);
+    result.status = typeof response.status === "number" && Number.isFinite(response.status) ? response.status : null;
+    statusText = typeof response.statusText === "string" ? response.statusText : "";
+    result.content_type = responseHeader(response, "content-type");
+    result.content_length = responseContentLength(response);
+
+    const shouldReadBody = check.require_nonzero_bytes === true
+      || typeof check.min_bytes === "number"
+      || Boolean(check.body_contains?.length)
+      || Boolean(check.body_not_contains?.length)
+      || Boolean(check.body_not_patterns?.length);
+    if (shouldReadBody && method !== "HEAD") {
+      const body = await responseBodyText(response);
+      result.bytes = body.bytes;
+      if (check.body_contains?.length) {
+        result.body_contains = Object.fromEntries(check.body_contains.filter(Boolean).map((snippet) => [snippet, body.text.includes(snippet)]));
+      }
+      if (check.body_not_contains?.length) {
+        result.body_not_contains = Object.fromEntries(check.body_not_contains.filter(Boolean).map((snippet) => [snippet, body.text.includes(snippet)]));
+      }
+      if (check.body_not_patterns?.length) {
+        result.body_not_patterns = Object.fromEntries(check.body_not_patterns.filter(Boolean).map((pattern) => [pattern, new RegExp(pattern).test(body.text)]));
+      }
+    }
+  } catch (caught) {
+    error = String(caught instanceof Error ? caught.message : caught).slice(0, 500);
+    result.error = error;
+  }
+
+  const bodyContainsMissing = httpStatusBodyContainsFailures(result, check);
+  const bodyNotContainsFound = httpStatusBodyNotContainsFailures(result, check);
+  const bodyNotPatternsFound = httpStatusBodyNotPatternFailures(result, check);
+  const ok = !error && linkStatusResultOk(result, check);
+
+  return {
+    index,
+    label: checkLabel(check) || `checks[${index}]`,
+    url,
+    method,
+    ok,
+    status: numberValue(result.status) ?? null,
+    status_text: statusText,
+    error,
+    content_type: stringValue(result.content_type) ?? null,
+    content_length: numberValue(result.content_length) ?? null,
+    bytes: numberValue(result.bytes) ?? null,
+    body_contains: isRecord(result.body_contains) ? Object.fromEntries(Object.entries(result.body_contains).map(([key, value]) => [key, value === true])) : null,
+    body_contains_missing: bodyContainsMissing,
+    body_not_contains: isRecord(result.body_not_contains) ? Object.fromEntries(Object.entries(result.body_not_contains).map(([key, value]) => [key, value === true])) : null,
+    body_not_contains_found: bodyNotContainsFound,
+    body_not_patterns: isRecord(result.body_not_patterns) ? Object.fromEntries(Object.entries(result.body_not_patterns).map(([key, value]) => [key, value === true])) : null,
+    body_not_patterns_found: bodyNotPatternsFound,
+  };
+}
+
+export async function preflightRiddleProofProfileHttpStatusChecks(
+  profile: RiddleProofProfile,
+  options: RiddleProofProfileHttpStatusPreflightOptions = {},
+): Promise<RiddleProofProfileHttpStatusPreflightResult> {
+  const targetUrl = options.target_url || resolveRiddleProofProfileTargetUrl(profile);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  if (typeof fetchImpl !== "function") {
+    throw new Error("profile http_status preflight requires fetch support or options.fetchImpl.");
+  }
+
+  const httpStatusChecks = profile.checks
+    .map((check, index) => ({ check, index }))
+    .filter((item) => item.check.type === "http_status");
+  const checks = await Promise.all(httpStatusChecks.map((item) => (
+    preflightHttpStatusCheck(item.check, item.index, targetUrl, fetchImpl as RiddleProofProfileHttpStatusPreflightFetch)
+  )));
+  const failed = checks.filter((check) => !check.ok).length;
+  return {
+    version: "riddle-proof.profile-http-status-preflight.v1",
+    ok: failed === 0,
+    profile_name: profile.name,
+    target_url: targetUrl,
+    checked: checks.length,
+    failed,
+    checks,
+    summary: failed === 0
+      ? `${profile.name} http_status preflight passed ${checks.length} check(s).`
+      : `${profile.name} http_status preflight failed ${failed} of ${checks.length} check(s).`,
+  };
 }
 
 function httpStatusEvidenceForCheck(

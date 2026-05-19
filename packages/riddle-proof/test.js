@@ -39,6 +39,7 @@ import {
   isTerminalStatus,
   normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
+  preflightRiddleProofProfileHttpStatusChecks,
   resolveRiddleProofProfileTimeoutSec,
   resolveRiddleProofProfileRouteUrl,
   redactForProofDiagnostics,
@@ -87,10 +88,12 @@ assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
 assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
+assert.equal(typeof cjs.preflightRiddleProofProfileHttpStatusChecks, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
 assert.equal(typeof cjsProfile.collectRiddleProofProfileWarnings, "function");
+assert.equal(typeof cjsProfile.preflightRiddleProofProfileHttpStatusChecks, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
@@ -200,6 +203,86 @@ try {
   assert.match(error.stdout, /completed_timeout/);
 }
 assert.equal(missingRequiredFailed, true);
+
+const httpStatusPreflightProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "http-status-preflight",
+  target: { url: "https://example.test/" },
+  checks: [
+    {
+      type: "http_status",
+      label: "proof artifact body",
+      url: "/proof.json",
+      expected_status: 200,
+      allowed_content_types: ["application/json"],
+      min_bytes: 10,
+      body_contains: ["passed", "missing-snippet"],
+      body_not_contains: ["raw-secret"],
+      body_not_patterns: ["Traceback"],
+    },
+  ],
+});
+const httpStatusPreflight = await preflightRiddleProofProfileHttpStatusChecks(httpStatusPreflightProfile, {
+  fetchImpl: async (url, init = {}) => {
+    assert.equal(url, "https://example.test/proof.json");
+    assert.equal(init.method, "GET");
+    const body = JSON.stringify({ status: "passed", leak: "raw-secret" });
+    return new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(body)) },
+    });
+  },
+});
+assert.equal(httpStatusPreflight.ok, false);
+assert.equal(httpStatusPreflight.checked, 1);
+assert.equal(httpStatusPreflight.failed, 1);
+assert.deepEqual(httpStatusPreflight.checks[0].body_contains_missing, ["missing-snippet"]);
+assert.deepEqual(httpStatusPreflight.checks[0].body_not_contains_found, ["raw-secret"]);
+assert.deepEqual(httpStatusPreflight.checks[0].body_not_patterns_found, []);
+assert.match(httpStatusPreflight.summary, /failed 1 of 1/);
+
+const httpStatusPreflightServer = createServer((request, response) => {
+  if (request.method !== "GET" || request.url !== "/proof.json") {
+    response.writeHead(404, { "content-type": "text/plain" });
+    response.end("not found");
+    return;
+  }
+  const body = JSON.stringify({ status: "passed", summary: "partial results available" });
+  response.writeHead(200, { "content-type": "application/json", "content-length": String(Buffer.byteLength(body)) });
+  response.end(body);
+});
+httpStatusPreflightServer.listen(0, "127.0.0.1");
+await once(httpStatusPreflightServer, "listening");
+try {
+  const address = httpStatusPreflightServer.address();
+  const preflightProfileFile = path.join(artifactAssertionDir, "profile-http-status-preflight.json");
+  writeFileSync(preflightProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "http-status-preflight-cli",
+    target: { url: `http://127.0.0.1:${address.port}/` },
+    checks: [
+      {
+        type: "http_status",
+        url: "/proof.json",
+        expected_status: 200,
+        allowed_content_types: ["application/json"],
+        body_contains: ["passed", "partial results available"],
+        body_not_contains: ["raw-secret"],
+      },
+    ],
+  }, null, 2));
+  const preflightCli = await runCli([
+    "profile-http-status-preflight",
+    "--profile",
+    preflightProfileFile,
+    "--format",
+    "summary",
+  ]);
+  assert.match(preflightCli.stdout, /http-status-preflight-cli http_status preflight passed 1 check/);
+} finally {
+  httpStatusPreflightServer.close();
+  await once(httpStatusPreflightServer, "close");
+}
 
 const riddlePreviewDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-client-preview-"));
 writeFileSync(path.join(riddlePreviewDir, "index.html"), "<!doctype html><title>Riddle Preview</title>");
