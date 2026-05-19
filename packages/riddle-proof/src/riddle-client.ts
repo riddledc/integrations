@@ -33,6 +33,8 @@ export interface RiddlePollProgressSnapshot {
 export interface RiddlePollSummary extends RiddlePollProgressSnapshot {
   timed_out: boolean;
   interval_ms: number;
+  unsubmitted_timeout?: boolean;
+  unsubmitted_timeout_ms?: number;
   message?: string;
 }
 
@@ -41,6 +43,7 @@ export interface RiddlePollJobOptions {
   attempts?: number;
   intervalMs?: number;
   progressEveryMs?: number;
+  unsubmittedTimeoutMs?: number;
   onProgress?: (snapshot: RiddlePollProgressSnapshot) => void | Promise<void>;
 }
 
@@ -486,12 +489,14 @@ export async function pollRiddleJob(
   const attempts = Math.max(1, Math.floor(options.attempts ?? (options.wait ? 300 : 1)));
   const intervalMs = Math.max(0, Math.floor(options.intervalMs ?? 2000));
   const progressEveryMs = Math.max(0, Math.floor(options.progressEveryMs ?? 10000));
+  const unsubmittedTimeoutMs = Math.max(0, Math.floor(options.unsubmittedTimeoutMs ?? 0));
   const startedAt = Date.now();
   let job: Record<string, unknown> | null = null;
   let lastSnapshot: RiddlePollProgressSnapshot | null = null;
   let lastProgressAt = 0;
   let lastProgressKey = "";
   let preSubmissionElapsedMs = 0;
+  let unsubmittedTimedOut = false;
 
   for (let index = 0; index < attempts; index += 1) {
     job = await riddleRequestJson<Record<string, unknown>>(config, `/v1/jobs/${jobId}`);
@@ -526,7 +531,16 @@ export async function pollRiddleJob(
         await options.onProgress(lastSnapshot);
       }
     }
+    unsubmittedTimedOut = Boolean(
+      options.wait &&
+      unsubmittedTimeoutMs > 0 &&
+      lastSnapshot.running_without_submission &&
+      !lastSnapshot.created_at &&
+      !lastSnapshot.submitted_at &&
+      preSubmissionElapsedMs >= unsubmittedTimeoutMs
+    );
     if (lastSnapshot.terminal) break;
+    if (unsubmittedTimedOut) break;
     if (index + 1 < attempts) {
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
     }
@@ -552,6 +566,8 @@ export async function pollRiddleJob(
         ...snapshot,
         timed_out: timedOut,
         interval_ms: intervalMs,
+        unsubmitted_timeout: unsubmittedTimedOut || undefined,
+        unsubmitted_timeout_ms: unsubmittedTimedOut ? unsubmittedTimeoutMs : undefined,
         message: pollMessage(snapshot, timedOut),
       },
     };
