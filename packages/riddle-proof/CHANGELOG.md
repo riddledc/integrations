@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.123
+
+### Patch Changes
+
+- 2924570: Add profile-level `http_status` preflight validation so promotion and audit profiles can verify status/body assertions before a hosted browser run.
+
 ## 0.7.122
 
 ### Patch Changes
