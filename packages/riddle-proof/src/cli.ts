@@ -668,6 +668,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
 
   const declaredActions = cliFiniteNumber(setupSummary.action_count);
   const totalResults = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.result_count) || 0), 0);
+  const finalScreenshotCount = cliFiniteNumber(setupSummary.final_screenshot_count)
+    ?? viewports.reduce((sum, viewport) => sum + (cliString(viewport.final_screenshot) || cliString(viewport.screenshot_label) ? 1 : 0), 0);
+  const finalScreenshotMode = cliString(setupSummary.final_screenshot_mode);
   const setupScreenshots = viewports.reduce((sum, viewport) => {
     const labels = Array.isArray(viewport.setup_screenshots) ? viewport.setup_screenshots : [];
     return sum + labels.filter((label) => typeof label === "string" && label.trim()).length;
@@ -686,6 +689,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
 
   const lines = [
     `- setup actions: ${declaredActions === undefined ? "unknown" : declaredActions} declared, ${totalResults} recorded result(s) across ${viewports.length} viewport(s)`,
+    ...(finalScreenshotMode ? [`- final screenshots: ${finalScreenshotCount}, mode ${finalScreenshotMode}`] : []),
     `- setup screenshots: ${setupScreenshots}`,
     `- clicked targets: ${clickedTotal}${failedTotal ? `; failed setup actions: ${failedTotal}` : ""}`,
   ];

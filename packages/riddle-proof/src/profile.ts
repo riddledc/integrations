@@ -470,6 +470,7 @@ export interface RiddleProofProfileViewportEvidence {
   route_inventory?: Record<string, JsonValue>;
   setup_action_results?: Array<Record<string, JsonValue>>;
   screenshot_label?: string;
+  screenshot_full_page?: boolean | null;
   navigation_error?: string;
   wait_error?: string;
 }
@@ -997,12 +998,27 @@ function profileSetupSummary(
   viewports: RiddleProofProfileViewportEvidence[],
   actionCount?: number,
   expectedActionCountByViewport?: Map<string, number>,
+  finalScreenshotFullPage?: boolean,
 ): JsonValue {
+  const normalizedFinalScreenshotFullPage = finalScreenshotFullPage === undefined
+    ? undefined
+    : finalScreenshotFullPage !== false;
+  const finalScreenshotCount = viewports.filter((viewport) => typeof viewport.screenshot_label === "string" && viewport.screenshot_label.trim()).length;
   return toJsonValue({
     viewport_count: viewports.length,
     action_count: actionCount ?? null,
+    final_screenshot_count: finalScreenshotCount,
+    final_screenshot_full_page: normalizedFinalScreenshotFullPage ?? null,
+    final_screenshot_mode: normalizedFinalScreenshotFullPage === undefined
+      ? null
+      : normalizedFinalScreenshotFullPage
+        ? "full_page"
+        : "viewport",
     viewports: viewports.map((viewport) => {
       const expectedActionCount = expectedActionCountByViewport?.get(viewport.name) ?? actionCount;
+      const viewportFinalScreenshotFullPage = typeof viewport.screenshot_full_page === "boolean"
+        ? viewport.screenshot_full_page
+        : normalizedFinalScreenshotFullPage;
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result.ok === false && result.optional !== true);
       const optionalFailed = results.filter((result) => result.ok === false && result.optional === true);
@@ -1056,6 +1072,8 @@ function profileSetupSummary(
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        final_screenshot: viewport.screenshot_label ?? null,
+        final_screenshot_full_page: viewportFinalScreenshotFullPage ?? null,
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
@@ -3846,7 +3864,7 @@ function assessSetupActionsFromEvidence(
           && (viewport.setup_action_results || []).every((result) => result.ok !== false || result.optional === true),
         result_count: (viewport.setup_action_results || []).length,
       })),
-      setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountByViewport),
+      setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountByViewport, profile.target.screenshot_full_page),
       failed,
     },
     message: failed.length ? `Setup actions failed in ${failed.length} viewport action(s).` : undefined,
@@ -4924,14 +4942,28 @@ function profileScreenshotLabels(viewports) {
   }
   return labels;
 }
-function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport) {
+function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport, finalScreenshotFullPage) {
+  const normalizedFinalScreenshotFullPage = finalScreenshotFullPage === undefined
+    ? undefined
+    : finalScreenshotFullPage !== false;
+  const finalScreenshotCount = (viewports || []).filter((viewport) => viewport && typeof viewport.screenshot_label === "string" && viewport.screenshot_label.trim()).length;
   return {
     viewport_count: (viewports || []).length,
     action_count: actionCount ?? null,
+    final_screenshot_count: finalScreenshotCount,
+    final_screenshot_full_page: normalizedFinalScreenshotFullPage ?? null,
+    final_screenshot_mode: normalizedFinalScreenshotFullPage === undefined
+      ? null
+      : normalizedFinalScreenshotFullPage
+        ? "full_page"
+        : "viewport",
     viewports: (viewports || []).map((viewport) => {
       const expectedActionCount = expectedActionCountsByViewport && expectedActionCountsByViewport[viewport.name] !== undefined
         ? expectedActionCountsByViewport[viewport.name]
         : actionCount;
+      const viewportFinalScreenshotFullPage = typeof viewport.screenshot_full_page === "boolean"
+        ? viewport.screenshot_full_page
+        : normalizedFinalScreenshotFullPage;
       const results = viewport.setup_action_results || [];
       const failed = results.filter((result) => result && result.ok === false && result.optional !== true);
       const optionalFailed = results.filter((result) => result && result.ok === false && result.optional === true);
@@ -4985,6 +5017,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         action_counts: profileSetupActionCounts(results),
         frame_action_count: results.filter((result) => result && result.frame_selector).length,
         frame_urls: profileSetupFrameUrls(viewport),
+        final_screenshot: viewport.screenshot_label || null,
+        final_screenshot_full_page: viewportFinalScreenshotFullPage ?? null,
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
@@ -5169,7 +5203,7 @@ function assessProfile(profile, evidence) {
             && (viewport.setup_action_results || []).every((result) => !result || result.ok !== false || result.optional === true),
           result_count: (viewport.setup_action_results || []).length,
         })),
-        setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport),
+        setup_summary: profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport, profile.target && profile.target.screenshot_full_page),
         failed,
       },
       message: failed.length ? "Setup actions failed in " + failed.length + " viewport action(s)." : undefined,
@@ -8048,9 +8082,13 @@ async function captureViewport(viewport) {
     }
   }
   const screenshotLabel = profileSlug + "-" + viewport.name;
+  let screenshotFullPage = null;
   try {
     const screenshotOptions = {};
-    if (profile.target && profile.target.screenshot_full_page !== undefined) screenshotOptions.fullPage = profile.target.screenshot_full_page !== false;
+    if (profile.target && profile.target.screenshot_full_page !== undefined) {
+      screenshotFullPage = profile.target.screenshot_full_page !== false;
+      screenshotOptions.fullPage = screenshotFullPage;
+    }
     if (typeof saveScreenshot === "function") await saveScreenshot(screenshotLabel, screenshotOptions);
   } catch (error) {
     pageErrors.push({ message: "saveScreenshot failed: " + String(error && error.message ? error.message : error).slice(0, 500) });
@@ -8118,6 +8156,7 @@ async function captureViewport(viewport) {
     route_inventory: routeInventory,
     setup_action_results: setupActionResults,
     screenshot_label: screenshotLabel,
+    screenshot_full_page: screenshotFullPage,
     navigation_error: navigationError,
     wait_error: waitError,
   };
