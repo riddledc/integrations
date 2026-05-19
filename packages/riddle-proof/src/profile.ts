@@ -455,6 +455,7 @@ export interface RiddleProofProfileViewportEvidence {
   text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
   text_match_samples?: Record<string, string[]>;
+  text_case_insensitive_samples?: Record<string, string[]>;
   http_statuses?: Record<string, Record<string, JsonValue>>;
   link_statuses?: Record<string, Record<string, JsonValue>>;
   route_inventory?: Record<string, JsonValue>;
@@ -2779,6 +2780,36 @@ function textMatchSamples(sample: string, check: RiddleProofProfileCheck): strin
   return sampleText ? [sampleText] : [];
 }
 
+function textCaseInsensitiveSamples(sample: string, check: RiddleProofProfileCheck): string[] {
+  const source = String(sample || "");
+  const text = check.pattern ? "" : check.text || "";
+  if (!source || !text) return [];
+  const index = source.toLowerCase().indexOf(text.toLowerCase());
+  const sampleText = textSampleAroundMatch(source, index, text.length);
+  return sampleText ? [sampleText] : [];
+}
+
+function textCaseInsensitiveSequenceSamples(texts: string[], check: RiddleProofProfileCheck): string[] {
+  const text = check.pattern ? "" : compactTextEvidenceSample(check.text || "");
+  if (!text) return [];
+  const expected = text.toLowerCase();
+  return texts
+    .map((candidate) => compactTextEvidenceSample(candidate))
+    .filter((candidate) => candidate && candidate.toLowerCase().includes(expected))
+    .slice(0, 3)
+    .map((candidate) => candidate.slice(0, 240));
+}
+
+function textCaseInsensitiveFailureSamples(viewport: RiddleProofProfileViewportEvidence, check: RiddleProofProfileCheck): string[] {
+  const key = textKey(check);
+  const captured = viewport.text_case_insensitive_samples?.[key] || [];
+  const capturedSamples = captured
+    .map((sample) => compactTextEvidenceSample(sample).slice(0, 240))
+    .filter(Boolean);
+  if (capturedSamples.length) return capturedSamples.slice(0, 3);
+  return textCaseInsensitiveSamples(viewport.body_text_sample || "", check).slice(0, 3);
+}
+
 function textCheckFailureSamples(viewport: RiddleProofProfileViewportEvidence, check: RiddleProofProfileCheck): string[] {
   const key = textKey(check);
   const captured = viewport.text_match_samples?.[key] || [];
@@ -3159,6 +3190,9 @@ function assessCheckFromEvidence(
       const matched = matches.length > 0;
       const failedAgainstExpectation = matched !== expectedVisible;
       const sampleTexts = matches.length ? matches : failedAgainstExpectation ? texts : [];
+      const caseInsensitiveSamples = failedAgainstExpectation && expectedVisible && !matched
+        ? textCaseInsensitiveSequenceSamples(texts, check)
+        : [];
       return {
         viewport: viewport.name,
         selector_count: viewport.selectors?.[key]?.count || 0,
@@ -3166,6 +3200,7 @@ function assessCheckFromEvidence(
         matched_count: matches.length,
         matched,
         samples: sampleTexts.slice(0, 3).map((text) => text.slice(0, 240)),
+        case_insensitive_samples: caseInsensitiveSamples,
       };
     });
     const failed = results.filter((result) => result.matched !== expectedVisible).length;
@@ -3322,6 +3357,9 @@ function assessCheckFromEvidence(
         viewport: viewport.name,
         matched,
         samples: failedAgainstExpectation ? textCheckFailureSamples(viewport, check) : [],
+        case_insensitive_samples: failedAgainstExpectation && expectedVisible && !matched
+          ? textCaseInsensitiveFailureSamples(viewport, check)
+          : [],
       };
     });
     const matches = results.map((result) => result.matched);
@@ -4056,6 +4094,32 @@ function textMatchSamples(sample, check) {
   if (!text) return [];
   const sampleText = textSampleAroundMatch(source, source.indexOf(text), text.length);
   return sampleText ? [sampleText] : [];
+}
+function textCaseInsensitiveSamples(sample, check) {
+  const source = String(sample || "");
+  const text = check.pattern ? "" : check.text || "";
+  if (!source || !text) return [];
+  const sampleText = textSampleAroundMatch(source, source.toLowerCase().indexOf(text.toLowerCase()), text.length);
+  return sampleText ? [sampleText] : [];
+}
+function textCaseInsensitiveSequenceSamples(texts, check) {
+  const text = check.pattern ? "" : compactTextEvidenceSample(check.text || "");
+  if (!text) return [];
+  const expected = text.toLowerCase();
+  return (texts || [])
+    .map((candidate) => compactTextEvidenceSample(candidate))
+    .filter((candidate) => candidate && candidate.toLowerCase().includes(expected))
+    .slice(0, 3)
+    .map((candidate) => candidate.slice(0, 240));
+}
+function textCaseInsensitiveFailureSamples(viewport, check) {
+  const key = check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
+  const captured = viewport && viewport.text_case_insensitive_samples && Array.isArray(viewport.text_case_insensitive_samples[key]) ? viewport.text_case_insensitive_samples[key] : [];
+  const capturedSamples = captured
+    .map((sample) => compactTextEvidenceSample(sample).slice(0, 240))
+    .filter(Boolean);
+  if (capturedSamples.length) return capturedSamples.slice(0, 3);
+  return textCaseInsensitiveSamples(viewport && viewport.body_text_sample || "", check).slice(0, 3);
 }
 function textCheckFailureSamples(viewport, check) {
   const key = check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
@@ -5015,6 +5079,9 @@ function assessProfile(profile, evidence) {
         const matched = matches.length > 0;
         const failedAgainstExpectation = matched !== expectedVisible;
         const sampleTexts = matches.length ? matches : failedAgainstExpectation ? texts : [];
+        const caseInsensitiveSamples = failedAgainstExpectation && expectedVisible && !matched
+          ? textCaseInsensitiveSequenceSamples(texts, check)
+          : [];
         return {
           viewport: viewport.name,
           selector_count: viewport.selectors && viewport.selectors[selector] ? viewport.selectors[selector].count : 0,
@@ -5022,6 +5089,7 @@ function assessProfile(profile, evidence) {
           matched_count: matches.length,
           matched,
           samples: sampleTexts.slice(0, 3).map((text) => text.slice(0, 240)),
+          case_insensitive_samples: caseInsensitiveSamples,
         };
       });
       const failed = results.filter((result) => result.matched !== expectedVisible).length;
@@ -5153,6 +5221,9 @@ function assessProfile(profile, evidence) {
           viewport: viewport.name,
           matched,
           samples: failedAgainstExpectation ? textCheckFailureSamples(viewport, check) : [],
+          case_insensitive_samples: failedAgainstExpectation && expectedVisible && !matched
+            ? textCaseInsensitiveFailureSamples(viewport, check)
+            : [],
         };
       });
       const matches = results.map((result) => result.matched);
@@ -5542,6 +5613,14 @@ function setupTextMatches(sample, action) {
   const expected = String(action.text || "");
   return rawSample.includes(expected)
     || normalizeSetupMatchText(rawSample).includes(normalizeSetupMatchText(expected));
+}
+function setupCaseInsensitiveTextSample(sample, action) {
+  if (!action || action.pattern || !action.text) return "";
+  const normalizedSample = normalizeSetupMatchText(sample);
+  const normalizedExpected = normalizeSetupMatchText(action.text);
+  if (!normalizedSample || !normalizedExpected) return "";
+  if (!normalizedSample.toLowerCase().includes(normalizedExpected.toLowerCase())) return "";
+  return compactSetupResultText(normalizedSample);
 }
 async function waitForAnyVisibleSelector(context, selector, timeout) {
   const deadline = Date.now() + setupNumber(timeout, 15000);
@@ -6293,6 +6372,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (!count) return { ...base, reason: "selector_not_found", count };
       let targetIndex = Number.isInteger(action.index) ? action.index : 0;
       let matchedText = null;
+      let caseInsensitiveText = null;
       let hiddenMatchIndex = -1;
       let hiddenMatchedText = null;
       if (action.text || action.pattern) {
@@ -6310,10 +6390,12 @@ async function executeSetupAction(action, ordinal, viewport) {
               hiddenMatchIndex = index;
               hiddenMatchedText = compactSetupResultText(text);
             }
+          } else if (!caseInsensitiveText) {
+            caseInsensitiveText = setupCaseInsensitiveTextSample(text, action) || null;
           }
         }
         if (targetIndex < 0 && hiddenMatchIndex >= 0) return { ...base, reason: "matching_element_not_visible", count, target_index: hiddenMatchIndex, text: hiddenMatchedText };
-        if (targetIndex < 0) return { ...base, reason: "text_not_found", count };
+        if (targetIndex < 0) return { ...base, reason: "text_not_found", count, case_insensitive_text: caseInsensitiveText || undefined };
       }
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex };
       const clickOptions = action.force === true
@@ -6357,6 +6439,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       const locator = scope.context.locator(action.selector);
       const startedAt = Date.now();
       let lastText = "";
+      let caseInsensitiveText = "";
       while (Date.now() - startedAt <= timeout) {
         const count = await locator.count().catch(() => 0);
         for (let index = 0; index < count; index += 1) {
@@ -6365,10 +6448,11 @@ async function executeSetupAction(action, ordinal, viewport) {
           if (setupTextMatches(text, action)) {
             return { ...base, ...setupScopeEvidence(scope), ok: true, text: compactSetupResultText(text), target_index: index, timeout_ms: timeout };
           }
+          caseInsensitiveText = caseInsensitiveText || setupCaseInsensitiveTextSample(text, action);
         }
         await page.waitForTimeout(100);
       }
-      return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+      return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), case_insensitive_text: caseInsensitiveText || undefined, timeout_ms: timeout };
     }
     if (type === "assert_text_visible" || type === "assert_text_absent") {
       const scope = await setupActionScope(action, timeout);
@@ -6377,6 +6461,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       const startedAt = Date.now();
       let lastText = "";
       let matchedText = "";
+      let caseInsensitiveText = "";
       let hiddenMatch = false;
       while (Date.now() - startedAt <= timeout) {
         const count = await locator.count().catch(() => 0);
@@ -6399,6 +6484,7 @@ async function executeSetupAction(action, ordinal, viewport) {
             }
             break;
           }
+          caseInsensitiveText = caseInsensitiveText || setupCaseInsensitiveTextSample(text, action);
         }
         if (type === "assert_text_absent" && !matched) {
           return { ...base, ...setupScopeEvidence(scope), ok: true, count, timeout_ms: timeout };
@@ -6409,7 +6495,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         if (hiddenMatch) {
           return { ...base, ...setupScopeEvidence(scope), reason: "matching_element_not_visible", text: compactSetupResultText(matchedText), timeout_ms: timeout };
         }
-        return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), timeout_ms: timeout };
+        return { ...base, ...setupScopeEvidence(scope), reason: "text_not_found", text: compactSetupResultText(lastText), case_insensitive_text: caseInsensitiveText || undefined, timeout_ms: timeout };
       }
       return { ...base, ...setupScopeEvidence(scope), reason: "text_still_present", text: compactSetupResultText(matchedText || lastText), timeout_ms: timeout };
     }
@@ -7517,6 +7603,7 @@ async function captureViewport(viewport) {
   const text_sequences = {};
   const text_matches = {};
   const text_match_samples = {};
+  const text_case_insensitive_samples = {};
   const http_statuses = {};
   const link_statuses = {};
   for (const check of profile.checks || []) {
@@ -7542,6 +7629,7 @@ async function captureViewport(viewport) {
       const sample = dom.body_text || dom.body_text_sample || "";
       text_matches[key] = textMatches(sample, check);
       text_match_samples[key] = textMatchSamples(sample, check);
+      text_case_insensitive_samples[key] = textCaseInsensitiveSamples(sample, check);
     }
     if ((check.type === "frame_text_visible" || check.type === "frame_url_equals" || check.type === "frame_url_matches" || check.type === "frame_no_horizontal_overflow") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
@@ -7619,6 +7707,7 @@ async function captureViewport(viewport) {
     text_sequences,
     text_matches,
     text_match_samples,
+    text_case_insensitive_samples,
     http_statuses,
     link_statuses,
     route_inventory: routeInventory,

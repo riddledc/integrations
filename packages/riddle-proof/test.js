@@ -2335,6 +2335,7 @@ assert.ok(setupAssertionProfileScript.includes('type === "assert_text_visible" |
 assert.ok(setupAssertionProfileScript.includes("target.innerText"));
 assert.ok(setupAssertionProfileScript.includes("normalizeSetupMatchText"));
 assert.ok(setupAssertionProfileScript.includes("normalizeSetupMatchText(rawSample).includes(normalizeSetupMatchText(expected))"));
+assert.ok(setupAssertionProfileScript.includes("case_insensitive_text"));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_window_value"'));
 assert.ok(setupAssertionProfileScript.includes('type === "assert_window_number"'));
 assert.ok(setupAssertionProfileScript.includes("setupReadWindowValue"));
@@ -2864,6 +2865,23 @@ assert.deepEqual(
   ["Pricing"],
 );
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
+const caseMismatchSelectorTextAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    text_sequences: {
+      "[data-testid='pricing-cards']": {
+        count: 1,
+        visible_count: 1,
+        texts: ["START BUILDING"],
+        visible_texts: ["START BUILDING"],
+      },
+    },
+  }, profileEvidence.viewports[1]],
+});
+const caseMismatchSelectorTextCheck = caseMismatchSelectorTextAssessment.checks.find((check) => check.type === "selector_text_visible");
+assert.equal(caseMismatchSelectorTextCheck.status, "failed");
+assert.deepEqual(caseMismatchSelectorTextCheck.evidence.viewports[0].case_insensitive_samples, ["START BUILDING"]);
 const failedPageTextSampleProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "page-text-failure-samples",
@@ -2903,6 +2921,37 @@ const failedTextVisibleCheck = failedPageTextSampleAssessment.checks.find((check
 assert.equal(failedTextVisibleCheck.status, "failed");
 assert.deepEqual(failedTextVisibleCheck.evidence.matches, [false]);
 assert.match(failedTextVisibleCheck.evidence.viewports[0].samples[0], /Dashboard shell loaded/);
+const caseMismatchPageTextProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "page-text-case-mismatch-samples",
+  target: { route: "/slalom-3d" },
+  checks: [
+    { type: "text_visible", text: "Hill: Default" },
+  ],
+}, { url: "https://example.com" });
+const caseMismatchPageTextAssessment = assessRiddleProofProfileEvidence(caseMismatchPageTextProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "page-text-case-mismatch-samples",
+  target_url: "https://example.com/slalom-3d",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-19T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/slalom-3d", observed: "/slalom-3d", expected_path: "/slalom-3d", matched: true, http_status: 200 },
+    body_text_sample: "Slalom 3D Preview HILL: DEFAULT Start on default",
+    text_matches: { "text:Hill: Default": false },
+    text_case_insensitive_samples: { "text:Hill: Default": ["HILL: DEFAULT"] },
+    selectors: {},
+    screenshot_label: "page-text-case-mismatch-samples-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+});
+const caseMismatchPageTextCheck = caseMismatchPageTextAssessment.checks.find((check) => check.type === "text_visible");
+assert.equal(caseMismatchPageTextCheck.status, "failed");
+assert.deepEqual(caseMismatchPageTextCheck.evidence.viewports[0].case_insensitive_samples, ["HILL: DEFAULT"]);
 const urlParamEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "deep-link-url-profile",
