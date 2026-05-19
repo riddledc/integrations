@@ -1132,7 +1132,7 @@ function profileSetupCanvasSignatureStableHashGroups(results: Array<Record<strin
     if (!hash) continue;
     const selector = stringValue(receipt.selector) || "canvas";
     const frameSelector = stringValue(receipt.frame_selector);
-    const key = `${frameSelector || ""}\n${selector}`;
+    const key = String(frameSelector || "") + "\n" + selector;
     const group = groups.get(key) || { selector, frame_selector: frameSelector, receipts: [] };
     const ordinal = numberValue(receipt.ordinal);
     const label = stringValue(receipt.label) || (ordinal === undefined ? `capture-${group.receipts.length + 1}` : `#${ordinal}`);
@@ -5395,6 +5395,48 @@ function profileSetupCanvasSignatureReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupCanvasSignatureStableHashGroups(results) {
+  const groups = new Map();
+  for (const receipt of profileSetupCanvasSignatureReceipts(results)) {
+    if (receipt.ok === false) continue;
+    const hash = typeof receipt.hash === "string" && receipt.hash.trim() ? receipt.hash.trim() : undefined;
+    if (!hash) continue;
+    const selector = typeof receipt.selector === "string" && receipt.selector.trim() ? receipt.selector.trim() : "canvas";
+    const frameSelector = typeof receipt.frame_selector === "string" && receipt.frame_selector.trim() ? receipt.frame_selector.trim() : undefined;
+    const key = String(frameSelector || "") + "\\n" + selector;
+    const group = groups.get(key) || { selector, frame_selector: frameSelector, receipts: [] };
+    const ordinal = typeof receipt.ordinal === "number" && Number.isFinite(receipt.ordinal) ? receipt.ordinal : undefined;
+    const label = typeof receipt.label === "string" && receipt.label.trim()
+      ? receipt.label.trim()
+      : ordinal === undefined
+        ? "capture-" + (group.receipts.length + 1)
+        : "#" + ordinal;
+    group.receipts.push({ hash, label, ordinal });
+    groups.set(key, group);
+  }
+  const warnings = [];
+  for (const group of groups.values()) {
+    const hashes = new Set(group.receipts.map((receipt) => receipt.hash));
+    const labels = [...new Set(group.receipts.map((receipt) => receipt.label))];
+    if (group.receipts.length < 2 || labels.length < 2 || hashes.size !== 1) continue;
+    const visibleLabels = labels.slice(0, 8);
+    warnings.push({
+      selector: group.selector,
+      frame_selector: group.frame_selector || null,
+      hash: group.receipts[0].hash,
+      count: group.receipts.length,
+      label_count: labels.length,
+      labels: visibleLabels,
+      omitted_label_count: Math.max(0, labels.length - visibleLabels.length),
+      ordinals: group.receipts
+        .map((receipt) => receipt.ordinal)
+        .filter((value) => value !== undefined)
+        .slice(0, 12),
+      reason: "stable_canvas_signature_hash",
+    });
+  }
+  return warnings;
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -5519,6 +5561,7 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,
+        canvas_signature_stable_hash_groups: profileSetupCanvasSignatureStableHashGroups(results),
         clicked,
         text_samples: textSamples,
         failed: failed.map((result) => ({
