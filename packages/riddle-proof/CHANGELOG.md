@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.163
+
+### Patch Changes
+
+- c18711e: Add canvas signature stability diagnostics to profile setup summaries so repeated labeled captures with the same canvas hash are surfaced as non-failing warnings.
+
 ## 0.7.162
 
 ### Patch Changes
