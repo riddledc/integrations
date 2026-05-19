@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.7.156
+
+### Patch Changes
+
+- 797b08e: Retry unsubmitted hosted profile jobs twice by default, improving recovery when
+  two returned Riddle job ids fail to materialize before a replacement succeeds.
+
 ## 0.7.155
 
 ### Patch Changes
