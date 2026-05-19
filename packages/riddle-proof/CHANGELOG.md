@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.164
+
+### Patch Changes
+
+- 4a97f4e: Include canvas signature stable-hash diagnostics in hosted generated profile results, not only local aggregate summaries.
+
 ## 0.7.163
 
 ### Patch Changes
