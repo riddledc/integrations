@@ -666,6 +666,13 @@ function cliRouteInventoryRouteList(routes: CliRouteInventoryRoute[]): string {
   return `${visible.join("; ")}${omitted}`;
 }
 
+function cliRouteInventorySourceScopeLabel(value: unknown): string | undefined {
+  const scope = cliString(value);
+  if (scope === "expected_routes") return "expected routes";
+  if (scope === "route_path_prefix") return "route path prefix";
+  return scope;
+}
+
 function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): string[] {
   const blocker = cliRecord(result.environment_blocker);
   if (!blocker) return [];
@@ -931,6 +938,9 @@ function profileRouteInventorySummaryMarkdown(result: RiddleProofProfileResult):
     const expectedCount = cliFiniteNumber(evidence.expected_count);
     const sourceLinkCount = cliFiniteNumber(evidence.source_link_count);
     const sourceUniqueLinkCount = cliFiniteNumber(evidence.source_unique_link_count);
+    const sourceCandidateCount = cliFiniteNumber(evidence.source_candidate_count);
+    const sourceCandidateUniqueLinkCount = cliFiniteNumber(evidence.source_candidate_unique_link_count);
+    const sourceScopeLabel = cliRouteInventorySourceScopeLabel(evidence.source_link_scope);
     const directRouteCount = cliFiniteNumber(evidence.direct_route_count);
     const clickthroughCount = cliFiniteNumber(evidence.clickthrough_count);
     const topLevelFailures = Array.isArray(evidence.failures) ? evidence.failures.length : undefined;
@@ -956,15 +966,24 @@ function profileRouteInventorySummaryMarkdown(result: RiddleProofProfileResult):
       lines.push(`- ${label} expected routes: ${cliRouteInventoryRouteList(expectedRoutes)}`);
     }
 
+    if (sourceScopeLabel || sourceCandidateCount !== undefined) {
+      const candidateText = sourceCandidateCount === undefined
+        ? ""
+        : `; selector candidates ${sourceCandidateCount}${sourceCandidateUniqueLinkCount === undefined ? "" : ` (${sourceCandidateUniqueLinkCount} unique)`}`;
+      lines.push(`- ${label} source scope: ${sourceScopeLabel || "unknown"}${candidateText}`);
+    }
+
     for (const viewport of viewports.slice(0, 8)) {
       const viewportName = cliString(viewport.viewport) || cliString(viewport.name) || "viewport";
       const viewportSourceLinkCount = cliFiniteNumber(viewport.source_link_count);
       const viewportSourceUniqueLinkCount = cliFiniteNumber(viewport.source_unique_link_count);
+      const viewportSourceCandidateCount = cliFiniteNumber(viewport.source_candidate_count);
+      const viewportSourceCandidateUniqueLinkCount = cliFiniteNumber(viewport.source_candidate_unique_link_count);
       const viewportDirectRouteCount = cliFiniteNumber(viewport.direct_route_count);
       const viewportClickthroughCount = cliFiniteNumber(viewport.clickthrough_count);
       const viewportFailureCount = cliFiniteNumber(viewport.failure_count) || 0;
       lines.push(
-        `- ${label} ${viewportName}: source ${viewportSourceLinkCount ?? "unknown"}${viewportSourceUniqueLinkCount === undefined ? "" : ` (${viewportSourceUniqueLinkCount} unique)`}, direct ${viewportDirectRouteCount ?? "unknown"}, clickthrough ${viewportClickthroughCount ?? "unknown"}, failures ${viewportFailureCount}`,
+        `- ${label} ${viewportName}: source ${viewportSourceLinkCount ?? "unknown"}${viewportSourceUniqueLinkCount === undefined ? "" : ` (${viewportSourceUniqueLinkCount} unique)`}${viewportSourceCandidateCount === undefined ? "" : `, selector candidates ${viewportSourceCandidateCount}${viewportSourceCandidateUniqueLinkCount === undefined ? "" : ` (${viewportSourceCandidateUniqueLinkCount} unique)`}`}, direct ${viewportDirectRouteCount ?? "unknown"}, clickthrough ${viewportClickthroughCount ?? "unknown"}, failures ${viewportFailureCount}`,
       );
     }
     if (viewports.length > 8) lines.push(`- ${label}: ${viewports.length - 8} additional viewport(s) omitted from route inventory summary.`);

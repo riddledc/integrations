@@ -904,6 +904,9 @@ const cliRunProfileServer = createServer((request, response) => {
               { name: "Docs", path: "/docs" },
               { name: "Dashboard", path: "/dashboard" },
             ],
+            source_link_scope: "expected_routes",
+            source_candidate_count: 12,
+            source_candidate_unique_link_count: 9,
             source_link_count: 8,
             source_unique_link_count: 5,
             duplicate_source_link_count: 3,
@@ -917,6 +920,8 @@ const cliRunProfileServer = createServer((request, response) => {
                 viewport: "desktop",
                 source_link_count: 8,
                 source_unique_link_count: 5,
+                source_candidate_count: 12,
+                source_candidate_unique_link_count: 9,
                 direct_route_count: 5,
                 clickthrough_count: 5,
                 failure_count: 0,
@@ -925,6 +930,8 @@ const cliRunProfileServer = createServer((request, response) => {
                 viewport: "phone",
                 source_link_count: 8,
                 source_unique_link_count: 5,
+                source_candidate_count: 12,
+                source_candidate_unique_link_count: 9,
                 direct_route_count: 5,
                 clickthrough_count: 5,
                 failure_count: 0,
@@ -1078,7 +1085,8 @@ try {
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory expected routes: Pricing \(\/pricing\); Billing \(\/billing\); Register \(\/register\); Docs \(\/docs\); Dashboard \(\/dashboard\)/);
-  assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory source scope: expected routes; selector candidates 12 \(9 unique\)/);
+  assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), selector candidates 12 \(9 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /## Riddle Job/);
   assert.match(profileSummaryMarkdown, /job `job_cli_profile_progress`, status `completed`, terminal true/);
   assert.match(profileSummaryMarkdown, /poll: queue 1m00s, elapsed \d+s, attempt 2\/4/);
@@ -2749,6 +2757,8 @@ assert.ok(routeInventoryProfileScript.includes("await waitForInventoryLinkIndex(
 assert.ok(routeInventoryProfileScript.includes("route_inventory: routeInventory"));
 assert.ok(routeInventoryProfileScript.includes("home_unique_game_link_count"));
 assert.ok(routeInventoryProfileScript.includes("source_unique_link_count"));
+assert.ok(routeInventoryProfileScript.includes("source_link_scope"));
+assert.ok(routeInventoryProfileScript.includes("source_candidate_count"));
 assert.ok(routeInventoryProfileScript.includes("duplicate_source_link_count"));
 assert.ok(routeInventoryProfileScript.includes("routeInventoryCheck.run_all_viewports"));
 assert.ok(routeInventoryProfileScript.includes("viewport_count: inventories.length"));
@@ -3291,6 +3301,9 @@ const routeInventoryEvidence = {
       expected_routes: routeInventoryProfile.checks[0].expected_routes,
       link_selector: "a[href^='/games/']",
       source_selector: ".game-table",
+      source_link_scope: "route_path_prefix",
+      source_candidate_count: 3,
+      source_candidate_unique_link_count: 2,
       source_link_count: 2,
       source_unique_link_count: 2,
       duplicate_source_link_count: 0,
@@ -3327,6 +3340,9 @@ assert.deepEqual(routeInventoryCheck.evidence.expected_routes, [
   { name: "Gem Mine", path: "/games/gem-mine" },
   { name: "Coin Clicker", path: "/games/coin-clicker" },
 ]);
+assert.equal(routeInventoryCheck.evidence.source_link_scope, "route_path_prefix");
+assert.equal(routeInventoryCheck.evidence.source_candidate_count, 3);
+assert.equal(routeInventoryCheck.evidence.source_candidate_unique_link_count, 2);
 assert.equal(routeInventoryCheck.evidence.source_link_count, 2);
 assert.equal(routeInventoryCheck.evidence.source_unique_link_count, 2);
 assert.equal(routeInventoryCheck.evidence.duplicate_source_link_count, 0);
@@ -3337,6 +3353,9 @@ assert.equal(routeInventoryCheck.evidence.clickthrough_count, 2);
 assert.equal(routeInventoryCheck.evidence.viewport_count, 1);
 assert.deepEqual(routeInventoryCheck.evidence.viewports[0], {
   viewport: "desktop",
+  source_link_scope: "route_path_prefix",
+  source_candidate_count: 3,
+  source_candidate_unique_link_count: 2,
   source_link_count: 2,
   source_unique_link_count: 2,
   duplicate_source_link_count: 0,
