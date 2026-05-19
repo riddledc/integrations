@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.126
+
+### Patch Changes
+
+- f9755c7: Add viewport-scoped network mock response sequences for profile-mode retry proofs.
+
 ## 0.7.125
 
 ### Patch Changes
