@@ -348,6 +348,7 @@ export interface RiddleProofProfileTarget {
   timeout_sec?: number;
   wait_for_selector?: string;
   wait_ms?: number;
+  screenshot_full_page?: boolean;
   setup_actions?: RiddleProofProfileSetupAction[];
   network_mocks?: RiddleProofProfileNetworkMock[];
 }
@@ -1459,6 +1460,44 @@ function normalizeSetupActions(value: unknown): RiddleProofProfileSetupAction[] 
   return value.map(normalizeSetupAction);
 }
 
+function normalizeTargetScreenshotFullPage(input: Record<string, unknown>): boolean | undefined {
+  const directFullPage = booleanValue(valueFromOwn(
+    input,
+    "screenshot_full_page",
+    "screenshotFullPage",
+    "final_screenshot_full_page",
+    "finalScreenshotFullPage",
+    "full_page_screenshots",
+    "fullPageScreenshots",
+  ));
+  const viewportOnly = booleanValue(valueFromOwn(
+    input,
+    "viewport_screenshots",
+    "viewportScreenshots",
+    "viewport_only_screenshots",
+    "viewportOnlyScreenshots",
+  ));
+  const modeInput = stringFromOwn(input, "screenshot_mode", "screenshotMode", "final_screenshot_mode", "finalScreenshotMode");
+  let modeFullPage: boolean | undefined;
+  if (modeInput) {
+    const mode = modeInput.trim().toLowerCase().replace(/[-\s]+/g, "_");
+    if (mode === "full_page" || mode === "fullpage" || mode === "page" || mode === "document") {
+      modeFullPage = true;
+    } else if (mode === "viewport" || mode === "view") {
+      modeFullPage = false;
+    } else {
+      throw new Error(`target.screenshot_mode ${modeInput} is not supported. Supported modes: full_page, viewport.`);
+    }
+  }
+  const values = [directFullPage, viewportOnly === undefined ? undefined : !viewportOnly, modeFullPage]
+    .filter((value): value is boolean => value !== undefined);
+  if (!values.length) return undefined;
+  if (values.some((value) => value !== values[0])) {
+    throw new Error("target has conflicting screenshot full_page / viewport mode options.");
+  }
+  return values[0];
+}
+
 function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfileNetworkMock {
   if (!isRecord(input)) throw new Error(`target.network_mocks[${index}] must be an object.`);
   const url = stringValue(input.url) || stringValue(input.glob) || stringValue(input.pattern);
@@ -2256,6 +2295,7 @@ export function normalizeRiddleProofProfile(
         ?? timeoutSecValue(targetInput.riddleTimeoutSec),
       wait_for_selector: stringValue(targetInput.wait_for_selector) || stringValue(targetInput.waitForSelector),
       wait_ms: numberValue(targetInput.wait_ms) ?? numberValue(targetInput.waitMs),
+      screenshot_full_page: normalizeTargetScreenshotFullPage(targetInput),
       setup_actions: normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions),
       network_mocks: normalizeNetworkMocks(targetInput.network_mocks ?? targetInput.networkMocks),
     },
@@ -8009,7 +8049,9 @@ async function captureViewport(viewport) {
   }
   const screenshotLabel = profileSlug + "-" + viewport.name;
   try {
-    if (typeof saveScreenshot === "function") await saveScreenshot(screenshotLabel);
+    const screenshotOptions = {};
+    if (profile.target && profile.target.screenshot_full_page !== undefined) screenshotOptions.fullPage = profile.target.screenshot_full_page !== false;
+    if (typeof saveScreenshot === "function") await saveScreenshot(screenshotLabel, screenshotOptions);
   } catch (error) {
     pageErrors.push({ message: "saveScreenshot failed: " + String(error && error.message ? error.message : error).slice(0, 500) });
   }

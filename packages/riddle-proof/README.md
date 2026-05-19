@@ -482,6 +482,12 @@ and `click_count_value_total`.
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`
 still overrides the profile value for one-off runs.
 
+Profile final viewport screenshots are full-page by default. Set
+`target.screenshot_full_page: false`, `target.screenshotFullPage: false`, or
+`target.screenshot_mode: "viewport"` when the automatic final screenshots
+should capture only the current viewport, for example when fixed or sticky
+headers make full-page captures misleading.
+
 Use `allowed_console_patterns` / `allowed_console_texts` on
 `no_fatal_console_errors` when a negative-path profile intentionally triggers a
 known browser console error, such as a mocked `503` that the app recovers from:
