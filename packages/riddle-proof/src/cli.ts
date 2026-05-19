@@ -16,6 +16,7 @@ import {
 } from "./local-agent";
 import {
   createRiddleApiClient,
+  isTerminalRiddleJobStatus,
   parseRiddleViewport,
   type RiddlePollJobResult,
   type RiddlePollProgressSnapshot,
@@ -486,6 +487,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const attempts = cliFiniteNumber(riddle.attempts);
   const submittedAt = cliString(riddle.submitted_at);
   const completedAt = cliString(riddle.completed_at);
+  const artifactRecovery = riddle.artifact_recovery === true;
   const parts = [
     mode ? `mode ${markdownInlineCode(mode)}` : "",
     jobCount === undefined ? "" : `jobs ${jobCount}`,
@@ -502,6 +504,9 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   if (submittedAt || completedAt) {
     lines.push(`- timing:${submittedAt ? ` submitted ${markdownInlineCode(submittedAt)}` : ""}${completedAt ? ` completed ${markdownInlineCode(completedAt)}` : ""}`);
   }
+  if (artifactRecovery) {
+    lines.push("- artifact recovery: used artifacts endpoint after non-terminal poll");
+  }
   const splitJobs = Array.isArray(riddle.split_jobs)
     ? riddle.split_jobs.map(cliRecord).filter((job): job is Record<string, unknown> => Boolean(job))
     : [];
@@ -512,6 +517,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
     const splitTerminal = typeof job.terminal === "boolean" ? job.terminal : undefined;
     const splitElapsedMs = cliFiniteNumber(job.elapsed_ms);
     const splitPreSubmissionElapsedMs = cliFiniteNumber(job.pre_submission_elapsed_ms);
+    const splitArtifactRecovery = job.artifact_recovery === true;
     lines.push(
       `- ${viewport}: ${[
         splitJobId ? `job ${markdownInlineCode(splitJobId)}` : "",
@@ -519,6 +525,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
         splitTerminal === undefined ? "" : `terminal ${splitTerminal ? "true" : "false"}`,
         splitElapsedMs === undefined ? "" : `elapsed ${formatPollDuration(splitElapsedMs)}`,
         splitPreSubmissionElapsedMs === undefined || splitPreSubmissionElapsedMs < 1000 ? "" : `pre-submit ${formatPollDuration(splitPreSubmissionElapsedMs)}`,
+        splitArtifactRecovery ? "artifact recovery" : "",
       ].filter(Boolean).join(", ") || "job metadata unavailable"}`,
     );
   }
@@ -1263,6 +1270,7 @@ function withRiddleMetadata(
     terminal?: boolean;
     poll?: RiddlePollSummary;
     artifacts?: RiddleProofProfileArtifactRef[];
+    artifactRecovery?: boolean;
   },
 ): RiddleProofProfileResult {
   const poll = input.poll;
@@ -1282,12 +1290,71 @@ function withRiddleMetadata(
       attempt: poll?.attempt ?? result.riddle?.attempt,
       attempts: poll?.attempts ?? result.riddle?.attempts,
       timed_out: poll?.timed_out ?? result.riddle?.timed_out,
+      artifact_recovery: input.artifactRecovery ?? result.riddle?.artifact_recovery,
     },
     artifacts: {
       ...result.artifacts,
       riddle_artifacts: input.artifacts || result.artifacts.riddle_artifacts,
     },
   };
+}
+
+function riddleArtifactsPayloadStatus(payload: unknown) {
+  const record = cliRecord(payload);
+  return cliString(record?.status) ?? cliString(cliRecord(record?.job)?.status);
+}
+
+async function recoverProfileResultFromRiddleArtifacts(
+  profile: RiddleProofProfile,
+  input: {
+    client: RiddleApiClient;
+    runner: RiddleProofProfileRunner;
+    jobId: string;
+    poll: RiddlePollJobResult;
+  },
+): Promise<RiddleProofProfileResult | undefined> {
+  if (input.poll.poll?.timed_out !== true) return undefined;
+  let artifactPayload: Record<string, unknown>;
+  try {
+    artifactPayload = await input.client.requestJson<Record<string, unknown>>(`/v1/jobs/${input.jobId}/artifacts`);
+  } catch {
+    return undefined;
+  }
+  const artifacts = collectRiddleProfileArtifactRefs(artifactPayload);
+  if (!artifacts.length) return undefined;
+  const artifactStatus = riddleArtifactsPayloadStatus(artifactPayload);
+  const terminal = artifactStatus ? isTerminalRiddleJobStatus(artifactStatus) : true;
+  const recoveredPoll: RiddlePollSummary | undefined = input.poll.poll
+    ? {
+        ...input.poll.poll,
+        status: artifactStatus ?? input.poll.poll.status,
+        terminal,
+      }
+    : undefined;
+  const artifactResult = await profileResultFromRiddleArtifacts(profile, artifacts, [artifactPayload, input.poll.job]);
+  if (artifactResult) {
+    return withRiddleMetadata(artifactResult, {
+      job_id: input.jobId,
+      status: artifactStatus ?? input.poll.status,
+      terminal,
+      poll: recoveredPoll,
+      artifacts,
+      artifactRecovery: true,
+    });
+  }
+  if (!terminal) return undefined;
+  return createRiddleProofProfileInsufficientResult({
+    profile,
+    runner: input.runner,
+    error: `Riddle job ${input.jobId} timed out in status ${input.poll.status || "unknown"}, but artifacts were recovered without a proof result.`,
+    riddle: {
+      ...riddleMetadataFromPoll(input.jobId, input.poll),
+      status: artifactStatus ?? input.poll.status,
+      terminal,
+      artifact_recovery: true,
+    },
+    artifacts,
+  });
 }
 
 function riddleMetadataFromPoll(
@@ -1368,12 +1435,14 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     attempt: result.riddle?.attempt,
     attempts: result.riddle?.attempts,
     timed_out: result.riddle?.timed_out,
+    artifact_recovery: result.riddle?.artifact_recovery,
   }));
   return {
     mode: "split-viewports",
     job_count: childRuns.length,
     status: "split-viewports",
     terminal: childRuns.every(({ result }) => result.riddle?.terminal !== false),
+    artifact_recovery: childRuns.some(({ result }) => result.riddle?.artifact_recovery === true),
     queue_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.queue_elapsed_ms)),
     pre_submission_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.pre_submission_elapsed_ms)),
     elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.elapsed_ms)),
@@ -1526,6 +1595,13 @@ async function runSingleRiddleProfileForCli(
   });
   const artifacts = collectRiddleProfileArtifactRefs(poll.artifacts);
   if (!poll.ok || !poll.terminal) {
+    const recoveredResult = await recoverProfileResultFromRiddleArtifacts(profile, {
+      client,
+      runner,
+      jobId,
+      poll,
+    });
+    if (recoveredResult) return recoveredResult;
     return createRiddleProofProfileEnvironmentBlockedResult({
       profile,
       runner,

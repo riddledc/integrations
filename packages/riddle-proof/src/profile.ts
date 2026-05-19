@@ -538,6 +538,7 @@ export interface RiddleProofProfileResult {
     attempt?: number;
     attempts?: number;
     timed_out?: boolean;
+    artifact_recovery?: boolean;
     split_jobs?: Array<{
       viewport: string;
       job_id?: string;
@@ -549,6 +550,7 @@ export interface RiddleProofProfileResult {
       attempt?: number;
       attempts?: number;
       timed_out?: boolean;
+      artifact_recovery?: boolean;
     }>;
   };
   environment_blocker?: Record<string, JsonValue>;
