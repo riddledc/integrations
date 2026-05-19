@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.158
+
+### Patch Changes
+
+- 95e733e: Filter viewport-scoped checks and setup actions out of non-matching split-viewport child runs so child artifacts do not report false product regressions for checks assigned to another viewport.
+
 ## 0.7.157
 
 ### Patch Changes
