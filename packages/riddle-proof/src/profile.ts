@@ -521,7 +521,9 @@ export interface RiddleProofProfileResult {
   warnings?: string[];
   evidence?: RiddleProofProfileEvidence;
   riddle?: {
+    mode?: "split-viewports" | (string & {});
     job_id?: string;
+    job_count?: number;
     status?: string | null;
     terminal?: boolean;
     created_at?: string | null;
@@ -532,6 +534,17 @@ export interface RiddleProofProfileResult {
     attempt?: number;
     attempts?: number;
     timed_out?: boolean;
+    split_jobs?: Array<{
+      viewport: string;
+      job_id?: string;
+      status?: string | null;
+      terminal?: boolean;
+      queue_elapsed_ms?: number | null;
+      elapsed_ms?: number;
+      attempt?: number;
+      attempts?: number;
+      timed_out?: boolean;
+    }>;
   };
   environment_blocker?: Record<string, JsonValue>;
   error?: string;

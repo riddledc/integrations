@@ -609,6 +609,70 @@ try {
 const cliRunProfileRequests = [];
 let cliRunProfilePollCount = 0;
 let cliRunProfilePort = 0;
+function cliRunProfileSplitResult(viewportName, width, height) {
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: `cli-profile-split-${viewportName}`,
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: "https://example.com/split-profile",
+      observed: "/split-profile",
+      expected_path: "/split-profile",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: [`cli-profile-split-${viewportName}`], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "route_loaded",
+        status: "passed",
+        evidence: { expected_path: "/split-profile", observed_paths: ["/split-profile"], http_statuses: [200] },
+      },
+      {
+        type: "no_horizontal_overflow",
+        status: "passed",
+        evidence: { max_overflow_px: 0, overflow_px: [0], bounds_overflow_px: [0] },
+      },
+    ],
+    summary: `cli-profile-split-${viewportName} passed.`,
+    captured_at: "2026-05-19T14:40:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: `cli-profile-split-${viewportName}`,
+      target_url: "https://example.com/split-profile",
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-19T14:40:00.000Z",
+      viewports: [
+        {
+          name: viewportName,
+          width,
+          height,
+          url: "https://example.com/split-profile",
+          route: {
+            requested: "https://example.com/split-profile",
+            observed: "/split-profile",
+            expected_path: "/split-profile",
+            matched: true,
+            http_status: 200,
+          },
+          title: `Split ${viewportName}`,
+          scroll_width: width,
+          client_width: width,
+          overflow_px: 0,
+          bounds_overflow_px: 0,
+          overflow_offenders: [],
+          screenshot_label: `cli-profile-split-${viewportName}`,
+          screenshot_full_page: false,
+        },
+      ],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1, split_fixture: viewportName },
+    },
+  };
+}
 const cliRunProfileServer = createServer((request, response) => {
   const sendJson = (payload, status = 200) => {
     response.writeHead(status, { "content-type": "application/json" });
@@ -628,6 +692,11 @@ const cliRunProfileServer = createServer((request, response) => {
         auth: request.headers.authorization || null,
         body,
       });
+      if (String(body.url || "").includes("/split-profile")) {
+        const viewportName = body.viewport?.width === 390 ? "phone" : "desktop";
+        sendJson({ job_id: `job_cli_profile_split_${viewportName}` });
+        return;
+      }
       if (String(body.url || "").includes("/blocked-profile")) {
         sendJson({
           error: "Insufficient available balance",
@@ -704,6 +773,42 @@ const cliRunProfileServer = createServer((request, response) => {
       submitted_at: "2026-05-13T23:21:00.000Z",
       completed_at: "2026-05-13T23:21:20.000Z",
     });
+    return;
+  }
+
+  const splitJobMatch = request.url.match(/^\/v1\/jobs\/job_cli_profile_split_(desktop|phone)$/);
+  if (request.method === "GET" && splitJobMatch) {
+    const viewportName = splitJobMatch[1];
+    sendJson({
+      job_id: `job_cli_profile_split_${viewportName}`,
+      status: "completed",
+      created_at: "2026-05-19T14:38:00.000Z",
+      submitted_at: "2026-05-19T14:38:10.000Z",
+      completed_at: "2026-05-19T14:39:00.000Z",
+    });
+    return;
+  }
+
+  const splitArtifactMatch = request.url.match(/^\/v1\/jobs\/job_cli_profile_split_(desktop|phone)\/artifacts$/);
+  if (request.method === "GET" && splitArtifactMatch) {
+    const viewportName = splitArtifactMatch[1];
+    sendJson({
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/split-proof-${viewportName}.json`,
+        },
+      ],
+    });
+    return;
+  }
+
+  const splitProofMatch = request.url.match(/^\/split-proof-(desktop|phone)\.json$/);
+  if (request.method === "GET" && splitProofMatch) {
+    const viewportName = splitProofMatch[1];
+    sendJson(viewportName === "phone"
+      ? cliRunProfileSplitResult("phone", 390, 844)
+      : cliRunProfileSplitResult("desktop", 1280, 900));
     return;
   }
 
@@ -1126,6 +1231,73 @@ try {
   assert.equal(cliRunProfileRequests.length, 2);
   assert.equal(cliRunProfileRequests[1].body.strict, true);
   assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
+
+  const splitProfileFile = path.join(riddlePreviewDir, "cli-profile-split.json");
+  const splitProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-split-output");
+  writeFileSync(splitProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-split",
+    target: {
+      route: "/split-profile",
+      viewports: [
+        { name: "desktop", width: 1280, height: 900 },
+        { name: "phone", width: 390, height: 844 },
+      ],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/split-profile" },
+      { type: "no_horizontal_overflow", max_overflow_px: 0 },
+    ],
+  }));
+  const cliSplitProfileResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    splitProfileOutputDir,
+    "--pollAttempts",
+    "1",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--split-viewports",
+    "true",
+    "--quiet",
+  ]);
+  const parsedSplitProfileResult = JSON.parse(cliSplitProfileResult.stdout);
+  assert.equal(parsedSplitProfileResult.status, "passed");
+  assert.equal(parsedSplitProfileResult.profile_name, "cli-profile-split");
+  assert.deepEqual(parsedSplitProfileResult.evidence.viewports.map((viewport) => viewport.name), ["desktop", "phone"]);
+  assert.equal(parsedSplitProfileResult.evidence.dom_summary.split_viewports, true);
+  assert.equal(parsedSplitProfileResult.evidence.dom_summary.child_result_count, 2);
+  assert.equal(parsedSplitProfileResult.riddle.mode, "split-viewports");
+  assert.equal(parsedSplitProfileResult.riddle.job_count, 2);
+  assert.deepEqual(parsedSplitProfileResult.riddle.split_jobs.map((job) => job.viewport), ["desktop", "phone"]);
+  assert.deepEqual(parsedSplitProfileResult.riddle.split_jobs.map((job) => job.job_id), ["job_cli_profile_split_desktop", "job_cli_profile_split_phone"]);
+  assert.deepEqual(
+    cliRunProfileRequests
+      .filter((call) => String(call.body.url || "").includes("/split-profile"))
+      .map((call) => call.body.viewport),
+    [{ name: "desktop", width: 1280, height: 900 }, { name: "phone", width: 390, height: 844 }],
+  );
+  assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "profile-result.json"), "utf8")).status, "passed");
+  assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "desktop", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-desktop");
+  assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "phone", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-phone");
+  const splitProfileSummary = readFileSync(path.join(splitProfileOutputDir, "summary.md"), "utf8");
+  assert.match(splitProfileSummary, /mode `split-viewports`, jobs 2, status `split-viewports`, terminal true/);
+  assert.match(splitProfileSummary, /desktop: job `job_cli_profile_split_desktop`, status `completed`, terminal true/);
+  assert.match(splitProfileSummary, /phone: job `job_cli_profile_split_phone`, status `completed`, terminal true/);
+  assert.match(splitProfileSummary, /desktop\/proof\.json/);
+  assert.match(splitProfileSummary, /phone\/proof\.json/);
 
   const fatalConsoleProfileFile = path.join(riddlePreviewDir, "cli-fatal-console-summary.json");
   const fatalConsoleOutputDir = path.join(riddlePreviewDir, "cli-fatal-console-summary-output");
