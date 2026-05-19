@@ -548,6 +548,23 @@ function profileCheckTextTarget(evidence: Record<string, unknown>): string | und
   return pattern ? `pattern ${markdownInlineCode(pattern)}` : undefined;
 }
 
+function observeWithinMarkdownReceipt(evidence: Record<string, unknown>): string | undefined {
+  const viewports = Array.isArray(evidence.viewports)
+    ? evidence.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+  if (!viewports.length) return undefined;
+  const receipts = viewports.slice(0, 4).map((viewport) => {
+    const name = cliString(viewport.viewport) || cliString(viewport.name) || "viewport";
+    const matched = viewport.matched === true ? "matched" : viewport.matched === false ? "missed" : "observed";
+    const elapsedMs = cliFiniteNumber(viewport.elapsed_ms);
+    const attempts = cliFiniteNumber(viewport.attempts);
+    const sample = cliString(viewport.sample);
+    return `${name} ${matched}${elapsedMs === undefined ? "" : ` in ${elapsedMs}ms`}${attempts === undefined ? "" : `, ${attempts} attempt${attempts === 1 ? "" : "s"}`}${sample ? `, sample ${markdownInlineCode(sample, 70)}` : ""}`;
+  });
+  if (viewports.length > receipts.length) receipts.push(`${viewports.length - receipts.length} more viewport${viewports.length - receipts.length === 1 ? "" : "s"}`);
+  return receipts.join("; ");
+}
+
 function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][number]): string | undefined {
   const evidence = cliRecord(check.evidence);
   if (!evidence) return undefined;
@@ -582,9 +599,15 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
     const textTarget = profileCheckTextTarget(evidence);
     const timeoutMs = cliFiniteNumber(evidence.timeout_ms);
     const withinLabel = timeoutMs === undefined ? "within timeout" : `within ${timeoutMs}ms`;
-    if (selector && textTarget) return `${markdownInlineCode(selector)} observes ${textTarget} ${withinLabel}`;
-    if (selector) return `${markdownInlineCode(selector)} visible ${withinLabel}`;
-    return textTarget ? `${textTarget} ${withinLabel}` : withinLabel;
+    const receipt = observeWithinMarkdownReceipt(evidence);
+    const base = selector && textTarget
+      ? `${markdownInlineCode(selector)} observes ${textTarget} ${withinLabel}`
+      : selector
+        ? `${markdownInlineCode(selector)} visible ${withinLabel}`
+        : textTarget
+          ? `${textTarget} ${withinLabel}`
+          : withinLabel;
+    return receipt ? `${base}; ${receipt}` : base;
   }
   if (check.type === "text_visible" || check.type === "text_absent") {
     return profileCheckTextTarget(evidence);
