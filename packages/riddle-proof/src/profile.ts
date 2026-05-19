@@ -1017,6 +1017,7 @@ function profileSetupSummary(
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason ?? result.error ?? null,
+          case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
         optional_failed: optionalFailed.map((result) => ({
           ordinal: result.ordinal ?? null,
@@ -1024,6 +1025,7 @@ function profileSetupSummary(
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason ?? result.error ?? null,
+          case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
       };
     }),
@@ -4767,6 +4769,7 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason || result.error || null,
+          case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
         optional_failed: optionalFailed.map((result) => ({
           ordinal: result.ordinal ?? null,
@@ -4774,6 +4777,7 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason || result.error || null,
+          case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
       };
     }),
