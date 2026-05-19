@@ -549,6 +549,46 @@ try {
   Date.now = originalDateNowForPreSubmit;
 }
 
+const originalDateNowForUnsubmittedTimeout = Date.now;
+let unsubmittedTimeoutPollCount = 0;
+let unsubmittedTimeoutNowIndex = 0;
+const unsubmittedTimeoutNowValues = [2_000_000, 2_002_500];
+Date.now = () => unsubmittedTimeoutNowValues[Math.min(unsubmittedTimeoutNowIndex++, unsubmittedTimeoutNowValues.length - 1)];
+try {
+  const unsubmittedTimeoutClient = createRiddleApiClient({
+    apiKey: "test-riddle-key",
+    apiBaseUrl: "https://api.unsubmitted-timeout.test",
+    fetchImpl: async (url) => {
+      if (String(url) === "https://api.unsubmitted-timeout.test/v1/jobs/job_unsubmitted_timeout") {
+        unsubmittedTimeoutPollCount += 1;
+        return new Response(JSON.stringify({
+          job_id: "job_unsubmitted_timeout",
+          status: "queued",
+          created_at: null,
+          submitted_at: null,
+          completed_at: null,
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+    },
+  });
+  const unsubmittedTimeoutResult = await unsubmittedTimeoutClient.pollJob("job_unsubmitted_timeout", {
+    wait: true,
+    attempts: 5,
+    intervalMs: 0,
+    unsubmittedTimeoutMs: 1000,
+  });
+  assert.equal(unsubmittedTimeoutResult.ok, false);
+  assert.equal(unsubmittedTimeoutResult.terminal, false);
+  assert.equal(unsubmittedTimeoutResult.poll.timed_out, true);
+  assert.equal(unsubmittedTimeoutResult.poll.unsubmitted_timeout, true);
+  assert.equal(unsubmittedTimeoutResult.poll.unsubmitted_timeout_ms, 1000);
+  assert.equal(unsubmittedTimeoutResult.poll.attempt, 1);
+  assert.equal(unsubmittedTimeoutPollCount, 1);
+} finally {
+  Date.now = originalDateNowForUnsubmittedTimeout;
+}
+
 let recoveredPollCount = 0;
 const recoveredPollClient = createRiddleApiClient({
   apiKey: "test-riddle-key",
@@ -664,6 +704,8 @@ try {
 const cliRunProfileRequests = [];
 let cliRunProfilePollCount = 0;
 let cliRunProfileArtifactRecoveryPollCount = 0;
+let cliRunProfileUnsubmittedRunCount = 0;
+let cliRunProfileUnsubmittedPollCount = 0;
 let cliRunProfilePort = 0;
 function cliRunProfileSplitResult(viewportName, width, height) {
   return {
@@ -775,6 +817,15 @@ const cliRunProfileServer = createServer((request, response) => {
         sendJson({ job_id: "job_cli_profile_timeout_artifacts" });
         return;
       }
+      if (String(body.url || "").includes("/unsubmitted-retry-profile")) {
+        cliRunProfileUnsubmittedRunCount += 1;
+        sendJson({
+          job_id: cliRunProfileUnsubmittedRunCount === 1
+            ? "job_cli_profile_unsubmitted_stale"
+            : "job_cli_profile_unsubmitted_retry",
+        });
+        return;
+      }
       if (String(body.url || "").includes("/fatal-console-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -835,6 +886,72 @@ const cliRunProfileServer = createServer((request, response) => {
           url: `http://127.0.0.1:${cliRunProfilePort}/timeout-artifacts-proof.json`,
         },
       ],
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_stale") {
+    cliRunProfileUnsubmittedPollCount += 1;
+    setTimeout(() => {
+      sendJson({
+        job_id: "job_cli_profile_unsubmitted_stale",
+        status: "queued",
+        created_at: null,
+        submitted_at: null,
+        completed_at: null,
+      });
+    }, 5);
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_retry") {
+    sendJson({
+      job_id: "job_cli_profile_unsubmitted_retry",
+      status: "completed",
+      created_at: "2026-05-19T18:20:00.000Z",
+      submitted_at: "2026-05-19T18:20:02.000Z",
+      completed_at: "2026-05-19T18:20:10.000Z",
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_retry/artifacts") {
+    sendJson({
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-retry-proof.json`,
+        },
+      ],
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/unsubmitted-retry-proof.json") {
+    sendJson({
+      version: "riddle-proof.profile-result.v1",
+      profile_name: "cli-profile-unsubmitted-retry",
+      runner: "riddle",
+      status: "passed",
+      baseline_policy: "invariant_only",
+      route: {
+        requested: "https://example.com/unsubmitted-retry-profile",
+        observed: "/unsubmitted-retry-profile",
+        expected_path: "/unsubmitted-retry-profile",
+        matched: true,
+        http_status: 200,
+      },
+      artifacts: { screenshots: ["unsubmitted-retry-profile"], proof_json: "proof.json" },
+      checks: [
+        {
+          type: "route_loaded",
+          label: "route_loaded",
+          status: "passed",
+          evidence: { expected_path: "/unsubmitted-retry-profile", observed_paths: ["/unsubmitted-retry-profile"], http_statuses: [200] },
+        },
+      ],
+      summary: "cli-profile-unsubmitted-retry passed.",
+      captured_at: "2026-05-19T18:20:10.000Z",
     });
     return;
   }
@@ -1391,6 +1508,51 @@ try {
   assert.match(artifactRecoverySummary, /artifact recovery: used artifacts endpoint after non-terminal poll/);
   assert.match(artifactRecoverySummary, /job `job_cli_profile_timeout_artifacts`, status `completed`, terminal true/);
 
+  const unsubmittedRetryProfileFile = path.join(riddlePreviewDir, "cli-profile-unsubmitted-retry.json");
+  const unsubmittedRetryOutputDir = path.join(riddlePreviewDir, "cli-profile-unsubmitted-retry-output");
+  writeFileSync(unsubmittedRetryProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-unsubmitted-retry",
+    target: {
+      route: "/unsubmitted-retry-profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/unsubmitted-retry-profile" }],
+  }));
+  const unsubmittedRetryResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    unsubmittedRetryProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    unsubmittedRetryOutputDir,
+    "--pollAttempts",
+    "5",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--unsubmitted-timeout-ms",
+    "1",
+  ]);
+  const parsedUnsubmittedRetryResult = JSON.parse(unsubmittedRetryResult.stdout);
+  assert.equal(parsedUnsubmittedRetryResult.status, "passed");
+  assert.equal(parsedUnsubmittedRetryResult.riddle.job_id, "job_cli_profile_unsubmitted_retry");
+  assert.equal(parsedUnsubmittedRetryResult.riddle.retry_count, 1);
+  assert.deepEqual(parsedUnsubmittedRetryResult.riddle.stale_job_ids, ["job_cli_profile_unsubmitted_stale"]);
+  assert.equal(cliRunProfileUnsubmittedRunCount, 2);
+  assert.equal(cliRunProfileUnsubmittedPollCount, 1);
+  assert.match(unsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale stayed unsubmitted/);
+  const unsubmittedRetrySummary = readFileSync(path.join(unsubmittedRetryOutputDir, "summary.md"), "utf8");
+  assert.match(unsubmittedRetrySummary, /retry recovery: replaced 1 unsubmitted job \(`job_cli_profile_unsubmitted_stale`\)/);
+
   cliRunProfilePollCount = 0;
   const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");
   const cliProfileStrictTrueResult = await runCli([
@@ -1417,8 +1579,8 @@ try {
     "--strict=true",
   ]);
   assert.equal(JSON.parse(cliProfileStrictTrueResult.stdout).status, "passed");
-  assert.equal(cliRunProfileRequests.length, 3);
-  assert.equal(cliRunProfileRequests[2].body.strict, true);
+  assert.equal(cliRunProfileRequests.length, 5);
+  assert.equal(cliRunProfileRequests[4].body.strict, true);
   assert.equal(JSON.parse(readFileSync(path.join(strictTrueOutputDir, "profile-result.json"), "utf8")).status, "passed");
 
   const splitProfileFile = path.join(riddlePreviewDir, "cli-profile-split.json");

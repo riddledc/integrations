@@ -19,6 +19,7 @@ import {
   isTerminalRiddleJobStatus,
   parseRiddleViewport,
   type RiddlePollJobResult,
+  type RiddlePollJobOptions,
   type RiddlePollProgressSnapshot,
   type RiddlePollSummary,
   type RiddleClientConfig,
@@ -124,12 +125,21 @@ function runProfileSplitViewportsOption(options: CliOptions) {
   return optionBoolean(options, "splitViewports") ?? false;
 }
 
+const DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 90_000;
+const DEFAULT_PROFILE_UNSUBMITTED_RETRIES = 1;
+
 function optionNumber(options: CliOptions, ...keys: string[]) {
   for (const key of keys) {
     const value = optionString(options, key);
     if (value !== undefined) return Number(value);
   }
   return undefined;
+}
+
+function optionInteger(options: CliOptions, fallback: number, ...keys: string[]) {
+  const value = optionNumber(options, ...keys);
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.floor(value);
 }
 
 function profileOutputDirOption(options: CliOptions) {
@@ -488,6 +498,10 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const submittedAt = cliString(riddle.submitted_at);
   const completedAt = cliString(riddle.completed_at);
   const artifactRecovery = riddle.artifact_recovery === true;
+  const retryCount = cliFiniteNumber(riddle.retry_count);
+  const staleJobIds = Array.isArray(riddle.stale_job_ids)
+    ? riddle.stale_job_ids.map((value) => cliString(value)).filter((value): value is string => Boolean(value))
+    : [];
   const parts = [
     mode ? `mode ${markdownInlineCode(mode)}` : "",
     jobCount === undefined ? "" : `jobs ${jobCount}`,
@@ -507,6 +521,9 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   if (artifactRecovery) {
     lines.push("- artifact recovery: used artifacts endpoint after non-terminal poll");
   }
+  if (retryCount !== undefined && retryCount > 0) {
+    lines.push(`- retry recovery: replaced ${retryCount} unsubmitted job${retryCount === 1 ? "" : "s"}${staleJobIds.length ? ` (${staleJobIds.map((value) => markdownInlineCode(value)).join(", ")})` : ""}`);
+  }
   const splitJobs = Array.isArray(riddle.split_jobs)
     ? riddle.split_jobs.map(cliRecord).filter((job): job is Record<string, unknown> => Boolean(job))
     : [];
@@ -518,6 +535,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
     const splitElapsedMs = cliFiniteNumber(job.elapsed_ms);
     const splitPreSubmissionElapsedMs = cliFiniteNumber(job.pre_submission_elapsed_ms);
     const splitArtifactRecovery = job.artifact_recovery === true;
+    const splitRetryCount = cliFiniteNumber(job.retry_count);
     lines.push(
       `- ${viewport}: ${[
         splitJobId ? `job ${markdownInlineCode(splitJobId)}` : "",
@@ -525,6 +543,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
         splitTerminal === undefined ? "" : `terminal ${splitTerminal ? "true" : "false"}`,
         splitElapsedMs === undefined ? "" : `elapsed ${formatPollDuration(splitElapsedMs)}`,
         splitPreSubmissionElapsedMs === undefined || splitPreSubmissionElapsedMs < 1000 ? "" : `pre-submit ${formatPollDuration(splitPreSubmissionElapsedMs)}`,
+        splitRetryCount === undefined || splitRetryCount <= 0 ? "" : `retries ${splitRetryCount}`,
         splitArtifactRecovery ? "artifact recovery" : "",
       ].filter(Boolean).join(", ") || "job metadata unavailable"}`,
     );
@@ -1294,9 +1313,12 @@ function withRiddleMetadata(
     poll?: RiddlePollSummary;
     artifacts?: RiddleProofProfileArtifactRef[];
     artifactRecovery?: boolean;
+    retryCount?: number;
+    staleJobIds?: string[];
   },
 ): RiddleProofProfileResult {
   const poll = input.poll;
+  const staleJobIds = input.staleJobIds?.filter(Boolean);
   return {
     ...result,
     riddle: {
@@ -1313,6 +1335,8 @@ function withRiddleMetadata(
       attempt: poll?.attempt ?? result.riddle?.attempt,
       attempts: poll?.attempts ?? result.riddle?.attempts,
       timed_out: poll?.timed_out ?? result.riddle?.timed_out,
+      retry_count: input.retryCount ?? result.riddle?.retry_count,
+      stale_job_ids: staleJobIds?.length ? staleJobIds : result.riddle?.stale_job_ids,
       artifact_recovery: input.artifactRecovery ?? result.riddle?.artifact_recovery,
     },
     artifacts: {
@@ -1406,6 +1430,48 @@ interface SplitViewportRunResult {
   result: RiddleProofProfileResult;
 }
 
+function profileUnsubmittedRetryTimeoutMs(options: CliOptions) {
+  return Math.max(0, optionInteger(
+    options,
+    DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS,
+    "unsubmittedTimeoutMs",
+    "unsubmittedJobTimeoutMs",
+    "submitTimeoutMs",
+  ));
+}
+
+function profileUnsubmittedRetryLimit(options: CliOptions) {
+  return Math.max(0, optionInteger(
+    options,
+    DEFAULT_PROFILE_UNSUBMITTED_RETRIES,
+    "unsubmittedRetries",
+    "unsubmittedJobRetries",
+    "submitRetries",
+  ));
+}
+
+function shouldRetryUnsubmittedRiddleJob(poll: RiddlePollJobResult) {
+  return poll.terminal !== true &&
+    poll.poll?.unsubmitted_timeout === true &&
+    !poll.poll.created_at &&
+    !poll.poll.submitted_at;
+}
+
+function riddlePollOptionsForProfile(options: CliOptions): RiddlePollJobOptions {
+  return {
+    wait: true,
+    attempts: optionNumber(options, "pollAttempts", "attempts"),
+    intervalMs: optionNumber(options, "intervalMs"),
+    progressEveryMs: optionNumber(options, "progressEveryMs"),
+    unsubmittedTimeoutMs: profileUnsubmittedRetryTimeoutMs(options),
+    onProgress: options.quiet !== true
+      ? (snapshot) => {
+          process.stderr.write(`${riddlePollProgressLine(snapshot)}\n`);
+        }
+      : undefined,
+  };
+}
+
 function profileForSplitViewport(profile: RiddleProofProfile, viewport: RiddleProofProfileViewport): RiddleProofProfile {
   return {
     ...profile,
@@ -1458,6 +1524,8 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     attempt: result.riddle?.attempt,
     attempts: result.riddle?.attempts,
     timed_out: result.riddle?.timed_out,
+    retry_count: result.riddle?.retry_count,
+    stale_job_ids: result.riddle?.stale_job_ids,
     artifact_recovery: result.riddle?.artifact_recovery,
   }));
   return {
@@ -1469,6 +1537,8 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     queue_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.queue_elapsed_ms)),
     pre_submission_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.pre_submission_elapsed_ms)),
     elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.elapsed_ms)),
+    retry_count: splitJobs.reduce((sum, job) => sum + (typeof job.retry_count === "number" && Number.isFinite(job.retry_count) ? job.retry_count : 0), 0),
+    stale_job_ids: splitJobs.flatMap((job) => Array.isArray(job.stale_job_ids) ? job.stale_job_ids : []),
     split_jobs: splitJobs,
   };
 }
@@ -1577,46 +1647,57 @@ async function runSingleRiddleProfileForCli(
   const { client, runner } = input;
   const targetUrl = resolveRiddleProofProfileTargetUrl(profile);
   let created: Record<string, unknown> | undefined;
-  try {
-    created = await client.runScript({
-      url: targetUrl,
-      script: buildRiddleProofProfileScript(profile),
-      viewport: profile.target.viewports[0],
-      timeoutSec: resolveRiddleProofProfileTimeoutSec(
-        profile,
-        optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
-      ),
-      strict: runProfileStrictOption(options),
-      sync: options.sync === true ? true : undefined,
-    });
-  } catch (error) {
-    return createRiddleProofProfileEnvironmentBlockedResult({ profile, runner, error });
+  let poll: RiddlePollJobResult | undefined;
+  let jobId = "";
+  const staleJobIds: string[] = [];
+  const retryLimit = profileUnsubmittedRetryLimit(options);
+  const pollOptions = riddlePollOptionsForProfile(options);
+
+  for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
+    try {
+      created = await client.runScript({
+        url: targetUrl,
+        script: buildRiddleProofProfileScript(profile),
+        viewport: profile.target.viewports[0],
+        timeoutSec: resolveRiddleProofProfileTimeoutSec(
+          profile,
+          optionString(options, "timeout") ? Number(optionString(options, "timeout")) : undefined,
+        ),
+        strict: runProfileStrictOption(options),
+        sync: options.sync === true ? true : undefined,
+      });
+    } catch (error) {
+      return createRiddleProofProfileEnvironmentBlockedResult({ profile, runner, error });
+    }
+
+    jobId = typeof created.job_id === "string"
+      ? created.job_id
+      : typeof created.id === "string"
+        ? created.id
+        : "";
+    if (!jobId) {
+      const directResult = extractRiddleProofProfileResult(created);
+      return directResult
+        ? withRiddleMetadata(directResult, { artifacts: collectRiddleProfileArtifactRefs(created) })
+        : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: collectRiddleProfileArtifactRefs(created) });
+    }
+
+    poll = await client.pollJob(jobId, pollOptions);
+    if (attempt < retryLimit && shouldRetryUnsubmittedRiddleJob(poll)) {
+      staleJobIds.push(jobId);
+      if (options.quiet !== true) {
+        process.stderr.write(`[riddle-poll] ${jobId} stayed unsubmitted for ${formatPollDuration(poll.poll?.pre_submission_elapsed_ms)}; retrying hosted run ${attempt + 1}/${retryLimit}\n`);
+      }
+      continue;
+    }
+    break;
   }
 
-  const jobId = typeof created.job_id === "string"
-    ? created.job_id
-    : typeof created.id === "string"
-      ? created.id
-      : "";
-  if (!jobId) {
-    const directResult = extractRiddleProofProfileResult(created);
-    return directResult
-      ? withRiddleMetadata(directResult, { artifacts: collectRiddleProfileArtifactRefs(created) })
-      : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: collectRiddleProfileArtifactRefs(created) });
+  if (!poll) {
+    return createRiddleProofProfileEnvironmentBlockedResult({ profile, runner, error: "Riddle job polling did not produce a result." });
   }
-
-  const poll = await client.pollJob(jobId, {
-    wait: true,
-    attempts: optionNumber(options, "pollAttempts", "attempts"),
-    intervalMs: optionNumber(options, "intervalMs"),
-    progressEveryMs: optionNumber(options, "progressEveryMs"),
-    onProgress: options.quiet !== true
-      ? (snapshot) => {
-          process.stderr.write(`${riddlePollProgressLine(snapshot)}\n`);
-        }
-      : undefined,
-  });
   const artifacts = collectRiddleProfileArtifactRefs(poll.artifacts);
+  const retryCount = staleJobIds.length || undefined;
   if (!poll.ok || !poll.terminal) {
     const recoveredResult = await recoverProfileResultFromRiddleArtifacts(profile, {
       client,
@@ -1624,12 +1705,18 @@ async function runSingleRiddleProfileForCli(
       jobId,
       poll,
     });
-    if (recoveredResult) return recoveredResult;
+    if (recoveredResult) {
+      return withRiddleMetadata(recoveredResult, { retryCount, staleJobIds });
+    }
     return createRiddleProofProfileEnvironmentBlockedResult({
       profile,
       runner,
       error: `Riddle job ${jobId} ended with status ${poll.status || "unknown"}.`,
-      riddle: riddleMetadataFromPoll(jobId, poll),
+      riddle: {
+        ...riddleMetadataFromPoll(jobId, poll),
+        retry_count: retryCount,
+        stale_job_ids: staleJobIds.length ? staleJobIds : undefined,
+      },
       artifacts,
     });
   }
@@ -1649,6 +1736,8 @@ async function runSingleRiddleProfileForCli(
     terminal: poll.terminal,
     poll: poll.poll,
     artifacts,
+    retryCount,
+    staleJobIds,
   });
 }
 
