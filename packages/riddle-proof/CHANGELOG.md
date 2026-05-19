@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.160
+
+### Patch Changes
+
+- 9df9465: Add a `canvas_signature` profile setup action for canvas-only proof surfaces and
+  prefer both first and last per-viewport setup receipts in compact summaries so
+  late lifecycle phases remain visible.
+
 ## 0.7.159
 
 ### Patch Changes
