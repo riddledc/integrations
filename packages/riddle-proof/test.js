@@ -1532,7 +1532,8 @@ assert.ok(profileScript.includes("overflow_offenders"));
 assert.ok(profileScript.includes("isHandledByHorizontalOverflowAncestor"));
 assert.ok(profileScript.includes('overflowX === "hidden" || overflowX === "clip"'));
 assert.ok(profileScript.includes("body_text: text"));
-assert.ok(profileScript.includes('textMatches(dom.body_text || dom.body_text_sample || "", check)'));
+assert.ok(profileScript.includes("const text_match_samples = {}"));
+assert.ok(profileScript.includes("text_match_samples[key] = textMatchSamples(sample, check)"));
 assert.ok(profileScript.includes('check.type === "selector_absent"'));
 assert.ok(profileScript.includes('check.type === "selector_count_equals"'));
 assert.ok(profileScript.includes('check.type === "selector_text_visible"'));
@@ -2840,6 +2841,45 @@ assert.deepEqual(
   ["Pricing"],
 );
 assert.equal(failedSelectorTextVisibleAssessment.checks.find((check) => check.type === "selector_text_absent").status, "passed");
+const failedPageTextSampleProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "page-text-failure-samples",
+  target: { route: "/dashboard" },
+  checks: [
+    { type: "text_absent", pattern: "NaN", flags: "i" },
+    { type: "text_visible", text: "Missing CTA" },
+  ],
+}, { url: "https://example.com" });
+const failedPageTextSampleAssessment = assessRiddleProofProfileEvidence(failedPageTextSampleProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "page-text-failure-samples",
+  target_url: "https://example.com/dashboard",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-19T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: { requested: "https://example.com/dashboard", observed: "/dashboard", expected_path: "/dashboard", matched: true, http_status: 200 },
+    body_text_sample: "Dashboard shell loaded without the target CTA.",
+    text_matches: { "pattern:NaN/i": true, "text:Missing CTA": false },
+    text_match_samples: { "pattern:NaN/i": ["Financial dashboard summary"] },
+    selectors: {},
+    screenshot_label: "page-text-failure-samples-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+});
+assert.equal(failedPageTextSampleAssessment.status, "product_regression");
+const failedTextAbsentCheck = failedPageTextSampleAssessment.checks.find((check) => check.type === "text_absent");
+assert.equal(failedTextAbsentCheck.status, "failed");
+assert.deepEqual(failedTextAbsentCheck.evidence.matches, [true]);
+assert.equal(failedTextAbsentCheck.evidence.viewports[0].matched, true);
+assert.deepEqual(failedTextAbsentCheck.evidence.viewports[0].samples, ["Financial dashboard summary"]);
+const failedTextVisibleCheck = failedPageTextSampleAssessment.checks.find((check) => check.type === "text_visible");
+assert.equal(failedTextVisibleCheck.status, "failed");
+assert.deepEqual(failedTextVisibleCheck.evidence.matches, [false]);
+assert.match(failedTextVisibleCheck.evidence.viewports[0].samples[0], /Dashboard shell loaded/);
 const urlParamEvidence = {
   version: "riddle-proof.profile-evidence.v1",
   profile_name: "deep-link-url-profile",
