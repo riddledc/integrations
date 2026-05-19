@@ -2377,6 +2377,7 @@ assert.ok(buildRiddleProofProfileScript(consoleWarningProfile).includes("no_cons
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_range_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_selector_count"));
@@ -2451,6 +2452,29 @@ assert.equal(formSetupProfile.target.setup_actions[5].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[5].value, "Riddle Proof Maze");
 assert.equal(formSetupProfile.target.setup_actions[6].type, "press");
 assert.equal(formSetupProfile.target.setup_actions[6].key, "Enter");
+const rangeSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-range-action",
+  target: {
+    route: "/games/higgs-field",
+    setup_actions: [
+      {
+        type: "set-slider-value",
+        selector: "input[type='range']",
+        value: "0.500",
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/higgs-field" }],
+}, { url: "https://example.com" });
+assert.equal(rangeSetupProfile.target.setup_actions[0].type, "set_range_value");
+assert.equal(rangeSetupProfile.target.setup_actions[0].value, "0.500");
+const rangeSetupProfileScript = buildRiddleProofProfileScript(rangeSetupProfile);
+assert.ok(rangeSetupProfileScript.includes('type === "set_range_value"'));
+assert.ok(rangeSetupProfileScript.includes("HTMLInputElement.prototype"));
+assert.ok(rangeSetupProfileScript.includes('new Event("input"'));
+assert.ok(rangeSetupProfileScript.includes('new Event("change"'));
+assert.ok(rangeSetupProfileScript.includes("not_range_input"));
 const dialogSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-dialog-response-action",
@@ -2716,6 +2740,15 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /click_count is only supported for click actions/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-range-value",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "set-range-value", selector: "input[type='range']" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /set_range_value requires value/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-coordinates",
