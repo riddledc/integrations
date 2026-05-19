@@ -1096,6 +1096,27 @@ function profileSetupRangeValueReceipts(results: Array<Record<string, JsonValue>
     }));
 }
 
+function profileSetupDragReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "drag")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      pointer_type: result.pointer_type ?? null,
+      input_dispatch: result.input_dispatch ?? null,
+      coordinate_mode: result.coordinate_mode ?? null,
+      from_x: result.from_x ?? null,
+      from_y: result.from_y ?? null,
+      to_x: result.to_x ?? null,
+      to_y: result.to_y ?? null,
+      steps: result.steps ?? null,
+      duration_ms: result.duration_ms ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function profileSetupCanvasSignatureReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
   return results
     .filter((result) => profileSetupResultAction(result) === "canvas_signature")
@@ -1227,6 +1248,8 @@ function profileSetupSummary(
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
+      const dragReceipts = profileSetupDragReceipts(results);
+      const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -1290,6 +1313,9 @@ function profileSetupSummary(
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
+        drag_total: dragReceipts.length,
+        drag_truncated: dragReceipts.length > sampledDragReceipts.length,
+        drag: sampledDragReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,
@@ -5373,6 +5399,26 @@ function profileSetupRangeValueReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupDragReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "drag")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      pointer_type: result.pointer_type ?? null,
+      input_dispatch: result.input_dispatch ?? null,
+      coordinate_mode: result.coordinate_mode ?? null,
+      from_x: result.from_x ?? null,
+      from_y: result.from_y ?? null,
+      to_x: result.to_x ?? null,
+      to_y: result.to_y ?? null,
+      steps: result.steps ?? null,
+      duration_ms: result.duration_ms ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function profileSetupCanvasSignatureReceipts(results) {
   return (results || [])
     .filter((result) => result && profileSetupResultAction(result) === "canvas_signature")
@@ -5495,6 +5541,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
+      const dragReceipts = profileSetupDragReceipts(results);
+      const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -5558,6 +5606,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
+        drag_total: dragReceipts.length,
+        drag_truncated: dragReceipts.length > sampledDragReceipts.length,
+        drag: sampledDragReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,

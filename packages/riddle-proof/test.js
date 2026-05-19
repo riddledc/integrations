@@ -1409,6 +1409,23 @@ const cliRunProfileServer = createServer((request, response) => {
                 clicked_truncated: false,
                 click_count_action_total: 1,
                 click_count_value_total: 2,
+                drag_total: 1,
+                drag_truncated: false,
+                drag: [{
+                  ordinal: 6,
+                  ok: true,
+                  selector: ".game-canvas",
+                  pointer_type: "touch",
+                  input_dispatch: "cdp",
+                  coordinate_mode: "ratio",
+                  from_x: 0.5,
+                  from_y: 0.64,
+                  to_x: 0.88,
+                  to_y: 0.64,
+                  steps: 16,
+                  duration_ms: 1100,
+                  reason: null,
+                }],
                 set_range_value_total: 1,
                 set_range_value_truncated: false,
                 set_range_value: [{
@@ -1778,11 +1795,13 @@ try {
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
   assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
@@ -3376,6 +3395,8 @@ assert.ok(dragSetupProfileScript.includes("newCDPSession"));
 assert.ok(dragSetupProfileScript.includes("Input.dispatchTouchEvent"));
 assert.ok(dragSetupProfileScript.includes("Input.dispatchMouseEvent"));
 assert.ok(dragSetupProfileScript.includes("input_dispatch"));
+assert.ok(dragSetupProfileScript.includes("profileSetupDragReceipts"));
+assert.ok(dragSetupProfileScript.includes("drag_total"));
 assert.ok(!dragSetupProfileScript.includes("setPointerCapture"));
 assert.ok(dragSetupProfileScript.includes("bounding_box_unavailable"));
 assert.ok(dragSetupProfileScript.includes("coordinate_mode"));
@@ -4086,6 +4107,7 @@ const profileEvidence = {
       },
       setup_action_results: [
         { ok: true, action: "click", selector: "[data-testid='open-pricing']", click_count: 2 },
+        { ok: true, action: "drag", selector: ".game-canvas", pointer_type: "touch", input_dispatch: "cdp", coordinate_mode: "ratio", from_x: 0.5, from_y: 0.64, to_x: 0.88, to_y: 0.64, steps: 16, duration_ms: 1100 },
         { ok: true, action: "screenshot", label: "after-click", screenshot_label: "pricing-page-basic-mobile-after-click" },
         { ok: true, action: "wait_for_text", selector: "body", text: "Start building" },
       ],
@@ -4159,6 +4181,11 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].click_count_a
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].click_count_value_total, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].selector, "[data-testid='open-pricing']");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].click_count, 2);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag_total, 1);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag_truncated, false);
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].selector, ".game-canvas");
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].pointer_type, "touch");
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].input_dispatch, "cdp");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
 const stableCanvasProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
