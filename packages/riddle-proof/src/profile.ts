@@ -6948,6 +6948,54 @@ async function executeSetupAction(action, ordinal, viewport) {
           const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
           const rect = element.getBoundingClientRect();
           const pointerId = payload.pointerType === "touch" ? 11 : 12;
+          const capturedPointers = new Set();
+          const originalOwnSetPointerCapture = Object.getOwnPropertyDescriptor(element, "setPointerCapture");
+          const originalOwnReleasePointerCapture = Object.getOwnPropertyDescriptor(element, "releasePointerCapture");
+          const originalOwnHasPointerCapture = Object.getOwnPropertyDescriptor(element, "hasPointerCapture");
+          const originalSetPointerCapture = typeof element.setPointerCapture === "function" ? element.setPointerCapture.bind(element) : undefined;
+          const originalReleasePointerCapture = typeof element.releasePointerCapture === "function" ? element.releasePointerCapture.bind(element) : undefined;
+          const originalHasPointerCapture = typeof element.hasPointerCapture === "function" ? element.hasPointerCapture.bind(element) : undefined;
+          const restorePointerCapture = () => {
+            if (originalOwnSetPointerCapture) Object.defineProperty(element, "setPointerCapture", originalOwnSetPointerCapture);
+            else delete (element as any).setPointerCapture;
+            if (originalOwnReleasePointerCapture) Object.defineProperty(element, "releasePointerCapture", originalOwnReleasePointerCapture);
+            else delete (element as any).releasePointerCapture;
+            if (originalOwnHasPointerCapture) Object.defineProperty(element, "hasPointerCapture", originalOwnHasPointerCapture);
+            else delete (element as any).hasPointerCapture;
+          };
+          Object.defineProperty(element, "setPointerCapture", {
+            configurable: true,
+            value: (activePointerId) => {
+              capturedPointers.add(activePointerId);
+              try {
+                return originalSetPointerCapture?.(activePointerId);
+              } catch {
+                return undefined;
+              }
+            },
+          });
+          Object.defineProperty(element, "releasePointerCapture", {
+            configurable: true,
+            value: (activePointerId) => {
+              capturedPointers.delete(activePointerId);
+              try {
+                return originalReleasePointerCapture?.(activePointerId);
+              } catch {
+                return undefined;
+              }
+            },
+          });
+          Object.defineProperty(element, "hasPointerCapture", {
+            configurable: true,
+            value: (activePointerId) => {
+              if (capturedPointers.has(activePointerId)) return true;
+              try {
+                return Boolean(originalHasPointerCapture?.(activePointerId));
+              } catch {
+                return false;
+              }
+            },
+          });
           const point = (progress) => ({
             clientX: rect.left + payload.start.x + (payload.end.x - payload.start.x) * progress,
             clientY: rect.top + payload.start.y + (payload.end.y - payload.start.y) * progress,
@@ -6967,16 +7015,20 @@ async function executeSetupAction(action, ordinal, viewport) {
               clientY: coords.clientY,
             }));
           };
-          dispatch("pointerover", 0);
-          dispatch("pointerenter", 0);
-          dispatch("pointerdown", 0);
-          for (let step = 1; step <= payload.steps; step += 1) {
-            dispatch("pointermove", step / payload.steps);
-            if (payload.durationMs && payload.steps > 1) await wait(payload.durationMs / payload.steps);
+          try {
+            dispatch("pointerover", 0);
+            dispatch("pointerenter", 0);
+            dispatch("pointerdown", 0);
+            for (let step = 1; step <= payload.steps; step += 1) {
+              dispatch("pointermove", step / payload.steps);
+              if (payload.durationMs && payload.steps > 1) await wait(payload.durationMs / payload.steps);
+            }
+            dispatch("pointerup", 1);
+            dispatch("pointerout", 1);
+            dispatch("pointerleave", 1);
+          } finally {
+            restorePointerCapture();
           }
-          dispatch("pointerup", 1);
-          dispatch("pointerout", 1);
-          dispatch("pointerleave", 1);
         }, {
           pointerType,
           start: localStart,
@@ -7016,6 +7068,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         to_x: toX,
         to_y: toY,
         pointer_type: pointerType,
+        pointer_capture_polyfill: pointerType === "touch" || pointerType === "pen" ? true : undefined,
         steps,
         duration_ms: durationMs || undefined,
       };
