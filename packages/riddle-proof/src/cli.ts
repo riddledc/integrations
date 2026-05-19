@@ -990,6 +990,29 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} canvas_signature: ${ok}, ${markdownInlineCode(selector)}${label ? ` ${markdownInlineCode(label, 80)}` : ""}${hash ? ` hash ${markdownInlineCode(hash, 80)}` : ""}${sizeText}${cssSizeText}${dataLength === undefined ? "" : `, data chars ${dataLength}`}${compareTo ? `, compared ${markdownInlineCode(compareTo)}` : ""}${previousHash ? ` previous ${markdownInlineCode(previousHash, 80)}` : ""}${changed === undefined ? "" : `, changed ${changed}`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (canvasSignatureDetails.length > sampledCanvasSignatureDetails.length) lines.push(`- ${canvasSignatureDetails.length - sampledCanvasSignatureDetails.length} additional canvas_signature receipt(s) omitted.`);
+  const canvasSignatureWarningGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const warnings = Array.isArray(viewport.canvas_signature_stable_hash_groups)
+      ? viewport.canvas_signature_stable_hash_groups.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return warnings.map((warning) => ({ name, receipt: warning }));
+  });
+  const canvasSignatureWarnings = canvasSignatureWarningGroups.flat();
+  const sampledCanvasSignatureWarnings = balancedSetupReceiptDetails(canvasSignatureWarningGroups, 12);
+  for (const { name, receipt } of sampledCanvasSignatureWarnings) {
+    const selector = cliString(receipt.selector) || "canvas";
+    const frameSelector = cliString(receipt.frame_selector);
+    const hash = cliString(receipt.hash);
+    const count = cliFiniteNumber(receipt.count);
+    const labelCount = cliFiniteNumber(receipt.label_count);
+    const labels = cliStringArray(receipt.labels);
+    const omittedLabelCount = cliFiniteNumber(receipt.omitted_label_count) || 0;
+    const labelText = labels.length
+      ? ` across ${labels.map((label) => markdownInlineCode(label, 60)).join(", ")}${omittedLabelCount ? `, plus ${omittedLabelCount} more` : ""}`
+      : "";
+    lines.push(`- ${name} canvas_signature warning: ${markdownInlineCode(selector)}${frameSelector ? ` in frame ${markdownInlineCode(frameSelector)}` : ""} returned the same hash${hash ? ` ${markdownInlineCode(hash, 80)}` : ""} for ${count ?? labelCount ?? "multiple"} labeled capture(s)${labelText}; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes.`);
+  }
+  if (canvasSignatureWarnings.length > sampledCanvasSignatureWarnings.length) lines.push(`- ${canvasSignatureWarnings.length - sampledCanvasSignatureWarnings.length} additional canvas_signature warning(s) omitted.`);
   const rangeValueGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.set_range_value)
