@@ -612,7 +612,9 @@ a field value rather than a raw substring:
 
 JSON paths support dot keys and array indexes such as `checks[0].status`, with
 `$` as the root. Each assertion supports `exists`, `equals`, `not_equals`,
-`contains`, and `type`.
+`contains`, and `type`. Scalar observations are recorded inline; arrays and
+objects are summarized with length or key counts plus a small sample so large
+proof artifacts do not get duplicated into the assertion evidence.
 
 `body_contains`, `body_patterns`, `body_not_contains`, and
 `body_not_patterns` match the raw HTTP response body, not rendered browser

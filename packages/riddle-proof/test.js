@@ -222,6 +222,8 @@ const httpStatusPreflightProfile = normalizeRiddleProofProfile({
       body_json_assertions: [
         { label: "status field", path: "status", equals: "passed" },
         { label: "first check status", path: "checks[0].status", equals: "passed" },
+        { label: "checks array", path: "checks", type: "array" },
+        { label: "meta object", path: "meta", type: "object" },
         { label: "debug absent", path: "debug", exists: false },
       ],
     },
@@ -231,7 +233,7 @@ const httpStatusPreflight = await preflightRiddleProofProfileHttpStatusChecks(ht
   fetchImpl: async (url, init = {}) => {
     assert.equal(url, "https://example.test/proof.json");
     assert.equal(init.method, "GET");
-    const body = JSON.stringify({ status: "passed", checks: [{ status: "passed" }], leak: "raw-secret" });
+    const body = JSON.stringify({ status: "passed", checks: [{ status: "passed" }], meta: { job_id: "job_json_assertion" }, leak: "raw-secret" });
     return new Response(body, {
       status: 200,
       headers: { "content-type": "application/json", "content-length": String(Buffer.byteLength(body)) },
@@ -244,7 +246,17 @@ assert.equal(httpStatusPreflight.failed, 1);
 assert.deepEqual(httpStatusPreflight.checks[0].body_contains_missing, ["missing-snippet"]);
 assert.deepEqual(httpStatusPreflight.checks[0].body_not_contains_found, ["raw-secret"]);
 assert.deepEqual(httpStatusPreflight.checks[0].body_not_patterns_found, []);
-assert.equal(httpStatusPreflight.checks[0].body_json_assertions.length, 3);
+assert.equal(httpStatusPreflight.checks[0].body_json_assertions.length, 5);
+const compactArrayAssertion = httpStatusPreflight.checks[0].body_json_assertions.find((assertion) => assertion.label === "checks array");
+assert.equal(compactArrayAssertion.observed, undefined);
+assert.equal(compactArrayAssertion.observed_type, "array");
+assert.equal(compactArrayAssertion.observed_length, 1);
+assert.deepEqual(compactArrayAssertion.observed_sample, [{ status: "passed" }]);
+const compactObjectAssertion = httpStatusPreflight.checks[0].body_json_assertions.find((assertion) => assertion.label === "meta object");
+assert.equal(compactObjectAssertion.observed, undefined);
+assert.equal(compactObjectAssertion.observed_type, "object");
+assert.equal(compactObjectAssertion.observed_key_count, 1);
+assert.deepEqual(compactObjectAssertion.observed_sample, { job_id: "job_json_assertion" });
 assert.deepEqual(httpStatusPreflight.checks[0].body_json_assertions_failed, []);
 assert.match(httpStatusPreflight.summary, /failed 1 of 1/);
 
