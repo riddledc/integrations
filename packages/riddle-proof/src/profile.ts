@@ -102,6 +102,55 @@ export type RiddleProofProfileBaselinePolicy =
   | "golden_reference_artifact"
   | (string & {});
 
+export interface RiddleProofArtifactBodyAssertionInput {
+  artifact_text: string;
+  candidates: string[];
+  required?: string[];
+}
+
+export interface RiddleProofArtifactBodyAssertionResult {
+  version: "riddle-proof.artifact-body-assertions.v1";
+  ok: boolean;
+  body_contains: string[];
+  present_candidates: string[];
+  missing_candidates: string[];
+  missing_required: string[];
+  warnings: string[];
+}
+
+function uniqueNonEmptyStrings(values: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values ?? []) {
+    const normalized = typeof value === "string" ? value.trim() : "";
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+export function deriveRiddleProofArtifactBodyAssertions(input: RiddleProofArtifactBodyAssertionInput): RiddleProofArtifactBodyAssertionResult {
+  const artifactText = typeof input.artifact_text === "string" ? input.artifact_text : "";
+  const candidates = uniqueNonEmptyStrings(input.candidates);
+  const required = uniqueNonEmptyStrings(input.required);
+  const mergedCandidates = uniqueNonEmptyStrings([...required, ...candidates]);
+  const presentCandidates = mergedCandidates.filter((snippet) => artifactText.includes(snippet));
+  const missingCandidates = mergedCandidates.filter((snippet) => !artifactText.includes(snippet));
+  const missingRequired = required.filter((snippet) => !artifactText.includes(snippet));
+  const warnings = missingCandidates.map((snippet) => `candidate snippet is not present in artifact body: ${snippet}`);
+
+  return {
+    version: "riddle-proof.artifact-body-assertions.v1",
+    ok: missingRequired.length === 0,
+    body_contains: presentCandidates,
+    present_candidates: presentCandidates,
+    missing_candidates: missingCandidates,
+    missing_required: missingRequired,
+    warnings,
+  };
+}
+
 export interface RiddleProofProfileViewport {
   name: string;
   width: number;
