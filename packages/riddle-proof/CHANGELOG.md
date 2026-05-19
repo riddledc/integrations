@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.143
+
+### Patch Changes
+
+- 5f079b6: Include Riddle poll timing metadata in profile results and summary markdown so queued hosted proof runs preserve their queue and elapsed-time evidence.
+
 ## 0.7.142
 
 ### Patch Changes
