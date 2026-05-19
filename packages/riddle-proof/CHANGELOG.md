@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.157
+
+### Patch Changes
+
+- ed35636: Recover hosted profile results from artifacts before retrying or blocking a queued job as stale.
+
 ## 0.7.156
 
 ### Patch Changes
