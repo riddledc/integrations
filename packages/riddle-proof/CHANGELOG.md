@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.121
+
+### Patch Changes
+
+- b0e0565: Add profile-body-assertions helper for deriving artifact body_contains fragments from actual proof artifacts.
+
 ## 0.7.120
 
 ### Patch Changes
