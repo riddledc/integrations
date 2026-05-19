@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.134
+
+### Patch Changes
+
+- 7b29b86: Surface `window_call_until` call-count receipts in profile setup summaries.
+
 ## 0.7.133
 
 ### Patch Changes
