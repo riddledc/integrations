@@ -2240,6 +2240,7 @@ assert.ok(windowCallUntilSetupProfileScript.includes('type === "window_call_unti
 assert.ok(windowCallUntilSetupProfileScript.includes("setupCallWindowFunction"));
 assert.ok(windowCallUntilSetupProfileScript.includes("until_condition_not_met"));
 assert.ok(windowCallUntilSetupProfileScript.includes("call_count"));
+assert.ok(windowCallUntilSetupProfileScript.includes("window_call_until_total"));
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-window-call",
