@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.144
+
+### Patch Changes
+
+- 57617f3: Surface expected route names and paths in route-inventory profile summaries.
+
 ## 0.7.143
 
 ### Patch Changes
