@@ -275,6 +275,7 @@ export interface RiddleProofProfileNetworkMock extends RiddleProofProfileNetwork
   method?: string;
   responses?: RiddleProofProfileNetworkMockResponse[];
   repeat_responses?: boolean;
+  sequence_scope?: "global" | "viewport";
   required_hit_count?: number;
   max_hit_count?: number;
   forbidden?: boolean;
@@ -1081,6 +1082,23 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
   if (maxHitCount !== undefined && effectiveRequiredHitCount > maxHitCount) {
     throw new Error(`target.network_mocks[${index}].max_hit_count cannot be less than its required hit count.`);
   }
+  const sequenceScopeInput = stringValue(
+    input.sequence_scope
+    ?? input.sequenceScope
+    ?? input.response_sequence_scope
+    ?? input.responseSequenceScope,
+  );
+  let sequenceScope: "global" | "viewport" | undefined;
+  if (sequenceScopeInput) {
+    const normalizedScope = sequenceScopeInput.toLowerCase().replace(/[-\s]+/g, "_");
+    if (normalizedScope === "global" || normalizedScope === "profile" || normalizedScope === "run") {
+      sequenceScope = "global";
+    } else if (normalizedScope === "viewport" || normalizedScope === "per_viewport" || normalizedScope === "viewport_scoped") {
+      sequenceScope = "viewport";
+    } else {
+      throw new Error(`target.network_mocks[${index}].sequence_scope must be "global" or "viewport".`);
+    }
+  }
   return {
     ...payload,
     label: normalizeName(input.label || input.name, `network-mock-${index + 1}`),
@@ -1091,6 +1109,7 @@ function normalizeNetworkMock(input: unknown, index: number): RiddleProofProfile
       || input.repeatResponses === true
       || input.cycle_responses === true
       || input.cycleResponses === true,
+    sequence_scope: sequenceScope,
     required_hit_count: requiredHitCount,
     max_hit_count: maxHitCount,
     forbidden,
@@ -5206,6 +5225,7 @@ async function setupLocatorVisible(locator, index) {
 async function registerNetworkMocks(mocks) {
   for (const mock of mocks || []) {
     let hitCount = 0;
+    const scopedHitCounts = {};
     await page.route(mock.url, async (route) => {
       const request = route.request();
       const method = request.method ? request.method() : "";
@@ -5221,8 +5241,13 @@ async function registerNetworkMocks(mocks) {
         const responses = Array.isArray(mock.responses) ? mock.responses : [];
         const hitIndex = hitCount;
         hitCount += 1;
+        const sequenceScope = mock.sequence_scope === "viewport" ? "viewport" : "global";
+        const viewportName = activeViewportName || null;
+        const sequenceScopeKey = sequenceScope === "viewport" ? (viewportName || "__unknown_viewport__") : "__global__";
+        const sequenceHitIndex = sequenceScope === "viewport" ? (scopedHitCounts[sequenceScopeKey] || 0) : hitIndex;
+        if (sequenceScope === "viewport") scopedHitCounts[sequenceScopeKey] = sequenceHitIndex + 1;
         const sequenceResponseIndex = responses.length
-          ? (mock.repeat_responses ? hitIndex % responses.length : Math.min(hitIndex, responses.length - 1))
+          ? (mock.repeat_responses ? sequenceHitIndex % responses.length : Math.min(sequenceHitIndex, responses.length - 1))
           : null;
         let responseIndex = sequenceResponseIndex;
         let responseSelection = responseIndex === null ? "mock" : "sequence";
@@ -5257,11 +5282,14 @@ async function registerNetworkMocks(mocks) {
           label: mock.label,
           response_label: response.label || null,
           hit_index: hitIndex,
+          sequence_hit_index: responseIndex === null ? undefined : sequenceHitIndex,
+          sequence_scope: responseIndex === null ? undefined : sequenceScope,
+          viewport: viewportName,
           response_index: responseIndex,
           sequence_response_index: responseSelection === "request_body" ? sequenceResponseIndex : undefined,
           response_selection: responseIndex === null ? null : responseSelection,
-          sequence_reused: responseSelection === "sequence" && responseIndex !== null && !mock.repeat_responses && hitIndex >= responses.length,
-          sequence_cycle: responseSelection === "sequence" && responseIndex !== null && mock.repeat_responses === true && hitIndex >= responses.length,
+          sequence_reused: responseSelection === "sequence" && responseIndex !== null && !mock.repeat_responses && sequenceHitIndex >= responses.length,
+          sequence_cycle: responseSelection === "sequence" && responseIndex !== null && mock.repeat_responses === true && sequenceHitIndex >= responses.length,
           url: request.url(),
           method,
         };
@@ -5303,6 +5331,7 @@ async function registerNetworkMocks(mocks) {
     });
   }
 }
+let activeViewportName = null;
 async function executeSetupAction(action, ordinal, viewport) {
   const type = setupActionType(action);
   const frameSelector = setupFrameSelector(action);
@@ -6565,6 +6594,7 @@ async function collectRouteInventory(check, viewport) {
   };
 }
 async function captureViewport(viewport) {
+  activeViewportName = viewport && viewport.name ? viewport.name : null;
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   let httpStatus = null;
   let navigationError;

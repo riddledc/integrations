@@ -346,6 +346,16 @@ cycle instead of reusing the final response, for example to repeat a fail-then-
 success pair across multiple viewports. Repeated sequences also record
 `sequence_cycle: true` after the first cycle.
 
+For full viewport-matrix retry profiles, set `sequence_scope: "viewport"` when
+each viewport should get its own first response, second response, and so on.
+This keeps a fail-then-success retry sequence from being consumed by the first
+viewport before phone or tablet runs begin. The mock evidence records both the
+global `hit_index` and viewport-local `sequence_hit_index`, plus the active
+`viewport`, so a run can show that each viewport exercised the same sequence.
+Use `required_hit_count` when the total expected calls matter, such as
+`responses.length * viewports.length` for a two-step retry across four
+viewports.
+
 Use `max_hit_count` / `max_hits` when a profile needs to prove a request does
 not run too many times. Use `forbidden: true` as shorthand for
 `max_hit_count: 0` and `required: false`, for example when a chat failure must

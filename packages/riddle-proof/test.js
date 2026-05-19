@@ -1567,6 +1567,7 @@ const networkMockProfile = normalizeRiddleProofProfile({
         method: "POST",
         delay_ms: 75,
         repeat_responses: true,
+        sequence_scope: "viewport",
         required_hit_count: 4,
         responses: [
           {
@@ -1605,6 +1606,7 @@ assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_not_con
 assert.deepEqual(networkMockProfile.target.network_mocks[1].request_body_not_patterns, ["\\\"legacyBuildId\\\"\\s*:"]);
 assert.equal(networkMockProfile.target.network_mocks[2].responses.length, 2);
 assert.equal(networkMockProfile.target.network_mocks[2].repeat_responses, true);
+assert.equal(networkMockProfile.target.network_mocks[2].sequence_scope, "viewport");
 assert.equal(networkMockProfile.target.network_mocks[2].required_hit_count, 4);
 assert.equal(networkMockProfile.target.network_mocks[2].responses[0].status, 503);
 assert.equal(networkMockProfile.target.network_mocks[2].responses[0].delay_ms, 75);
@@ -1624,6 +1626,9 @@ assert.ok(networkMockProfileScript.includes("network_mock_hit_count"));
 assert.ok(networkMockProfileScript.includes("response_index"));
 assert.ok(networkMockProfileScript.includes("sequence_reused"));
 assert.ok(networkMockProfileScript.includes("sequence_cycle"));
+assert.ok(networkMockProfileScript.includes("activeViewportName"));
+assert.ok(networkMockProfileScript.includes("sequence_hit_index"));
+assert.ok(networkMockProfileScript.includes("mock.sequence_scope"));
 assert.ok(networkMockProfileScript.includes("selectNetworkMockResponseByRequestBody"));
 assert.ok(networkMockProfileScript.includes("response_selection"));
 assert.ok(networkMockProfileScript.includes("sequence_response_index"));
@@ -3686,10 +3691,10 @@ const networkMockProfileAssessment = assessRiddleProofProfileEvidence(networkMoc
   network_mocks: [
     { ok: true, label: "chat", url: "https://example.com/v1/chat/completions", method: "POST", status: 200 },
     { ok: true, label: "save", url: "https://example.com/api/save", method: "POST", status: 200 },
-    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 0, response_index: 0, sequence_cycle: false, url: "https://example.com/api/build", method: "POST", status: 503 },
-    { ok: true, label: "build-retry", response_label: "second-build-succeeds", hit_index: 1, response_index: 1, sequence_cycle: false, url: "https://example.com/api/build", method: "POST", status: 200 },
-    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 2, response_index: 0, sequence_cycle: true, url: "https://example.com/api/build", method: "POST", status: 503 },
-    { ok: true, label: "build-retry", response_label: "second-build-succeeds", hit_index: 3, response_index: 1, sequence_cycle: true, url: "https://example.com/api/build", method: "POST", status: 200 },
+    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 0, sequence_hit_index: 0, sequence_scope: "viewport", viewport: "mobile", response_index: 0, sequence_cycle: false, url: "https://example.com/api/build", method: "POST", status: 503 },
+    { ok: true, label: "build-retry", response_label: "second-build-succeeds", hit_index: 1, sequence_hit_index: 1, sequence_scope: "viewport", viewport: "mobile", response_index: 1, sequence_cycle: false, url: "https://example.com/api/build", method: "POST", status: 200 },
+    { ok: true, label: "build-retry", response_label: "first-build-fails", hit_index: 2, sequence_hit_index: 2, sequence_scope: "viewport", viewport: "mobile", response_index: 0, sequence_cycle: true, url: "https://example.com/api/build", method: "POST", status: 503 },
+    { ok: true, label: "build-retry", response_label: "second-build-succeeds", hit_index: 3, sequence_hit_index: 3, sequence_scope: "viewport", viewport: "mobile", response_index: 1, sequence_cycle: true, url: "https://example.com/api/build", method: "POST", status: 200 },
   ],
   dom_summary: { viewport_count: 1, network_mock_hit_count: 6 },
 });
