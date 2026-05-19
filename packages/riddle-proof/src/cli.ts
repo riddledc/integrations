@@ -1543,13 +1543,21 @@ function riddlePollOptionsForProfile(options: CliOptions): RiddlePollJobOptions 
   };
 }
 
+function profileItemAppliesToSplitViewport(item: { viewports?: string[] }, viewport: RiddleProofProfileViewport): boolean {
+  if (!item.viewports?.length) return true;
+  return Boolean(viewport.name && item.viewports.includes(viewport.name));
+}
+
 function profileForSplitViewport(profile: RiddleProofProfile, viewport: RiddleProofProfileViewport): RiddleProofProfile {
+  const setupActions = profile.target.setup_actions?.filter((action) => profileItemAppliesToSplitViewport(action, viewport));
   return {
     ...profile,
     name: `${profile.name}-${viewport.name || `${viewport.width}x${viewport.height}`}`,
+    checks: profile.checks.filter((check) => profileItemAppliesToSplitViewport(check, viewport)),
     target: {
       ...profile.target,
       viewports: [viewport],
+      ...(setupActions ? { setup_actions: setupActions } : {}),
     },
     metadata: {
       ...(profile.metadata || {}),
