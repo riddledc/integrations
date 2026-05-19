@@ -732,6 +732,28 @@ function cliRunProfileSplitResult(viewportName, width, height) {
         status: "passed",
         evidence: { expected_path: "/split-profile", observed_paths: ["/split-profile"], http_statuses: [200] },
       },
+      ...(viewportName === "desktop" ? [{
+        type: "http_status",
+        label: "desktop-only-status",
+        status: "passed",
+        evidence: {
+          url: "https://example.com/desktop-only.json",
+          method: "GET",
+          viewports: [{
+            viewport: "desktop",
+            key: "GET https://example.com/desktop-only.json",
+            url: "https://example.com/desktop-only.json",
+            method: "GET",
+            status: 200,
+            ok: true,
+            content_type: "application/json",
+            bytes: 11,
+            body_contains: { "\"ok\":true": true },
+            failures: [],
+          }],
+          failures: [],
+        },
+      }] : []),
       {
         type: "no_horizontal_overflow",
         status: "passed",
@@ -765,6 +787,20 @@ function cliRunProfileSplitResult(viewportName, width, height) {
           overflow_px: 0,
           bounds_overflow_px: 0,
           overflow_offenders: [],
+          ...(viewportName === "desktop" ? {
+            http_statuses: {
+              "GET https://example.com/desktop-only.json": {
+                version: "riddle-proof.http-status.v1",
+                url: "https://example.com/desktop-only.json",
+                method: "GET",
+                status: 200,
+                ok: true,
+                content_type: "application/json",
+                bytes: 11,
+                body_contains: { "\"ok\":true": true },
+              },
+            },
+          } : {}),
           screenshot_label: `cli-profile-split-${viewportName}`,
           screenshot_full_page: false,
         },
@@ -1987,6 +2023,15 @@ try {
     },
     checks: [
       { type: "route_loaded", expected_path: "/split-profile" },
+      {
+        type: "http_status",
+        label: "desktop-only-status",
+        url: "/desktop-only.json",
+        expected_status: 200,
+        allowed_content_types: ["application/json"],
+        body_contains: ["\"ok\":true"],
+        viewports: ["desktop"],
+      },
       { type: "no_horizontal_overflow", max_overflow_px: 0 },
     ],
   }));
@@ -2020,16 +2065,19 @@ try {
   assert.deepEqual(parsedSplitProfileResult.evidence.viewports.map((viewport) => viewport.name), ["desktop", "phone"]);
   assert.equal(parsedSplitProfileResult.evidence.dom_summary.split_viewports, true);
   assert.equal(parsedSplitProfileResult.evidence.dom_summary.child_result_count, 2);
+  assert.deepEqual(parsedSplitProfileResult.evidence.dom_summary.child_statuses.map((item) => item.status), ["passed", "passed"]);
   assert.equal(parsedSplitProfileResult.riddle.mode, "split-viewports");
   assert.equal(parsedSplitProfileResult.riddle.job_count, 2);
   assert.deepEqual(parsedSplitProfileResult.riddle.split_jobs.map((job) => job.viewport), ["desktop", "phone"]);
   assert.deepEqual(parsedSplitProfileResult.riddle.split_jobs.map((job) => job.job_id), ["job_cli_profile_split_desktop", "job_cli_profile_split_phone"]);
+  const splitProfileRunRequests = cliRunProfileRequests
+    .filter((call) => String(call.body.url || "").includes("/split-profile"));
   assert.deepEqual(
-    cliRunProfileRequests
-      .filter((call) => String(call.body.url || "").includes("/split-profile"))
-      .map((call) => call.body.viewport),
+    splitProfileRunRequests.map((call) => call.body.viewport),
     [{ name: "desktop", width: 1280, height: 900 }, { name: "phone", width: 390, height: 844 }],
   );
+  assert.match(String(splitProfileRunRequests[0].body.script), /desktop-only-status/);
+  assert.doesNotMatch(String(splitProfileRunRequests[1].body.script), /desktop-only-status/);
   assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "desktop", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-desktop");
   assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "phone", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-phone");
