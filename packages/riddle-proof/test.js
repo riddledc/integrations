@@ -1024,6 +1024,13 @@ try {
   const parsedProfileResult = JSON.parse(cliProfileResult.stdout);
   assert.equal(parsedProfileResult.status, "passed");
   assert.equal(parsedProfileResult.riddle.job_id, "job_cli_profile_progress");
+  assert.equal(parsedProfileResult.riddle.status, "completed");
+  assert.equal(parsedProfileResult.riddle.terminal, true);
+  assert.equal(parsedProfileResult.riddle.submitted_at, "2026-05-13T23:21:00.000Z");
+  assert.equal(parsedProfileResult.riddle.completed_at, "2026-05-13T23:21:20.000Z");
+  assert.equal(parsedProfileResult.riddle.queue_elapsed_ms, 60_000);
+  assert.equal(parsedProfileResult.riddle.attempt, 2);
+  assert.equal(parsedProfileResult.riddle.attempts, 4);
   assert.equal(cliRunProfileRequests.length, 1);
   assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
   assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
@@ -1064,6 +1071,10 @@ try {
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory: expected 5, source links 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory duplicate source links: 3 allowed: \/billing, \/register/);
   assert.match(profileSummaryMarkdown, /pricing funnel route inventory desktop: source 8 \(5 unique\), direct 5, clickthrough 5, failures 0/);
+  assert.match(profileSummaryMarkdown, /## Riddle Job/);
+  assert.match(profileSummaryMarkdown, /job `job_cli_profile_progress`, status `completed`, terminal true/);
+  assert.match(profileSummaryMarkdown, /poll: queue 1m00s, elapsed \d+s, attempt 2\/4/);
+  assert.match(profileSummaryMarkdown, /timing: submitted `2026-05-13T23:21:00\.000Z` completed `2026-05-13T23:21:20\.000Z`/);
   assert.match(profileSummaryMarkdown, /passed: public artifacts \(`a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]` probed links = 9, bytes >= 32\)/);
   assert.match(profileSummaryMarkdown, /## Link Status/);
   assert.match(profileSummaryMarkdown, /public artifacts `a\[href\*='\/artifacts\/'\], img\[src\*='\/artifacts\/'\]`: probed links 9, discovered 10, ok 9, failures 0, min bytes 32, content types `image\/\*`, `application\/json`/);
