@@ -737,6 +737,41 @@ function cliReturnSummaryLabel(value: unknown): string | undefined {
   return parts.length ? parts.join(", ") : undefined;
 }
 
+type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };
+
+function balancedSetupReceiptDetails(groups: CliSetupReceiptDetail[][], limit: number): CliSetupReceiptDetail[] {
+  if (limit <= 0) return [];
+  const total = groups.reduce((sum, group) => sum + group.length, 0);
+  if (total <= limit) return groups.flat();
+
+  const selected: CliSetupReceiptDetail[] = [];
+  const indexes = new Array(groups.length).fill(0);
+  const nonEmptyIndexes = groups
+    .map((group, index) => group.length ? index : -1)
+    .filter((index) => index >= 0);
+
+  for (const index of nonEmptyIndexes) {
+    if (selected.length >= limit) return selected;
+    selected.push(groups[index][0]);
+    indexes[index] = 1;
+  }
+
+  while (selected.length < limit) {
+    let progressed = false;
+    for (const index of nonEmptyIndexes) {
+      const nextIndex = indexes[index];
+      const next = groups[index][nextIndex];
+      if (!next) continue;
+      selected.push(next);
+      indexes[index] = nextIndex + 1;
+      progressed = true;
+      if (selected.length >= limit) break;
+    }
+    if (!progressed) break;
+  }
+  return selected;
+}
+
 function cliStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && Boolean(entry.trim())) : [];
 }
@@ -907,14 +942,16 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const observedPath = cliString(viewport.observed_path);
     lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
-  const rangeValueDetails = viewports.flatMap((viewport) => {
+  const rangeValueGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.set_range_value)
       ? viewport.set_range_value.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
       : [];
     return receipts.map((receipt) => ({ name, receipt }));
   });
-  for (const { name, receipt } of rangeValueDetails.slice(0, 12)) {
+  const rangeValueDetails = rangeValueGroups.flat();
+  const sampledRangeValueDetails = balancedSetupReceiptDetails(rangeValueGroups, 12);
+  for (const { name, receipt } of sampledRangeValueDetails) {
     const selector = cliString(receipt.selector) || "input[type=range]";
     const requested = cliValueLabel(receipt.requested_value);
     const actual = cliValueLabel(receipt.actual_value);
@@ -927,15 +964,17 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const reason = cliString(receipt.reason);
     lines.push(`- ${name} set_range_value: ${ok}, ${markdownInlineCode(selector)}${requested === undefined ? "" : ` requested ${markdownInlineCode(requested, 80)}`}${actual === undefined ? "" : ` -> ${markdownInlineCode(actual, 80)}`}${before === undefined ? "" : `, before ${markdownInlineCode(before, 80)}`}${valueAsNumber === undefined ? "" : `, number ${valueAsNumber}`}${min === undefined && max === undefined ? "" : `, range ${min === undefined ? "?" : markdownInlineCode(min, 40)}..${max === undefined ? "?" : markdownInlineCode(max, 40)}`}${step === undefined ? "" : ` step ${markdownInlineCode(step, 40)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
-  if (rangeValueDetails.length > 12) lines.push(`- ${rangeValueDetails.length - 12} additional set_range_value receipt(s) omitted.`);
-  const windowCallDetails = viewports.flatMap((viewport) => {
+  if (rangeValueDetails.length > sampledRangeValueDetails.length) lines.push(`- ${rangeValueDetails.length - sampledRangeValueDetails.length} additional set_range_value receipt(s) omitted.`);
+  const windowCallGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_call)
       ? viewport.window_call.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
       : [];
     return receipts.map((receipt) => ({ name, receipt }));
   });
-  for (const { name, receipt } of windowCallDetails.slice(0, 12)) {
+  const windowCallDetails = windowCallGroups.flat();
+  const sampledWindowCallDetails = balancedSetupReceiptDetails(windowCallGroups, 12);
+  for (const { name, receipt } of sampledWindowCallDetails) {
     const path = cliString(receipt.path) || "window_function";
     const storedTo = cliString(receipt.return_stored_to);
     const returned = cliValueLabel(receipt.returned);
@@ -946,15 +985,17 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const reason = cliString(receipt.reason);
     lines.push(`- ${name} window_call: ${ok}, ${markdownInlineCode(path)}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returnSummary ? `, summary ${markdownInlineCode(returnSummary, 140)}` : ""}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
-  if (windowCallDetails.length > 12) lines.push(`- ${windowCallDetails.length - 12} additional window_call receipt(s) omitted.`);
-  const windowEvalDetails = viewports.flatMap((viewport) => {
+  if (windowCallDetails.length > sampledWindowCallDetails.length) lines.push(`- ${windowCallDetails.length - sampledWindowCallDetails.length} additional window_call receipt(s) omitted.`);
+  const windowEvalGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_eval)
       ? viewport.window_eval.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
       : [];
     return receipts.map((receipt) => ({ name, receipt }));
   });
-  for (const { name, receipt } of windowEvalDetails.slice(0, 12)) {
+  const windowEvalDetails = windowEvalGroups.flat();
+  const sampledWindowEvalDetails = balancedSetupReceiptDetails(windowEvalGroups, 12);
+  for (const { name, receipt } of sampledWindowEvalDetails) {
     const scriptLength = cliFiniteNumber(receipt.script_length);
     const storedTo = cliString(receipt.return_stored_to);
     const returned = cliValueLabel(receipt.returned);
@@ -965,15 +1006,17 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const reason = cliString(receipt.reason);
     lines.push(`- ${name} window_eval: ${ok}${scriptLength === undefined ? "" : `, script ${scriptLength} chars`}${storedTo ? `, stored ${markdownInlineCode(storedTo)}` : ""}, return ${captured}${expected === undefined ? "" : `, expected ${markdownInlineCode(expected, 80)}`}${returnSummary ? `, summary ${markdownInlineCode(returnSummary, 140)}` : ""}${returned === undefined ? "" : `, returned ${markdownInlineCode(returned, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
-  if (windowEvalDetails.length > 12) lines.push(`- ${windowEvalDetails.length - 12} additional window_eval receipt(s) omitted.`);
-  const windowCallUntilDetails = viewports.flatMap((viewport) => {
+  if (windowEvalDetails.length > sampledWindowEvalDetails.length) lines.push(`- ${windowEvalDetails.length - sampledWindowEvalDetails.length} additional window_eval receipt(s) omitted.`);
+  const windowCallUntilGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.window_call_until)
       ? viewport.window_call_until.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
       : [];
     return receipts.map((receipt) => ({ name, receipt }));
   });
-  for (const { name, receipt } of windowCallUntilDetails.slice(0, 12)) {
+  const windowCallUntilDetails = windowCallUntilGroups.flat();
+  const sampledWindowCallUntilDetails = balancedSetupReceiptDetails(windowCallUntilGroups, 12);
+  for (const { name, receipt } of sampledWindowCallUntilDetails) {
     const path = cliString(receipt.path) || "window_function";
     const untilPath = cliString(receipt.until_path) || "until_path";
     const expected = cliValueLabel(receipt.until_expected_value);
@@ -987,7 +1030,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
       : ` in ${callCount}${maxCalls === undefined ? "" : `/${maxCalls}`} call(s)`;
     lines.push(`- ${name} window_call_until: ${ok}, ${markdownInlineCode(path)} until ${markdownInlineCode(untilPath)}${expected === undefined ? "" : ` == ${markdownInlineCode(expected, 80)}`}${callText}${actual === undefined ? "" : `, observed ${markdownInlineCode(actual, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
-  if (windowCallUntilDetails.length > 12) lines.push(`- ${windowCallUntilDetails.length - 12} additional window_call_until receipt(s) omitted.`);
+  if (windowCallUntilDetails.length > sampledWindowCallUntilDetails.length) lines.push(`- ${windowCallUntilDetails.length - sampledWindowCallUntilDetails.length} additional window_call_until receipt(s) omitted.`);
   const failedDetails = viewports.flatMap((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const failed = Array.isArray(viewport.failed)
