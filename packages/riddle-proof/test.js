@@ -1424,7 +1424,7 @@ const cliRunProfileServer = createServer((request, response) => {
                   step: "0.001",
                   reason: null,
                 }],
-                canvas_signature_total: 1,
+                canvas_signature_total: 3,
                 canvas_signature_truncated: false,
                 canvas_signature: [{
                   ordinal: 5,
@@ -1442,6 +1442,41 @@ const cliRunProfileServer = createServer((request, response) => {
                   changed: true,
                   return_stored_to: "__proof.canvasReady",
                   reason: null,
+                }, {
+                  ordinal: 6,
+                  ok: true,
+                  selector: ".game-canvas",
+                  label: "playing",
+                  hash: "123456789",
+                  data_length: 2048,
+                  width: 800,
+                  height: 450,
+                  css_width: 800,
+                  css_height: 450,
+                  reason: null,
+                }, {
+                  ordinal: 7,
+                  ok: true,
+                  selector: ".game-canvas",
+                  label: "terminal",
+                  hash: "123456789",
+                  data_length: 2048,
+                  width: 800,
+                  height: 450,
+                  css_width: 800,
+                  css_height: 450,
+                  reason: null,
+                }],
+                canvas_signature_stable_hash_groups: [{
+                  selector: ".game-canvas",
+                  frame_selector: null,
+                  hash: "123456789",
+                  count: 3,
+                  label_count: 3,
+                  labels: ["ready", "playing", "terminal"],
+                  omitted_label_count: 0,
+                  ordinals: [5, 6, 7],
+                  reason: "stable_canvas_signature_hash",
                 }],
                 window_call_total: 1,
                 window_call_stored_total: 1,
@@ -1743,12 +1778,13 @@ try {
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
-  assert.match(profileSummaryMarkdown, /canvas_signature: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
+  assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
   assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
   assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, summary `ok=true, moves=16`, returned `\{"ok":true,"sum":5,"nested":\{"moves":16\}\}`/);
@@ -4122,6 +4158,24 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].click_count_v
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].selector, "[data-testid='open-pricing']");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].clicked[0].click_count, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const stableCanvasProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    setup_action_results: [
+      { ok: true, action: "canvas_signature", ordinal: 1, selector: ".game-canvas", label: "menu", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
+      { ok: true, action: "canvas_signature", ordinal: 2, selector: ".game-canvas", label: "playing", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
+      { ok: true, action: "canvas_signature", ordinal: 3, selector: ".game-canvas", label: "terminal", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
+    ],
+  }, profileEvidence.viewports[1]],
+});
+const stableCanvasSummary = stableCanvasProfileAssessment.checks
+  .find((check) => check.type === "setup_actions_succeeded")
+  .evidence.setup_summary.viewports[0];
+assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups.length, 1);
+assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups[0].selector, ".game-canvas");
+assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups[0].hash, "same-hash");
+assert.deepEqual(stableCanvasSummary.canvas_signature_stable_hash_groups[0].labels, ["menu", "playing", "terminal"]);
 const longClickProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [{
