@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.140
+
+### Patch Changes
+
+- 3396403: Surface explicit final screenshot mode in profile setup summaries so viewport/full-page artifact intent is visible without opening raw proof JSON or checking PNG dimensions.
+
 ## 0.7.139
 
 ### Patch Changes
