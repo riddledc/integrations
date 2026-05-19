@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.139
+
+### Patch Changes
+
+- 556ccce: Allow profile targets to request viewport-only final screenshots with `screenshot_full_page: false`, `screenshotFullPage: false`, or `screenshot_mode: "viewport"` so automatic per-viewport artifacts can avoid fixed-header full-page capture artifacts.
+
 ## 0.7.138
 
 ### Patch Changes
