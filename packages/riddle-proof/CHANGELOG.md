@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.129
+
+### Patch Changes
+
+- 5322a0c: Include per-viewport text samples when whole-page text profile checks fail, so broad `text_visible` and `text_absent` assertions show the body text that made the check fail.
+
 ## 0.7.128
 
 ### Patch Changes
