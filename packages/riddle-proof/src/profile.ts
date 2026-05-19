@@ -3070,7 +3070,14 @@ function textSequenceForCheck(viewport: RiddleProofProfileViewportEvidence, chec
     const matchTexts = Array.isArray(sequence.match_texts) ? sequence.match_texts : [];
     const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
     const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
-    const candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
+    let candidates;
+    if (check.type === "selector_text_visible") {
+      candidates = visibleMatchTexts.length ? visibleMatchTexts : visibleTexts;
+    } else if (check.type === "selector_text_absent") {
+      candidates = matchTexts.length ? matchTexts : texts;
+    } else {
+      candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
+    }
     return candidates.map((text) => String(text).replace(/\s+/g, " ").trim()).filter(Boolean);
   }
   return [];
@@ -4664,7 +4671,14 @@ function textSequenceForCheck(viewport, check) {
     const matchTexts = Array.isArray(sequence.match_texts) ? sequence.match_texts : [];
     const visibleTexts = Array.isArray(sequence.visible_texts) ? sequence.visible_texts : [];
     const texts = Array.isArray(sequence.texts) ? sequence.texts : [];
-    const candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
+    let candidates;
+    if (check.type === "selector_text_visible") {
+      candidates = visibleMatchTexts.length ? visibleMatchTexts : visibleTexts;
+    } else if (check.type === "selector_text_absent") {
+      candidates = matchTexts.length ? matchTexts : texts;
+    } else {
+      candidates = visibleMatchTexts.length ? visibleMatchTexts : matchTexts.length ? matchTexts : visibleTexts.length ? visibleTexts : texts;
+    }
     return candidates.map((text) => String(text || "").replace(/\s+/g, " ").trim()).filter(Boolean);
   }
   return [];
