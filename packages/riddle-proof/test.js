@@ -771,11 +771,16 @@ const cliRunProfileServer = createServer((request, response) => {
             setup_summary: {
               viewport_count: 1,
               action_count: 2,
+              final_screenshot_count: 1,
+              final_screenshot_full_page: false,
+              final_screenshot_mode: "viewport",
               viewports: [{
                 name: "desktop",
                 ok: true,
                 result_count: 3,
                 observed_path: "/profile",
+                final_screenshot: "cli-profile-progress-desktop",
+                final_screenshot_full_page: false,
                 setup_screenshots: ["cli-profile-progress-desktop-ready"],
                 clicked_total: 1,
                 clicked_truncated: false,
@@ -1026,6 +1031,7 @@ try {
   assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 2 declared, 3 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
@@ -1207,6 +1213,7 @@ const profile = normalizeRiddleProofProfile({
   target: {
     route: "/pricing",
     timeout_sec: 420,
+    screenshot_mode: "viewport",
     viewports: [
       { name: "mobile", width: 390, height: 844 },
       { name: "desktop", width: 1440, height: 1000 },
@@ -1232,6 +1239,7 @@ const profile = normalizeRiddleProofProfile({
 }, { url: "https://example.com" });
 assert.equal(resolveRiddleProofProfileTargetUrl(profile), "https://example.com/pricing");
 assert.equal(profile.target.timeout_sec, 420);
+assert.equal(profile.target.screenshot_full_page, false);
 assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
@@ -1584,7 +1592,9 @@ assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
 assert.ok(profileScript.includes('saveScreenshot(label, screenshotOptions)'));
 assert.ok(profileScript.includes("screenshotOptions.fullPage = action.full_page !== false"));
-assert.ok(profileScript.includes("screenshotOptions.fullPage = profile.target.screenshot_full_page !== false"));
+assert.ok(profileScript.includes("screenshotFullPage = profile.target.screenshot_full_page !== false"));
+assert.ok(profileScript.includes("screenshotOptions.fullPage = screenshotFullPage"));
+assert.ok(profileScript.includes("screenshot_full_page: screenshotFullPage"));
 assert.ok(profileScript.includes("executeSetupActions"));
 assert.ok(profileScript.includes("setupActionsForViewport(profile.target.setup_actions || [], viewport.name)"));
 assert.ok(profileScript.includes("expected_action_count"));
@@ -2911,8 +2921,11 @@ const profileSetupCheck = profileAssessment.checks.find((check) => check.type ==
 assert.equal(profileSetupCheck.status, "passed");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewport_count, 2);
 assert.equal(profileSetupCheck.evidence.setup_summary.action_count, 2);
+assert.equal(profileSetupCheck.evidence.setup_summary.final_screenshot_count, 2);
+assert.equal(profileSetupCheck.evidence.setup_summary.final_screenshot_mode, "viewport");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].name, "mobile");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].observed_path, "/pricing/");
+assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].final_screenshot_full_page, false);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.click, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.screenshot, 1);
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].action_counts.wait_for_text, 1);

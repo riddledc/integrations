@@ -486,7 +486,9 @@ Profile final viewport screenshots are full-page by default. Set
 `target.screenshot_full_page: false`, `target.screenshotFullPage: false`, or
 `target.screenshot_mode: "viewport"` when the automatic final screenshots
 should capture only the current viewport, for example when fixed or sticky
-headers make full-page captures misleading.
+headers make full-page captures misleading. Compact profile summaries include
+the final screenshot count and mode when a profile sets an explicit target
+screenshot mode.
 
 Use `allowed_console_patterns` / `allowed_console_texts` on
 `no_fatal_console_errors` when a negative-path profile intentionally triggers a
