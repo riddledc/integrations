@@ -592,13 +592,35 @@ JSON, YAML, robots, sitemap, or other machine-readable endpoint:
 }
 ```
 
+For JSON responses, prefer `body_json_assertions` when the durable contract is
+a field value rather than a raw substring:
+
+```json
+{
+  "type": "http_status",
+  "label": "proof artifact",
+  "url": "/proof/good-catches/artifacts/job_1234/proof.json.json",
+  "expected_status": 200,
+  "allowed_content_types": ["application/json"],
+  "body_json_assertions": [
+    { "path": "status", "equals": "passed" },
+    { "path": "checks[0].status", "equals": "passed" },
+    { "path": "environment_blocker", "exists": false }
+  ]
+}
+```
+
+JSON paths support dot keys and array indexes such as `checks[0].status`, with
+`$` as the root. Each assertion supports `exists`, `equals`, `not_equals`,
+`contains`, and `type`.
+
 `body_contains`, `body_patterns`, `body_not_contains`, and
 `body_not_patterns` match the raw HTTP response body, not rendered browser
 text. Use `text_visible` or `selector_text_visible` when CSS transforms,
 hydration, client rendering, hidden elements, or layout-specific copy should be
 judged exactly as the browser exposes it to users.
-Hosted `summary.md` includes `http_status` body assertion pass counts so a
-reviewer can see raw body proof coverage without opening `proof.json`.
+Hosted `summary.md` includes `http_status` body and JSON assertion pass counts
+so a reviewer can see raw response proof coverage without opening `proof.json`.
 
 When the profile target is a mounted Riddle static Preview such as
 `https://preview.riddledc.com/s/ps_1234abcd/docs/`, root-relative
