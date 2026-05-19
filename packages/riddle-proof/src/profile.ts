@@ -6936,106 +6936,79 @@ async function executeSetupAction(action, ordinal, viewport) {
       const durationMs = setupNumber(action.duration_ms ?? action.durationMs, 0);
       const pointerType = String(action.pointer_type || action.pointerType || "mouse").trim().toLowerCase();
       if (pointerType === "touch" || pointerType === "pen") {
-        const localStart = {
-          x: coordinate(fromX, box.width),
-          y: coordinate(fromY, box.height),
-        };
-        const localEnd = {
-          x: coordinate(toX, box.width),
-          y: coordinate(toY, box.height),
-        };
-        await target.evaluate(async (element, payload) => {
-          const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-          const rect = element.getBoundingClientRect();
-          const pointerId = payload.pointerType === "touch" ? 11 : 12;
-          const capturedPointers = new Set();
-          const originalOwnSetPointerCapture = Object.getOwnPropertyDescriptor(element, "setPointerCapture");
-          const originalOwnReleasePointerCapture = Object.getOwnPropertyDescriptor(element, "releasePointerCapture");
-          const originalOwnHasPointerCapture = Object.getOwnPropertyDescriptor(element, "hasPointerCapture");
-          const originalSetPointerCapture = typeof element.setPointerCapture === "function" ? element.setPointerCapture.bind(element) : undefined;
-          const originalReleasePointerCapture = typeof element.releasePointerCapture === "function" ? element.releasePointerCapture.bind(element) : undefined;
-          const originalHasPointerCapture = typeof element.hasPointerCapture === "function" ? element.hasPointerCapture.bind(element) : undefined;
-          const restorePointerCapture = () => {
-            if (originalOwnSetPointerCapture) Object.defineProperty(element, "setPointerCapture", originalOwnSetPointerCapture);
-            else delete (element as any).setPointerCapture;
-            if (originalOwnReleasePointerCapture) Object.defineProperty(element, "releasePointerCapture", originalOwnReleasePointerCapture);
-            else delete (element as any).releasePointerCapture;
-            if (originalOwnHasPointerCapture) Object.defineProperty(element, "hasPointerCapture", originalOwnHasPointerCapture);
-            else delete (element as any).hasPointerCapture;
-          };
-          Object.defineProperty(element, "setPointerCapture", {
-            configurable: true,
-            value: (activePointerId) => {
-              capturedPointers.add(activePointerId);
-              try {
-                return originalSetPointerCapture?.(activePointerId);
-              } catch {
-                return undefined;
-              }
-            },
-          });
-          Object.defineProperty(element, "releasePointerCapture", {
-            configurable: true,
-            value: (activePointerId) => {
-              capturedPointers.delete(activePointerId);
-              try {
-                return originalReleasePointerCapture?.(activePointerId);
-              } catch {
-                return undefined;
-              }
-            },
-          });
-          Object.defineProperty(element, "hasPointerCapture", {
-            configurable: true,
-            value: (activePointerId) => {
-              if (capturedPointers.has(activePointerId)) return true;
-              try {
-                return Boolean(originalHasPointerCapture?.(activePointerId));
-              } catch {
-                return false;
-              }
-            },
-          });
-          const point = (progress) => ({
-            clientX: rect.left + payload.start.x + (payload.end.x - payload.start.x) * progress,
-            clientY: rect.top + payload.start.y + (payload.end.y - payload.start.y) * progress,
-          });
-          const dispatch = (type, progress) => {
-            const coords = point(progress);
-            element.dispatchEvent(new PointerEvent(type, {
-              bubbles: true,
-              cancelable: true,
-              composed: true,
-              pointerId,
-              pointerType: payload.pointerType,
-              isPrimary: true,
-              buttons: type === "pointerup" ? 0 : 1,
-              button: type === "pointerup" ? 0 : 0,
-              clientX: coords.clientX,
-              clientY: coords.clientY,
-            }));
-          };
-          try {
-            dispatch("pointerover", 0);
-            dispatch("pointerenter", 0);
-            dispatch("pointerdown", 0);
-            for (let step = 1; step <= payload.steps; step += 1) {
-              dispatch("pointermove", step / payload.steps);
-              if (payload.durationMs && payload.steps > 1) await wait(payload.durationMs / payload.steps);
+        const client = await page.context().newCDPSession(page);
+        try {
+          if (pointerType === "touch") {
+            const touchPoint = (x, y) => ({
+              x,
+              y,
+              radiusX: 1,
+              radiusY: 1,
+              force: 1,
+              id: 11,
+            });
+            await client.send("Input.dispatchTouchEvent", {
+              type: "touchStart",
+              touchPoints: [touchPoint(start.x, start.y)],
+            });
+            for (let step = 1; step <= steps; step += 1) {
+              const progress = step / steps;
+              await client.send("Input.dispatchTouchEvent", {
+                type: "touchMove",
+                touchPoints: [
+                  touchPoint(
+                    start.x + (end.x - start.x) * progress,
+                    start.y + (end.y - start.y) * progress,
+                  ),
+                ],
+              });
+              if (durationMs && steps > 1) await page.waitForTimeout(durationMs / steps);
             }
-            dispatch("pointerup", 1);
-            dispatch("pointerout", 1);
-            dispatch("pointerleave", 1);
-          } finally {
-            restorePointerCapture();
+            await client.send("Input.dispatchTouchEvent", {
+              type: "touchEnd",
+              touchPoints: [],
+            });
+          } else {
+            await client.send("Input.dispatchMouseEvent", {
+              type: "mouseMoved",
+              x: start.x,
+              y: start.y,
+              pointerType: "pen",
+            });
+            await client.send("Input.dispatchMouseEvent", {
+              type: "mousePressed",
+              x: start.x,
+              y: start.y,
+              button: "left",
+              buttons: 1,
+              clickCount: 1,
+              pointerType: "pen",
+            });
+            for (let step = 1; step <= steps; step += 1) {
+              const progress = step / steps;
+              await client.send("Input.dispatchMouseEvent", {
+                type: "mouseMoved",
+                x: start.x + (end.x - start.x) * progress,
+                y: start.y + (end.y - start.y) * progress,
+                button: "left",
+                buttons: 1,
+                pointerType: "pen",
+              });
+              if (durationMs && steps > 1) await page.waitForTimeout(durationMs / steps);
+            }
+            await client.send("Input.dispatchMouseEvent", {
+              type: "mouseReleased",
+              x: end.x,
+              y: end.y,
+              button: "left",
+              buttons: 0,
+              clickCount: 1,
+              pointerType: "pen",
+            });
           }
-        }, {
-          pointerType,
-          start: localStart,
-          end: localEnd,
-          steps,
-          durationMs,
-        });
+        } finally {
+          await client.detach().catch(() => {});
+        }
       } else {
         await page.mouse.move(start.x, start.y);
         await page.mouse.down();
@@ -7068,7 +7041,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         to_x: toX,
         to_y: toY,
         pointer_type: pointerType,
-        pointer_capture_polyfill: pointerType === "touch" || pointerType === "pen" ? true : undefined,
+        input_dispatch: pointerType === "touch" || pointerType === "pen" ? "cdp" : "playwright_mouse",
         steps,
         duration_ms: durationMs || undefined,
       };
