@@ -66,6 +66,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "wait_for_selector",
   "wait_for_text",
   "window_call",
+  "window_call_until",
 ] as const;
 
 export type RiddleProofProfileStatus = typeof RIDDLE_PROOF_PROFILE_STATUSES[number];
@@ -269,6 +270,10 @@ export interface RiddleProofProfileSetupAction {
   path?: string;
   args?: JsonValue[];
   expect_return?: JsonValue;
+  until_path?: string;
+  until_expected_value?: JsonValue;
+  max_calls?: number;
+  interval_ms?: number;
   expected_value?: JsonValue;
   min_value?: number;
   max_value?: number;
@@ -1085,6 +1090,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "dialog_response"
     : normalizedInput === "dismiss_dialog" || normalizedInput === "dismiss_dialogs" || normalizedInput === "cancel_dialog"
       ? "dialog_response"
+    : normalizedInput === "window_call_until" || normalizedInput === "call_until" || normalizedInput === "window_call_repeat_until" || normalizedInput === "repeat_window_call_until"
+      ? "window_call_until"
       : normalizedInput;
   if ((RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES as readonly string[]).includes(normalized)) {
     return normalized as RiddleProofProfileSetupActionType;
@@ -1223,10 +1230,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
   }
   const path = stringFromOwn(input, "path", "function_path", "functionPath", "window_path", "windowPath", "state_path", "statePath");
-  if ((type === "window_call" || type === "assert_window_value" || type === "assert_window_number") && !path) {
+  if ((type === "window_call" || type === "window_call_until" || type === "assert_window_value" || type === "assert_window_number") && !path) {
     throw new Error(`target.setup_actions[${index}] ${type} requires path.`);
   }
-  const args = type === "window_call" ? normalizeSetupActionArgs(input, index) : undefined;
+  const args = type === "window_call" || type === "window_call_until" ? normalizeSetupActionArgs(input, index) : undefined;
   const hasExpectedValue = hasOwn(input, "expected_value")
     || hasOwn(input, "expectedValue")
     || hasOwn(input, "expected")
@@ -1251,6 +1258,32 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     || hasOwn(input, "expectReturn")
     || hasOwn(input, "expected_return")
     || hasOwn(input, "expectedReturn");
+  const untilPath = stringFromOwn(input, "until_path", "untilPath", "until_state_path", "untilStatePath", "until_window_path", "untilWindowPath", "until");
+  const hasUntilExpectedValue = hasOwn(input, "until_expected_value")
+    || hasOwn(input, "untilExpectedValue")
+    || hasOwn(input, "until_expected")
+    || hasOwn(input, "untilExpected")
+    || hasOwn(input, "until_value")
+    || hasOwn(input, "untilValue")
+    || hasOwn(input, "expected_value")
+    || hasOwn(input, "expectedValue")
+    || hasOwn(input, "expected");
+  if (type === "window_call_until") {
+    if (!untilPath) {
+      throw new Error(`target.setup_actions[${index}] ${type} requires until_path.`);
+    }
+    if (!hasUntilExpectedValue) {
+      throw new Error(`target.setup_actions[${index}] ${type} requires until_expected_value.`);
+    }
+  }
+  const maxCalls = numberValue(valueFromOwn(input, "max_calls", "maxCalls", "max_attempts", "maxAttempts", "attempts"));
+  if (type === "window_call_until" && (maxCalls === undefined || !Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 100)) {
+    throw new Error(`target.setup_actions[${index}].max_calls must be an integer from 1 to 100.`);
+  }
+  const intervalMs = numberValue(valueFromOwn(input, "interval_ms", "intervalMs", "poll_ms", "pollMs", "call_interval_ms", "callIntervalMs"));
+  if (type === "window_call_until" && intervalMs !== undefined && (!Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 5000)) {
+    throw new Error(`target.setup_actions[${index}].interval_ms must be an integer from 0 to 5000.`);
+  }
   const steps = numberValue(input.steps);
   if (type === "drag" && steps !== undefined && (!Number.isInteger(steps) || steps < 1 || steps > 100)) {
     throw new Error(`target.setup_actions[${index}].steps must be an integer from 1 to 100.`);
@@ -1281,6 +1314,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
+    until_path: untilPath,
+    until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
+    max_calls: maxCalls,
+    interval_ms: intervalMs,
     expected_value: hasExpectedValue ? toJsonValue(rawExpectedValue) : undefined,
     min_value: minValue,
     max_value: maxValue,
@@ -5694,6 +5731,34 @@ async function setupReadWindowValue(context, path) {
     return { ok: true, value: toJsonValue(current) };
   }, { path });
 }
+async function setupCallWindowFunction(context, path, args) {
+  return await context.evaluate(async ({ path, args }) => {
+    const toJsonValue = (value) => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === "string" || typeof value === "boolean") return value;
+      if (typeof value === "number") return Number.isFinite(value) ? value : null;
+      if (Array.isArray(value)) return value.map(toJsonValue);
+      if (typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
+      }
+      return String(value);
+    };
+    const pathParts = String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
+    let parent = window;
+    let current = window;
+    for (const part of pathParts) {
+      parent = current;
+      current = current?.[part];
+    }
+    if (typeof current !== "function") return { ok: false, reason: "missing_function" };
+    try {
+      const returned = await current.apply(parent, Array.isArray(args) ? args : []);
+      return { ok: true, returned: toJsonValue(returned) };
+    } catch (error) {
+      return { ok: false, reason: "function_threw", error: String(error && error.message ? error.message : error).slice(0, 1000) };
+    }
+  }, { path, args });
+}
 function setupFrameSelector(action) {
   return String(action?.frame_selector || action?.frameSelector || action?.iframe_selector || action?.iframeSelector || "").trim();
 }
@@ -6211,32 +6276,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (!path) return { ...base, path, reason: "missing_path" };
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
-      const result = await scope.context.evaluate(async ({ path, args }) => {
-        const toJsonValue = (value) => {
-          if (value === null || value === undefined) return null;
-          if (typeof value === "string" || typeof value === "boolean") return value;
-          if (typeof value === "number") return Number.isFinite(value) ? value : null;
-          if (Array.isArray(value)) return value.map(toJsonValue);
-          if (typeof value === "object") {
-            return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
-          }
-          return String(value);
-        };
-        const pathParts = String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
-        let parent = window;
-        let current = window;
-        for (const part of pathParts) {
-          parent = current;
-          current = current?.[part];
-        }
-        if (typeof current !== "function") return { ok: false, reason: "missing_function" };
-        try {
-          const returned = await current.apply(parent, Array.isArray(args) ? args : []);
-          return { ok: true, returned: toJsonValue(returned) };
-        } catch (error) {
-          return { ok: false, reason: "function_threw", error: String(error && error.message ? error.message : error).slice(0, 1000) };
-        }
-      }, { path, args });
+      const result = await setupCallWindowFunction(scope.context, path, args);
       const hasExpectation = setupHasOwn(action, "expect_return")
         || setupHasOwn(action, "expectReturn")
         || setupHasOwn(action, "expected_return")
@@ -6259,6 +6299,126 @@ async function executeSetupAction(action, ordinal, viewport) {
         expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
         reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
         error: result.error || undefined,
+      };
+    }
+    if (type === "window_call_until") {
+      const path = String(action.path || action.function_path || action.functionPath || "");
+      const untilPath = String(action.until_path || action.untilPath || action.until_state_path || action.untilStatePath || action.until_window_path || action.untilWindowPath || action.until || "");
+      const args = Array.isArray(action.args) ? action.args : [];
+      if (!path) return { ...base, path, reason: "missing_path" };
+      if (!untilPath) return { ...base, path, reason: "missing_until_path" };
+      const hasUntilExpected = setupHasOwn(action, "until_expected_value")
+        || setupHasOwn(action, "untilExpectedValue")
+        || setupHasOwn(action, "until_expected")
+        || setupHasOwn(action, "untilExpected")
+        || setupHasOwn(action, "until_value")
+        || setupHasOwn(action, "untilValue")
+        || setupHasOwn(action, "expected_value")
+        || setupHasOwn(action, "expectedValue")
+        || setupHasOwn(action, "expected");
+      const untilExpected = setupHasOwn(action, "until_expected_value")
+        ? action.until_expected_value
+        : setupHasOwn(action, "untilExpectedValue")
+          ? action.untilExpectedValue
+          : setupHasOwn(action, "until_expected")
+            ? action.until_expected
+            : setupHasOwn(action, "untilExpected")
+              ? action.untilExpected
+              : setupHasOwn(action, "until_value")
+                ? action.until_value
+                : setupHasOwn(action, "untilValue")
+                  ? action.untilValue
+                  : setupHasOwn(action, "expected_value")
+                    ? action.expected_value
+                    : setupHasOwn(action, "expectedValue")
+                      ? action.expectedValue
+                      : action.expected;
+      if (!hasUntilExpected) return { ...base, path, until_path: untilPath, reason: "missing_until_expected_value" };
+      const maxCalls = Math.min(100, Math.max(1, Math.floor(setupNumber(action.max_calls ?? action.maxCalls ?? action.max_attempts ?? action.maxAttempts ?? action.attempts, 1) || 1)));
+      const intervalMs = Math.min(5000, Math.max(0, Math.floor(setupNumber(action.interval_ms ?? action.intervalMs ?? action.poll_ms ?? action.pollMs ?? action.call_interval_ms ?? action.callIntervalMs, 100) || 0)));
+      const hasReturnExpectation = setupHasOwn(action, "expect_return")
+        || setupHasOwn(action, "expectReturn")
+        || setupHasOwn(action, "expected_return")
+        || setupHasOwn(action, "expectedReturn");
+      const expectedReturn = setupHasOwn(action, "expect_return")
+        ? action.expect_return
+        : setupHasOwn(action, "expectReturn")
+          ? action.expectReturn
+          : setupHasOwn(action, "expected_return")
+            ? action.expected_return
+            : action.expectedReturn;
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const startedAt = Date.now();
+      let callCount = 0;
+      let lastCallResult = null;
+      let lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
+      if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+        return {
+          ...base,
+          ...setupScopeEvidence(scope),
+          ok: true,
+          path,
+          arg_count: args.length,
+          until_path: untilPath,
+          until_value: setupJsonValue(lastPredicateResult.value),
+          until_expected_value: setupJsonValue(untilExpected),
+          call_count: callCount,
+          max_calls: maxCalls,
+          interval_ms: intervalMs,
+          timeout_ms: timeout,
+        };
+      }
+      while (callCount < maxCalls && Date.now() - startedAt <= timeout) {
+        lastCallResult = await setupCallWindowFunction(scope.context, path, args);
+        callCount += 1;
+        if (!lastCallResult.ok) break;
+        if (hasReturnExpectation && !setupValuesEqual(lastCallResult.returned, expectedReturn)) break;
+        lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
+        if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+          return {
+            ...base,
+            ...setupScopeEvidence(scope),
+            ok: true,
+            path,
+            arg_count: args.length,
+            returned: setupJsonValue(lastCallResult.returned),
+            expected_return: hasReturnExpectation ? setupJsonValue(expectedReturn) : undefined,
+            until_path: untilPath,
+            until_value: setupJsonValue(lastPredicateResult.value),
+            until_expected_value: setupJsonValue(untilExpected),
+            call_count: callCount,
+            max_calls: maxCalls,
+            interval_ms: intervalMs,
+            timeout_ms: timeout,
+          };
+        }
+        if (callCount < maxCalls && intervalMs) await page.waitForTimeout(intervalMs);
+      }
+      const returnExpectationMet = !hasReturnExpectation || setupValuesEqual(lastCallResult?.returned, expectedReturn);
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        path,
+        arg_count: args.length,
+        returned: setupJsonValue(lastCallResult?.returned),
+        expected_return: hasReturnExpectation ? setupJsonValue(expectedReturn) : undefined,
+        until_path: untilPath,
+        until_value: setupJsonValue(lastPredicateResult?.value),
+        until_expected_value: setupJsonValue(untilExpected),
+        call_count: callCount,
+        max_calls: maxCalls,
+        interval_ms: intervalMs,
+        timeout_ms: timeout,
+        reason: lastCallResult && !lastCallResult.ok
+          ? lastCallResult.reason
+          : hasReturnExpectation && !returnExpectationMet
+            ? "unexpected_return_value"
+            : Date.now() - startedAt > timeout
+              ? "timeout"
+              : "until_condition_not_met",
+        error: lastCallResult?.error || undefined,
+        missing_part: lastPredicateResult?.missing_part || undefined,
       };
     }
     if (type === "assert_window_value") {
