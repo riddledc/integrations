@@ -1159,7 +1159,11 @@ const cliRunProfileServer = createServer((request, response) => {
                   script_length: 52,
                   return_captured: true,
                   return_stored_to: "__proof.lastEval",
-                  returned: { ok: true },
+                  returned: { ok: true, sum: 5, nested: { moves: 16 } },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "moves", path: "nested.moves", exists: true, value: 16 },
+                  ],
                   reason: null,
                 }],
                 window_call_until_total: 1,
@@ -1439,7 +1443,7 @@ try {
   assert.match(profileSummaryMarkdown, /desktop: ok, 5 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
-  assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, returned `\{"ok":true\}`/);
+  assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, summary `ok=true, moves=16`, returned `\{"ok":true,"sum":5,"nested":\{"moves":16\}\}`/);
   assert.match(profileSummaryMarkdown, /desktop window_call_until: ok, `__proof\.step` until `__proof\.done` == `true` in 3\/5 call\(s\), observed `true`/);
   assert.match(profileSummaryMarkdown, /## Network Mocks/);
   assert.match(profileSummaryMarkdown, /mocks: 2; total hits: 5; required mocks: 2/);
@@ -2896,6 +2900,7 @@ const windowEvalSetupProfile = normalizeRiddleProofProfile({
         expectReturn: { ok: true, sum: 5 },
         storeReturnTo: "__proof.lastEval",
         captureReturn: true,
+        returnSummaryFields: [{ path: "ok" }, { path: "sum", label: "total" }],
       },
     ],
   },
@@ -2907,12 +2912,15 @@ assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].args, [2, 3]);
 assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].expect_return, { ok: true, sum: 5 });
 assert.equal(windowEvalSetupProfile.target.setup_actions[0].store_return_to, "__proof.lastEval");
 assert.equal(windowEvalSetupProfile.target.setup_actions[0].capture_return, undefined);
+assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].return_summary_fields, [{ path: "ok" }, { path: "sum", label: "total" }]);
 const windowEvalSetupProfileScript = buildRiddleProofProfileScript(windowEvalSetupProfile);
 assert.ok(windowEvalSetupProfileScript.includes('type === "window_eval"'));
 assert.ok(windowEvalSetupProfileScript.includes("setupEvaluateWindowScript"));
 assert.ok(windowEvalSetupProfileScript.includes("missing_evaluator"));
 assert.ok(windowEvalSetupProfileScript.includes("script_threw"));
 assert.ok(windowEvalSetupProfileScript.includes("script_length"));
+assert.ok(windowEvalSetupProfileScript.includes("return_summary_fields"));
+assert.ok(windowEvalSetupProfileScript.includes("profileSetupReturnSummary"));
 assert.ok(windowEvalSetupProfileScript.includes("profileSetupWindowEvalReceipts"));
 assert.ok(windowEvalSetupProfileScript.includes("window_eval_total"));
 assert.ok(!windowEvalSetupProfileScript.includes("new Function"));

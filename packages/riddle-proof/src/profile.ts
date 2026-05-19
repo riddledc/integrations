@@ -277,6 +277,7 @@ export interface RiddleProofProfileSetupAction {
   expect_return?: JsonValue;
   store_return_to?: string;
   capture_return?: boolean;
+  return_summary_fields?: RiddleProofProfileReturnSummaryField[];
   until_path?: string;
   until_expected_value?: JsonValue;
   max_calls?: number;
@@ -302,6 +303,11 @@ export interface RiddleProofProfileSetupAction {
   viewports?: string[];
   optional?: boolean;
   continue_on_failure?: boolean;
+}
+
+export interface RiddleProofProfileReturnSummaryField {
+  path: string;
+  label?: string;
 }
 
 export interface RiddleProofProfileNetworkMockResponse {
@@ -1008,6 +1014,8 @@ function profileSetupWindowCallReceipts(results: Array<Record<string, JsonValue>
       };
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      const returnSummary = profileSetupReturnSummary(result);
+      if (returnSummary.length) receipt.return_summary = returnSummary;
       return receipt;
     });
 }
@@ -1026,8 +1034,44 @@ function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>
       };
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      const returnSummary = profileSetupReturnSummary(result);
+      if (returnSummary.length) receipt.return_summary = returnSummary;
       return receipt;
     });
+}
+
+function profileSetupReturnSummaryFields(result: Record<string, JsonValue>): RiddleProofProfileReturnSummaryField[] {
+  const input = result.return_summary_fields;
+  if (!Array.isArray(input)) return [];
+  const fields: RiddleProofProfileReturnSummaryField[] = [];
+  for (const item of input) {
+    if (typeof item === "string") {
+      const path = item.trim();
+      if (path) fields.push({ path });
+      continue;
+    }
+    if (!isRecord(item)) continue;
+    const path = stringValue(item.path) ?? stringValue(item.key) ?? stringValue(item.json_path) ?? stringValue(item.jsonPath);
+    if (!path) continue;
+    const label = stringValue(item.label) ?? stringValue(item.name) ?? stringValue(item.title);
+    fields.push(label ? { path, label } : { path });
+  }
+  return fields;
+}
+
+function profileSetupReturnSummary(result: Record<string, JsonValue>): Array<Record<string, JsonValue>> {
+  if (result.returned === undefined) return [];
+  return profileSetupReturnSummaryFields(result).map((field) => {
+    const resolved = resolveJsonPath(result.returned, field.path);
+    const receipt: Record<string, JsonValue> = {
+      label: field.label || field.path,
+      path: field.path,
+      exists: resolved.exists,
+    };
+    if (resolved.exists) receipt.value = toJsonValue(resolved.value);
+    if (resolved.error) receipt.reason = resolved.error;
+    return receipt;
+  });
 }
 
 function profileSetupRangeValueReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
@@ -1278,6 +1322,38 @@ function normalizeSetupActionArgs(input: Record<string, unknown>, index: number)
     throw new Error(`target.setup_actions[${index}] window_call/window_eval args must be an array.`);
   }
   return argsInput.map(toJsonValue);
+}
+
+function normalizeReturnSummaryFields(input: Record<string, unknown>, index: number): RiddleProofProfileReturnSummaryField[] | undefined {
+  const fieldsInput = valueFromOwn(
+    input,
+    "return_summary_fields",
+    "returnSummaryFields",
+    "summary_fields",
+    "summaryFields",
+    "receipt_fields",
+    "receiptFields",
+    "return_receipt_fields",
+    "returnReceiptFields",
+  );
+  if (fieldsInput === undefined) return undefined;
+  if (!Array.isArray(fieldsInput)) {
+    throw new Error(`target.setup_actions[${index}].return_summary_fields must be an array.`);
+  }
+  return fieldsInput.map((field, fieldIndex) => {
+    if (typeof field === "string") {
+      const path = field.trim();
+      if (!path) throw new Error(`target.setup_actions[${index}].return_summary_fields[${fieldIndex}] requires path.`);
+      return { path };
+    }
+    if (!isRecord(field)) {
+      throw new Error(`target.setup_actions[${index}].return_summary_fields[${fieldIndex}] must be a string path or object.`);
+    }
+    const path = stringFromOwn(field, "path", "key", "json_path", "jsonPath");
+    if (!path) throw new Error(`target.setup_actions[${index}].return_summary_fields[${fieldIndex}] requires path.`);
+    const label = stringFromOwn(field, "label", "name", "title");
+    return label ? { path, label } : { path };
+  });
 }
 
 function normalizeSetupActionRepeat(input: Record<string, unknown>, index: number): number | undefined {
@@ -1538,6 +1614,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
     store_return_to: storeReturnTo,
     capture_return: captureReturn,
+    return_summary_fields: normalizeReturnSummaryFields(input, index),
     until_path: untilPath,
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
     max_calls: maxCalls,
@@ -5123,6 +5200,8 @@ function profileSetupWindowCallReceipts(results) {
       };
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      const returnSummary = profileSetupReturnSummary(result);
+      if (returnSummary.length) receipt.return_summary = returnSummary;
       return receipt;
     });
 }
@@ -5140,8 +5219,42 @@ function profileSetupWindowEvalReceipts(results) {
       };
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
+      const returnSummary = profileSetupReturnSummary(result);
+      if (returnSummary.length) receipt.return_summary = returnSummary;
       return receipt;
     });
+}
+function profileSetupReturnSummaryFields(result) {
+  const input = result && result.return_summary_fields;
+  if (!Array.isArray(input)) return [];
+  const fields = [];
+  for (const item of input) {
+    if (typeof item === "string") {
+      const path = item.trim();
+      if (path) fields.push({ path });
+      continue;
+    }
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const path = String(item.path || item.key || item.json_path || item.jsonPath || "").trim();
+    if (!path) continue;
+    const label = String(item.label || item.name || item.title || "").trim();
+    fields.push(label ? { path, label } : { path });
+  }
+  return fields;
+}
+function profileSetupReturnSummary(result) {
+  if (!result || result.returned === undefined) return [];
+  return profileSetupReturnSummaryFields(result).map((field) => {
+    const resolved = resolveJsonProbePath(result.returned, field.path);
+    const receipt = {
+      label: field.label || field.path,
+      path: field.path,
+      exists: Boolean(resolved.exists),
+    };
+    if (resolved.exists) receipt.value = setupJsonValue(resolved.value);
+    if (resolved.error) receipt.reason = resolved.error;
+    return receipt;
+  });
 }
 function profileSetupRangeValueReceipts(results) {
   return (results || [])
@@ -6878,6 +6991,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       const script = String(action.script || action.code || action.source || action.body || "");
       const args = Array.isArray(action.args) ? action.args : [];
       const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.assign_return_to || action.assignReturnTo || action.return_state_path || action.returnStatePath || "").trim();
+      const returnSummaryFields = Array.isArray(action.return_summary_fields) ? action.return_summary_fields : [];
       if (!script.trim()) return { ...base, reason: "missing_script" };
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
@@ -6907,6 +7021,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         return_captured: captureReturn,
         expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
         return_stored_to: result.return_stored_to || storeReturnTo || undefined,
+        return_summary_fields: returnSummaryFields.length ? setupJsonValue(returnSummaryFields) : undefined,
         reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
         store_reason: result.store_reason || undefined,
         error: result.error || undefined,
@@ -6916,6 +7031,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       const path = String(action.path || action.function_path || action.functionPath || "");
       const args = Array.isArray(action.args) ? action.args : [];
       const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.assign_return_to || action.assignReturnTo || action.return_state_path || action.returnStatePath || "").trim();
+      const returnSummaryFields = Array.isArray(action.return_summary_fields) ? action.return_summary_fields : [];
       if (!path) return { ...base, path, reason: "missing_path" };
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
@@ -6945,6 +7061,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         return_captured: captureReturn,
         expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
         return_stored_to: result.return_stored_to || storeReturnTo || undefined,
+        return_summary_fields: returnSummaryFields.length ? setupJsonValue(returnSummaryFields) : undefined,
         reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
         store_reason: result.store_reason || undefined,
         error: result.error || undefined,
