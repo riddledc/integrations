@@ -2189,6 +2189,8 @@ const windowCallSetupProfile = normalizeRiddleProofProfile({
         path: "__gemMineProofForceEscape",
         args: [true, { source: "profile" }],
         expectReturn: true,
+        storeReturnTo: "__gemMineProof.lastForceEscapeResult",
+        captureReturn: false,
         after_ms: 250,
         repeat: 3,
       },
@@ -2200,12 +2202,18 @@ assert.equal(windowCallSetupProfile.target.setup_actions[0].type, "window_call")
 assert.equal(windowCallSetupProfile.target.setup_actions[0].path, "__gemMineProofForceEscape");
 assert.deepEqual(windowCallSetupProfile.target.setup_actions[0].args, [true, { source: "profile" }]);
 assert.equal(windowCallSetupProfile.target.setup_actions[0].expect_return, true);
+assert.equal(windowCallSetupProfile.target.setup_actions[0].store_return_to, "__gemMineProof.lastForceEscapeResult");
+assert.equal(windowCallSetupProfile.target.setup_actions[0].capture_return, false);
 assert.equal(windowCallSetupProfile.target.setup_actions[0].repeat, 3);
 const windowCallSetupProfileScript = buildRiddleProofProfileScript(windowCallSetupProfile);
 assert.ok(windowCallSetupProfileScript.includes('type === "window_call"'));
 assert.ok(windowCallSetupProfileScript.includes("missing_function"));
 assert.ok(windowCallSetupProfileScript.includes("unexpected_return_value"));
 assert.ok(windowCallSetupProfileScript.includes("setupValuesEqual"));
+assert.ok(windowCallSetupProfileScript.includes("storeWindowReturn"));
+assert.ok(windowCallSetupProfileScript.includes("return_stored_to"));
+assert.ok(windowCallSetupProfileScript.includes("return_captured"));
+assert.ok(windowCallSetupProfileScript.includes("capture_return"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_index"));
 assert.ok(windowCallSetupProfileScript.includes("repeat_count"));
 const windowCallUntilSetupProfile = normalizeRiddleProofProfile({

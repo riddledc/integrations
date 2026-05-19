@@ -270,6 +270,8 @@ export interface RiddleProofProfileSetupAction {
   path?: string;
   args?: JsonValue[];
   expect_return?: JsonValue;
+  store_return_to?: string;
+  capture_return?: boolean;
   until_path?: string;
   until_expected_value?: JsonValue;
   max_calls?: number;
@@ -1283,6 +1285,25 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     || hasOwn(input, "expectReturn")
     || hasOwn(input, "expected_return")
     || hasOwn(input, "expectedReturn");
+  const storeReturnTo = stringFromOwn(
+    input,
+    "store_return_to",
+    "storeReturnTo",
+    "save_return_to",
+    "saveReturnTo",
+    "assign_return_to",
+    "assignReturnTo",
+    "return_state_path",
+    "returnStatePath",
+  );
+  const captureReturn = input.capture_return === false
+    || input.captureReturn === false
+    || input.include_return === false
+    || input.includeReturn === false
+    || input.omit_return === true
+    || input.omitReturn === true
+    ? false
+    : undefined;
   const untilPath = stringFromOwn(input, "until_path", "untilPath", "until_state_path", "untilStatePath", "until_window_path", "untilWindowPath", "until");
   const hasUntilExpectedValue = hasOwn(input, "until_expected_value")
     || hasOwn(input, "untilExpectedValue")
@@ -1339,6 +1360,8 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     path,
     args,
     expect_return: hasExpectedReturn ? toJsonValue(valueFromOwn(input, "expect_return", "expectReturn", "expected_return", "expectedReturn")) : undefined,
+    store_return_to: storeReturnTo,
+    capture_return: captureReturn,
     until_path: untilPath,
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
     max_calls: maxCalls,
@@ -5780,8 +5803,8 @@ async function setupReadWindowValue(context, path) {
     return { ok: true, value: toJsonValue(current) };
   }, { path });
 }
-async function setupCallWindowFunction(context, path, args) {
-  return await context.evaluate(async ({ path, args }) => {
+async function setupCallWindowFunction(context, path, args, storeReturnTo, captureReturn) {
+  return await context.evaluate(async ({ path, args, storeReturnTo, captureReturn }) => {
     const toJsonValue = (value) => {
       if (value === null || value === undefined) return null;
       if (typeof value === "string" || typeof value === "boolean") return value;
@@ -5791,6 +5814,19 @@ async function setupCallWindowFunction(context, path, args) {
         return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, toJsonValue(child)]));
       }
       return String(value);
+    };
+    const storeWindowReturn = (storePath, value) => {
+      const pathParts = String(storePath || "").split(".").map((part) => part.trim()).filter(Boolean);
+      if (pathParts[0] === "window") pathParts.shift();
+      if (!pathParts.length) return { ok: false, reason: "missing_store_path" };
+      let target = window;
+      for (let index = 0; index < pathParts.length - 1; index += 1) {
+        const part = pathParts[index];
+        if (target[part] === null || typeof target[part] !== "object") target[part] = {};
+        target = target[part];
+      }
+      target[pathParts[pathParts.length - 1]] = value;
+      return { ok: true, path: pathParts.join(".") };
     };
     const pathParts = String(path || "").split(".").map((part) => part.trim()).filter(Boolean);
     let parent = window;
@@ -5802,11 +5838,18 @@ async function setupCallWindowFunction(context, path, args) {
     if (typeof current !== "function") return { ok: false, reason: "missing_function" };
     try {
       const returned = await current.apply(parent, Array.isArray(args) ? args : []);
-      return { ok: true, returned: toJsonValue(returned) };
+      const jsonReturned = toJsonValue(returned);
+      const returnedForResult = captureReturn === false ? undefined : jsonReturned;
+      if (storeReturnTo) {
+        const stored = storeWindowReturn(storeReturnTo, jsonReturned);
+        if (!stored.ok) return { ok: false, reason: "return_store_failed", store_reason: stored.reason, returned: returnedForResult };
+        return { ok: true, returned: returnedForResult, return_stored_to: stored.path };
+      }
+      return { ok: true, returned: returnedForResult };
     } catch (error) {
       return { ok: false, reason: "function_threw", error: String(error && error.message ? error.message : error).slice(0, 1000) };
     }
-  }, { path, args });
+  }, { path, args, storeReturnTo, captureReturn });
 }
 function setupFrameSelector(action) {
   return String(action?.frame_selector || action?.frameSelector || action?.iframe_selector || action?.iframeSelector || "").trim();
@@ -6322,10 +6365,10 @@ async function executeSetupAction(action, ordinal, viewport) {
     if (type === "window_call") {
       const path = String(action.path || action.function_path || action.functionPath || "");
       const args = Array.isArray(action.args) ? action.args : [];
+      const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.assign_return_to || action.assignReturnTo || action.return_state_path || action.returnStatePath || "").trim();
       if (!path) return { ...base, path, reason: "missing_path" };
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
-      const result = await setupCallWindowFunction(scope.context, path, args);
       const hasExpectation = setupHasOwn(action, "expect_return")
         || setupHasOwn(action, "expectReturn")
         || setupHasOwn(action, "expected_return")
@@ -6334,9 +6377,13 @@ async function executeSetupAction(action, ordinal, viewport) {
         ? action.expect_return
         : setupHasOwn(action, "expectReturn")
           ? action.expectReturn
-          : setupHasOwn(action, "expected_return")
-            ? action.expected_return
-            : action.expectedReturn;
+        : setupHasOwn(action, "expected_return")
+          ? action.expected_return
+          : action.expectedReturn;
+      const captureReturn = action.capture_return === false || action.captureReturn === false || action.include_return === false || action.includeReturn === false || action.omit_return === true || action.omitReturn === true
+        ? hasExpectation
+        : true;
+      const result = await setupCallWindowFunction(scope.context, path, args, storeReturnTo, captureReturn);
       const expectationMet = !hasExpectation || setupValuesEqual(result.returned, expected);
       return {
         ...base,
@@ -6344,9 +6391,12 @@ async function executeSetupAction(action, ordinal, viewport) {
         ok: Boolean(result.ok && expectationMet),
         path,
         arg_count: args.length,
-        returned: setupJsonValue(result.returned),
+        returned: captureReturn ? setupJsonValue(result.returned) : undefined,
+        return_captured: captureReturn,
         expected_return: hasExpectation ? setupJsonValue(expected) : undefined,
+        return_stored_to: result.return_stored_to || storeReturnTo || undefined,
         reason: result.ok ? (expectationMet ? undefined : "unexpected_return_value") : result.reason,
+        store_reason: result.store_reason || undefined,
         error: result.error || undefined,
       };
     }
@@ -6354,6 +6404,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       const path = String(action.path || action.function_path || action.functionPath || "");
       const untilPath = String(action.until_path || action.untilPath || action.until_state_path || action.untilStatePath || action.until_window_path || action.untilWindowPath || action.until || "");
       const args = Array.isArray(action.args) ? action.args : [];
+      const storeReturnTo = String(action.store_return_to || action.storeReturnTo || action.save_return_to || action.saveReturnTo || action.assign_return_to || action.assignReturnTo || action.return_state_path || action.returnStatePath || "").trim();
       if (!path) return { ...base, path, reason: "missing_path" };
       if (!untilPath) return { ...base, path, reason: "missing_until_path" };
       const hasUntilExpected = setupHasOwn(action, "until_expected_value")
@@ -6396,6 +6447,9 @@ async function executeSetupAction(action, ordinal, viewport) {
           : setupHasOwn(action, "expected_return")
             ? action.expected_return
             : action.expectedReturn;
+      const captureReturn = action.capture_return === false || action.captureReturn === false || action.include_return === false || action.includeReturn === false || action.omit_return === true || action.omitReturn === true
+        ? hasReturnExpectation
+        : true;
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
       const startedAt = Date.now();
@@ -6419,7 +6473,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         };
       }
       while (callCount < maxCalls && Date.now() - startedAt <= timeout) {
-        lastCallResult = await setupCallWindowFunction(scope.context, path, args);
+        lastCallResult = await setupCallWindowFunction(scope.context, path, args, storeReturnTo, captureReturn);
         callCount += 1;
         if (!lastCallResult.ok) break;
         if (hasReturnExpectation && !setupValuesEqual(lastCallResult.returned, expectedReturn)) break;
@@ -6431,8 +6485,10 @@ async function executeSetupAction(action, ordinal, viewport) {
             ok: true,
             path,
             arg_count: args.length,
-            returned: setupJsonValue(lastCallResult.returned),
+            returned: captureReturn ? setupJsonValue(lastCallResult.returned) : undefined,
+            return_captured: captureReturn,
             expected_return: hasReturnExpectation ? setupJsonValue(expectedReturn) : undefined,
+            return_stored_to: lastCallResult.return_stored_to || storeReturnTo || undefined,
             until_path: untilPath,
             until_value: setupJsonValue(lastPredicateResult.value),
             until_expected_value: setupJsonValue(untilExpected),
@@ -6450,8 +6506,10 @@ async function executeSetupAction(action, ordinal, viewport) {
         ...setupScopeEvidence(scope),
         path,
         arg_count: args.length,
-        returned: setupJsonValue(lastCallResult?.returned),
+        returned: captureReturn ? setupJsonValue(lastCallResult?.returned) : undefined,
+        return_captured: captureReturn,
         expected_return: hasReturnExpectation ? setupJsonValue(expectedReturn) : undefined,
+        return_stored_to: lastCallResult?.return_stored_to || storeReturnTo || undefined,
         until_path: untilPath,
         until_value: setupJsonValue(lastPredicateResult?.value),
         until_expected_value: setupJsonValue(untilExpected),
@@ -6467,6 +6525,7 @@ async function executeSetupAction(action, ordinal, viewport) {
               ? "timeout"
               : "until_condition_not_met",
         error: lastCallResult?.error || undefined,
+        store_reason: lastCallResult?.store_reason || undefined,
         missing_part: lastPredicateResult?.missing_part || undefined,
       };
     }
