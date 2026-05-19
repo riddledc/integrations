@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.148
+
+### Patch Changes
+
+- 3a1ec50: Add a first-class `set_range_value` profile setup action for HTML range inputs and React-controlled sliders.
+
 ## 0.7.147
 
 ### Patch Changes
