@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.152
+
+### Patch Changes
+
+- 6b0eb1b: Render compact observe_within timing and sample receipts in profile summary markdown.
+
 ## 0.7.151
 
 ### Patch Changes
