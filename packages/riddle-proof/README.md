@@ -198,6 +198,24 @@ generic inline-script warning threshold. Use `--strict=true` when you
 deliberately want Riddle's non-critical script-safety warnings to block the run.
 Critical script-safety violations remain blocked by Riddle either way.
 
+When promoting proof artifacts into a durable public profile, avoid guessing
+which backend or runner tokens are preserved inside `proof.json`. Derive the
+`body_contains` fragments from the artifact body first:
+
+```sh
+riddle-proof-loop profile-body-assertions \
+  --artifact artifacts/job_abc123/proof.json.json \
+  --candidates-json '["product_regression","completed_timeout","Timed Out","partial results available"]' \
+  --required-json '["product_regression"]' \
+  --format body-contains
+```
+
+The command prints only snippets that are actually present in the artifact.
+Missing optional candidates are reported in JSON mode as warnings, while missing
+required snippets make the command exit non-zero. This keeps Good Catch and
+audit-profile promotions tied to real artifacts instead of hand-authored token
+guesses.
+
 The package includes generic starter profiles:
 
 - `examples/profiles/page-content-basic.json` for route/content/layout smoke profiles.

@@ -26,6 +26,7 @@ import {
   collectRiddleProfileArtifactRefs,
   createRiddleProofProfileEnvironmentBlockedResult,
   createRiddleProofProfileInsufficientResult,
+  deriveRiddleProofArtifactBodyAssertions,
   extractRiddleProofProfileResult,
   normalizeRiddleProofProfile,
   profileStatusExitCode,
@@ -51,6 +52,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
+    "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
@@ -130,6 +132,19 @@ function previewFrameworkOption(options: CliOptions) {
 
 function readStdin() {
   return readFileSync(0, "utf-8");
+}
+
+async function readTextValue(value: string | undefined, label: string): Promise<string> {
+  if (!value) throw new Error(`${label} is required.`);
+  if (value === "-") return readStdin();
+  if (/^https?:\/\//i.test(value)) {
+    const response = await fetch(value);
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${label} URL failed HTTP ${response.status}: ${text.slice(0, 500)}`);
+    return text;
+  }
+  if (existsSync(value)) return readFileSync(value, "utf-8");
+  throw new Error(`${label} must be a readable file path, URL, or -.`);
 }
 
 function formatPollDuration(ms: number | null | undefined) {
@@ -1035,6 +1050,30 @@ async function main() {
     }
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     process.exitCode = profileStatusExitCode(profile, result.status);
+    return;
+  }
+
+  if (command === "profile-body-assertions") {
+    const artifactText = await readTextValue(optionString(options, "artifact") ?? optionString(options, "input"), "--artifact");
+    const candidates = readOptionalJsonStringArray(optionString(options, "candidatesJson") ?? optionString(options, "candidateJson"), "--candidates-json") ?? [];
+    const required = readOptionalJsonStringArray(optionString(options, "requiredJson"), "--required-json");
+    if (!candidates.length && !required?.length) {
+      throw new Error("--candidates-json or --required-json must provide at least one snippet.");
+    }
+    const result = deriveRiddleProofArtifactBodyAssertions({
+      artifact_text: artifactText,
+      candidates,
+      required,
+    });
+    const format = optionString(options, "format") || "json";
+    if (format === "body-contains") {
+      process.stdout.write(`${JSON.stringify(result.body_contains, null, 2)}\n`);
+    } else if (format === "json") {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      throw new Error("--format must be json or body-contains.");
+    }
+    process.exitCode = result.ok ? 0 : 1;
     return;
   }
 

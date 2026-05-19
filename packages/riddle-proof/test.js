@@ -30,6 +30,7 @@ import {
   createRunStatusSnapshot,
   createRunState,
   createRiddleProofRunCard,
+  deriveRiddleProofArtifactBodyAssertions,
   extractRiddleProofProfileResult,
   createRunResult,
   createCodexExecAgentAdapter,
@@ -85,6 +86,7 @@ assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
@@ -130,6 +132,74 @@ function runCli(args, options = {}) {
     });
   });
 }
+
+const artifactAssertion = deriveRiddleProofArtifactBodyAssertions({
+  artifact_text: "status passed; Timed Out; partial results available",
+  candidates: ["passed", "completed_timeout", "partial results available", "passed"],
+  required: ["Timed Out"],
+});
+assert.equal(artifactAssertion.ok, true);
+assert.deepEqual(artifactAssertion.body_contains, ["Timed Out", "passed", "partial results available"]);
+assert.deepEqual(artifactAssertion.missing_candidates, ["completed_timeout"]);
+assert.deepEqual(artifactAssertion.missing_required, []);
+
+const artifactAssertionRequiredMiss = deriveRiddleProofArtifactBodyAssertions({
+  artifact_text: "status product_regression",
+  candidates: ["product_regression"],
+  required: ["completed_timeout"],
+});
+assert.equal(artifactAssertionRequiredMiss.ok, false);
+assert.deepEqual(artifactAssertionRequiredMiss.body_contains, ["product_regression"]);
+assert.deepEqual(artifactAssertionRequiredMiss.missing_required, ["completed_timeout"]);
+
+const artifactAssertionDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-artifact-assertions-"));
+const artifactAssertionFile = path.join(artifactAssertionDir, "proof.json");
+const artifactCandidatesFile = path.join(artifactAssertionDir, "candidates.json");
+writeFileSync(artifactAssertionFile, JSON.stringify({
+  status: "product_regression",
+  summary: "Timed Out without partial results available",
+}, null, 2));
+writeFileSync(artifactCandidatesFile, JSON.stringify(["product_regression", "completed_timeout", "partial results available"]));
+const artifactAssertionCli = await runCli([
+  "profile-body-assertions",
+  "--artifact",
+  artifactAssertionFile,
+  "--candidates-json",
+  artifactCandidatesFile,
+  "--required-json",
+  JSON.stringify(["product_regression"]),
+]);
+const artifactAssertionCliJson = JSON.parse(artifactAssertionCli.stdout);
+assert.equal(artifactAssertionCliJson.ok, true);
+assert.deepEqual(artifactAssertionCliJson.body_contains, ["product_regression", "partial results available"]);
+assert.deepEqual(artifactAssertionCliJson.missing_candidates, ["completed_timeout"]);
+
+const artifactAssertionBodyOnly = await runCli([
+  "profile-body-assertions",
+  "--artifact",
+  artifactAssertionFile,
+  "--candidates-json",
+  artifactCandidatesFile,
+  "--format",
+  "body-contains",
+]);
+assert.deepEqual(JSON.parse(artifactAssertionBodyOnly.stdout), ["product_regression", "partial results available"]);
+
+let missingRequiredFailed = false;
+try {
+  await runCli([
+    "profile-body-assertions",
+    "--artifact",
+    artifactAssertionFile,
+    "--required-json",
+    JSON.stringify(["completed_timeout"]),
+  ]);
+} catch (error) {
+  missingRequiredFailed = true;
+  assert.equal(error.code, 1);
+  assert.match(error.stdout, /completed_timeout/);
+}
+assert.equal(missingRequiredFailed, true);
 
 const riddlePreviewDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-client-preview-"));
 writeFileSync(path.join(riddlePreviewDir, "index.html"), "<!doctype html><title>Riddle Preview</title>");
