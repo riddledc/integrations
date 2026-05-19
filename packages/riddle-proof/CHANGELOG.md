@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.161
+
+### Patch Changes
+
+- d6027ca: Prevent synthetic touch and pen drag setup actions from tripping app `setPointerCapture` handlers by shimming pointer capture for the dispatched pointer id during the drag.
+
 ## 0.7.160
 
 ### Patch Changes
