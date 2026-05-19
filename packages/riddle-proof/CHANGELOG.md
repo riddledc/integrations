@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.132
+
+### Patch Changes
+
+- 956aca8: Surface setup action case-insensitive text receipts in compact setup summaries and profile summary markdown.
+
 ## 0.7.131
 
 ### Patch Changes
