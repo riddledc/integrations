@@ -704,6 +704,8 @@ try {
 const cliRunProfileRequests = [];
 let cliRunProfilePollCount = 0;
 let cliRunProfileArtifactRecoveryPollCount = 0;
+let cliRunProfileUnsubmittedArtifactRecoveryRunCount = 0;
+let cliRunProfileUnsubmittedArtifactRecoveryPollCount = 0;
 let cliRunProfileUnsubmittedRunCount = 0;
 let cliRunProfileUnsubmittedPollCount = 0;
 let cliRunProfileDoubleUnsubmittedRunCount = 0;
@@ -891,6 +893,11 @@ const cliRunProfileServer = createServer((request, response) => {
         sendJson({ job_id: "job_cli_profile_timeout_artifacts" });
         return;
       }
+      if (String(body.url || "").includes("/unsubmitted-artifact-recovery-profile")) {
+        cliRunProfileUnsubmittedArtifactRecoveryRunCount += 1;
+        sendJson({ job_id: "job_cli_profile_unsubmitted_artifact_recovery" });
+        return;
+      }
       if (String(body.url || "").includes("/unsubmitted-retry-profile")) {
         cliRunProfileUnsubmittedRunCount += 1;
         sendJson({
@@ -973,6 +980,31 @@ const cliRunProfileServer = createServer((request, response) => {
         {
           name: "proof.json",
           url: `http://127.0.0.1:${cliRunProfilePort}/timeout-artifacts-proof.json`,
+        },
+      ],
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_artifact_recovery") {
+    cliRunProfileUnsubmittedArtifactRecoveryPollCount += 1;
+    sendJson({
+      job_id: "job_cli_profile_unsubmitted_artifact_recovery",
+      status: "queued",
+      created_at: null,
+      submitted_at: null,
+      completed_at: null,
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_artifact_recovery/artifacts") {
+    sendJson({
+      status: "completed",
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-artifact-recovery-proof.json`,
         },
       ],
     });
@@ -1082,6 +1114,66 @@ const cliRunProfileServer = createServer((request, response) => {
       ],
       summary: "cli-profile-unsubmitted-retry passed.",
       captured_at: "2026-05-19T18:20:10.000Z",
+    });
+    return;
+  }
+
+  if (request.method === "GET" && request.url === "/unsubmitted-artifact-recovery-proof.json") {
+    sendJson({
+      version: "riddle-proof.profile-result.v1",
+      profile_name: "cli-profile-unsubmitted-artifact-recovery",
+      runner: "riddle",
+      status: "passed",
+      baseline_policy: "invariant_only",
+      route: {
+        requested: "https://example.com/unsubmitted-artifact-recovery-profile",
+        observed: "/unsubmitted-artifact-recovery-profile",
+        expected_path: "/unsubmitted-artifact-recovery-profile",
+        matched: true,
+        http_status: 200,
+      },
+      artifacts: { screenshots: ["unsubmitted-artifact-recovery-profile"], proof_json: "proof.json" },
+      checks: [
+        {
+          type: "route_loaded",
+          status: "passed",
+          evidence: { expected_path: "/unsubmitted-artifact-recovery-profile", observed_paths: ["/unsubmitted-artifact-recovery-profile"], http_statuses: [200] },
+        },
+      ],
+      summary: "cli-profile-unsubmitted-artifact-recovery passed.",
+      captured_at: "2026-05-19T19:20:00.000Z",
+      evidence: {
+        version: "riddle-proof.profile-evidence.v1",
+        profile_name: "cli-profile-unsubmitted-artifact-recovery",
+        target_url: "https://example.com/unsubmitted-artifact-recovery-profile",
+        baseline_policy: "invariant_only",
+        captured_at: "2026-05-19T19:20:00.000Z",
+        viewports: [
+          {
+            name: "desktop",
+            width: 1280,
+            height: 900,
+            url: "https://example.com/unsubmitted-artifact-recovery-profile",
+            route: {
+              requested: "https://example.com/unsubmitted-artifact-recovery-profile",
+              observed: "/unsubmitted-artifact-recovery-profile",
+              expected_path: "/unsubmitted-artifact-recovery-profile",
+              matched: true,
+              http_status: 200,
+            },
+            title: "Recovered",
+            scroll_width: 1280,
+            client_width: 1280,
+            overflow_px: 0,
+            bounds_overflow_px: 0,
+            overflow_offenders: [],
+            screenshot_label: "unsubmitted-artifact-recovery-profile",
+            screenshot_full_page: false,
+          },
+        ],
+        console: { events: [], fatal_count: 0 },
+        page_errors: [],
+      },
     });
     return;
   }
@@ -1712,6 +1804,52 @@ try {
   const artifactRecoverySummary = readFileSync(path.join(artifactRecoveryOutputDir, "summary.md"), "utf8");
   assert.match(artifactRecoverySummary, /artifact recovery: used artifacts endpoint after non-terminal poll/);
   assert.match(artifactRecoverySummary, /job `job_cli_profile_timeout_artifacts`, status `completed`, terminal true/);
+
+  const unsubmittedArtifactRecoveryProfileFile = path.join(riddlePreviewDir, "cli-profile-unsubmitted-artifact-recovery.json");
+  const unsubmittedArtifactRecoveryOutputDir = path.join(riddlePreviewDir, "cli-profile-unsubmitted-artifact-recovery-output");
+  writeFileSync(unsubmittedArtifactRecoveryProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-unsubmitted-artifact-recovery",
+    target: {
+      route: "/unsubmitted-artifact-recovery-profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/unsubmitted-artifact-recovery-profile" }],
+  }));
+  const unsubmittedArtifactRecoveryResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    unsubmittedArtifactRecoveryProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    unsubmittedArtifactRecoveryOutputDir,
+    "--pollAttempts",
+    "5",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--unsubmitted-timeout-ms",
+    "1",
+  ]);
+  const parsedUnsubmittedArtifactRecoveryResult = JSON.parse(unsubmittedArtifactRecoveryResult.stdout);
+  assert.equal(parsedUnsubmittedArtifactRecoveryResult.status, "passed");
+  assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.job_id, "job_cli_profile_unsubmitted_artifact_recovery");
+  assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.artifact_recovery, true);
+  assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.retry_count, undefined);
+  assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.stale_job_ids, undefined);
+  assert.equal(cliRunProfileUnsubmittedArtifactRecoveryRunCount, 1);
+  assert.equal(cliRunProfileUnsubmittedArtifactRecoveryPollCount, 1);
+  assert.doesNotMatch(unsubmittedArtifactRecoveryResult.stderr, /stayed unsubmitted/);
+  const unsubmittedArtifactRecoverySummary = readFileSync(path.join(unsubmittedArtifactRecoveryOutputDir, "summary.md"), "utf8");
+  assert.match(unsubmittedArtifactRecoverySummary, /artifact recovery: used artifacts endpoint after non-terminal poll/);
 
   const unsubmittedRetryProfileFile = path.join(riddlePreviewDir, "cli-profile-unsubmitted-retry.json");
   const unsubmittedRetryOutputDir = path.join(riddlePreviewDir, "cli-profile-unsubmitted-retry-output");
