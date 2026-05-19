@@ -453,6 +453,7 @@ export interface RiddleProofProfileViewportEvidence {
   frames?: Record<string, Record<string, JsonValue>>;
   text_sequences?: Record<string, Record<string, JsonValue>>;
   text_matches?: Record<string, boolean>;
+  text_match_samples?: Record<string, string[]>;
   http_statuses?: Record<string, Record<string, JsonValue>>;
   link_statuses?: Record<string, Record<string, JsonValue>>;
   route_inventory?: Record<string, JsonValue>;
@@ -2727,6 +2728,55 @@ function matchText(sample: string, check: RiddleProofProfileCheck) {
   return sample.includes(check.text || "");
 }
 
+function compactTextEvidenceSample(value: unknown): string {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function textSampleAroundMatch(sample: string, index: number, length: number): string | undefined {
+  if (index < 0) return undefined;
+  const source = String(sample || "");
+  const context = 120;
+  const start = Math.max(0, index - context);
+  const end = Math.min(source.length, index + Math.max(length, 1) + context);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < source.length ? "..." : "";
+  const compacted = compactTextEvidenceSample(`${prefix}${source.slice(start, end)}${suffix}`);
+  return compacted ? compacted.slice(0, 240) : undefined;
+}
+
+function textMatchSamples(sample: string, check: RiddleProofProfileCheck): string[] {
+  const source = String(sample || "");
+  if (!source) return [];
+  if (check.pattern) {
+    try {
+      const flags = Array.from(new Set(String(check.flags || "").replace(/[gy]/g, "").split(""))).join("");
+      const match = new RegExp(check.pattern, flags).exec(source);
+      const sampleText = match ? textSampleAroundMatch(source, match.index, match[0]?.length || 1) : undefined;
+      return sampleText ? [sampleText] : [];
+    } catch {
+      return [];
+    }
+  }
+  const text = check.text || "";
+  if (!text) return [];
+  const index = source.indexOf(text);
+  const sampleText = textSampleAroundMatch(source, index, text.length);
+  return sampleText ? [sampleText] : [];
+}
+
+function textCheckFailureSamples(viewport: RiddleProofProfileViewportEvidence, check: RiddleProofProfileCheck): string[] {
+  const key = textKey(check);
+  const captured = viewport.text_match_samples?.[key] || [];
+  const capturedSamples = captured
+    .map((sample) => compactTextEvidenceSample(sample).slice(0, 240))
+    .filter(Boolean);
+  if (capturedSamples.length) return capturedSamples.slice(0, 3);
+  const matchedSamples = textMatchSamples(viewport.body_text_sample || "", check);
+  if (matchedSamples.length) return matchedSamples.slice(0, 3);
+  const fallback = compactTextEvidenceSample(viewport.body_text_sample || "").slice(0, 240);
+  return fallback ? [fallback] : [];
+}
+
 function allowedMessageSample(input: unknown): string {
   if (!isRecord(input)) return String(input || "");
   const parts = [
@@ -3247,12 +3297,19 @@ function assessCheckFromEvidence(
   if (check.type === "text_visible" || check.type === "text_absent") {
     const key = textKey(check);
     const expectedVisible = check.type === "text_visible";
-    const matches = viewports.map((viewport) => {
+    const results = viewports.map((viewport) => {
       const fromEvidence = viewport.text_matches?.[key];
-      return typeof fromEvidence === "boolean"
+      const matched = typeof fromEvidence === "boolean"
         ? fromEvidence
         : matchText(viewport.body_text_sample || "", check);
+      const failedAgainstExpectation = matched !== expectedVisible;
+      return {
+        viewport: viewport.name,
+        matched,
+        samples: failedAgainstExpectation ? textCheckFailureSamples(viewport, check) : [],
+      };
     });
+    const matches = results.map((result) => result.matched);
     const failed = matches.filter((matched) => matched !== expectedVisible).length;
     return {
       type: check.type,
@@ -3262,6 +3319,7 @@ function assessCheckFromEvidence(
         text: check.text || null,
         pattern: check.pattern || null,
         matches,
+        viewports: results.map((result) => toJsonValue(result)),
       },
       message: failed ? `Text assertion failed in ${failed} viewport(s).` : undefined,
     };
@@ -3953,6 +4011,48 @@ function textMatches(sample, check) {
     try { return new RegExp(check.pattern, check.flags || "").test(sample || ""); } catch { return false; }
   }
   return String(sample || "").includes(check.text || "");
+}
+function compactTextEvidenceSample(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+function textSampleAroundMatch(sample, index, length) {
+  if (index < 0) return undefined;
+  const source = String(sample || "");
+  const context = 120;
+  const start = Math.max(0, index - context);
+  const end = Math.min(source.length, index + Math.max(length, 1) + context);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < source.length ? "..." : "";
+  const compacted = compactTextEvidenceSample(prefix + source.slice(start, end) + suffix);
+  return compacted ? compacted.slice(0, 240) : undefined;
+}
+function textMatchSamples(sample, check) {
+  const source = String(sample || "");
+  if (!source) return [];
+  if (check.pattern) {
+    try {
+      const flags = Array.from(new Set(String(check.flags || "").replace(/[gy]/g, "").split(""))).join("");
+      const match = new RegExp(check.pattern, flags).exec(source);
+      const sampleText = match ? textSampleAroundMatch(source, match.index, match[0] ? match[0].length : 1) : undefined;
+      return sampleText ? [sampleText] : [];
+    } catch { return []; }
+  }
+  const text = check.text || "";
+  if (!text) return [];
+  const sampleText = textSampleAroundMatch(source, source.indexOf(text), text.length);
+  return sampleText ? [sampleText] : [];
+}
+function textCheckFailureSamples(viewport, check) {
+  const key = check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
+  const captured = viewport && viewport.text_match_samples && Array.isArray(viewport.text_match_samples[key]) ? viewport.text_match_samples[key] : [];
+  const capturedSamples = captured
+    .map((sample) => compactTextEvidenceSample(sample).slice(0, 240))
+    .filter(Boolean);
+  if (capturedSamples.length) return capturedSamples.slice(0, 3);
+  const matchedSamples = textMatchSamples(viewport && viewport.body_text_sample || "", check);
+  if (matchedSamples.length) return matchedSamples.slice(0, 3);
+  const fallback = compactTextEvidenceSample(viewport && viewport.body_text_sample || "").slice(0, 240);
+  return fallback ? [fallback] : [];
 }
 function allowedMessageSample(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return String(input || "");
@@ -5031,13 +5131,22 @@ function assessProfile(profile, evidence) {
     if (check.type === "text_visible" || check.type === "text_absent") {
       const key = check.pattern ? "pattern:" + check.pattern + "/" + (check.flags || "") : "text:" + (check.text || "");
       const expectedVisible = check.type === "text_visible";
-      const matches = checkViewports.map((viewport) => viewport.text_matches && typeof viewport.text_matches[key] === "boolean" ? viewport.text_matches[key] : textMatches(viewport.body_text_sample || "", check));
+      const results = checkViewports.map((viewport) => {
+        const matched = viewport.text_matches && typeof viewport.text_matches[key] === "boolean" ? viewport.text_matches[key] : textMatches(viewport.body_text_sample || "", check);
+        const failedAgainstExpectation = matched !== expectedVisible;
+        return {
+          viewport: viewport.name,
+          matched,
+          samples: failedAgainstExpectation ? textCheckFailureSamples(viewport, check) : [],
+        };
+      });
+      const matches = results.map((result) => result.matched);
       const failed = matches.filter((matched) => matched !== expectedVisible).length;
       checks.push({
         type: check.type,
         label: check.label || check.type,
         status: failed ? "failed" : "passed",
-        evidence: { text: check.text, pattern: check.pattern, matches },
+        evidence: { text: check.text, pattern: check.pattern, matches, viewports: results },
         message: failed ? "Text assertion failed in " + failed + " viewport(s)." : undefined,
       });
       continue;
@@ -5357,6 +5466,36 @@ function textMatches(sample, check) {
     try { return new RegExp(check.pattern, check.flags || "").test(sample || ""); } catch { return false; }
   }
   return String(sample || "").includes(check.text || "");
+}
+function compactTextEvidenceSample(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+function textSampleAroundMatch(sample, index, length) {
+  if (index < 0) return undefined;
+  const source = String(sample || "");
+  const context = 120;
+  const start = Math.max(0, index - context);
+  const end = Math.min(source.length, index + Math.max(length, 1) + context);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < source.length ? "..." : "";
+  const compacted = compactTextEvidenceSample(prefix + source.slice(start, end) + suffix);
+  return compacted ? compacted.slice(0, 240) : undefined;
+}
+function textMatchSamples(sample, check) {
+  const source = String(sample || "");
+  if (!source) return [];
+  if (check.pattern) {
+    try {
+      const flags = Array.from(new Set(String(check.flags || "").replace(/[gy]/g, "").split(""))).join("");
+      const match = new RegExp(check.pattern, flags).exec(source);
+      const sampleText = match ? textSampleAroundMatch(source, match.index, match[0] ? match[0].length : 1) : undefined;
+      return sampleText ? [sampleText] : [];
+    } catch { return []; }
+  }
+  const text = check.text || "";
+  if (!text) return [];
+  const sampleText = textSampleAroundMatch(source, source.indexOf(text), text.length);
+  return sampleText ? [sampleText] : [];
 }
 function profileCheckAppliesToViewport(check, viewport) {
   if (!Array.isArray(check.viewports) || !check.viewports.length) return true;
@@ -7309,6 +7448,7 @@ async function captureViewport(viewport) {
   const frames = {};
   const text_sequences = {};
   const text_matches = {};
+  const text_match_samples = {};
   const http_statuses = {};
   const link_statuses = {};
   for (const check of profile.checks || []) {
@@ -7330,7 +7470,10 @@ async function captureViewport(viewport) {
       text_sequences[check.selector] = await selectorTextSequence(check.selector);
     }
     if ((check.type === "text_visible" || check.type === "text_absent") && (check.text || check.pattern)) {
-      text_matches[textKey(check)] = textMatches(dom.body_text || dom.body_text_sample || "", check);
+      const key = textKey(check);
+      const sample = dom.body_text || dom.body_text_sample || "";
+      text_matches[key] = textMatches(sample, check);
+      text_match_samples[key] = textMatchSamples(sample, check);
     }
     if ((check.type === "frame_text_visible" || check.type === "frame_url_equals" || check.type === "frame_url_matches" || check.type === "frame_no_horizontal_overflow") && check.selector) {
       selectors[check.selector] = selectors[check.selector] || await selectorStats(check.selector);
@@ -7407,6 +7550,7 @@ async function captureViewport(viewport) {
     frames,
     text_sequences,
     text_matches,
+    text_match_samples,
     http_statuses,
     link_statuses,
     route_inventory: routeInventory,
