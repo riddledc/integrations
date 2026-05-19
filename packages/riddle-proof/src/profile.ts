@@ -255,6 +255,7 @@ export interface RiddleProofProfileSetupAction {
   force?: boolean;
   click_count?: number;
   coordinate_mode?: "pixels" | "ratio";
+  pointer_type?: "mouse" | "touch" | "pen";
   from_x?: number;
   from_y?: number;
   to_x?: number;
@@ -1136,6 +1137,18 @@ function normalizeSetupActionCoordinateMode(value: unknown, index: number): "pix
   throw new Error(`target.setup_actions[${index}].coordinate_mode ${String(value)} is not supported. Supported coordinate modes: pixels, ratio.`);
 }
 
+function normalizeSetupActionPointerType(value: unknown, type: RiddleProofProfileSetupActionType, index: number): "mouse" | "touch" | "pen" | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (type !== "drag") {
+    throw new Error(`target.setup_actions[${index}].pointer_type is only supported for drag actions.`);
+  }
+  const normalized = String(value).trim().replace(/-/g, "_").toLowerCase();
+  if (normalized === "mouse") return "mouse";
+  if (normalized === "touch" || normalized === "finger") return "touch";
+  if (normalized === "pen" || normalized === "stylus") return "pen";
+  throw new Error(`target.setup_actions[${index}].pointer_type ${String(value)} is not supported. Supported pointer types: mouse, touch, pen.`);
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -1154,6 +1167,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   const toX = numberValue(valueFromOwn(input, "to_x", "toX", "end_x", "endX", "x2"));
   const toY = numberValue(valueFromOwn(input, "to_y", "toY", "end_y", "endY", "y2"));
   const coordinateMode = normalizeSetupActionCoordinateMode(valueFromOwn(input, "coordinate_mode", "coordinateMode", "coords", "units"), index);
+  const pointerType = normalizeSetupActionPointerType(valueFromOwn(input, "pointer_type", "pointerType", "input_type", "inputType"), type, index);
   if (type === "drag") {
     if (fromX === undefined || fromY === undefined || toX === undefined || toY === undefined) {
       throw new Error(`target.setup_actions[${index}] drag requires from_x, from_y, to_x, and to_y.`);
@@ -1250,6 +1264,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     ),
     click_count: normalizeSetupActionClickCount(input, type, index),
     coordinate_mode: coordinateMode,
+    pointer_type: pointerType,
     from_x: fromX,
     from_y: fromY,
     to_x: toX,
@@ -5974,23 +5989,75 @@ async function executeSetupAction(action, ordinal, viewport) {
       const requestedSteps = setupNumber(action.steps, 8);
       const steps = Math.min(100, Math.max(1, Math.floor(requestedSteps || 8)));
       const durationMs = setupNumber(action.duration_ms ?? action.durationMs, 0);
-      await page.mouse.move(start.x, start.y);
-      await page.mouse.down();
-      try {
-        if (durationMs && steps > 1) {
-          for (let step = 1; step <= steps; step += 1) {
-            const progress = step / steps;
-            await page.mouse.move(
-              start.x + (end.x - start.x) * progress,
-              start.y + (end.y - start.y) * progress,
-            );
-            await page.waitForTimeout(durationMs / steps);
+      const pointerType = String(action.pointer_type || action.pointerType || "mouse").trim().toLowerCase();
+      if (pointerType === "touch" || pointerType === "pen") {
+        const localStart = {
+          x: coordinate(fromX, box.width),
+          y: coordinate(fromY, box.height),
+        };
+        const localEnd = {
+          x: coordinate(toX, box.width),
+          y: coordinate(toY, box.height),
+        };
+        await target.evaluate(async (element, payload) => {
+          const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const rect = element.getBoundingClientRect();
+          const pointerId = payload.pointerType === "touch" ? 11 : 12;
+          const point = (progress) => ({
+            clientX: rect.left + payload.start.x + (payload.end.x - payload.start.x) * progress,
+            clientY: rect.top + payload.start.y + (payload.end.y - payload.start.y) * progress,
+          });
+          const dispatch = (type, progress) => {
+            const coords = point(progress);
+            element.dispatchEvent(new PointerEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              pointerId,
+              pointerType: payload.pointerType,
+              isPrimary: true,
+              buttons: type === "pointerup" ? 0 : 1,
+              button: type === "pointerup" ? 0 : 0,
+              clientX: coords.clientX,
+              clientY: coords.clientY,
+            }));
+          };
+          dispatch("pointerover", 0);
+          dispatch("pointerenter", 0);
+          dispatch("pointerdown", 0);
+          for (let step = 1; step <= payload.steps; step += 1) {
+            dispatch("pointermove", step / payload.steps);
+            if (payload.durationMs && payload.steps > 1) await wait(payload.durationMs / payload.steps);
           }
-        } else {
-          await page.mouse.move(end.x, end.y, { steps });
+          dispatch("pointerup", 1);
+          dispatch("pointerout", 1);
+          dispatch("pointerleave", 1);
+        }, {
+          pointerType,
+          start: localStart,
+          end: localEnd,
+          steps,
+          durationMs,
+        });
+      } else {
+        await page.mouse.move(start.x, start.y);
+        await page.mouse.down();
+        try {
+          if (durationMs && steps > 1) {
+            for (let step = 1; step <= steps; step += 1) {
+              const progress = step / steps;
+              await page.mouse.move(
+                start.x + (end.x - start.x) * progress,
+                start.y + (end.y - start.y) * progress,
+              );
+              await page.waitForTimeout(durationMs / steps);
+            }
+          } else {
+            await page.mouse.move(end.x, end.y, { steps });
+          }
+        } finally {
+          await page.mouse.up().catch(() => {});
         }
-      } finally {
-        await page.mouse.up().catch(() => {});
       }
       return {
         ...base,
@@ -6003,6 +6070,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         from_y: fromY,
         to_x: toX,
         to_y: toY,
+        pointer_type: pointerType,
         steps,
         duration_ms: durationMs || undefined,
       };
