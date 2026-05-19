@@ -32,6 +32,7 @@ import {
   extractRiddleProofProfileResult,
   normalizeRiddleProofProfile,
   preflightRiddleProofProfileHttpStatusChecks,
+  RIDDLE_PROOF_PROFILE_EVIDENCE_VERSION,
   profileStatusExitCode,
   resolveRiddleProofProfileTargetUrl,
   resolveRiddleProofProfileTimeoutSec,
@@ -43,9 +44,10 @@ import {
   type RiddleProofProfileRunner,
   type RiddleProofProfileViewport,
 } from "./profile";
-import type { RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
+import type { JsonValue, RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
 
 type CliOptions = Record<string, string | boolean>;
+type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
 
 function usage() {
   return [
@@ -55,7 +57,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -115,6 +117,10 @@ function optionBoolean(options: CliOptions, key: string) {
 
 function runProfileStrictOption(options: CliOptions) {
   return optionBoolean(options, "strict") ?? false;
+}
+
+function runProfileSplitViewportsOption(options: CliOptions) {
+  return optionBoolean(options, "splitViewports") ?? false;
 }
 
 function optionNumber(options: CliOptions, ...keys: string[]) {
@@ -469,6 +475,8 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const riddle = cliRecord(result.riddle);
   if (!riddle) return [];
   const jobId = cliString(riddle.job_id);
+  const mode = cliString(riddle.mode);
+  const jobCount = cliFiniteNumber(riddle.job_count);
   const status = cliString(riddle.status);
   const terminal = typeof riddle.terminal === "boolean" ? riddle.terminal : undefined;
   const queueElapsedMs = cliFiniteNumber(riddle.queue_elapsed_ms);
@@ -478,6 +486,8 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const submittedAt = cliString(riddle.submitted_at);
   const completedAt = cliString(riddle.completed_at);
   const parts = [
+    mode ? `mode ${markdownInlineCode(mode)}` : "",
+    jobCount === undefined ? "" : `jobs ${jobCount}`,
     jobId ? `job ${markdownInlineCode(jobId)}` : "",
     status ? `status ${markdownInlineCode(status)}` : "",
     terminal === undefined ? "" : `terminal ${terminal ? "true" : "false"}`,
@@ -491,6 +501,23 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   if (submittedAt || completedAt) {
     lines.push(`- timing:${submittedAt ? ` submitted ${markdownInlineCode(submittedAt)}` : ""}${completedAt ? ` completed ${markdownInlineCode(completedAt)}` : ""}`);
   }
+  const splitJobs = Array.isArray(riddle.split_jobs)
+    ? riddle.split_jobs.map(cliRecord).filter((job): job is Record<string, unknown> => Boolean(job))
+    : [];
+  for (const job of splitJobs.slice(0, 12)) {
+    const viewport = cliString(job.viewport) || "viewport";
+    const splitJobId = cliString(job.job_id);
+    const splitStatus = cliString(job.status);
+    const splitTerminal = typeof job.terminal === "boolean" ? job.terminal : undefined;
+    lines.push(
+      `- ${viewport}: ${[
+        splitJobId ? `job ${markdownInlineCode(splitJobId)}` : "",
+        splitStatus ? `status ${markdownInlineCode(splitStatus)}` : "",
+        splitTerminal === undefined ? "" : `terminal ${splitTerminal ? "true" : "false"}`,
+      ].filter(Boolean).join(", ") || "job metadata unavailable"}`,
+    );
+  }
+  if (splitJobs.length > 12) lines.push(`- ${splitJobs.length - 12} additional split job(s) omitted.`);
   return lines;
 }
 
@@ -1242,13 +1269,178 @@ function riddleMetadataFromPoll(
   };
 }
 
-async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
-  const runner = (optionString(options, "runner") || "riddle") as RiddleProofProfileRunner;
-  if (runner !== "riddle") {
-    throw new Error(`Unsupported --runner ${runner}. The current CLI supports --runner riddle.`);
+interface SplitViewportRunResult {
+  viewport: RiddleProofProfileViewport;
+  profile: RiddleProofProfile;
+  result: RiddleProofProfileResult;
+}
+
+function profileForSplitViewport(profile: RiddleProofProfile, viewport: RiddleProofProfileViewport): RiddleProofProfile {
+  return {
+    ...profile,
+    name: `${profile.name}-${viewport.name || `${viewport.width}x${viewport.height}`}`,
+    target: {
+      ...profile.target,
+      viewports: [viewport],
+    },
+    metadata: {
+      ...(profile.metadata || {}),
+      split_parent_profile: profile.name,
+      split_viewport: viewport.name,
+    },
+  };
+}
+
+function safeProfileOutputSegment(value: string) {
+  const safe = value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
+  return safe || "viewport";
+}
+
+function splitViewportOutputDir(outputDir: string, viewportName: string, seen: Map<string, number>) {
+  const base = safeProfileOutputSegment(viewportName);
+  const count = seen.get(base) || 0;
+  seen.set(base, count + 1);
+  return path.join(outputDir, count ? `${base}-${count + 1}` : base);
+}
+
+function splitViewportArtifactRefs(input: SplitViewportRunResult): RiddleProofProfileArtifactRef[] {
+  return (input.result.artifacts.riddle_artifacts || []).map((artifact) => ({
+    ...artifact,
+    name: `${safeProfileOutputSegment(input.viewport.name)}/${artifact.name || artifact.kind || "artifact"}`,
+  }));
+}
+
+function sumDefinedNumbers(values: Array<number | null | undefined>) {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return numbers.length ? numbers.reduce((sum, value) => sum + value, 0) : undefined;
+}
+
+function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): RiddleProofProfileResult["riddle"] {
+  const splitJobs = childRuns.map(({ viewport, result }) => ({
+    viewport: viewport.name,
+    job_id: result.riddle?.job_id,
+    status: result.riddle?.status,
+    terminal: result.riddle?.terminal,
+    queue_elapsed_ms: result.riddle?.queue_elapsed_ms,
+    elapsed_ms: result.riddle?.elapsed_ms,
+    attempt: result.riddle?.attempt,
+    attempts: result.riddle?.attempts,
+    timed_out: result.riddle?.timed_out,
+  }));
+  return {
+    mode: "split-viewports",
+    job_count: childRuns.length,
+    status: "split-viewports",
+    terminal: childRuns.every(({ result }) => result.riddle?.terminal !== false),
+    queue_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.queue_elapsed_ms)),
+    elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.elapsed_ms)),
+    split_jobs: splitJobs,
+  };
+}
+
+function latestCapturedAt(evidences: RiddleProofProfileEvidence[]) {
+  let latest = "";
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const evidence of evidences) {
+    const parsed = Date.parse(evidence.captured_at);
+    if (Number.isFinite(parsed) && parsed >= latestMs) {
+      latest = evidence.captured_at;
+      latestMs = parsed;
+    }
   }
+  return latest || new Date().toISOString();
+}
+
+function splitViewportDomSummary(
+  profile: RiddleProofProfile,
+  childRuns: SplitViewportRunResult[],
+  evidence: Pick<RiddleProofProfileEvidence, "viewports" | "console" | "page_errors" | "network_mocks">,
+): Record<string, JsonValue> {
+  return {
+    split_viewports: true,
+    expected_viewport_count: profile.target.viewports.length,
+    viewport_count: evidence.viewports.length,
+    child_result_count: childRuns.length,
+    child_statuses: childRuns.map(({ viewport, result }) => ({
+      viewport: viewport.name,
+      profile_name: result.profile_name,
+      status: result.status,
+      job_id: result.riddle?.job_id || null,
+    })),
+    routes: evidence.viewports.map((viewport) => ({
+      viewport: viewport.name,
+      requested: viewport.route.requested,
+      observed: viewport.route.observed,
+      matched: viewport.route.matched,
+      http_status: viewport.route.http_status ?? null,
+    })),
+    titles: evidence.viewports.map((viewport) => viewport.title).filter((title): title is string => Boolean(title)),
+    overflow_px: evidence.viewports.map((viewport) => viewport.overflow_px ?? null),
+    bounds_overflow_px: evidence.viewports.map((viewport) => viewport.bounds_overflow_px ?? null),
+    overflow_offender_counts: evidence.viewports.map((viewport) => (viewport.overflow_offenders || []).length),
+    console_event_count: evidence.console.events.length,
+    console_fatal_count: evidence.console.fatal_count,
+    page_error_count: evidence.page_errors.length,
+    network_mock_count: (profile.target.network_mocks || []).length,
+    network_mock_hit_count: (evidence.network_mocks || []).filter((event) => event.ok !== false).length,
+  };
+}
+
+function aggregateSplitViewportEvidence(
+  profile: RiddleProofProfile,
+  childRuns: SplitViewportRunResult[],
+): RiddleProofProfileEvidence {
+  const evidences = childRuns
+    .map(({ result }) => result.evidence)
+    .filter((evidence): evidence is RiddleProofProfileEvidence => Boolean(evidence));
+  const viewports = evidences.flatMap((evidence) => evidence.viewports || []);
+  const consoleEvents = evidences.flatMap((evidence) => evidence.console?.events || []);
+  const pageErrors = evidences.flatMap((evidence) => evidence.page_errors || []);
+  const networkMocks = evidences.flatMap((evidence) => evidence.network_mocks || []);
+  const evidence: RiddleProofProfileEvidence = {
+    version: RIDDLE_PROOF_PROFILE_EVIDENCE_VERSION,
+    profile_name: profile.name,
+    target_url: resolveRiddleProofProfileTargetUrl(profile),
+    baseline_policy: profile.baseline_policy,
+    captured_at: latestCapturedAt(evidences),
+    viewports,
+    console: {
+      events: consoleEvents,
+      fatal_count: evidences.reduce((sum, item) => sum + (item.console?.fatal_count || 0), 0),
+    },
+    page_errors: pageErrors,
+    network_mocks: networkMocks.length ? networkMocks : undefined,
+  };
+  evidence.dom_summary = splitViewportDomSummary(profile, childRuns, evidence);
+  return evidence;
+}
+
+function splitViewportBlockedMessage(childRuns: SplitViewportRunResult[]) {
+  const blocked = childRuns
+    .filter(({ result }) => !result.evidence || result.status === "environment_blocked" || result.status === "configuration_error")
+    .map(({ viewport, result }) => `${viewport.name}: ${result.status}${result.error ? ` (${result.error})` : ""}`);
+  return `Split viewport run did not produce reliable evidence for ${blocked.join("; ")}.`;
+}
+
+function withSplitViewportWarnings(profile: RiddleProofProfile, result: RiddleProofProfileResult): RiddleProofProfileResult {
+  const warnings: string[] = [];
+  if (profile.target.network_mocks?.length) {
+    warnings.push("Split viewport mode runs each viewport in a separate Riddle job; global network mock sequencing is assessed from aggregated events.");
+  }
+  if (!warnings.length) return result;
+  return {
+    ...result,
+    warnings: [...new Set([...(result.warnings || []), ...warnings])],
+  };
+}
+
+async function runSingleRiddleProfileForCli(
+  profile: RiddleProofProfile,
+  options: CliOptions,
+  input: { client: RiddleApiClient; runner: RiddleProofProfileRunner },
+): Promise<RiddleProofProfileResult> {
+  const { client, runner } = input;
   const targetUrl = resolveRiddleProofProfileTargetUrl(profile);
-  const client = createRiddleApiClient(riddleClientConfig(options));
   let created: Record<string, unknown> | undefined;
   try {
     created = await client.runScript({
@@ -1316,6 +1508,56 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
     poll: poll.poll,
     artifacts,
   });
+}
+
+async function runSplitViewportProfileForCli(
+  profile: RiddleProofProfile,
+  options: CliOptions,
+  input: { client: RiddleApiClient; runner: RiddleProofProfileRunner },
+): Promise<RiddleProofProfileResult> {
+  const outputDir = profileOutputDirOption(options);
+  const seenOutputNames = new Map<string, number>();
+  const childRuns: SplitViewportRunResult[] = [];
+  for (const viewport of profile.target.viewports) {
+    const childProfile = profileForSplitViewport(profile, viewport);
+    const result = await runSingleRiddleProfileForCli(childProfile, options, input);
+    if (outputDir) {
+      writeProfileOutput(splitViewportOutputDir(outputDir, viewport.name, seenOutputNames), result);
+    }
+    childRuns.push({ viewport, profile: childProfile, result });
+  }
+
+  const artifacts = childRuns.flatMap(splitViewportArtifactRefs);
+  const blocked = childRuns.filter(({ result }) => !result.evidence || result.status === "environment_blocked" || result.status === "configuration_error");
+  if (blocked.length) {
+    return createRiddleProofProfileEnvironmentBlockedResult({
+      profile,
+      runner: input.runner,
+      error: splitViewportBlockedMessage(childRuns),
+      riddle: splitViewportRiddleMetadata(childRuns),
+      artifacts,
+    });
+  }
+
+  const evidence = aggregateSplitViewportEvidence(profile, childRuns);
+  const result = assessRiddleProofProfileEvidence(profile, evidence, {
+    runner: input.runner,
+    riddle: splitViewportRiddleMetadata(childRuns),
+    artifacts,
+  });
+  return withSplitViewportWarnings(profile, result);
+}
+
+async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
+  const runner = (optionString(options, "runner") || "riddle") as RiddleProofProfileRunner;
+  if (runner !== "riddle") {
+    throw new Error(`Unsupported --runner ${runner}. The current CLI supports --runner riddle.`);
+  }
+  const client = createRiddleApiClient(riddleClientConfig(options));
+  if (runProfileSplitViewportsOption(options) && profile.target.viewports.length > 1) {
+    return runSplitViewportProfileForCli(profile, options, { client, runner });
+  }
+  return runSingleRiddleProfileForCli(profile, options, { client, runner });
 }
 
 function requestForRun(options: CliOptions): RiddleProofRunParams {
