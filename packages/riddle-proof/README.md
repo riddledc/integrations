@@ -605,6 +605,26 @@ The check records visible text for the selector in each viewport and reports
 matched counts plus short samples, which makes generated-command and evidence
 card audits easier to diagnose than global `text_visible` checks.
 
+Use `observe_within` when the proof needs to catch a short-lived user-visible
+state after setup actions, such as a combo badge, damage flash, transient
+particle count, toast, or canvas-adjacent HUD update:
+
+```json
+{
+  "type": "observe_within",
+  "selector": ".result-state",
+  "pattern": "Photon.*active",
+  "timeout_ms": 1500
+}
+```
+
+With `selector` plus `text` or `pattern`, the runner polls visible selector
+text until it matches. With only `selector`, it polls for a visible matching
+element. With only `text` or `pattern`, it polls the rendered page body. The
+proof evidence records per-viewport match status, elapsed time, attempts,
+selector counts when applicable, and a compact sample. `within_ms` is accepted
+as an alias for `timeout_ms`; the default timeout is `2000`.
+
 Use `http_status` when the contract belongs to the fetched response itself:
 status code, content type, byte size, or raw body fragments from a markdown,
 JSON, YAML, robots, sitemap, or other machine-readable endpoint:

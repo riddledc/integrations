@@ -571,6 +571,14 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
   if (check.type === "selector_text_order") {
     return selector ? `${markdownInlineCode(selector)} text order` : undefined;
   }
+  if (check.type === "observe_within") {
+    const textTarget = profileCheckTextTarget(evidence);
+    const timeoutMs = cliFiniteNumber(evidence.timeout_ms);
+    const withinLabel = timeoutMs === undefined ? "within timeout" : `within ${timeoutMs}ms`;
+    if (selector && textTarget) return `${markdownInlineCode(selector)} observes ${textTarget} ${withinLabel}`;
+    if (selector) return `${markdownInlineCode(selector)} visible ${withinLabel}`;
+    return textTarget ? `${textTarget} ${withinLabel}` : withinLabel;
+  }
   if (check.type === "text_visible" || check.type === "text_absent") {
     return profileCheckTextTarget(evidence);
   }
