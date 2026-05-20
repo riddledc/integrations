@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.194
+
+### Patch Changes
+
+- e18f2ea: Recognize passing proof-pack cleanup inventory receipts when stale state is explicitly cleared.
+
 ## 0.7.193
 
 ### Patch Changes
