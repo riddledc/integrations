@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.175
+
+### Patch Changes
+
+- 8e48330: Include tap setup action receipts in hosted Riddle runner setup summaries so CLI markdown can show tap totals and per-viewport tap evidence.
+
 ## 0.7.174
 
 ### Patch Changes
