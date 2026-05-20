@@ -59,7 +59,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -144,6 +144,22 @@ function optionInteger(options: CliOptions, fallback: number, ...keys: string[])
 
 function profileOutputDirOption(options: CliOptions) {
   return optionString(options, "output") ?? optionString(options, "outputDir");
+}
+
+function runProfileResultFormatOption(options: CliOptions) {
+  const format = optionString(options, "resultFormat") ?? "json";
+  if (format === "json" || format === "summary" || format === "none") return format;
+  throw new Error("--result-format must be json, summary, or none.");
+}
+
+function writeRunProfileResult(result: RiddleProofProfileResult, options: CliOptions) {
+  const format = runProfileResultFormatOption(options);
+  if (format === "none") return;
+  if (format === "summary") {
+    process.stdout.write(profileResultMarkdown(result));
+    return;
+  }
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
 function previewFrameworkOption(options: CliOptions) {
@@ -2223,7 +2239,7 @@ async function main() {
     if (diagnosticLine && optionBoolean(options, "quiet") !== true) {
       process.stderr.write(`${diagnosticLine}\n`);
     }
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    writeRunProfileResult(result, options);
     process.exitCode = profileStatusExitCode(profile, result.status);
     return;
   }
