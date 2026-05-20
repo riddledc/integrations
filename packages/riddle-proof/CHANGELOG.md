@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.195
+
+### Patch Changes
+
+- 9888214: Report proof-pack route and viewport receipts as complete only when every expected viewport has route evidence.
+
 ## 0.7.194
 
 ### Patch Changes
