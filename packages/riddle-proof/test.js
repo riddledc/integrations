@@ -4222,6 +4222,40 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].selec
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].pointer_type, "touch");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].input_dispatch, "cdp");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const scopedSetupSubsetProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "scoped-setup-subset",
+  target: {
+    route: "/pricing",
+    viewports: [{ name: "desktop", width: 1440, height: 1000 }],
+    setup_actions: [
+      { type: "wait", ms: 10 },
+      { type: "click", selector: ".desktop-only", viewports: ["desktop"] },
+      { type: "click", selector: ".mobile-only", viewports: ["mobile", "ipad"] },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/pricing" }],
+}, { url: "https://example.com" });
+const scopedSetupSubsetAssessment = assessRiddleProofProfileEvidence(scopedSetupSubsetProfile, {
+  ...profileEvidence,
+  profile_name: "scoped-setup-subset",
+  viewports: [{
+    ...profileEvidence.viewports[1],
+    setup_action_results: [
+      { ok: true, action: "wait", ms: 10 },
+      { ok: true, action: "click", selector: ".desktop-only" },
+    ],
+  }],
+  dom_summary: { viewport_count: 1 },
+});
+const scopedSetupSubsetCheck = scopedSetupSubsetAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
+assert.equal(scopedSetupSubsetAssessment.status, "passed");
+assert.equal(scopedSetupSubsetCheck.status, "passed");
+assert.equal(scopedSetupSubsetCheck.evidence.failed.length, 0);
+assert.equal(scopedSetupSubsetCheck.evidence.action_count, 3);
+assert.equal(scopedSetupSubsetCheck.evidence.viewports[0].expected_action_count, 2);
+assert.equal(scopedSetupSubsetCheck.evidence.viewports[0].result_count, 2);
+assert.ok(!buildRiddleProofProfileScript(scopedSetupSubsetProfile).includes("setup action scoped to missing viewport"));
 const stableCanvasProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
   viewports: [{
