@@ -898,6 +898,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     return sum + labels.filter((label) => typeof label === "string" && label.trim()).length;
   }, 0);
   const clickedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0);
+  const clickSequenceTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_sequence_total) || 0), 0);
   const clickCountActionTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_action_total) || 0), 0);
   const clickCountValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_count_value_total) || 0), 0);
   const windowCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_total) || 0), 0);
@@ -923,6 +924,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   ];
   if (clickCountActionTotal) {
     lines.push(`- click counts: ${clickCountActionTotal} action(s), click_count total ${clickCountValueTotal}`);
+  }
+  if (clickSequenceTotal) {
+    lines.push(`- click sequences: ${clickSequenceTotal} group(s)`);
   }
   if (windowCallTotal) {
     lines.push(`- window_call: ${windowCallTotal} action(s), stored returns ${windowCallStoredTotal}, captured returns ${windowCallCapturedTotal}`);
@@ -951,6 +955,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
       ? viewport.setup_screenshots.filter((label) => typeof label === "string" && label.trim()).length
       : 0;
     const clicked = cliFiniteNumber(viewport.clicked_total) || 0;
+    const clickSequenceCount = cliFiniteNumber(viewport.click_sequence_total) || 0;
     const clickCountActions = cliFiniteNumber(viewport.click_count_action_total) || 0;
     const windowCallActions = cliFiniteNumber(viewport.window_call_total) || 0;
     const windowCallStored = cliFiniteNumber(viewport.window_call_stored_total) || 0;
@@ -964,8 +969,34 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const dragActions = cliFiniteNumber(viewport.drag_total) || 0;
     const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
+  const clickSequenceGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.click_sequences)
+      ? viewport.click_sequences.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  const clickSequenceDetails = clickSequenceGroups.flat();
+  const sampledClickSequenceDetails = balancedSetupReceiptDetails(clickSequenceGroups, 12);
+  for (const { name, receipt } of sampledClickSequenceDetails) {
+    const selectorTemplate = cliString(receipt.selector_template) || "target";
+    const valueSource = cliString(receipt.value_source);
+    const sequence = Array.isArray(receipt.sequence)
+      ? receipt.sequence.map((value) => cliFiniteNumber(value)).filter((value): value is number => value !== undefined)
+      : [];
+    const sequenceText = sequence.join(",");
+    const omittedSequenceCount = cliFiniteNumber(receipt.omitted_sequence_count) || 0;
+    const clickTotal = cliFiniteNumber(receipt.click_total);
+    const resultCount = cliFiniteNumber(receipt.result_count);
+    const ordinals = Array.isArray(receipt.ordinals)
+      ? receipt.ordinals.map((value) => cliFiniteNumber(value)).filter((value): value is number => value !== undefined)
+      : [];
+    const ordinalText = ordinals.length ? ordinals.join(",") : "";
+    lines.push(`- ${name} click_sequence: ${markdownInlineCode(selectorTemplate)}${valueSource ? ` ${valueSource}` : ""}${sequenceText ? ` sequence ${markdownInlineCode(sequenceText, 160)}` : ""}${omittedSequenceCount ? ` (+${omittedSequenceCount} omitted)` : ""}${clickTotal === undefined ? "" : `, clicks ${clickTotal}`}${resultCount === undefined ? "" : `, results ${resultCount}`}${ordinalText ? `, ordinals ${markdownInlineCode(ordinalText, 120)}` : ""}`);
+  }
+  if (clickSequenceDetails.length > sampledClickSequenceDetails.length) lines.push(`- ${clickSequenceDetails.length - sampledClickSequenceDetails.length} additional click_sequence receipt(s) omitted.`);
   const dragGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.drag)

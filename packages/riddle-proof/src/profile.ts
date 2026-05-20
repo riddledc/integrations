@@ -1185,6 +1185,67 @@ function profileSetupCanvasSignatureStableHashGroups(results: Array<Record<strin
   return warnings;
 }
 
+function profileSetupClickSequenceReceipts(clickedItems: Array<Record<string, unknown>>): Array<Record<string, JsonValue>> {
+  const nthChildPattern = /:nth-child\((\d+)\)/;
+  const nthChildTemplatePattern = /:nth-child\(\d+\)/g;
+  const groups = new Map<string, {
+    selector_template: string;
+    frame_selector?: string;
+    value_source: string;
+    sequence: number[];
+    ordinals: number[];
+    result_count: number;
+    click_total: number;
+  }>();
+
+  for (const item of clickedItems) {
+    const selector = stringValue(item.selector);
+    if (!selector) continue;
+    const match = nthChildPattern.exec(selector);
+    if (!match) continue;
+
+    const frameSelector = stringValue(item.frame_selector);
+    const selectorTemplate = selector.replace(nthChildTemplatePattern, ":nth-child(*)");
+    const key = `${frameSelector || ""}\n${selectorTemplate}`;
+    const group = groups.get(key) || {
+      selector_template: selectorTemplate,
+      frame_selector: frameSelector,
+      value_source: "nth-child",
+      sequence: [],
+      ordinals: [],
+      result_count: 0,
+      click_total: 0,
+    };
+    const value = Number(match[1]);
+    const clickCountValue = numberValue(item.click_count);
+    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
+    for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
+    const ordinal = numberValue(item.ordinal);
+    if (ordinal !== undefined) group.ordinals.push(ordinal);
+    group.result_count += 1;
+    group.click_total += clickCount;
+    groups.set(key, group);
+  }
+
+  return [...groups.values()]
+    .filter((group) => group.result_count >= 4)
+    .map((group) => {
+      const sequence = group.sequence.slice(0, 32);
+      const ordinals = group.ordinals.slice(0, 16);
+      return {
+        selector_template: group.selector_template,
+        frame_selector: group.frame_selector ?? null,
+        value_source: group.value_source,
+        result_count: group.result_count,
+        click_total: group.click_total,
+        sequence,
+        omitted_sequence_count: Math.max(0, group.sequence.length - sequence.length),
+        ordinals,
+        omitted_ordinal_count: Math.max(0, group.ordinals.length - ordinals.length),
+      };
+    });
+}
+
 function sampleProfileSetupSummaryItems<T>(items: T[], limit: number): T[] {
   if (items.length <= limit) return items;
   const firstCount = Math.floor(limit / 2);
@@ -1265,6 +1326,8 @@ function profileSetupSummary(
           };
         });
       const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
+      const clickSequences = profileSetupClickSequenceReceipts(clickedItems);
+      const sampledClickSequences = sampleProfileSetupSummaryItems(clickSequences, 6);
       const text_samples = results
         .filter((result) => result.ok !== false && typeof result.text === "string" && (
           profileSetupResultAction(result) === "assert_text_visible"
@@ -1294,6 +1357,9 @@ function profileSetupSummary(
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
+        click_sequence_total: clickSequences.length,
+        click_sequence_truncated: clickSequences.length > sampledClickSequences.length,
+        click_sequences: sampledClickSequences,
         click_count_action_total: clickCountValues.length,
         click_count_value_total: clickCountValues.reduce((sum, value) => sum + value, 0),
         window_call_until_total: windowCallUntilReceipts.length,
@@ -5491,6 +5557,55 @@ function profileSetupCanvasSignatureStableHashGroups(results) {
   }
   return warnings;
 }
+function profileSetupClickSequenceReceipts(clickedItems) {
+  const nthChildPattern = /:nth-child\((\d+)\)/;
+  const nthChildTemplatePattern = /:nth-child\(\d+\)/g;
+  const groups = new Map();
+  for (const item of clickedItems || []) {
+    const selector = typeof item.selector === "string" && item.selector.trim() ? item.selector.trim() : undefined;
+    if (!selector) continue;
+    const match = nthChildPattern.exec(selector);
+    if (!match) continue;
+    const frameSelector = typeof item.frame_selector === "string" && item.frame_selector.trim() ? item.frame_selector.trim() : undefined;
+    const selectorTemplate = selector.replace(nthChildTemplatePattern, ":nth-child(*)");
+    const key = String(frameSelector || "") + "\\n" + selectorTemplate;
+    const group = groups.get(key) || {
+      selector_template: selectorTemplate,
+      frame_selector: frameSelector,
+      value_source: "nth-child",
+      sequence: [],
+      ordinals: [],
+      result_count: 0,
+      click_total: 0,
+    };
+    const value = Number(match[1]);
+    const clickCountValue = typeof item.click_count === "number" && Number.isFinite(item.click_count) ? item.click_count : undefined;
+    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
+    for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
+    const ordinal = typeof item.ordinal === "number" && Number.isFinite(item.ordinal) ? item.ordinal : undefined;
+    if (ordinal !== undefined) group.ordinals.push(ordinal);
+    group.result_count += 1;
+    group.click_total += clickCount;
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .filter((group) => group.result_count >= 4)
+    .map((group) => {
+      const sequence = group.sequence.slice(0, 32);
+      const ordinals = group.ordinals.slice(0, 16);
+      return {
+        selector_template: group.selector_template,
+        frame_selector: group.frame_selector || null,
+        value_source: group.value_source,
+        result_count: group.result_count,
+        click_total: group.click_total,
+        sequence,
+        omitted_sequence_count: Math.max(0, group.sequence.length - sequence.length),
+        ordinals,
+        omitted_ordinal_count: Math.max(0, group.ordinals.length - ordinals.length),
+      };
+    });
+}
 function sampleProfileSetupSummaryItems(items, limit) {
   if ((items || []).length <= limit) return items || [];
   const firstCount = Math.floor(limit / 2);
@@ -5566,6 +5681,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
           };
         });
       const clicked = sampleProfileSetupSummaryItems(clickedItems, 8);
+      const clickSequences = profileSetupClickSequenceReceipts(clickedItems);
+      const sampledClickSequences = sampleProfileSetupSummaryItems(clickSequences, 6);
       const textSamples = results
         .filter((result) => result && result.ok !== false && typeof result.text === "string" && (
           profileSetupResultAction(result) === "assert_text_visible"
@@ -5595,6 +5712,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         setup_screenshots: profileSetupScreenshotLabels(results),
         clicked_total: clickedItems.length,
         clicked_truncated: clickedItems.length > clicked.length,
+        click_sequence_total: clickSequences.length,
+        click_sequence_truncated: clickSequences.length > sampledClickSequences.length,
+        click_sequences: sampledClickSequences,
         click_count_action_total: clickCountValues.length,
         click_count_value_total: clickCountValues.reduce((sum, value) => sum + value, 0),
         window_call_until_total: windowCallUntilReceipts.length,
