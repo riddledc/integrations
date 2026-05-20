@@ -59,7 +59,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|summary|none; default json] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -148,8 +148,56 @@ function profileOutputDirOption(options: CliOptions) {
 
 function runProfileResultFormatOption(options: CliOptions) {
   const format = optionString(options, "resultFormat") ?? "json";
-  if (format === "json" || format === "summary" || format === "none") return format;
-  throw new Error("--result-format must be json, summary, or none.");
+  if (format === "compact") return "compact-json";
+  if (format === "json" || format === "compact-json" || format === "summary" || format === "none") return format;
+  throw new Error("--result-format must be json, compact-json, summary, or none.");
+}
+
+function compactProfileCheckCounts(result: RiddleProofProfileResult) {
+  return result.checks.reduce<Record<string, number>>((counts, check) => {
+    const status = String(check.status || "unknown");
+    counts[status] = (counts[status] || 0) + 1;
+    counts.total = (counts.total || 0) + 1;
+    return counts;
+  }, { total: 0 });
+}
+
+function compactProfileChecks(result: RiddleProofProfileResult) {
+  return result.checks.map((check) => ({
+    type: check.type,
+    label: check.label,
+    status: check.status,
+    message: check.message,
+  }));
+}
+
+function compactRunProfileResult(result: RiddleProofProfileResult, options: CliOptions) {
+  const outputDir = profileOutputDirOption(options);
+  return {
+    version: "riddle-proof.profile-compact-result.v1",
+    profile_name: result.profile_name,
+    runner: result.runner,
+    status: result.status,
+    summary: result.summary,
+    captured_at: result.captured_at,
+    baseline_policy: result.baseline_policy,
+    route: result.route,
+    check_counts: compactProfileCheckCounts(result),
+    checks: compactProfileChecks(result),
+    warnings: result.warnings,
+    environment_blocker: result.environment_blocker,
+    metadata: result.metadata,
+    riddle: result.riddle,
+    artifacts: result.artifacts,
+    output_dir: outputDir,
+    output_files: outputDir ? {
+      profile_result: "profile-result.json",
+      summary: "summary.md",
+      proof_json: result.evidence ? "proof.json" : undefined,
+      console: result.evidence?.console ? "console.json" : undefined,
+      dom_summary: result.evidence?.dom_summary ? "dom-summary.json" : undefined,
+    } : undefined,
+  };
 }
 
 function writeRunProfileResult(result: RiddleProofProfileResult, options: CliOptions) {
@@ -157,6 +205,10 @@ function writeRunProfileResult(result: RiddleProofProfileResult, options: CliOpt
   if (format === "none") return;
   if (format === "summary") {
     process.stdout.write(profileResultMarkdown(result));
+    return;
+  }
+  if (format === "compact-json") {
+    process.stdout.write(`${JSON.stringify(compactRunProfileResult(result, options), null, 2)}\n`);
     return;
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

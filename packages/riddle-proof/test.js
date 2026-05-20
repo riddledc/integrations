@@ -3251,6 +3251,43 @@ try {
   assert.match(cliProfileSummaryResult.stdout, /## Riddle Job/);
   assert.throws(() => JSON.parse(cliProfileSummaryResult.stdout));
 
+  const cliProfileCompactResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    profileOutputDir,
+    "--pollAttempts",
+    "4",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+    "--result-format",
+    "compact-json",
+  ]);
+  const parsedCompactProfileResult = JSON.parse(cliProfileCompactResult.stdout);
+  assert.equal(parsedCompactProfileResult.version, "riddle-proof.profile-compact-result.v1");
+  assert.equal(parsedCompactProfileResult.status, "passed");
+  assert.equal(parsedCompactProfileResult.profile_name, "cli-profile-progress");
+  assert.equal(parsedCompactProfileResult.summary, "cli-profile-progress passed.");
+  assert.equal(parsedCompactProfileResult.evidence, undefined);
+  assert.equal(parsedCompactProfileResult.check_counts.passed, 16);
+  assert.equal(parsedCompactProfileResult.check_counts.total, 16);
+  assert.equal(parsedCompactProfileResult.riddle.job_id, "job_cli_profile_progress");
+  assert.equal(parsedCompactProfileResult.artifacts.proof_json, "proof.json");
+  assert.equal(parsedCompactProfileResult.output_files.profile_result, "profile-result.json");
+  assert.equal(parsedCompactProfileResult.output_files.summary, "summary.md");
+
   const cliProfileNoResult = await runCli([
     "run-profile",
     "--api-base-url",
