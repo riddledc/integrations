@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.169
+
+### Patch Changes
+
+- 4a39219: Group repeated same-selector setup clicks in compact profile summaries.
+
 ## 0.7.168
 
 ### Patch Changes
