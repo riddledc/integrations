@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.166
+
+### Patch Changes
+
+- d8da9e3: Add coordinate-specific setup click support for Riddle Proof profiles.
+
 ## 0.7.165
 
 ### Patch Changes
