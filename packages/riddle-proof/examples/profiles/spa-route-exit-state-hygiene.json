@@ -21,7 +21,7 @@
         "label": "capture-route-active-state",
         "timeout_ms": 10000,
         "store_return_to": "__rpRouteExit.active",
-        "script": "const proof=window.__exampleRouteProof?.read?.()||{};const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const activeGlobals=watched.filter((name)=>Object.prototype.hasOwnProperty.call(window,name)&&window[name]!==undefined);const out={ready:proof.ready===true,route:location.pathname,activeGlobals,activeGlobalCount:activeGlobals.length,receiptId:String(proof.receiptId||''),mode:String(proof.mode||'')};out.ok=out.ready===true&&out.activeGlobalCount>0;window.__rpRouteExit={...(window.__rpRouteExit||{}),active:out};return out;",
+        "script": "const proof=window.__exampleRouteProof?.read?.()||{};const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const activeGlobals=watched.filter((name)=>window[name]!==undefined);const out={ready:proof.ready===true,route:location.pathname,activeGlobals,activeGlobalCount:activeGlobals.length,receiptId:String(proof.receiptId||''),mode:String(proof.mode||'')};out.ok=out.ready===true&&out.activeGlobalCount>0;window.__rpRouteExit={...(window.__rpRouteExit||{}),active:out};return out;",
         "return_summary_fields": [
           { "path": "ok" },
           { "path": "ready" },
@@ -39,7 +39,7 @@
         "label": "capture-route-exit-cleanup",
         "timeout_ms": 10000,
         "store_return_to": "__rpRouteExit.cleanup",
-        "script": "const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const staleNames=watched.filter((name)=>Object.prototype.hasOwnProperty.call(window,name)&&window[name]!==undefined);const out={ok:location.pathname==='/'&&staleNames.length===0,route:location.pathname,staleNames,staleCount:staleNames.length};window.__rpRouteExit={...(window.__rpRouteExit||{}),cleanup:out};return out;",
+        "script": "const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const staleNames=watched.filter((name)=>window[name]!==undefined);const out={ok:location.pathname==='/'&&staleNames.length===0,route:location.pathname,staleNames,staleCount:staleNames.length};window.__rpRouteExit={...(window.__rpRouteExit||{}),cleanup:out};return out;",
         "return_summary_fields": [
           { "path": "ok" },
           { "path": "route" },

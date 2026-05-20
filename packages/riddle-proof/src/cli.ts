@@ -691,6 +691,36 @@ function profileFailedCleanupInventoryReason(setupViewports: Record<string, unkn
   return undefined;
 }
 
+function profileHasRouteExitAffordanceReceipt(receipts: Record<string, unknown>[]): boolean {
+  const affordanceFields = [
+    "navVisibleBeforeExit",
+    "navVisible",
+    "navigationVisible",
+    "exitVisible",
+    "exitControlVisible",
+    "routeExitVisible",
+    "homeLinkVisible",
+  ];
+  const routeFields = ["route", "afterRoute", "nextRoute", "browserPath", "path"];
+  return receipts.some((receipt) => {
+    if (affordanceFields.some((name) => setupReturnSummaryValue(receipt, [name]) !== undefined)) return true;
+
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const reason = cliString(receipt.reason) || "";
+    const haystack = `${storedTo} ${summary} ${reason}`.toLowerCase();
+    const mentionsRouteExit = haystack.includes("routeexit")
+      || haystack.includes("route-exit")
+      || haystack.includes("route exit")
+      || haystack.includes("afterrouteexit")
+      || haystack.includes("after route exit");
+    if (!mentionsRouteExit) return false;
+    return routeFields.some((name) => setupReturnSummaryValue(receipt, [name]) !== undefined)
+      || haystack.includes("route=")
+      || haystack.includes("browserpath=");
+  });
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -774,6 +804,7 @@ function profilePackReceiptStatus(
     setupReturnSummaryValue(item, ["changed"]) === true
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
   ));
+  const hasRouteExitAffordanceReceipt = profileHasRouteExitAffordanceReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
@@ -812,6 +843,18 @@ function profilePackReceiptStatus(
   }
   if (text.includes("invalid state")) {
     return profileReceiptSignalStatus(hasStateContract || hasInvalidStateReceipt, "invalid-state receipt present", "invalid-state receipt missing");
+  }
+  if (
+    text.includes("route-exit affordance")
+    || text.includes("route exit affordance")
+    || text.includes("navigation before cleanup")
+    || text.includes("exit control")
+  ) {
+    return profileReceiptSignalStatus(
+      hasRouteExitAffordanceReceipt || hasStateContract || clickCount > 0,
+      "route-exit affordance receipt present",
+      "affordance receipt missing",
+    );
   }
   if (text.includes("retry") || text.includes("repair") || text.includes("reset") || text.includes("affordance")) {
     return profileReceiptSignalStatus(hasStateContract || clickCount > 0, "affordance or transition receipt present", "affordance receipt missing");
