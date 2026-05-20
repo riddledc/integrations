@@ -2938,6 +2938,22 @@ try {
       { type: "text_visible", text: "Valid JSON" },
       { type: "text_absent", text: "Invalid JSON" },
     ],
+    metadata: {
+      pack_id: "workflow_truth",
+      pack_public_name: "Workflow Truth Pack",
+      declared_state_contract: {
+        initial: "Valid JSON is visible before mutation.",
+        failure_or_mutation: "Invalid JSON appears with repair affordance.",
+        recovered_or_final: "Valid JSON returns and Invalid JSON is absent.",
+      },
+      required_receipts: [
+        "declared state contract",
+        "screenshots at each state boundary",
+        "DOM summary",
+        "artifact links or paths",
+        "intercepting element when blocked",
+      ],
+    },
   }));
   const workflowTruthResult = await runCli([
     "run-profile",
@@ -2955,8 +2971,18 @@ try {
     workflowTruthOutputDir,
     "--quiet",
   ]);
-  assert.equal(JSON.parse(workflowTruthResult.stdout).status, "passed");
+  const parsedWorkflowTruthResult = JSON.parse(workflowTruthResult.stdout);
+  assert.equal(parsedWorkflowTruthResult.status, "passed");
+  assert.equal(parsedWorkflowTruthResult.metadata.pack_id, "workflow_truth");
   const workflowTruthSummaryMarkdown = readFileSync(path.join(workflowTruthOutputDir, "summary.md"), "utf8");
+  assert.match(workflowTruthSummaryMarkdown, /## Proof Pack/);
+  assert.match(workflowTruthSummaryMarkdown, /pack: `workflow_truth` - Workflow Truth Pack/);
+  assert.match(workflowTruthSummaryMarkdown, /required receipts: 5/);
+  assert.match(workflowTruthSummaryMarkdown, /present: declared state contract \(state contract metadata or receipts present\)/);
+  assert.match(workflowTruthSummaryMarkdown, /present: screenshots at each state boundary \(multiple screenshots present\)/);
+  assert.match(workflowTruthSummaryMarkdown, /present: DOM summary \(DOM summary evidence present\)/);
+  assert.match(workflowTruthSummaryMarkdown, /present: artifact links or paths \(artifact references listed\)/);
+  assert.match(workflowTruthSummaryMarkdown, /manual: intercepting element when blocked \(only applies when blocked\)/);
   assert.match(workflowTruthSummaryMarkdown, /## State Contract/);
   assert.match(
     workflowTruthSummaryMarkdown,

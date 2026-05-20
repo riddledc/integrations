@@ -540,6 +540,7 @@ export interface RiddleProofProfileResult {
   checks: RiddleProofProfileCheckResult[];
   summary: string;
   captured_at: string;
+  metadata?: Record<string, JsonValue>;
   warnings?: string[];
   evidence?: RiddleProofProfileEvidence;
   riddle?: {
@@ -4685,6 +4686,7 @@ export function assessRiddleProofProfileEvidence(
     checks,
     summary: summarizeRiddleProofProfileResult({ profile_name: profile.name, status, checks, viewports: evidence?.viewports || [] }),
     captured_at: capturedAt,
+    metadata: profile.metadata,
     warnings: warnings.length ? warnings : undefined,
     evidence,
     riddle: options.riddle,
@@ -4765,6 +4767,7 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
     checks: [],
     summary: summarizeEnvironmentBlockedRunner(input.profile.name, environmentBlocker),
     captured_at: new Date().toISOString(),
+    metadata: input.profile.metadata,
     warnings: warnings.length ? warnings : undefined,
     riddle: input.riddle,
     environment_blocker: environmentBlocker,
@@ -4857,6 +4860,7 @@ export function createRiddleProofProfileInsufficientResult(input: {
     checks: [],
     summary: `${input.profile.name} did not produce enough evidence for a profile judgment.`,
     captured_at: new Date().toISOString(),
+    metadata: input.profile.metadata,
     warnings: warnings.length ? warnings : undefined,
     riddle: input.riddle,
     error: message,
@@ -6784,6 +6788,7 @@ function assessProfile(profile, evidence) {
     checks,
     summary,
     captured_at: evidence.captured_at,
+    metadata: profile.metadata,
     warnings: profileWarnings.length ? profileWarnings : undefined,
     evidence,
   };

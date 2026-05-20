@@ -456,6 +456,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
     if (result.warnings.length > 12) lines.push(`- ${result.warnings.length - 12} additional warning(s) omitted.`);
     lines.push("");
   }
+  const packMetadataLines = profilePackMetadataMarkdown(result);
+  if (packMetadataLines.length) {
+    lines.push("## Proof Pack", "", ...packMetadataLines, "");
+  }
   lines.push("## Checks", "");
   for (const check of result.checks) {
     lines.push(`- ${check.status}: ${profileCheckMarkdownLabel(check)}`);
@@ -577,6 +581,241 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
     );
   }
   if (splitJobs.length > 12) lines.push(`- ${splitJobs.length - 12} additional split job(s) omitted.`);
+  return lines;
+}
+
+function profileMetadataStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => typeof item === "string" ? item.trim() : "").filter((item): item is string => Boolean(item))
+    : [];
+}
+
+function profileSetupSummaryRecord(result: RiddleProofProfileResult): Record<string, unknown> | undefined {
+  const setupCheck = result.checks.find((check) => check.type === "setup_actions_succeeded");
+  return cliRecord(setupCheck?.evidence?.setup_summary);
+}
+
+function profileSetupSummaryViewports(result: RiddleProofProfileResult): Record<string, unknown>[] {
+  const setupSummary = profileSetupSummaryRecord(result);
+  return Array.isArray(setupSummary?.viewports)
+    ? setupSummary.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+}
+
+function profileHasPassedCheck(result: RiddleProofProfileResult, types: string[]): boolean {
+  return result.checks.some((check) => types.includes(check.type) && check.status === "passed");
+}
+
+function profileHasCheck(result: RiddleProofProfileResult, types: string[]): boolean {
+  return result.checks.some((check) => types.includes(check.type));
+}
+
+function profileSetupScreenshotCount(viewports: Record<string, unknown>[]): number {
+  return viewports.reduce((sum, viewport) => {
+    const setupScreenshots = Array.isArray(viewport.setup_screenshots)
+      ? viewport.setup_screenshots.filter((label) => typeof label === "string" && label.trim()).length
+      : 0;
+    const finalScreenshot = cliString(viewport.final_screenshot) || cliString(viewport.screenshot_label) ? 1 : 0;
+    return sum + setupScreenshots + finalScreenshot;
+  }, 0);
+}
+
+function profileSetupReceiptTotal(viewports: Record<string, unknown>[], key: string): number {
+  return viewports.reduce((sum, viewport) => sum + setupReceiptArray(viewport, key).filter((receipt) => receipt.ok !== false).length, 0);
+}
+
+function profileSetupFailureCount(viewports: Record<string, unknown>[]): number {
+  return viewports.reduce((sum, viewport) => {
+    const failed = Array.isArray(viewport.failed) ? viewport.failed : [];
+    return sum + failed.filter((failure) => Boolean(cliRecord(failure))).length;
+  }, 0);
+}
+
+function profileSetupObstructionCount(viewports: Record<string, unknown>[]): number {
+  return viewports.reduce((sum, viewport) => {
+    const failed = Array.isArray(viewport.failed)
+      ? viewport.failed.map(cliRecord).filter((failure): failure is Record<string, unknown> => Boolean(failure))
+      : [];
+    return sum + failed.filter((failure) => Boolean(setupFailureObstructionSnippet(cliString(failure.reason)))).length;
+  }, 0);
+}
+
+function profileResultHasArtifact(result: RiddleProofProfileResult): boolean {
+  return Boolean(
+    result.artifacts.proof_json
+    || result.artifacts.console
+    || result.artifacts.dom_summary
+    || result.artifacts.screenshots?.length
+    || result.artifacts.riddle_artifacts?.some((artifact) => artifact.url || artifact.path || artifact.name),
+  );
+}
+
+function profileReceiptSignalStatus(
+  hasSignal: boolean,
+  presentReason: string,
+  missingReason: string,
+): { status: "present" | "missing"; reason: string } {
+  return hasSignal
+    ? { status: "present", reason: presentReason }
+    : { status: "missing", reason: missingReason };
+}
+
+function profilePackReceiptStatus(
+  result: RiddleProofProfileResult,
+  metadata: Record<string, unknown>,
+  receipt: string,
+): { status: "present" | "missing" | "manual"; reason: string } {
+  const text = receipt.toLowerCase();
+  const setupSummary = profileSetupSummaryRecord(result);
+  const setupViewports = profileSetupSummaryViewports(result);
+  const evidenceViewports = Array.isArray(result.evidence?.viewports) ? result.evidence.viewports : [];
+  const setupResultCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.result_count) || 0), 0);
+  const setupScreenshotCount = profileSetupScreenshotCount(setupViewports);
+  const screenshotCount = (result.artifacts.screenshots?.length || 0)
+    + evidenceViewports.filter((viewport) => cliString(viewport.screenshot_label)).length
+    + setupScreenshotCount;
+  const windowEvalCount = profileSetupReceiptTotal(setupViewports, "window_eval");
+  const valueReceipts = [
+    ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_eval")),
+    ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_call")),
+  ].filter((item) => item.ok !== false);
+  const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
+    + profileSetupReceiptTotal(setupViewports, "click")
+    + profileSetupReceiptTotal(setupViewports, "click_count");
+  const setupFailureCount = profileSetupFailureCount(setupViewports);
+  const setupObstructionCount = profileSetupObstructionCount(setupViewports);
+  const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
+    + profileSetupReceiptTotal(setupViewports, "tap")
+    + profileSetupReceiptTotal(setupViewports, "press")
+    + profileSetupReceiptTotal(setupViewports, "keyboard_sequence");
+  const canvasReceipts = setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "canvas_signature"));
+  const hasCanvasChange = canvasReceipts.some((item) => item.ok !== false && item.changed === true);
+  const hasNaturalInput = setupNaturalInputSummaryMarkdown(setupViewports).length > 0;
+  const hasStateContract = profileStateContractSummaryMarkdown(result).length > 0 || Boolean(cliRecord(metadata.declared_state_contract));
+  const hasReachability = profileReachabilitySummaryMarkdown(result).length > 0
+    || result.checks.some((check) => check.type === "selector_visible" && Boolean(cliRecord(check.evidence)?.selector));
+  const hasOverflowEvidence = result.checks.some((check) => (
+    check.type === "no_horizontal_overflow"
+    || check.type === "no_mobile_horizontal_overflow"
+    || check.type === "frame_no_horizontal_overflow"
+  )) || evidenceViewports.some((viewport) => (
+    (cliFiniteNumber(viewport.overflow_px) || 0) > 0
+    || (cliFiniteNumber(viewport.bounds_overflow_px) || 0) > 0
+    || Boolean(viewport.overflow_offenders?.length)
+  ));
+  const hasConsoleAccounting = profileHasCheck(result, ["no_console_warnings", "no_fatal_console_errors"])
+    || Boolean(result.evidence?.console || result.evidence?.page_errors);
+  const hasDomSummary = Boolean(result.artifacts.dom_summary || result.evidence?.dom_summary);
+  const hasProofJson = Boolean(result.artifacts.proof_json || result.version === "riddle-proof.profile-result.v1");
+  const hasRouteViewport = Boolean(result.route?.requested || result.route?.observed)
+    && Boolean(evidenceViewports.length || result.route?.matched !== undefined);
+  const hasSetupReceipts = setupResultCount > 0 || Boolean(setupSummary);
+  const hasTextVisibility = profileHasPassedCheck(result, ["text_visible", "selector_text_visible", "selector_visible"]);
+  const hasTextAbsence = profileHasPassedCheck(result, ["text_absent", "selector_text_absent"]);
+  const hasMeasuredStateChange = hasNaturalInput || hasCanvasChange || valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["changed"]) === true
+    || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
+  ));
+
+  if (text.includes("artifact link") || text.includes("artifact path")) {
+    return profileReceiptSignalStatus(profileResultHasArtifact(result), "artifact references listed", "no artifact references found");
+  }
+  if (text.includes("proof json")) return profileReceiptSignalStatus(hasProofJson, "proof JSON artifact named", "proof JSON artifact missing");
+  if (text.includes("dom summary")) return profileReceiptSignalStatus(hasDomSummary, "DOM summary evidence present", "DOM summary evidence missing");
+  if (text.includes("console") || text.includes("warning") || text.includes("fatal") || text.includes("browser warning") || text.includes("graphics")) {
+    return profileReceiptSignalStatus(hasConsoleAccounting, "console checks or evidence present", "console accounting evidence missing");
+  }
+  if (text.includes("route") && text.includes("viewport")) {
+    return profileReceiptSignalStatus(hasRouteViewport, "route and viewport evidence present", "route or viewport evidence missing");
+  }
+  if (text.includes("setup action")) {
+    return profileReceiptSignalStatus(hasSetupReceipts, "setup receipts present", "setup receipts missing");
+  }
+  if (text.includes("declared state contract")) {
+    return profileReceiptSignalStatus(hasStateContract, "state contract metadata or receipts present", "state contract evidence missing");
+  }
+  if (text.includes("stale") || text.includes("absence")) {
+    return profileReceiptSignalStatus(hasTextAbsence, "absence check passed", "absence check missing");
+  }
+  if (text.includes("recovered") || text.includes("final state")) {
+    return profileReceiptSignalStatus(hasStateContract || hasTextVisibility, "final state receipt present", "final state receipt missing");
+  }
+  if (text.includes("retry") || text.includes("repair") || text.includes("reset") || text.includes("affordance")) {
+    return profileReceiptSignalStatus(hasStateContract || clickCount > 0, "affordance or transition receipt present", "affordance receipt missing");
+  }
+  if (text.includes("failure") || text.includes("mutation")) {
+    return profileReceiptSignalStatus(hasStateContract || windowEvalCount > 0 || clickCount > 0, "failure or mutation receipt present", "failure or mutation receipt missing");
+  }
+  if (text.includes("initial") && (text.includes("visible") || text.includes("state"))) {
+    return profileReceiptSignalStatus(hasTextVisibility || screenshotCount > 0, "initial visible-state evidence present", "initial state evidence missing");
+  }
+  if (text.includes("selector count") || text.includes("visible count") || text.includes("control visibility") || text.includes("reachability gate") || text.includes("visible control")) {
+    return profileReceiptSignalStatus(hasReachability, "selector visibility or reachability evidence present", "reachability evidence missing");
+  }
+  if (text.includes("overflow") || text.includes("clipped") || text.includes("fit")) {
+    return profileReceiptSignalStatus(hasOverflowEvidence, "overflow evidence present", "overflow evidence missing");
+  }
+  if (text.includes("click receipt") || text.includes("obstruction receipt") || text.includes("state mutation")) {
+    return profileReceiptSignalStatus(clickCount > 0 || setupObstructionCount > 0, "click or obstruction receipt present", "click or obstruction receipt missing");
+  }
+  if (text.includes("target selector") || text.includes("target selector/text")) {
+    return profileReceiptSignalStatus(hasReachability || hasTextVisibility, "selector or text check evidence present", "selector/text evidence missing");
+  }
+  if (text.includes("intercepting element")) {
+    if (setupObstructionCount > 0) return { status: "present", reason: "obstruction receipt present" };
+    return setupFailureCount > 0
+      ? { status: "missing", reason: "setup failed without intercepting element evidence" }
+      : { status: "manual", reason: "only applies when blocked" };
+  }
+  if (text.includes("before and after state")) {
+    return profileReceiptSignalStatus(
+      hasStateContract || valueReceipts.length >= 2 || screenshotCount >= 2,
+      "before/after state evidence present",
+      "before/after state evidence missing",
+    );
+  }
+  if (text.includes("screenshot")) {
+    const needsBoundaryScreenshots = text.includes("each") || text.includes("before and after") || text.includes("state boundary");
+    return profileReceiptSignalStatus(
+      needsBoundaryScreenshots ? screenshotCount >= 2 : screenshotCount > 0,
+      needsBoundaryScreenshots ? "multiple screenshots present" : "screenshot evidence present",
+      needsBoundaryScreenshots ? "multiple screenshots missing" : "screenshot evidence missing",
+    );
+  }
+  if (text.includes("input dispatch") || text.includes("pointer") || text.includes("touch") || text.includes("key event") || text.includes("trusted-event")) {
+    return profileReceiptSignalStatus(inputDispatchCount > 0 || hasNaturalInput, "input dispatch evidence present", "input dispatch evidence missing");
+  }
+  if (text.includes("measured") || text.includes("state-change") || text.includes("pixel delta") || text.includes("movement receipt") || text.includes("canvas hash")) {
+    return profileReceiptSignalStatus(hasMeasuredStateChange, "measured-change evidence present", "measured-change evidence missing");
+  }
+
+  return { status: "manual", reason: "semantic receipt requires audit review" };
+}
+
+function profilePackMetadataMarkdown(result: RiddleProofProfileResult): string[] {
+  const metadata = cliRecord(result.metadata);
+  if (!metadata) return [];
+
+  const packId = cliString(metadata.pack_id);
+  const packPublicName = cliString(metadata.pack_public_name);
+  const requiredReceipts = profileMetadataStringArray(metadata.required_receipts);
+  if (!packId && !packPublicName && !requiredReceipts.length) return [];
+
+  const lines: string[] = [];
+  const packParts = [
+    packId ? markdownInlineCode(packId) : "",
+    packPublicName ? packPublicName : "",
+  ].filter(Boolean);
+  if (packParts.length) lines.push(`- pack: ${packParts.join(" - ")}`);
+  if (requiredReceipts.length) {
+    lines.push(`- required receipts: ${requiredReceipts.length}`);
+    for (const receipt of requiredReceipts.slice(0, 20)) {
+      const item = profilePackReceiptStatus(result, metadata, receipt);
+      lines.push(`  - ${item.status}: ${receipt} (${item.reason})`);
+    }
+    if (requiredReceipts.length > 20) lines.push(`  - ${requiredReceipts.length - 20} additional required receipt(s) omitted.`);
+  }
+
   return lines;
 }
 
@@ -2014,7 +2253,7 @@ async function profileResultFromRiddleArtifacts(
 ): Promise<RiddleProofProfileResult | undefined> {
   for (const input of fallbackInputs) {
     const result = extractRiddleProofProfileResult(input);
-    if (result) return result;
+    if (result) return withProfileMetadata(profile, result);
   }
   const proofArtifacts = artifacts
     .filter((artifact) => /(^|\/)proof\.json(?:\.json)?$/i.test(artifact.name || artifact.url || artifact.path || ""))
@@ -2026,7 +2265,7 @@ async function profileResultFromRiddleArtifacts(
   for (const artifact of proofArtifacts) {
     const parsed = await readArtifactJson(artifact);
     const result = extractRiddleProofProfileResult(parsed);
-    if (result) return result;
+    if (result) return withProfileMetadata(profile, result);
   }
   const evidenceArtifacts = artifacts.filter((artifact) => /profile-evidence|evidence\.json/i.test(artifact.name || artifact.url || artifact.path || ""));
   for (const artifact of evidenceArtifacts) {
@@ -2036,6 +2275,17 @@ async function profileResultFromRiddleArtifacts(
     }
   }
   return undefined;
+}
+
+function withProfileMetadata(profile: RiddleProofProfile, result: RiddleProofProfileResult): RiddleProofProfileResult {
+  if (!profile.metadata || !Object.keys(profile.metadata).length) return result;
+  return {
+    ...result,
+    metadata: {
+      ...profile.metadata,
+      ...(result.metadata || {}),
+    },
+  };
 }
 
 function withRiddleMetadata(
@@ -2469,7 +2719,7 @@ async function runSingleRiddleProfileForCli(
     if (!jobId) {
       const directResult = extractRiddleProofProfileResult(created);
       return directResult
-        ? withRiddleMetadata(directResult, { artifacts: collectRiddleProfileArtifactRefs(created) })
+        ? withRiddleMetadata(withProfileMetadata(profile, directResult), { artifacts: collectRiddleProfileArtifactRefs(created) })
         : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: collectRiddleProfileArtifactRefs(created) });
     }
 

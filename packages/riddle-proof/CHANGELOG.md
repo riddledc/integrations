@@ -9,6 +9,7 @@
   state-bearing setup receipts.
 - Surface focused-pass side caveats for allowed console noise and unrelated
   viewport overflow.
+- Surface proof-pack metadata and required-receipt checklist summaries.
 - 0625ed0: Rename setup-summary keyboard aggregates from press-focused fields to keyboard-focused fields, while keeping CLI rendering backward-compatible with older press-labeled artifacts.
 
 ## 0.7.182
