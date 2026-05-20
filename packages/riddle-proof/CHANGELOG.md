@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.179
+
+### Patch Changes
+
+- 34b2d18: Add a gameplay `window_call_until` profile example for waiting on runtime state contracts instead of fixed sleeps.
+
 ## 0.7.178
 
 ### Patch Changes
