@@ -240,6 +240,7 @@ The package includes generic starter profiles:
 - `examples/profiles/handled-recovery-list-load.json` for failed or malformed list-load recovery profiles.
 - `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
 - `examples/profiles/terminal-result-partial-evidence.json` for API-console terminal error or timeout receipts that preserve partial screenshot, console, and HAR evidence.
+- `examples/profiles/gameplay-window-call-until.json` for gameplay profiles that wait on a runtime state contract instead of a fixed sleep.
 
 Copy one of those shapes into a repository profile directory and replace the
 routes, selectors, mock URLs, and text checks with app-specific invariants.
@@ -487,6 +488,10 @@ progressive state until a window-state receipt is true. It accepts `path` plus
 optional `args`, `until_path`, `until_expected_value`, `max_calls` from 1 to
 100, and optional `interval_ms`; the action stops early when the predicate is
 met and records `call_count`, final `returned`, and final `until_value`.
+For gameplay progression, prefer this to a fixed `wait` when frame cadence or
+hosted-runner timing can vary by viewport; install a small `window` helper that
+returns JSON-safe state, stores the latest receipt, and makes the pass condition
+explicit. See `examples/profiles/gameplay-window-call-until.json`.
 Use `screenshot` with an optional `label` to capture durable Riddle screenshots
 at important setup milestones, such as after a route switch, terminal state, or
 reset. These labels are recorded in setup evidence and included in profile
