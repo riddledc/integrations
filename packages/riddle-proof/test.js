@@ -1973,6 +1973,142 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/workflow-generated-output-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-workflow-generated-output-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/workflow-generated-output-summary",
+            observed: "/workflow-generated-output-summary",
+            expected_path: "/workflow-generated-output-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "workflow-generated-output-before",
+              "workflow-generated-output-after",
+              "cli-workflow-generated-output-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/workflow-generated-output-summary",
+                    setup_screenshots: ["workflow-generated-output-before", "workflow-generated-output-after"],
+                    clicked_total: 1,
+                    window_eval_total: 2,
+                    window_eval_stored_total: 2,
+                    window_eval_captured_total: 2,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 720,
+                        return_captured: true,
+                        return_stored_to: "__workflowGeneratedOutput.before",
+                        returned: {
+                          ok: true,
+                          state: "generated-output-before-toggle",
+                          outputReady: true,
+                          before: { size: { text: "166 bytes -> 140 bytes", outputBytes: 140 }, surfaceCount: 3 },
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "generated-output-before-toggle" },
+                          { label: "outputReady", path: "outputReady", exists: true, value: true },
+                          { label: "before.size.text", path: "before.size.text", exists: true, value: "166 bytes -> 140 bytes" },
+                          { label: "before.size.outputBytes", path: "before.size.outputBytes", exists: true, value: 140 },
+                          { label: "before.surfaceCount", path: "before.surfaceCount", exists: true, value: 3 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 3,
+                        ok: true,
+                        script_length: 840,
+                        return_captured: true,
+                        return_stored_to: "__workflowGeneratedOutput.after",
+                        returned: {
+                          ok: true,
+                          state: "output-after-toggle",
+                          outputStillReady: true,
+                          sizeChanged: true,
+                          before: { size: { text: "166 bytes -> 140 bytes", outputBytes: 140 } },
+                          after: { size: { text: "166 bytes -> 162 bytes", outputBytes: 162 }, surfaceCount: 3 },
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "output-after-toggle" },
+                          { label: "outputStillReady", path: "outputStillReady", exists: true, value: true },
+                          { label: "sizeChanged", path: "sizeChanged", exists: true, value: true },
+                          { label: "before.size.text", path: "before.size.text", exists: true, value: "166 bytes -> 140 bytes" },
+                          { label: "after.size.text", path: "after.size.text", exists: true, value: "166 bytes -> 162 bytes" },
+                          { label: "before.size.outputBytes", path: "before.size.outputBytes", exists: true, value: 140 },
+                          { label: "after.size.outputBytes", path: "after.size.outputBytes", exists: true, value: 162 },
+                          { label: "after.surfaceCount", path: "after.surfaceCount", exists: true, value: 3 },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    clicked: [
+                      { ordinal: 2, selector: "label[for='remove-comments']", text: "Remove comments" },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            { type: "text_visible", label: "text_visible", status: "passed", evidence: { text: "166 bytes", matches: [true] } },
+            { type: "no_fatal_console_errors", label: "no_fatal_console_errors", status: "passed", evidence: { console_fatal_count: 0 } },
+          ],
+          summary: "cli-workflow-generated-output-summary passed.",
+          captured_at: "2026-05-20T00:00:30.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-workflow-generated-output-summary",
+            target_url: "https://example.com/workflow-generated-output-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:30.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/workflow-generated-output-summary",
+                observed: "/workflow-generated-output-summary",
+                expected_path: "/workflow-generated-output-summary",
+                matched: true,
+                http_status: 200,
+              },
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "cli-workflow-generated-output-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/workflow-truth-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -4699,6 +4835,99 @@ try {
   );
   assert.match(workflowTruthSummaryMarkdown, /## Side Caveats/);
   assert.match(workflowTruthSummaryMarkdown, /side caveat layout desktop: scroll overflow 18px, bounds overflow 18px; top offender `\.long-example-url` 18px/);
+
+  const workflowGeneratedOutputProfileFile = path.join(riddlePreviewDir, "cli-workflow-generated-output-summary.json");
+  const workflowGeneratedOutputOutputDir = path.join(riddlePreviewDir, "cli-workflow-generated-output-summary-output");
+  writeFileSync(workflowGeneratedOutputProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-workflow-generated-output-summary",
+    target: {
+      route: "/workflow-generated-output-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "text_visible", text: "166 bytes" },
+    ],
+    metadata: {
+      pack_id: "workflow_truth",
+      pack_public_name: "Workflow Truth Pack",
+      declared_state_contract: {
+        initial: "The inline input route is visible before mutation.",
+        generated_output: "Synthetic input produces a visible output-size result.",
+        mutation: "Toggling one visible option changes the output-size result.",
+      },
+      required_receipts: [
+        "declared state contract",
+        "generated-output mutation/final-state receipt",
+      ],
+    },
+  }));
+  const workflowGeneratedOutputResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    workflowGeneratedOutputProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    workflowGeneratedOutputOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(workflowGeneratedOutputResult.stdout).status, "passed");
+  const workflowGeneratedOutputSummaryMarkdown = readFileSync(path.join(workflowGeneratedOutputOutputDir, "summary.md"), "utf8");
+  assert.match(workflowGeneratedOutputSummaryMarkdown, /## Proof Pack/);
+  assert.match(workflowGeneratedOutputSummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(workflowGeneratedOutputSummaryMarkdown, /present: generated-output mutation\/final-state receipt \(generated-output mutation receipt present\)/);
+
+  const workflowGeneratedOutputStaleProfileFile = path.join(riddlePreviewDir, "cli-workflow-generated-output-stale-summary.json");
+  const workflowGeneratedOutputStaleOutputDir = path.join(riddlePreviewDir, "cli-workflow-generated-output-stale-summary-output");
+  writeFileSync(workflowGeneratedOutputStaleProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-workflow-generated-output-stale-summary",
+    target: {
+      route: "/workflow-generated-output-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "text_visible", text: "166 bytes" },
+    ],
+    metadata: {
+      pack_id: "workflow_truth",
+      pack_public_name: "Workflow Truth Pack",
+      declared_state_contract: {
+        generated_output: "Synthetic input produces a visible output-size result.",
+        mutation: "Toggling one visible option changes the output-size result.",
+      },
+      required_receipts: [
+        "stale-copy absence check",
+      ],
+    },
+  }));
+  await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    workflowGeneratedOutputStaleProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    workflowGeneratedOutputStaleOutputDir,
+    "--quiet",
+  ]);
+  const workflowGeneratedOutputStaleSummaryMarkdown = readFileSync(path.join(workflowGeneratedOutputStaleOutputDir, "summary.md"), "utf8");
+  assert.match(workflowGeneratedOutputStaleSummaryMarkdown, /## Proof Pack/);
+  assert.match(workflowGeneratedOutputStaleSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 missing\)/);
+  assert.match(workflowGeneratedOutputStaleSummaryMarkdown, /missing: stale-copy absence check \(absence check missing\)/);
 
   const naturalInputProfileFile = path.join(riddlePreviewDir, "cli-natural-input-summary.json");
   const naturalInputOutputDir = path.join(riddlePreviewDir, "cli-natural-input-summary-output");

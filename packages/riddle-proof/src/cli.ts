@@ -995,6 +995,53 @@ function profileHasRecoveredStateReceipt(receipts: Record<string, unknown>[]): b
   });
 }
 
+function profileMetadataHasGeneratedOutputContract(metadata: Record<string, unknown>): boolean {
+  const contract = cliRecord(metadata.declared_state_contract);
+  if (!contract) return false;
+  const keys = Object.keys(contract).join(" ").toLowerCase();
+  const values = Object.values(contract)
+    .map((value) => cliString(value)?.toLowerCase() || "")
+    .join(" ");
+  const haystack = `${keys} ${values}`;
+  return haystack.includes("generated_output")
+    || haystack.includes("generated output")
+    || haystack.includes("output-size")
+    || haystack.includes("output size")
+    || haystack.includes("output result")
+    || haystack.includes("optimizer size");
+}
+
+function profileHasGeneratedOutputReceipt(receipts: Record<string, unknown>[]): boolean {
+  let outputReady = false;
+  let outputChanged = false;
+
+  for (const receipt of receipts) {
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${summary}`.toLowerCase();
+
+    const readySignal = setupReturnSummaryValue(receipt, ["outputReady", "outputStillReady"]) === true
+      || cliFiniteNumber(setupReturnSummaryValue(receipt, ["surfaceCount", "before.surfaceCount", "after.surfaceCount"])) !== undefined
+      || setupReturnSummaryValue(receipt, ["size", "before.size", "after.size", "size.text", "before.size.text", "after.size.text"]) !== undefined;
+    if (readySignal && (haystack.includes("output") || haystack.includes("size") || haystack.includes("result"))) {
+      outputReady = true;
+    }
+
+    const beforeBytes = cliFiniteNumber(setupReturnSummaryValue(receipt, ["before.size.outputBytes", "before.outputBytes", "beforeBytes"]));
+    const afterBytes = cliFiniteNumber(setupReturnSummaryValue(receipt, ["after.size.outputBytes", "after.outputBytes", "afterBytes"]));
+    const beforeText = cliString(setupReturnSummaryValue(receipt, ["before.size.text", "before.outputText", "beforeText"]));
+    const afterText = cliString(setupReturnSummaryValue(receipt, ["after.size.text", "after.outputText", "afterText"]));
+    const explicitChange = setupReturnSummaryValue(receipt, ["sizeChanged", "outputChanged", "resultChanged"]) === true;
+    const byteChange = beforeBytes !== undefined && afterBytes !== undefined && beforeBytes !== afterBytes;
+    const textChange = Boolean(beforeText && afterText && beforeText !== afterText);
+    if (explicitChange || byteChange || textChange) outputChanged = true;
+  }
+
+  return outputReady && outputChanged;
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -1104,6 +1151,8 @@ function profilePackReceiptStatus(
   const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
   const hasRouteContinuationReceipt = profileHasRouteContinuationReceipt(valueReceipts);
   const hasRecoveredStateReceipt = profileHasRecoveredStateReceipt(valueReceipts);
+  const hasGeneratedOutputContract = profileMetadataHasGeneratedOutputContract(metadata);
+  const hasGeneratedOutputReceipt = profileHasGeneratedOutputReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
   const passedCleanupInventoryReason = profilePassedCleanupInventoryReason(setupViewports);
 
@@ -1169,6 +1218,19 @@ function profilePackReceiptStatus(
       return { status: "present", reason: `cleanup inventory passed: ${passedCleanupInventoryReason}` };
     }
     return profileReceiptSignalStatus(hasTextAbsence, "absence check passed", "absence check missing");
+  }
+  if (
+    text.includes("generated-output")
+    || text.includes("generated output")
+    || text.includes("output-size")
+    || text.includes("output size")
+    || ((text.includes("output") || text.includes("result")) && (text.includes("mutation") || text.includes("final")))
+  ) {
+    return profileReceiptSignalStatus(
+      hasGeneratedOutputContract && hasGeneratedOutputReceipt,
+      "generated-output mutation receipt present",
+      "generated-output mutation receipt missing",
+    );
   }
   if (text.includes("recovered") || text.includes("final state")) {
     return profileReceiptSignalStatus(hasStateContract || hasTextVisibility, "final state receipt present", "final state receipt missing");
