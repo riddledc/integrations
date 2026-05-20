@@ -7267,6 +7267,34 @@ assert.ok(terminalResultProfile.checks.some(
 ));
 assert.ok(terminalResultProfile.metadata.purpose.includes("terminal error or timeout"));
 
+const gameplayWindowCallUntilProfile = readJson("./examples/profiles/gameplay-window-call-until.json");
+assert.equal(gameplayWindowCallUntilProfile.name, "gameplay-window-call-until");
+const normalizedGameplayWindowCallUntilProfile = normalizeRiddleProofProfile(
+  gameplayWindowCallUntilProfile,
+  { url: "https://example.com" },
+);
+assert.equal(normalizedGameplayWindowCallUntilProfile.target.setup_actions.find(
+  (action) => action.type === "window_call_until",
+)?.until_path, "__gameplayProof.running.ok");
+assert.ok(gameplayWindowCallUntilProfile.target.setup_actions.some(
+  (action) => action.type === "press" && action.key === "Space",
+));
+const gameplayWindowCallUntilAction = gameplayWindowCallUntilProfile.target.setup_actions.find(
+  (action) => action.type === "window_call_until",
+);
+assert.equal(gameplayWindowCallUntilAction.path, "__riddleGameplayStep");
+assert.equal(gameplayWindowCallUntilAction.until_path, "__gameplayProof.running.ok");
+assert.equal(gameplayWindowCallUntilAction.until_expected_value, true);
+assert.equal(gameplayWindowCallUntilAction.max_calls, 36);
+assert.equal(gameplayWindowCallUntilAction.interval_ms, 250);
+assert.ok(gameplayWindowCallUntilProfile.target.setup_actions.some(
+  (action) => action.type === "assert_window_number" && action.path === "__gameplayProof.running.distance" && action.min_value === 2,
+));
+assert.ok(gameplayWindowCallUntilProfile.target.setup_actions.some(
+  (action) => action.type === "screenshot" && action.label === "running",
+));
+assert.ok(gameplayWindowCallUntilProfile.metadata.purpose.includes("fixed sleeps"));
+
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
 const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
 const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");
