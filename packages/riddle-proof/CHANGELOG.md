@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.192
+
+### Patch Changes
+
+- 2e206d2: Keep the profile route helper compatible with Riddle script validation by using
+  plain helper methods and refreshed route snapshots instead of dynamic property
+  descriptors.
+
 ## 0.7.191
 
 ### Patch Changes
