@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.167
+
+### Patch Changes
+
+- 427d07e: Ignore setup actions scoped only to non-captured viewports when assessing profile runs, so viewport-filtered proof jobs do not fail on intentionally omitted viewport-specific actions.
+
 ## 0.7.166
 
 ### Patch Changes
