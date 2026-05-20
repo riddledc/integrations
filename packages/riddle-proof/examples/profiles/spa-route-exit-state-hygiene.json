@@ -71,6 +71,17 @@
     "product_regression": "fail"
   },
   "metadata": {
+    "pack_id": "state_hygiene",
+    "pack_public_name": "State Hygiene Pack",
+    "required_receipts": [
+      "active route-local proof helpers and route state receipt",
+      "route-exit affordance inventory before cleanup",
+      "route or mode exit action receipt through visible UI",
+      "post-cleanup stale-state inventory after route cleanup",
+      "screenshots at active and post-cleanup boundaries",
+      "console and warning accounting",
+      "proof JSON and artifact links"
+    ],
     "purpose": "Template for SPA route-exit hygiene profiles. Replace the example route, selectors, and watched globals with route-local proof helpers, receipts, timers, input state, or touch state that must exist while the feature route is active and must be removed after visible UI navigation returns home."
   }
 }

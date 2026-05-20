@@ -3431,6 +3431,50 @@ try {
   assert.match(routeExitAffordanceSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(routeExitAffordanceSummaryMarkdown, /present: route-exit affordance inventory before cleanup \(route-exit affordance receipt present\)/);
 
+  const routeExitVisibleUiProfileFile = path.join(riddlePreviewDir, "cli-route-exit-visible-ui-summary.json");
+  const routeExitVisibleUiOutputDir = path.join(riddlePreviewDir, "cli-route-exit-visible-ui-summary-output");
+  writeFileSync(routeExitVisibleUiProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-route-exit-visible-ui-summary",
+    target: {
+      route: "/route-exit-affordance-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "route-exit affordance inventory before cleanup",
+        "route or mode exit action receipt through visible UI",
+      ],
+    },
+  }));
+  const routeExitVisibleUiResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    routeExitVisibleUiProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    routeExitVisibleUiOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(routeExitVisibleUiResult.stdout).status, "passed");
+  const routeExitVisibleUiSummaryMarkdown = readFileSync(path.join(routeExitVisibleUiOutputDir, "summary.md"), "utf8");
+  assert.match(routeExitVisibleUiSummaryMarkdown, /## Proof Pack/);
+  assert.match(routeExitVisibleUiSummaryMarkdown, /pack completeness: incomplete \(1 present, 1 missing\)/);
+  assert.match(routeExitVisibleUiSummaryMarkdown, /present: route-exit affordance inventory before cleanup \(route-exit affordance receipt present\)/);
+  assert.match(routeExitVisibleUiSummaryMarkdown, /missing: route or mode exit action receipt through visible UI \(visible UI action receipt missing\)/);
+
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
   writeFileSync(workflowTruthProfileFile, JSON.stringify({
@@ -8553,6 +8597,8 @@ assert.ok(spaRouteExitStateHygieneProfile.checks.some(
 assert.ok(spaRouteExitStateHygieneProfile.checks.some(
   (check) => check.type === "no_mobile_horizontal_overflow",
 ));
+assert.equal(spaRouteExitStateHygieneProfile.metadata.pack_id, "state_hygiene");
+assert.ok(spaRouteExitStateHygieneProfile.metadata.required_receipts.includes("route or mode exit action receipt through visible UI"));
 assert.ok(spaRouteExitStateHygieneProfile.metadata.purpose.includes("route-exit hygiene"));
 
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);

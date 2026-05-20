@@ -743,6 +743,7 @@ function profilePackReceiptStatus(
   const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
     + profileSetupReceiptTotal(setupViewports, "click")
     + profileSetupReceiptTotal(setupViewports, "click_count");
+  const visibleUiActionCount = clickCount + profileSetupReceiptTotal(setupViewports, "tap");
   const setupFailureCount = profileSetupFailureCount(setupViewports);
   const setupObstructionCount = profileSetupObstructionCount(setupViewports);
   const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
@@ -843,6 +844,20 @@ function profilePackReceiptStatus(
   }
   if (text.includes("invalid state")) {
     return profileReceiptSignalStatus(hasStateContract || hasInvalidStateReceipt, "invalid-state receipt present", "invalid-state receipt missing");
+  }
+  if (
+    text.includes("through visible ui")
+    || text.includes("visible ui action")
+    || text.includes("ui-routed")
+    || text.includes("ui routed")
+    || (text.includes("visible") && text.includes("route") && text.includes("exit") && text.includes("action"))
+    || (text.includes("visible") && text.includes("mode") && text.includes("exit") && text.includes("action"))
+  ) {
+    return profileReceiptSignalStatus(
+      visibleUiActionCount > 0,
+      "visible UI action receipt present",
+      "visible UI action receipt missing",
+    );
   }
   if (
     text.includes("route-exit affordance")
