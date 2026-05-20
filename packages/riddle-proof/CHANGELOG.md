@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.196
+
+### Patch Changes
+
+- 2f71da3: Add an opt-in `fallback_to_tap` mode for profile setup `click` actions so
+  canvas/game route exits can recover from brittle locator click actionability
+  while recording that a pointer tap fallback was used.
+
 ## 0.7.195
 
 ### Patch Changes
