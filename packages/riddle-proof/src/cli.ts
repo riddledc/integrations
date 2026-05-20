@@ -740,6 +740,68 @@ function profileHasOfflineAudioMetricsReceipt(receipts: Record<string, unknown>[
   }));
 }
 
+function profileHasActiveRouteLocalProofReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const route = cliString(setupReturnSummaryValue(receipt, ["route", "browserPath", "path"]));
+    if (!route) return false;
+    const proofVersion = cliString(setupReturnSummaryValue(receipt, ["proofVersion", "proof_version", "proofKind", "proof_kind"]));
+    const globalCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["globalCount", "activeGlobalCount", "activeGlobals.length"]));
+    const globalNames = setupReturnSummaryValue(receipt, ["globalNames", "activeGlobals"]);
+    const enabled = setupReturnSummaryValue(receipt, ["enabled", "proofEnabled", "proof_enabled"]) === true;
+    const ready = setupReturnSummaryValue(receipt, ["ready", "proofReady", "proof_ready"]) === true;
+    const supportsProofFeature = setupReturnSummaryValue(receipt, ["supportsOfflineAudio", "supportsProof", "proofSupported"]) === true;
+    return Boolean(
+      proofVersion
+      || enabled
+      || ready
+      || supportsProofFeature
+      || (globalCount !== undefined && globalCount > 0)
+      || (Array.isArray(globalNames) && globalNames.length > 0),
+    );
+  });
+}
+
+function profileLowerSummaryValue(receipt: Record<string, unknown>, names: string[]): string {
+  return names
+    .map((name) => cliString(setupReturnSummaryValue(receipt, [name]))?.toLowerCase())
+    .find((value): value is string => Boolean(value)) || "";
+}
+
+function profileHasTerminalLossReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "terminalOutcome", "terminal"]);
+    const lastFlightLost = setupReturnSummaryValue(receipt, ["lastFlightLost", "lost"]) === true;
+    const outOfBounds = setupReturnSummaryValue(receipt, ["lastFlightOutOfBounds", "outOfBounds"]) === true;
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const haystack = `${storedTo} ${label} ${path}`.toLowerCase();
+    const labelsLoss = haystack.includes("loss")
+      || haystack.includes("lost")
+      || haystack.includes("terminal");
+    if (!labelsLoss && !lastFlightLost && !outOfBounds) return false;
+    return lastFlightLost
+      || outOfBounds
+      || ["over", "lost", "loss", "failed", "failure", "game_over", "gameover"].includes(status)
+      || ["lost", "loss", "failed", "failure", "game_over", "gameover"].includes(outcome);
+  });
+}
+
+function profileHasControlledLaunchReceipt(receipts: Record<string, unknown>[], expected: "failure" | "success"): boolean {
+  return receipts.some((receipt) => {
+    const shotKind = profileLowerSummaryValue(receipt, ["lastShotKind", "shotKind", "kind"]);
+    const shotStatus = profileLowerSummaryValue(receipt, ["lastShotStatus", "shotStatus"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome"]);
+    if (expected === "success") {
+      return shotKind === "success" && (!shotStatus || shotStatus === "success" || outcome === "success");
+    }
+    return ["failure", "failed", "miss", "lost", "loss"].includes(shotKind)
+      || ["failure", "failed", "miss", "lost", "loss"].includes(shotStatus)
+      || ["failure", "failed", "miss", "lost", "loss"].includes(outcome);
+  });
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -826,6 +888,10 @@ function profilePackReceiptStatus(
   ));
   const hasRouteExitAffordanceReceipt = profileHasRouteExitAffordanceReceipt(valueReceipts);
   const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
+  const hasActiveRouteLocalProofReceipt = profileHasActiveRouteLocalProofReceipt(valueReceipts);
+  const hasTerminalLossReceipt = profileHasTerminalLossReceipt(valueReceipts);
+  const hasControlledFailureLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "failure");
+  const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
@@ -841,6 +907,17 @@ function profilePackReceiptStatus(
   }
   if (text.includes("setup action")) {
     return profileReceiptSignalStatus(hasSetupReceipts, "setup receipts present", "setup receipts missing");
+  }
+  if (
+    text.includes("active")
+    && (text.includes("route-local") || text.includes("route local"))
+    && (text.includes("proof helper") || text.includes("proof api") || text.includes("proof state"))
+  ) {
+    return profileReceiptSignalStatus(
+      hasActiveRouteLocalProofReceipt,
+      "active route-local proof receipt present",
+      "active route-local proof receipt missing",
+    );
   }
   if (text.includes("declared state contract")) {
     return profileReceiptSignalStatus(hasStateContract, "state contract metadata or receipts present", "state contract evidence missing");
@@ -864,6 +941,27 @@ function profilePackReceiptStatus(
   }
   if (text.includes("invalid state")) {
     return profileReceiptSignalStatus(hasStateContract || hasInvalidStateReceipt, "invalid-state receipt present", "invalid-state receipt missing");
+  }
+  if ((text.includes("loss") || text.includes("lost")) && text.includes("terminal")) {
+    return profileReceiptSignalStatus(
+      hasTerminalLossReceipt,
+      "terminal loss receipt present",
+      "terminal loss receipt missing",
+    );
+  }
+  if (text.includes("controlled") && text.includes("launch") && (text.includes("failure") || text.includes("failed") || text.includes("miss"))) {
+    return profileReceiptSignalStatus(
+      hasControlledFailureLaunchReceipt,
+      "controlled failure launch receipt present",
+      "controlled failure launch receipt missing",
+    );
+  }
+  if (text.includes("controlled") && text.includes("launch") && text.includes("success")) {
+    return profileReceiptSignalStatus(
+      hasControlledSuccessLaunchReceipt,
+      "controlled success launch receipt present",
+      "controlled success launch receipt missing",
+    );
   }
   if (
     text.includes("through visible ui")
