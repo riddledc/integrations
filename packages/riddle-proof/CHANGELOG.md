@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.170
+
+### Patch Changes
+
+- 562d948: Preserve non-passed child statuses in split-viewport profile aggregates and skip mobile-only overflow checks when a child run has no mobile viewport evidence.
+
 ## 0.7.169
 
 ### Patch Changes
