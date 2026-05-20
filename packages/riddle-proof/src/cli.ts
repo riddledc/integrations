@@ -840,6 +840,77 @@ function profileHasRouteExitAffordanceReceipt(receipts: Record<string, unknown>[
   });
 }
 
+function profileCleanupLabelMatches(value: string | undefined): boolean {
+  if (!value) return false;
+  return /\b(cleanup|clean|clear|reset|undo|discard|new)\b/i.test(value);
+}
+
+function profileHasCleanupBoundaryAffordanceReceipt(receipts: Record<string, unknown>[]): boolean {
+  const visibleFields = [
+    "cleanupControlVisible",
+    "cleanupVisible",
+    "clearControlVisible",
+    "resetControlVisible",
+    "undoVisible",
+    "discardVisible",
+    "newControlVisible",
+    "exitControlVisible",
+  ];
+  const textFields = [
+    "cleanupControlText",
+    "cleanupText",
+    "clearControlText",
+    "resetControlText",
+    "undoText",
+    "discardText",
+    "newControlText",
+    "exitControlText",
+    "controlText",
+    "affordanceText",
+  ];
+
+  return receipts.some((receipt) => {
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${summary}`.toLowerCase();
+    const mentionsCleanupBoundary = haystack.includes("cleanup")
+      || haystack.includes("precleanup")
+      || haystack.includes("pre-cleanup")
+      || haystack.includes("boundary")
+      || haystack.includes("undo")
+      || haystack.includes("clear")
+      || haystack.includes("reset")
+      || haystack.includes("discard");
+    const visibleControl = visibleFields.some((name) => setupReturnSummaryValue(receipt, [name]) === true);
+    const controlText = textFields
+      .map((name) => cliString(setupReturnSummaryValue(receipt, [name])))
+      .find((value) => profileCleanupLabelMatches(value));
+    return mentionsCleanupBoundary && (visibleControl || Boolean(controlText));
+  });
+}
+
+function profileVisibleCleanupActionCount(setupViewports: Record<string, unknown>[]): number {
+  const keys = new Set<string>();
+  const clickedReceipts = setupViewports.flatMap((viewport) => [
+    ...setupReceiptArray(viewport, "clicked"),
+    ...setupReceiptArray(viewport, "tap"),
+    ...setupReceiptArray(viewport, "tap_until"),
+  ]);
+  clickedReceipts.forEach((receipt, index) => {
+    if (receipt.ok === false) return;
+    const text = cliString(receipt.text)
+      || cliString(receipt.label)
+      || cliString(receipt.target)
+      || cliString(receipt.selector);
+    if (!profileCleanupLabelMatches(text)) return;
+    const ordinal = cliFiniteNumber(receipt.ordinal);
+    keys.add(ordinal === undefined ? `idx:${index}:${text}` : `ord:${ordinal}:${text}`);
+  });
+  return keys.size;
+}
+
 function profileHasOfflineAudioMetricsReceipt(receipts: Record<string, unknown>[]): boolean {
   const metricFields = [
     "mixPeak",
@@ -1080,6 +1151,7 @@ function profilePackReceiptStatus(
   const clickFallbackTapCount = clickFallbackTapKeys.size;
   const tapUntilCount = profileSetupReceiptTotal(setupViewports, "tap_until");
   const visibleUiActionCount = clickCount + profileSetupReceiptTotal(setupViewports, "tap") + tapUntilCount;
+  const visibleCleanupActionCount = profileVisibleCleanupActionCount(setupViewports);
   const setupFailureCount = profileSetupFailureCount(setupViewports);
   const setupObstructionCount = profileSetupObstructionCount(setupViewports);
   const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
@@ -1143,6 +1215,7 @@ function profilePackReceiptStatus(
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
   ));
   const hasRouteExitAffordanceReceipt = profileHasRouteExitAffordanceReceipt(valueReceipts);
+  const hasCleanupBoundaryAffordanceReceipt = profileHasCleanupBoundaryAffordanceReceipt(valueReceipts);
   const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
   const hasActiveRouteLocalProofReceipt = profileHasActiveRouteLocalProofReceipt(valueReceipts);
   const hasTerminalLossReceipt = profileHasTerminalLossReceipt(valueReceipts);
@@ -1294,6 +1367,17 @@ function profilePackReceiptStatus(
     );
   }
   if (
+    text.includes("cleanup")
+    && text.includes("action")
+    && (text.includes("visible ui") || text.includes("visible"))
+  ) {
+    return profileReceiptSignalStatus(
+      visibleCleanupActionCount > 0,
+      `visible cleanup action receipt present (${visibleCleanupActionCount})`,
+      "visible cleanup action receipt missing",
+    );
+  }
+  if (
     text.includes("through visible ui")
     || text.includes("visible ui action")
     || text.includes("ui-routed")
@@ -1317,6 +1401,21 @@ function profilePackReceiptStatus(
       hasRouteExitAffordanceReceipt || hasStateContract || clickCount > 0,
       "route-exit affordance receipt present",
       "affordance receipt missing",
+    );
+  }
+  if (
+    text.includes("cleanup")
+    && (
+      text.includes("affordance")
+      || text.includes("control")
+      || text.includes("boundary")
+      || text.includes("inventory")
+    )
+  ) {
+    return profileReceiptSignalStatus(
+      hasCleanupBoundaryAffordanceReceipt,
+      "visible cleanup affordance receipt present",
+      "visible cleanup affordance receipt missing",
     );
   }
   if (text.includes("retry") || text.includes("repair") || text.includes("reset") || text.includes("affordance")) {

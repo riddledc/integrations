@@ -1486,6 +1486,111 @@ const cliRunProfileServer = createServer((request, response) => {
         sendJson(cliStateHygieneRecoveryActionSummaryResult());
         return;
       }
+      if (String(body.url || "").includes("/cleanup-boundary-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-cleanup-boundary-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/cleanup-boundary-summary",
+            observed: "/cleanup-boundary-summary",
+            expected_path: "/cleanup-boundary-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "cleanup-boundary-pre-cleanup",
+              "cleanup-boundary-post-cleanup",
+              "cli-cleanup-boundary-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/cleanup-boundary-summary",
+                    setup_screenshots: ["cleanup-boundary-pre-cleanup", "cleanup-boundary-post-cleanup"],
+                    clicked_total: 2,
+                    clicked: [
+                      { ordinal: 2, selector: ".menu-button", text: "Edit" },
+                      { ordinal: 3, selector: ".menu-item", text: "Undo Ctrl+Z" },
+                    ],
+                    window_eval_total: 2,
+                    window_eval_stored_total: 2,
+                    window_eval_captured_total: 2,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 640,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.preCleanup",
+                        returned: {
+                          ok: true,
+                          state: "undo-control-before-cleanup",
+                          exitControlVisible: true,
+                          exitControlText: "Undo Ctrl+Z",
+                          temporaryStateStillPresent: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "undo-control-before-cleanup" },
+                          { label: "exitControlVisible", path: "exitControlVisible", exists: true, value: true },
+                          { label: "exitControlText", path: "exitControlText", exists: true, value: "Undo Ctrl+Z" },
+                          { label: "temporaryStateStillPresent", path: "temporaryStateStillPresent", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 4,
+                        ok: true,
+                        script_length: 700,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.cleanup",
+                        returned: {
+                          ok: true,
+                          state: "after-undo-clean-state",
+                          staleCount: 0,
+                          staleNames: [],
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "after-undo-clean-state" },
+                          { label: "staleCount", path: "staleCount", exists: true, value: 0 },
+                          { label: "staleNames", path: "staleNames", exists: true, value: [] },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            { type: "route_loaded", label: "route_loaded", status: "passed", evidence: { expected_path: "/cleanup-boundary-summary", observed_paths: ["/cleanup-boundary-summary"] } },
+            { type: "no_fatal_console_errors", label: "no_fatal_console_errors", status: "passed", evidence: { console_fatal_count: 0 } },
+          ],
+          summary: "cli-cleanup-boundary-summary passed.",
+          captured_at: "2026-05-20T00:00:40.000Z",
+        });
+        return;
+      }
       if (String(body.url || "").includes("/fatal-console-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -4420,6 +4525,51 @@ try {
   assert.match(routeExitVisibleUiSummaryMarkdown, /pack completeness: incomplete \(1 present, 1 missing\)/);
   assert.match(routeExitVisibleUiSummaryMarkdown, /present: route-exit affordance inventory before cleanup \(route-exit affordance receipt present\)/);
   assert.match(routeExitVisibleUiSummaryMarkdown, /missing: route or mode exit action receipt through visible UI \(visible UI action receipt missing\)/);
+
+  const cleanupBoundaryProfileFile = path.join(riddlePreviewDir, "cli-cleanup-boundary-summary.json");
+  const cleanupBoundaryOutputDir = path.join(riddlePreviewDir, "cli-cleanup-boundary-summary-output");
+  writeFileSync(cleanupBoundaryProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-cleanup-boundary-summary",
+    target: {
+      route: "/cleanup-boundary-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/cleanup-boundary-summary" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "visible cleanup affordance inventory before cleanup",
+        "visible cleanup action receipt through visible UI",
+      ],
+    },
+  }));
+  const cleanupBoundaryResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    cleanupBoundaryProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    cleanupBoundaryOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(cleanupBoundaryResult.stdout).status, "passed");
+  const cleanupBoundarySummaryMarkdown = readFileSync(path.join(cleanupBoundaryOutputDir, "summary.md"), "utf8");
+  assert.match(cleanupBoundarySummaryMarkdown, /## Proof Pack/);
+  assert.match(cleanupBoundarySummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(cleanupBoundarySummaryMarkdown, /present: visible cleanup affordance inventory before cleanup \(visible cleanup affordance receipt present\)/);
+  assert.match(cleanupBoundarySummaryMarkdown, /present: visible cleanup action receipt through visible UI \(visible cleanup action receipt present \(1\)\)/);
+  assert.doesNotMatch(cleanupBoundarySummaryMarkdown, /route or mode exit action receipt/);
 
   const clickFallbackTapProfileFile = path.join(riddlePreviewDir, "cli-click-fallback-tap-summary.json");
   const clickFallbackTapOutputDir = path.join(riddlePreviewDir, "cli-click-fallback-tap-summary-output");
