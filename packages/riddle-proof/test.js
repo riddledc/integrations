@@ -4379,6 +4379,75 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].selec
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].pointer_type, "touch");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].input_dispatch, "cdp");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const arrayReturnSummaryProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "array-return-summary-profile",
+  target: {
+    route: "/games/drum-sequencer",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    setup_actions: [{
+      type: "window_call",
+      path: "__RIDDLE_SEQUENCER_PROOF__.getSummary",
+      capture_return: true,
+      return_summary_fields: [
+        { path: "arrangement.length", label: "arrangedSlots" },
+        { path: "arrangement.2", label: "slot3" },
+        { path: "arrangement[1]", label: "slot2" },
+      ],
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/drum-sequencer" }],
+}, { url: "https://example.com" });
+const arrayReturnSummaryScript = buildRiddleProofProfileScript(arrayReturnSummaryProfile);
+assert.ok(arrayReturnSummaryScript.includes('segment === "length"'));
+assert.ok(arrayReturnSummaryScript.includes("Number(segment)"));
+const arrayReturnSummaryAssessment = assessRiddleProofProfileEvidence(arrayReturnSummaryProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "array-return-summary-profile",
+  target_url: "https://example.com/games/drum-sequencer",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-20T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: {
+      requested: "https://example.com/games/drum-sequencer",
+      observed: "/games/drum-sequencer",
+      expected_path: "/games/drum-sequencer",
+      matched: true,
+      http_status: 200,
+    },
+    overflow_px: 0,
+    setup_action_results: [{
+      ok: true,
+      action: "window_call",
+      ordinal: 0,
+      path: "__RIDDLE_SEQUENCER_PROOF__.getSummary",
+      return_captured: true,
+      returned: { partCount: 2, arrangement: [0, 0, 1, 0] },
+      return_summary_fields: [
+        { path: "arrangement.length", label: "arrangedSlots" },
+        { path: "arrangement.2", label: "slot3" },
+        { path: "arrangement[1]", label: "slot2" },
+      ],
+    }],
+    screenshot_label: "array-return-summary-profile-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const arrayReturnSummarySetup = arrayReturnSummaryAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
+assert.equal(arrayReturnSummarySetup.status, "passed");
+assert.deepEqual(
+  arrayReturnSummarySetup.evidence.setup_summary.viewports[0].window_call[0].return_summary,
+  [
+    { label: "arrangedSlots", path: "arrangement.length", exists: true, value: 4 },
+    { label: "slot3", path: "arrangement.2", exists: true, value: 1 },
+    { label: "slot2", path: "arrangement[1]", exists: true, value: 0 },
+  ],
+);
 const desktopOnlyMobileOverflowProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "desktop-only-mobile-overflow",
