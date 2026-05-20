@@ -1172,6 +1172,19 @@ function profileSetupTapReceipts(results: Array<Record<string, JsonValue>>): Arr
     }));
 }
 
+function profileSetupPressReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "press")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      key: result.key ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function profileSetupCanvasSignatureReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
   return results
     .filter((result) => profileSetupResultAction(result) === "canvas_signature")
@@ -1380,6 +1393,8 @@ function profileSetupSummary(
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
+      const pressReceipts = profileSetupPressReceipts(results);
+      const sampledPressReceipts = sampleProfileSetupSummaryItems(pressReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -1457,6 +1472,9 @@ function profileSetupSummary(
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
+        press_total: pressReceipts.length,
+        press_truncated: pressReceipts.length > sampledPressReceipts.length,
+        press: sampledPressReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,
@@ -5723,6 +5741,18 @@ function profileSetupTapReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupPressReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "press")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      key: result.key ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function profileSetupCanvasSignatureReceipts(results) {
   return (results || [])
     .filter((result) => result && profileSetupResultAction(result) === "canvas_signature")
@@ -5911,6 +5941,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
+      const pressReceipts = profileSetupPressReceipts(results);
+      const sampledPressReceipts = sampleProfileSetupSummaryItems(pressReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -5988,6 +6020,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
+        press_total: pressReceipts.length,
+        press_truncated: pressReceipts.length > sampledPressReceipts.length,
+        press: sampledPressReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,
