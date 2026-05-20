@@ -2323,6 +2323,8 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const actual = cliValueLabel(receipt.until_value);
     const tapCount = cliFiniteNumber(receipt.tap_count);
     const maxTaps = cliFiniteNumber(receipt.max_taps) ?? cliFiniteNumber(receipt.max_calls);
+    const tapBurstSize = cliFiniteNumber(receipt.tap_burst_size);
+    const conditionCheckCount = cliFiniteNumber(receipt.condition_check_count);
     const ok = receipt.ok === false ? "failed" : "ok";
     const reason = cliString(receipt.reason);
     const coordinateText = x && y
@@ -2331,7 +2333,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const tapText = tapCount === undefined
       ? ""
       : ` in ${tapCount}${maxTaps === undefined ? "" : `/${maxTaps}`} tap(s)`;
-    lines.push(`- ${name} tap_until: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`} until ${markdownInlineCode(untilPath)}${expected === undefined ? "" : ` == ${markdownInlineCode(expected, 80)}`}${tapText}${actual === undefined ? "" : `, observed ${markdownInlineCode(actual, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+    const burstText = tapBurstSize === undefined || tapBurstSize <= 1 ? "" : `, burst ${tapBurstSize}`;
+    const conditionCheckText = conditionCheckCount === undefined ? "" : `, ${conditionCheckCount} check(s)`;
+    lines.push(`- ${name} tap_until: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`} until ${markdownInlineCode(untilPath)}${expected === undefined ? "" : ` == ${markdownInlineCode(expected, 80)}`}${tapText}${burstText}${conditionCheckText}${actual === undefined ? "" : `, observed ${markdownInlineCode(actual, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (tapUntilDetails.length > sampledTapUntilDetails.length) lines.push(`- ${tapUntilDetails.length - sampledTapUntilDetails.length} additional tap_until receipt(s) omitted.`);
   const keyboardGroups = viewports.map((viewport) => {

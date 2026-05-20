@@ -3013,6 +3013,8 @@ const cliRunProfileServer = createServer((request, response) => {
                   until_expected_value: "green",
                   tap_count: 12,
                   max_taps: 20,
+                  tap_burst_size: 4,
+                  condition_check_count: 4,
                   interval_ms: 25,
                   timeout_ms: 30000,
                   reason: null,
@@ -3443,7 +3445,7 @@ try {
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
-  assert.match(profileSummaryMarkdown, /desktop tap_until: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.65`, duration 40ms until `__proof\.winner` == `green` in 12\/20 tap\(s\), observed `green`/);
+  assert.match(profileSummaryMarkdown, /desktop tap_until: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.65`, duration 40ms until `__proof\.winner` == `green` in 12\/20 tap\(s\), burst 4, 4 check\(s\), observed `green`/);
   assert.match(profileSummaryMarkdown, /desktop keyboard_sequence: keys `ArrowUp,Enter`, ordinals `9,10`/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`, held 600ms/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `Enter` on `\.signal-input\.short`/);
@@ -5382,6 +5384,7 @@ const tapUntilProfile = normalizeRiddleProofProfile({
       until_path: "__proof.winner",
       until_expected_value: "green",
       max_taps: 12,
+      tap_burst_size: 4,
       interval_ms: 25,
     }],
   },
@@ -5393,11 +5396,14 @@ assert.equal(tapUntilProfile.target.setup_actions[0].coordinate_mode, "ratio");
 assert.equal(tapUntilProfile.target.setup_actions[0].until_path, "__proof.winner");
 assert.equal(tapUntilProfile.target.setup_actions[0].until_expected_value, "green");
 assert.equal(tapUntilProfile.target.setup_actions[0].max_calls, 12);
+assert.equal(tapUntilProfile.target.setup_actions[0].tap_burst_size, 4);
 assert.equal(tapUntilProfile.target.setup_actions[0].interval_ms, 25);
 const tapUntilProfileScript = buildRiddleProofProfileScript(tapUntilProfile);
 assert.ok(tapUntilProfileScript.includes('if (type === "tap_until")'));
 assert.ok(tapUntilProfileScript.includes("dispatchSetupTapPoint"));
 assert.ok(tapUntilProfileScript.includes("tap_count: tapCount"));
+assert.ok(tapUntilProfileScript.includes("tap_burst_size: tapBurstSize"));
+assert.ok(tapUntilProfileScript.includes("condition_check_count: conditionCheckCount"));
 assert.ok(tapUntilProfileScript.includes("tap_until_total"));
 assert.ok(tapUntilProfileScript.includes("tap_until_tap_total"));
 const tapCoordinateProfileScript = buildRiddleProofProfileScript(tapCoordinateProfile);
@@ -6418,6 +6424,15 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /max_calls must be an integer from 1 to 100/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-tap-until-burst",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "tap-until", selector: "canvas", until_path: "__proof.done", until_expected_value: true, max_taps: 12, tap_burst_size: 0 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /tap_burst_size must be an integer from 1 to 100/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-setup-repeat",
