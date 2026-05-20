@@ -7017,7 +7017,114 @@ function setupJsonValue(value) {
 function setupValuesEqual(left, right) {
   return JSON.stringify(setupJsonValue(left)) === JSON.stringify(setupJsonValue(right));
 }
+async function ensureProfilePageHelpers(context) {
+  try {
+    await context.evaluate(({ targetUrl }) => {
+      const asPathname = (path) => {
+        const value = String(path || "/");
+        return value.startsWith("/") ? value : "/" + value;
+      };
+      const normalizePathname = (path) => {
+        const value = asPathname(path);
+        return value === "/" ? "/" : value.replace(/\/+$/, "") || "/";
+      };
+      const previewMountPrefix = (pathname) => {
+        const value = normalizePathname(pathname);
+        const apiPreview = value.match(/^(\/s\/[^/]+)(?:\/|$)/);
+        if (apiPreview) return apiPreview[1];
+        const internalPreview = value.match(/^(\/preview\/[^/]+\/[^/]+)(?:\/|$)/);
+        return internalPreview ? internalPreview[1] : "";
+      };
+      const targetMountPrefix = () => {
+        try {
+          return previewMountPrefix(new URL(String(targetUrl || ""), window.location.href).pathname);
+        } catch {
+          return "";
+        }
+      };
+      const currentRoute = () => {
+        const pathname = asPathname(window.location.pathname);
+        const normalizedPathname = normalizePathname(pathname);
+        const currentBasePath = previewMountPrefix(normalizedPathname);
+        const basePath = currentBasePath || targetMountPrefix();
+        const suffix = String(window.location.search || "") + String(window.location.hash || "");
+        const appPath = currentBasePath && (normalizedPathname === currentBasePath || normalizedPathname.startsWith(currentBasePath + "/"))
+          ? normalizePathname(normalizedPathname.slice(currentBasePath.length) || "/")
+          : normalizedPathname;
+        return {
+          url: window.location.href,
+          origin: window.location.origin,
+          pathname,
+          search: window.location.search,
+          hash: window.location.hash,
+          basePath,
+          previewMountPrefix: basePath,
+          currentBasePath,
+          appPath,
+          appRoute: appPath + suffix,
+          mountedPath: normalizedPathname,
+          mountedRoute: normalizedPathname + suffix,
+          isPreviewMounted: Boolean(currentBasePath),
+        };
+      };
+      const parseRoute = (route) => {
+        const raw = String(route || "/").trim() || "/";
+        if (/^https?:\/\//i.test(raw)) {
+          try {
+            const url = new URL(raw);
+            if (url.origin !== window.location.origin) return { external: true, value: raw };
+            return { external: false, pathname: normalizePathname(url.pathname), suffix: url.search + url.hash };
+          } catch {
+            return { external: false, pathname: normalizePathname(raw), suffix: "" };
+          }
+        }
+        try {
+          const url = new URL(raw, window.location.origin);
+          return { external: false, pathname: normalizePathname(url.pathname), suffix: url.search + url.hash };
+        } catch {
+          const hashIndex = raw.indexOf("#");
+          const beforeHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw;
+          const hash = hashIndex >= 0 ? raw.slice(hashIndex) : "";
+          const searchIndex = beforeHash.indexOf("?");
+          const pathname = searchIndex >= 0 ? beforeHash.slice(0, searchIndex) : beforeHash;
+          const search = searchIndex >= 0 ? beforeHash.slice(searchIndex) : "";
+          return { external: false, pathname: normalizePathname(pathname), suffix: search + hash };
+        }
+      };
+      const joinRoute = (route) => {
+        const parsed = parseRoute(route);
+        if (parsed.external) return parsed.value;
+        const current = currentRoute();
+        const basePath = current.basePath || "";
+        const routePath = parsed.pathname || "/";
+        if (!basePath) return routePath + (parsed.suffix || "");
+        if (routePath === basePath || routePath.startsWith(basePath + "/")) return routePath + (parsed.suffix || "");
+        return (routePath === "/" ? basePath + "/" : basePath + routePath) + (parsed.suffix || "");
+      };
+      const existing = window.__riddleProofProfile && typeof window.__riddleProofProfile === "object"
+        ? window.__riddleProofProfile
+        : {};
+      Object.defineProperties(existing, {
+        current: { configurable: true, get: currentRoute },
+        appPath: { configurable: true, get: () => currentRoute().appPath },
+        appRoute: { configurable: true, get: () => currentRoute().appRoute },
+        basePath: { configurable: true, get: () => currentRoute().basePath },
+        previewMountPrefix: { configurable: true, get: () => currentRoute().previewMountPrefix },
+        mountedPath: { configurable: true, get: () => currentRoute().mountedPath },
+        mountedRoute: { configurable: true, get: () => currentRoute().mountedRoute },
+      });
+      existing.version = "riddle-proof.profile-helper.v1";
+      existing.route = currentRoute;
+      existing.getRoute = currentRoute;
+      existing.joinRoute = joinRoute;
+      window.__riddleProofProfile = existing;
+    }, { targetUrl });
+  } catch {
+    // Profile helper injection is best-effort so existing window actions keep their old behavior.
+  }
+}
 async function setupReadWindowValue(context, path) {
+  await ensureProfilePageHelpers(context);
   return await context.evaluate(({ path }) => {
     const toJsonValue = (value) => {
       if (value === null || value === undefined) return null;
@@ -7041,6 +7148,7 @@ async function setupReadWindowValue(context, path) {
   }, { path });
 }
 async function setupCallWindowFunction(context, path, args, storeReturnTo, captureReturn) {
+  await ensureProfilePageHelpers(context);
   return await context.evaluate(async ({ path, args, storeReturnTo, captureReturn }) => {
     const toJsonValue = (value) => {
       if (value === null || value === undefined) return null;
@@ -7089,6 +7197,7 @@ async function setupCallWindowFunction(context, path, args, storeReturnTo, captu
   }, { path, args, storeReturnTo, captureReturn });
 }
 async function setupEvaluateWindowScript(context, script, args, storeReturnTo, captureReturn) {
+  await ensureProfilePageHelpers(context);
   return await context.evaluate(async ({ script, args, storeReturnTo, captureReturn }) => {
     const toJsonValue = (value) => {
       if (value === null || value === undefined) return null;

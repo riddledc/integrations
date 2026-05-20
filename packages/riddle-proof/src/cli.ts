@@ -788,6 +788,33 @@ function profileHasTerminalLossReceipt(receipts: Record<string, unknown>[]): boo
   });
 }
 
+function profileHasTerminalSuccessReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "terminalOutcome", "terminal", "result"]);
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const haystack = `${storedTo} ${label} ${path}`.toLowerCase();
+    if (haystack.includes("shot")) return false;
+    const labelsSuccess = haystack.includes("success")
+      || haystack.includes("terminal")
+      || haystack.includes("completed")
+      || haystack.includes("complete");
+    const success = setupReturnSummaryValue(receipt, ["success", "passed", "completed"]) === true;
+    const targetHit = setupReturnSummaryValue(receipt, ["lastFlightTargetHit", "targetHit"]) === true;
+    const gateHit = setupReturnSummaryValue(receipt, ["lastFlight.passedThroughGate", "passedThroughGate", "gate"]) === true;
+    const bucketHit = setupReturnSummaryValue(receipt, ["lastFlight.bucketHit", "bucketHit", "bucket"]) === true;
+    if (!labelsSuccess && !success && !targetHit && !gateHit && !bucketHit) return false;
+    return success
+      || targetHit
+      || gateHit
+      || bucketHit
+      || ["success", "won", "complete", "completed", "passed"].includes(status)
+      || ["success", "won", "complete", "completed", "passed"].includes(outcome);
+  });
+}
+
 function profileHasControlledLaunchReceipt(receipts: Record<string, unknown>[], expected: "failure" | "success"): boolean {
   return receipts.some((receipt) => {
     const shotKind = profileLowerSummaryValue(receipt, ["lastShotKind", "shotKind", "kind"]);
@@ -799,6 +826,26 @@ function profileHasControlledLaunchReceipt(receipts: Record<string, unknown>[], 
     return ["failure", "failed", "miss", "lost", "loss"].includes(shotKind)
       || ["failure", "failed", "miss", "lost", "loss"].includes(shotStatus)
       || ["failure", "failed", "miss", "lost", "loss"].includes(outcome);
+  });
+}
+
+function profileHasRouteContinuationReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const fromRoute = cliString(setupReturnSummaryValue(receipt, ["fromRoute", "from", "previousRoute", "sourceRoute"]));
+    const target = cliString(setupReturnSummaryValue(receipt, ["target", "nextHref", "toRoute", "nextRoute", "href"]));
+    const afterRoute = cliString(setupReturnSummaryValue(receipt, ["routeAfterPush", "afterRoute", "route", "observedRoute"]));
+    if (!fromRoute || (!target && !afterRoute)) return false;
+
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${summary}`.toLowerCase();
+    return haystack.includes("navigation")
+      || haystack.includes("continuation")
+      || haystack.includes("route")
+      || haystack.includes("next")
+      || haystack.includes("target");
   });
 }
 
@@ -917,8 +964,10 @@ function profilePackReceiptStatus(
   const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
   const hasActiveRouteLocalProofReceipt = profileHasActiveRouteLocalProofReceipt(valueReceipts);
   const hasTerminalLossReceipt = profileHasTerminalLossReceipt(valueReceipts);
+  const hasTerminalSuccessReceipt = profileHasTerminalSuccessReceipt(valueReceipts);
   const hasControlledFailureLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "failure");
   const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
+  const hasRouteContinuationReceipt = profileHasRouteContinuationReceipt(valueReceipts);
   const hasRecoveredStateReceipt = profileHasRecoveredStateReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
@@ -977,6 +1026,13 @@ function profilePackReceiptStatus(
       "terminal loss receipt missing",
     );
   }
+  if (text.includes("success") && text.includes("terminal")) {
+    return profileReceiptSignalStatus(
+      hasTerminalSuccessReceipt,
+      "terminal success receipt present",
+      "terminal success receipt missing",
+    );
+  }
   if (text.includes("controlled") && text.includes("launch") && (text.includes("failure") || text.includes("failed") || text.includes("miss"))) {
     return profileReceiptSignalStatus(
       hasControlledFailureLaunchReceipt,
@@ -1001,6 +1057,13 @@ function profilePackReceiptStatus(
       visibleUiActionCount > 0 && hasRecoveredStateReceipt,
       "visible recovery-action receipt present",
       "visible recovery-action receipt missing",
+    );
+  }
+  if (text.includes("route continuation") || text.includes("route-transition") || text.includes("route transition")) {
+    return profileReceiptSignalStatus(
+      hasRouteContinuationReceipt,
+      "route continuation receipt present",
+      "route continuation receipt missing",
     );
   }
   if (
