@@ -296,6 +296,7 @@ export interface RiddleProofProfileSetupAction {
   until_path?: string;
   until_expected_value?: JsonValue;
   max_calls?: number;
+  tap_burst_size?: number;
   interval_ms?: number;
   expected_value?: JsonValue;
   min_value?: number;
@@ -1199,6 +1200,8 @@ function profileSetupTapUntilReceipts(results: Array<Record<string, JsonValue>>)
       until_expected_value: result.until_expected_value ?? null,
       tap_count: result.tap_count ?? null,
       max_taps: result.max_taps ?? result.max_calls ?? null,
+      tap_burst_size: result.tap_burst_size ?? null,
+      condition_check_count: result.condition_check_count ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
       reason: result.reason ?? result.error ?? null,
@@ -1987,6 +1990,12 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if ((type === "window_call_until" || type === "tap_until") && (maxCalls === undefined || !Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 100)) {
     throw new Error(`target.setup_actions[${index}].max_calls must be an integer from 1 to 100.`);
   }
+  const tapBurstSize = type === "tap_until"
+    ? numberValue(valueFromOwn(input, "tap_burst_size", "tapBurstSize", "burst_size", "burstSize", "check_every_taps", "checkEveryTaps", "predicate_interval_taps", "predicateIntervalTaps"))
+    : undefined;
+  if (type === "tap_until" && tapBurstSize !== undefined && (!Number.isInteger(tapBurstSize) || tapBurstSize < 1 || tapBurstSize > 100)) {
+    throw new Error(`target.setup_actions[${index}].tap_burst_size must be an integer from 1 to 100.`);
+  }
   const intervalMs = numberValue(valueFromOwn(input, "interval_ms", "intervalMs", "poll_ms", "pollMs", "call_interval_ms", "callIntervalMs"));
   if ((type === "window_call_until" || type === "tap_until") && intervalMs !== undefined && (!Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 5000)) {
     throw new Error(`target.setup_actions[${index}].interval_ms must be an integer from 0 to 5000.`);
@@ -2045,6 +2054,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     until_path: untilPath,
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
     max_calls: maxCalls,
+    tap_burst_size: tapBurstSize,
     interval_ms: intervalMs,
     expected_value: hasExpectedValue ? toJsonValue(rawExpectedValue) : undefined,
     min_value: minValue,
@@ -5836,6 +5846,8 @@ function profileSetupTapUntilReceipts(results) {
       until_expected_value: result.until_expected_value ?? null,
       tap_count: result.tap_count ?? null,
       max_taps: result.max_taps ?? result.max_calls ?? null,
+      tap_burst_size: result.tap_burst_size ?? null,
+      condition_check_count: result.condition_check_count ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
       reason: result.reason || result.error || null,
@@ -7826,6 +7838,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (!untilPath) return { ...base, reason: "missing_until_path" };
       if (!hasUntilExpected) return { ...base, until_path: untilPath, reason: "missing_until_expected_value" };
       const maxTaps = Math.min(100, Math.max(1, Math.floor(setupNumber(action.max_taps ?? action.maxTaps ?? action.tap_limit ?? action.tapLimit ?? action.max_calls ?? action.maxCalls ?? action.max_attempts ?? action.maxAttempts ?? action.attempts, 1) || 1)));
+      const tapBurstSize = Math.min(maxTaps, Math.min(100, Math.max(1, Math.floor(setupNumber(action.tap_burst_size ?? action.tapBurstSize ?? action.burst_size ?? action.burstSize ?? action.check_every_taps ?? action.checkEveryTaps ?? action.predicate_interval_taps ?? action.predicateIntervalTaps, 1) || 1))));
       const intervalMs = Math.min(5000, Math.max(0, Math.floor(setupNumber(action.interval_ms ?? action.intervalMs ?? action.poll_ms ?? action.pollMs ?? action.tap_interval_ms ?? action.tapIntervalMs, 100) || 0)));
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
@@ -7833,6 +7846,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (prepared.result) return prepared.result;
       const startedAt = Date.now();
       let tapCount = 0;
+      let conditionCheckCount = 1;
       let lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
       const targetEvidence = setupTapTargetEvidence(prepared.target);
       if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
@@ -7847,14 +7861,21 @@ async function executeSetupAction(action, ordinal, viewport) {
           tap_count: tapCount,
           max_taps: maxTaps,
           max_calls: maxTaps,
+          tap_burst_size: tapBurstSize,
+          condition_check_count: conditionCheckCount,
           interval_ms: intervalMs,
           timeout_ms: timeout,
         };
       }
       while (tapCount < maxTaps && Date.now() - startedAt <= timeout) {
-        await dispatchSetupTapPoint(prepared.target.point, prepared.target.pointerType, prepared.target.durationMs);
-        tapCount += 1;
+        const burstCount = Math.min(tapBurstSize, maxTaps - tapCount);
+        for (let burstIndex = 0; burstIndex < burstCount && Date.now() - startedAt <= timeout; burstIndex += 1) {
+          await dispatchSetupTapPoint(prepared.target.point, prepared.target.pointerType, prepared.target.durationMs);
+          tapCount += 1;
+          if (tapCount < maxTaps && burstIndex < burstCount - 1 && intervalMs) await page.waitForTimeout(intervalMs);
+        }
         lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
+        conditionCheckCount += 1;
         if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
           return {
             ...base,
@@ -7867,6 +7888,8 @@ async function executeSetupAction(action, ordinal, viewport) {
             tap_count: tapCount,
             max_taps: maxTaps,
             max_calls: maxTaps,
+            tap_burst_size: tapBurstSize,
+            condition_check_count: conditionCheckCount,
             interval_ms: intervalMs,
             timeout_ms: timeout,
           };
@@ -7883,6 +7906,8 @@ async function executeSetupAction(action, ordinal, viewport) {
         tap_count: tapCount,
         max_taps: maxTaps,
         max_calls: maxTaps,
+        tap_burst_size: tapBurstSize,
+        condition_check_count: conditionCheckCount,
         interval_ms: intervalMs,
         timeout_ms: timeout,
         reason: Date.now() - startedAt > timeout ? "timeout" : "until_condition_not_met",
