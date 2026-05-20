@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.186
+
+### Patch Changes
+
+- 3dbfbf4: Treat measured route-exit affordance receipts as State Hygiene Proof Pack evidence and remove prototype-access patterns from the packaged SPA route-exit starter profile.
+
 ## 0.7.185
 
 ### Patch Changes
