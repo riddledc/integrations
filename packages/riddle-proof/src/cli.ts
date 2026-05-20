@@ -912,6 +912,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
   const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
   const dragTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.drag_total) || 0), 0);
+  const tapTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.tap_total) || 0), 0);
   const canvasSignatureTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.canvas_signature_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
     sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
@@ -947,6 +948,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (dragTotal) {
     lines.push(`- drag: ${dragTotal} action(s)`);
   }
+  if (tapTotal) {
+    lines.push(`- tap: ${tapTotal} action(s)`);
+  }
   if (canvasSignatureTotal) {
     lines.push(`- canvas_signature: ${canvasSignatureTotal} action(s)`);
   }
@@ -972,9 +976,10 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
     const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
     const dragActions = cliFiniteNumber(viewport.drag_total) || 0;
+    const tapActions = cliFiniteNumber(viewport.tap_total) || 0;
     const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${tapActions ? `, ${tapActions} tap action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   const clickSequenceGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
@@ -1030,6 +1035,31 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} drag: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${steps === undefined ? "" : `, steps ${steps}`}${durationMs === undefined ? "" : `, duration ${durationMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (dragDetails.length > sampledDragDetails.length) lines.push(`- ${dragDetails.length - sampledDragDetails.length} additional drag receipt(s) omitted.`);
+  const tapGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.tap)
+      ? viewport.tap.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  const tapDetails = tapGroups.flat();
+  const sampledTapDetails = balancedSetupReceiptDetails(tapGroups, 12);
+  for (const { name, receipt } of sampledTapDetails) {
+    const selector = cliString(receipt.selector) || "target";
+    const pointerType = cliString(receipt.pointer_type);
+    const inputDispatch = cliString(receipt.input_dispatch);
+    const coordinateMode = cliString(receipt.coordinate_mode);
+    const x = cliValueLabel(receipt.x);
+    const y = cliValueLabel(receipt.y);
+    const durationMs = cliFiniteNumber(receipt.duration_ms);
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    const coordinateText = x && y
+      ? `, ${coordinateMode ? `${coordinateMode} ` : ""}${markdownInlineCode(`${x},${y}`)}`
+      : "";
+    lines.push(`- ${name} tap: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (tapDetails.length > sampledTapDetails.length) lines.push(`- ${tapDetails.length - sampledTapDetails.length} additional tap receipt(s) omitted.`);
   const canvasSignatureGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.canvas_signature)

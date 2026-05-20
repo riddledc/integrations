@@ -1530,6 +1530,20 @@ const cliRunProfileServer = createServer((request, response) => {
                   duration_ms: 1100,
                   reason: null,
                 }],
+                tap_total: 1,
+                tap_truncated: false,
+                tap: [{
+                  ordinal: 7,
+                  ok: true,
+                  selector: ".game-canvas",
+                  pointer_type: "touch",
+                  input_dispatch: "cdp",
+                  coordinate_mode: "ratio",
+                  x: 0.5,
+                  y: 0.88,
+                  duration_ms: 80,
+                  reason: null,
+                }],
                 set_range_value_total: 1,
                 set_range_value_truncated: false,
                 set_range_value: [{
@@ -1918,14 +1932,16 @@ try {
   assert.match(profileSummaryMarkdown, /click sequences: 1 group\(s\)/);
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /tap: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /deterministic_runtime: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
+  assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
   assert.match(profileSummaryMarkdown, /desktop deterministic_runtime: ok, random on replace \+6 -> 6, clock on 1000/);
@@ -2862,6 +2878,34 @@ assert.ok(clickCoordinateProfileScript.includes("clickOptions.position = positio
 assert.ok(clickCoordinateProfileScript.includes("missing_click_coordinates"));
 assert.doesNotMatch(clickCoordinateProfileScript, /let position:/);
 assert.doesNotMatch(clickCoordinateProfileScript, /let mode:/);
+const tapCoordinateProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-tap-coordinate-profile",
+  target: {
+    route: "/game",
+    setup_actions: [{ type: "tap", selector: "canvas", pointer_type: "touch", coordinate_mode: "ratio", x: 0.5, y: 0.88 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/game" }],
+}, { url: "https://example.com" });
+assert.equal(tapCoordinateProfile.target.setup_actions[0].type, "tap");
+assert.equal(tapCoordinateProfile.target.setup_actions[0].pointer_type, "touch");
+assert.equal(tapCoordinateProfile.target.setup_actions[0].coordinate_mode, "ratio");
+assert.equal(tapCoordinateProfile.target.setup_actions[0].from_x, 0.5);
+assert.equal(tapCoordinateProfile.target.setup_actions[0].from_y, 0.88);
+const touchTapAliasProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-touch-tap-alias-profile",
+  target: {
+    route: "/game",
+    setup_actions: [{ type: "touch-tap", selector: "canvas" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/game" }],
+}, { url: "https://example.com" });
+assert.equal(touchTapAliasProfile.target.setup_actions[0].type, "tap");
+const tapCoordinateProfileScript = buildRiddleProofProfileScript(tapCoordinateProfile);
+assert.ok(tapCoordinateProfileScript.includes('if (type === "tap")'));
+assert.ok(tapCoordinateProfileScript.includes("missing_tap_coordinates"));
+assert.ok(tapCoordinateProfileScript.includes("Input.dispatchTouchEvent"));
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
@@ -3383,6 +3427,7 @@ assert.ok(consoleAllowedProfileScript.includes("matchesAllowedMessage"));
 assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
 assert.ok(buildRiddleProofProfileScript(consoleWarningProfile).includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("tap"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_range_value"));
@@ -3926,7 +3971,7 @@ assert.throws(() => normalizeRiddleProofProfile({
     setup_actions: [{ type: "click", selector: ".game-area", pointer_type: "touch" }],
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
-}, { url: "https://example.com" }), /pointer_type is only supported for drag actions/);
+}, { url: "https://example.com" }), /pointer_type is only supported for drag\/tap actions/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-steps",
