@@ -4599,7 +4599,8 @@ const stableCanvasProfileAssessment = assessRiddleProofProfileEvidence(profile, 
     setup_action_results: [
       { ok: true, action: "canvas_signature", ordinal: 1, selector: ".game-canvas", label: "menu", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
       { ok: true, action: "canvas_signature", ordinal: 2, selector: ".game-canvas", label: "playing", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
-      { ok: true, action: "canvas_signature", ordinal: 3, selector: ".game-canvas", label: "terminal", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
+      { ok: true, action: "canvas_signature", ordinal: 3, selector: ".game-canvas", label: "race", hash: "changed-hash", data_length: 9000, width: 640, height: 360 },
+      { ok: true, action: "canvas_signature", ordinal: 4, selector: ".game-canvas", label: "terminal", hash: "same-hash", data_length: 2000, width: 640, height: 360 },
     ],
   }, profileEvidence.viewports[1]],
 });
@@ -4609,6 +4610,7 @@ const stableCanvasSummary = stableCanvasProfileAssessment.checks
 assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups.length, 1);
 assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups[0].selector, ".game-canvas");
 assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups[0].hash, "same-hash");
+assert.equal(stableCanvasSummary.canvas_signature_stable_hash_groups[0].count, 3);
 assert.deepEqual(stableCanvasSummary.canvas_signature_stable_hash_groups[0].labels, ["menu", "playing", "terminal"]);
 const longClickProfileAssessment = assessRiddleProofProfileEvidence(profile, {
   ...profileEvidence,
