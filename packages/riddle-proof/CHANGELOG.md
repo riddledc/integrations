@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.168
+
+### Patch Changes
+
+- ed8f721: Add compact click-sequence receipts to profile setup summaries for repeated `:nth-child(...)` click series, and render them in generated CLI summaries.
+
 ## 0.7.167
 
 ### Patch Changes
