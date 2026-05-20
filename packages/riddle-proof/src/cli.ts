@@ -469,6 +469,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (reachabilitySummaryLines.length) {
     lines.push("", "## Reachability", "", ...reachabilitySummaryLines);
   }
+  const stateContractSummaryLines = profileStateContractSummaryMarkdown(result);
+  if (stateContractSummaryLines.length) {
+    lines.push("", "## State Contract", "", ...stateContractSummaryLines);
+  }
   const networkMockSummaryLines = profileNetworkMockSummaryMarkdown(result);
   if (networkMockSummaryLines.length) {
     lines.push("", "## Network Mocks", "", ...networkMockSummaryLines);
@@ -973,6 +977,93 @@ function profileReachabilitySummaryMarkdown(result: RiddleProofProfileResult): s
     return [...receipts.slice(0, 8), `- ${receipts.length - 8} additional reachability receipt(s) omitted.`];
   }
   return receipts;
+}
+
+function stateContractReceiptName(receipt: Record<string, unknown>, fallbackIndex: number): string {
+  const storedTo = cliString(receipt.return_stored_to);
+  if (!storedTo) return `receipt-${fallbackIndex + 1}`;
+  const parts = storedTo.split(".").map((part) => part.trim()).filter(Boolean);
+  return parts[parts.length - 1] || storedTo;
+}
+
+function stateContractReceiptValue(receipt: Record<string, unknown>): string | undefined {
+  const value = setupReturnSummaryValue(receipt, [
+    "state",
+    "nextState",
+    "terminalState",
+    "finalState",
+    "status",
+    "phase",
+  ]);
+  return cliValueLabel(value);
+}
+
+function stateContractSignalParts(receipts: Record<string, unknown>[]): string[] {
+  const names = [
+    "hasValidate",
+    "hasTryFix",
+    "hasErrorDetail",
+    "hasValid",
+    "hasInvalid",
+    "invalidGone",
+    "staleGone",
+    "staleCopyGone",
+    "repairedTrailingCommaGone",
+    "hasSuccess",
+    "hasFailure",
+    "hasRetry",
+    "hasError",
+    "success",
+    "recovered",
+  ];
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const receipt of receipts) {
+    for (const name of names) {
+      const value = setupReturnSummaryValue(receipt, [name]);
+      if (value === undefined) continue;
+      const label = cliValueLabel(value);
+      if (label === undefined) continue;
+      const part = `${name}=${label}`;
+      if (seen.has(part)) continue;
+      seen.add(part);
+      parts.push(part);
+      if (parts.length >= 8) return parts;
+    }
+  }
+  return parts;
+}
+
+function profileStateContractSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const setupCheck = result.checks.find((check) => check.type === "setup_actions_succeeded");
+  const setupSummary = cliRecord(setupCheck?.evidence?.setup_summary);
+  const viewports = Array.isArray(setupSummary?.viewports)
+    ? setupSummary.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+  const lines: string[] = [];
+  for (const viewport of viewports.slice(0, 8)) {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = [
+      ...setupReceiptArray(viewport, "window_eval"),
+      ...setupReceiptArray(viewport, "window_call"),
+      ...setupReceiptArray(viewport, "window_call_until"),
+    ].filter((receipt) => receipt.ok !== false);
+    const states = receipts
+      .map((receipt, index) => ({
+        name: stateContractReceiptName(receipt, index),
+        state: stateContractReceiptValue(receipt),
+      }))
+      .filter((receipt): receipt is { name: string; state: string } => Boolean(receipt.state));
+    if (states.length < 2) continue;
+    const stateChain = states
+      .slice(0, 6)
+      .map((receipt) => `${markdownInlineCode(receipt.name, 60)}=${markdownInlineCode(receipt.state, 80)}`)
+      .join(" -> ");
+    const omitted = states.length > 6 ? ` (+${states.length - 6} more)` : "";
+    const signals = stateContractSignalParts(receipts);
+    lines.push(`- state contract ${name}: ${stateChain}${omitted}${signals.length ? `; signals ${signals.map((part) => markdownInlineCode(part, 80)).join(", ")}` : ""}`);
+  }
+  return lines;
 }
 
 type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };

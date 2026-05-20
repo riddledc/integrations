@@ -1175,6 +1175,115 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/workflow-truth-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-workflow-truth-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/workflow-truth-summary",
+            observed: "/workflow-truth-summary",
+            expected_path: "/workflow-truth-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["cli-workflow-truth-summary-desktop"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/workflow-truth-summary",
+                    setup_screenshots: ["workflow-truth-initial", "workflow-truth-invalid", "workflow-truth-recovered"],
+                    clicked_total: 1,
+                    window_eval_total: 4,
+                    window_eval_stored_total: 4,
+                    window_eval_captured_total: 4,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 700,
+                        return_captured: true,
+                        return_stored_to: "__workflowTruth.initialValid",
+                        returned: { ok: true, state: "valid", hasValidate: true },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "valid" },
+                          { label: "hasValidate", path: "hasValidate", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 2,
+                        ok: true,
+                        script_length: 210,
+                        return_captured: true,
+                        return_stored_to: "__workflowTruth.invalidNavigation",
+                        returned: { ok: true, nextState: "invalid" },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "nextState", path: "nextState", exists: true, value: "invalid" },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 3,
+                        ok: true,
+                        script_length: 900,
+                        return_captured: true,
+                        return_stored_to: "__workflowTruth.invalidState",
+                        returned: { ok: true, state: "invalid", hasTryFix: true, hasErrorDetail: true },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "invalid" },
+                          { label: "hasTryFix", path: "hasTryFix", exists: true, value: true },
+                          { label: "hasErrorDetail", path: "hasErrorDetail", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 4,
+                        ok: true,
+                        script_length: 850,
+                        return_captured: true,
+                        return_stored_to: "__workflowTruth.recoveredValid",
+                        returned: { ok: true, state: "recovered-valid", hasValid: true, invalidGone: true, repairedTrailingCommaGone: true },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "recovered-valid" },
+                          { label: "hasValid", path: "hasValid", exists: true, value: true },
+                          { label: "invalidGone", path: "invalidGone", exists: true, value: true },
+                          { label: "repairedTrailingCommaGone", path: "repairedTrailingCommaGone", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            { type: "text_visible", label: "text_visible", status: "passed", evidence: { text: "Valid JSON", matches: [true] } },
+            { type: "text_absent", label: "text_absent", status: "passed", evidence: { text: "Invalid JSON", matches: [false] } },
+          ],
+          summary: "cli-workflow-truth-summary passed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+        });
+        return;
+      }
       if (String(body.url || "").includes("/natural-input-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -2785,6 +2894,44 @@ try {
   const reachabilitySummaryMarkdown = readFileSync(path.join(reachabilityOutputDir, "summary.md"), "utf8");
   assert.match(reachabilitySummaryMarkdown, /## Reachability/);
   assert.match(reachabilitySummaryMarkdown, /reachability phone: `input\.search` exists 1, visible 0, reason `no_visible_match`, top bounds overflow 37px/);
+
+  const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
+  const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
+  writeFileSync(workflowTruthProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-workflow-truth-summary",
+    target: {
+      route: "/workflow-truth-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "text_visible", text: "Valid JSON" },
+      { type: "text_absent", text: "Invalid JSON" },
+    ],
+  }));
+  const workflowTruthResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    workflowTruthProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    workflowTruthOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(workflowTruthResult.stdout).status, "passed");
+  const workflowTruthSummaryMarkdown = readFileSync(path.join(workflowTruthOutputDir, "summary.md"), "utf8");
+  assert.match(workflowTruthSummaryMarkdown, /## State Contract/);
+  assert.match(
+    workflowTruthSummaryMarkdown,
+    /state contract desktop: `initialValid`=`valid` -> `invalidNavigation`=`invalid` -> `invalidState`=`invalid` -> `recoveredValid`=`recovered-valid`; signals `hasValidate=true`, `hasTryFix=true`, `hasErrorDetail=true`, `hasValid=true`, `invalidGone=true`, `repairedTrailingCommaGone=true`/,
+  );
 
   const naturalInputProfileFile = path.join(riddlePreviewDir, "cli-natural-input-summary.json");
   const naturalInputOutputDir = path.join(riddlePreviewDir, "cli-natural-input-summary-output");
