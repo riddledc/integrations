@@ -12,6 +12,8 @@
 - Surface proof-pack metadata and required-receipt checklist summaries.
 - Classify workflow error-detail state receipts from setup return summaries in
   proof-pack checklists.
+- Classify responsive reachability visible-control and state-growth receipts
+  from setup return summaries in proof-pack checklists.
 - 0625ed0: Rename setup-summary keyboard aggregates from press-focused fields to keyboard-focused fields, while keeping CLI rendering backward-compatible with older press-labeled artifacts.
 
 ## 0.7.182

@@ -1175,6 +1175,151 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/responsive-reachability-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-responsive-reachability-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/responsive-reachability-summary",
+            observed: "/responsive-reachability-summary",
+            expected_path: "/responsive-reachability-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "responsive-reachability-initial",
+              "responsive-reachability-after-add",
+              "cli-responsive-reachability-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/responsive-reachability-summary",
+                    setup_screenshots: ["responsive-reachability-initial", "responsive-reachability-after-add"],
+                    clicked_total: 1,
+                    window_eval_total: 2,
+                    window_eval_stored_total: 2,
+                    window_eval_captured_total: 2,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 800,
+                        return_captured: true,
+                        return_stored_to: "__responsiveReachability.before",
+                        returned: {
+                          ok: true,
+                          itemCount: 5,
+                          visibleButtonCount: 1,
+                          grid: { width: 960 },
+                          buttonTextSample: ["Add Item"],
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "itemCount", path: "itemCount", exists: true, value: 5 },
+                          { label: "visibleButtonCount", path: "visibleButtonCount", exists: true, value: 1 },
+                          { label: "grid.width", path: "grid.width", exists: true, value: 960 },
+                          { label: "buttonTextSample", path: "buttonTextSample", exists: true, value: ["Add Item"] },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 3,
+                        ok: true,
+                        script_length: 640,
+                        return_captured: true,
+                        return_stored_to: "__responsiveReachability.afterAdd",
+                        returned: {
+                          ok: true,
+                          before: 5,
+                          itemCount: 6,
+                          delta: 1,
+                          buttonStillVisible: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "before", path: "before", exists: true, value: 5 },
+                          { label: "itemCount", path: "itemCount", exists: true, value: 6 },
+                          { label: "delta", path: "delta", exists: true, value: 1 },
+                          { label: "buttonStillVisible", path: "buttonStillVisible", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    clicked: [{ ordinal: 2, selector: "button", text: "ADD ITEM" }],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            {
+              type: "selector_visible",
+              label: "selector_visible",
+              status: "passed",
+              evidence: { selector: ".react-grid-layout", visible_counts: [1] },
+            },
+            {
+              type: "selector_visible",
+              label: "selector_visible",
+              status: "passed",
+              evidence: { selector: "button", visible_counts: [1] },
+            },
+          ],
+          summary: "cli-responsive-reachability-summary passed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-responsive-reachability-summary",
+            target_url: "https://example.com/responsive-reachability-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/responsive-reachability-summary",
+                observed: "/responsive-reachability-summary",
+                expected_path: "/responsive-reachability-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {
+                ".react-grid-layout": { count: 1, visible_count: 1 },
+                "button": { count: 1, visible_count: 1 },
+              },
+              text_matches: {},
+              screenshot_label: "cli-responsive-reachability-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/workflow-truth-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -2924,6 +3069,53 @@ try {
   const reachabilitySummaryMarkdown = readFileSync(path.join(reachabilityOutputDir, "summary.md"), "utf8");
   assert.match(reachabilitySummaryMarkdown, /## Reachability/);
   assert.match(reachabilitySummaryMarkdown, /reachability phone: `input\.search` exists 1, visible 0, reason `no_visible_match`, top bounds overflow 37px/);
+
+  const responsiveReachabilityProfileFile = path.join(riddlePreviewDir, "cli-responsive-reachability-summary.json");
+  const responsiveReachabilityOutputDir = path.join(riddlePreviewDir, "cli-responsive-reachability-summary-output");
+  writeFileSync(responsiveReachabilityProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-responsive-reachability-summary",
+    target: {
+      route: "/responsive-reachability-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "selector_visible", selector: ".react-grid-layout" },
+      { type: "selector_visible", selector: "button" },
+    ],
+    metadata: {
+      pack_id: "responsive_reachability",
+      pack_public_name: "Responsive Reachability Pack",
+      required_receipts: [
+        "visible grid and control evidence",
+        "safe click receipt",
+        "state-growth receipt after the click",
+      ],
+    },
+  }));
+  const responsiveReachabilityResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    responsiveReachabilityProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    responsiveReachabilityOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(responsiveReachabilityResult.stdout).status, "passed");
+  const responsiveReachabilitySummaryMarkdown = readFileSync(path.join(responsiveReachabilityOutputDir, "summary.md"), "utf8");
+  assert.match(responsiveReachabilitySummaryMarkdown, /## Proof Pack/);
+  assert.match(responsiveReachabilitySummaryMarkdown, /pack: `responsive_reachability` - Responsive Reachability Pack/);
+  assert.match(responsiveReachabilitySummaryMarkdown, /present: visible grid and control evidence \(visible grid\/control evidence present\)/);
+  assert.match(responsiveReachabilitySummaryMarkdown, /present: safe click receipt \(click or obstruction receipt present\)/);
+  assert.match(responsiveReachabilitySummaryMarkdown, /present: state-growth receipt after the click \(state-growth receipt present\)/);
 
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");

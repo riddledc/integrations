@@ -697,6 +697,20 @@ function profilePackReceiptStatus(
     return typeof state === "string" && state.toLowerCase().includes("invalid");
   });
   const hasErrorDetailReceipt = valueReceipts.some((item) => setupReturnSummaryValue(item, ["hasErrorDetail", "errorDetail", "error_detail"]) === true);
+  const hasGridEvidence = valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["itemCount", "grid.width", "gridWidth", "visibleGridCount"]) !== undefined
+  ));
+  const hasVisibleControlReceipt = valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["visibleButtonCount", "visibleControlCount"]) !== undefined
+    || setupReturnSummaryValue(item, ["buttonStillVisible", "controlStillVisible"]) === true
+  ));
+  const hasStateGrowthReceipt = valueReceipts.some((item) => {
+    const delta = cliFiniteNumber(setupReturnSummaryValue(item, ["delta", "countDelta", "itemDelta", "stateDelta"]));
+    if (delta !== undefined && delta > 0) return true;
+    const before = cliFiniteNumber(setupReturnSummaryValue(item, ["before", "beforeCount", "previousCount"]));
+    const after = cliFiniteNumber(setupReturnSummaryValue(item, ["after", "afterCount", "itemCount", "count"]));
+    return before !== undefined && after !== undefined && after > before;
+  });
   const hasReachability = profileReachabilitySummaryMarkdown(result).length > 0
     || result.checks.some((check) => check.type === "selector_visible" && Boolean(cliRecord(check.evidence)?.selector));
   const hasOverflowEvidence = result.checks.some((check) => (
@@ -764,6 +778,16 @@ function profilePackReceiptStatus(
   }
   if (text.includes("initial") && (text.includes("visible") || text.includes("state"))) {
     return profileReceiptSignalStatus(hasTextVisibility || screenshotCount > 0, "initial visible-state evidence present", "initial state evidence missing");
+  }
+  if (text.includes("state-growth") || text.includes("state growth") || text.includes("growth receipt") || text.includes("grid grows") || (text.includes("state") && text.includes("after the click"))) {
+    return profileReceiptSignalStatus(hasStateGrowthReceipt, "state-growth receipt present", "state-growth receipt missing");
+  }
+  if (text.includes("visible grid") || text.includes("control evidence") || (text.includes("grid") && text.includes("control"))) {
+    return profileReceiptSignalStatus(
+      hasGridEvidence && (hasVisibleControlReceipt || hasReachability),
+      "visible grid/control evidence present",
+      "visible grid/control evidence missing",
+    );
   }
   if (text.includes("selector count") || text.includes("visible count") || text.includes("control visibility") || text.includes("reachability gate") || text.includes("visible control")) {
     return profileReceiptSignalStatus(hasReachability, "selector visibility or reachability evidence present", "reachability evidence missing");
