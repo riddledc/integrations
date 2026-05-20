@@ -2666,9 +2666,26 @@ const clickCountAliasProfile = normalizeRiddleProofProfile({
   checks: [{ type: "route_loaded", expected_path: "/checkout" }],
 }, { url: "https://example.com" });
 assert.equal(clickCountAliasProfile.target.setup_actions[0].click_count, 3);
+const clickCoordinateProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-coordinate-profile",
+  target: {
+    route: "/game",
+    setup_actions: [{ type: "click", selector: "canvas", coordinate_mode: "ratio", x: 0.7, y: 0.55 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/game" }],
+}, { url: "https://example.com" });
+assert.equal(clickCoordinateProfile.target.setup_actions[0].coordinate_mode, "ratio");
+assert.equal(clickCoordinateProfile.target.setup_actions[0].from_x, 0.7);
+assert.equal(clickCoordinateProfile.target.setup_actions[0].from_y, 0.55);
 const clickCountProfileScript = buildRiddleProofProfileScript(clickCountSetupProfile);
 assert.ok(clickCountProfileScript.includes("action.click_count"));
 assert.ok(clickCountProfileScript.includes("clickOptions.clickCount = clickCount"));
+const clickCoordinateProfileScript = buildRiddleProofProfileScript(clickCoordinateProfile);
+assert.ok(clickCoordinateProfileScript.includes("clickOptions.position = position"));
+assert.ok(clickCoordinateProfileScript.includes("missing_click_coordinates"));
+assert.doesNotMatch(clickCoordinateProfileScript, /let position:/);
+assert.doesNotMatch(clickCoordinateProfileScript, /let mode:/);
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
@@ -3602,6 +3619,24 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /click_count is only supported for click actions/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-click-coordinate",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", selector: "canvas", coordinate_mode: "ratio", x: 0.5 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /click coordinates require both x and y/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-setup-click-ratio",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", selector: "canvas", coordinate_mode: "ratio", x: 1.4, y: 0.5 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /click ratio coordinates must be between 0 and 1/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-range-value",
