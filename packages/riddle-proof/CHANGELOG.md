@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.176
+
+### Patch Changes
+
+- 5888b9b: Clarify route_loaded failures when the URL path matches but route readiness fails, and include route errors in check evidence.
+
 ## 0.7.175
 
 ### Patch Changes
