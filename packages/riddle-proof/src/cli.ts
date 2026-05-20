@@ -776,6 +776,111 @@ function setupFailureObstructionSnippet(reason: string | undefined): string | un
   return snippet || undefined;
 }
 
+function setupReceiptArray(viewport: Record<string, unknown>, key: string): Record<string, unknown>[] {
+  return Array.isArray(viewport[key])
+    ? viewport[key].map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+}
+
+function setupReturnSummaryValue(receipt: Record<string, unknown>, names: string[]): unknown {
+  for (const name of names) {
+    if (receipt[name] !== undefined) return receipt[name];
+  }
+  const returned = cliRecord(receipt.returned);
+  for (const name of names) {
+    if (returned?.[name] !== undefined) return returned[name];
+  }
+  const summaries = Array.isArray(receipt.return_summary)
+    ? receipt.return_summary.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+  for (const item of summaries) {
+    const label = cliString(item.label);
+    const path = cliString(item.path);
+    if (names.some((name) => label === name || path === name)) return item.value;
+  }
+  return undefined;
+}
+
+function setupMetricPart(receipts: Record<string, unknown>[], label: string, names: string[] = [label]): string | undefined {
+  for (const receipt of receipts) {
+    const value = setupReturnSummaryValue(receipt, names);
+    const valueLabel = cliValueLabel(value);
+    if (valueLabel !== undefined) return `${label}=${valueLabel}`;
+  }
+  return undefined;
+}
+
+function setupInputReceiptLabel(kind: string, receipt: Record<string, unknown>): string {
+  const selector = cliString(receipt.selector);
+  const pointerType = cliString(receipt.pointer_type);
+  const inputDispatch = cliString(receipt.input_dispatch);
+  const key = cliString(receipt.key);
+  return [
+    kind,
+    selector ? markdownInlineCode(selector) : "",
+    pointerType ? markdownInlineCode(pointerType) : "",
+    key ? markdownInlineCode(key) : "",
+    inputDispatch ? `via ${markdownInlineCode(inputDispatch)}` : "",
+  ].filter(Boolean).join(" ");
+}
+
+function setupCanvasHashChangeLabel(receipts: Record<string, unknown>[]): string | undefined {
+  const changed = receipts.find((receipt) => cliString(receipt.previous_hash) && cliString(receipt.hash) && receipt.changed === true);
+  if (changed) return `${markdownInlineCode(cliString(changed.previous_hash) || "")} -> ${markdownInlineCode(cliString(changed.hash) || "")}`;
+
+  const hashes = receipts
+    .map((receipt) => cliString(receipt.hash))
+    .filter((hash): hash is string => Boolean(hash));
+  const first = hashes[0];
+  const last = [...hashes].reverse().find((hash) => hash !== first);
+  return first && last ? `${markdownInlineCode(first)} -> ${markdownInlineCode(last)}` : undefined;
+}
+
+function setupNaturalInputSummaryMarkdown(viewports: Record<string, unknown>[]): string[] {
+  const lines: string[] = [];
+  for (const viewport of viewports.slice(0, 8)) {
+    const name = cliString(viewport.name) || "viewport";
+    const inputReceipts = [
+      ...setupReceiptArray(viewport, "drag").map((receipt) => ({ kind: "drag", receipt })),
+      ...setupReceiptArray(viewport, "tap").map((receipt) => ({ kind: "tap", receipt })),
+      ...setupReceiptArray(viewport, "press").map((receipt) => ({ kind: "press", receipt })),
+    ].filter(({ receipt }) => receipt.ok !== false);
+    if (!inputReceipts.length) continue;
+
+    const valueReceipts = [
+      ...setupReceiptArray(viewport, "window_eval"),
+      ...setupReceiptArray(viewport, "window_call"),
+    ].filter((receipt) => receipt.ok !== false);
+    const canvasReceipts = setupReceiptArray(viewport, "canvas_signature").filter((receipt) => receipt.ok !== false);
+    const eventParts = [
+      setupMetricPart(valueReceipts, "pointerDowns"),
+      setupMetricPart(valueReceipts, "pointerMoves"),
+      setupMetricPart(valueReceipts, "pointerUps"),
+      setupMetricPart(valueReceipts, "trustedEvents"),
+      setupMetricPart(valueReceipts, "eventCount"),
+    ].filter((part): part is string => Boolean(part));
+    const pixelParts = [
+      setupMetricPart(valueReceipts, "nonWhiteDelta"),
+      setupMetricPart(valueReceipts, "darkDelta"),
+    ].filter((part): part is string => Boolean(part));
+    const hashChange = setupCanvasHashChangeLabel(canvasReceipts);
+    if (!eventParts.length && !pixelParts.length && !hashChange) continue;
+
+    const inputText = inputReceipts
+      .slice(0, 3)
+      .map(({ kind, receipt }) => setupInputReceiptLabel(kind, receipt))
+      .join(", ");
+    const parts = [
+      inputText,
+      eventParts.length ? `events ${eventParts.join(", ")}` : "",
+      pixelParts.length ? `pixel deltas ${pixelParts.join(", ")}` : "",
+      hashChange ? `canvas hash ${hashChange}` : "",
+    ].filter(Boolean);
+    lines.push(`- natural input ${name}: ${parts.join("; ")}`);
+  }
+  return lines;
+}
+
 type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };
 
 function balancedSetupReceiptDetails(groups: CliSetupReceiptDetail[][], limit: number): CliSetupReceiptDetail[] {
@@ -997,6 +1102,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (canvasSignatureTotal) {
     lines.push(`- canvas_signature: ${canvasSignatureTotal} action(s)`);
   }
+  lines.push(...setupNaturalInputSummaryMarkdown(viewports));
 
   for (const viewport of viewports.slice(0, 8)) {
     const name = cliString(viewport.name) || "viewport";

@@ -1094,6 +1094,118 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/natural-input-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-natural-input-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/natural-input-summary",
+            observed: "/natural-input-summary",
+            expected_path: "/natural-input-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["cli-natural-input-summary-desktop"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  final_screenshot_count: 1,
+                  final_screenshot_mode: "viewport",
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/natural-input-summary",
+                    setup_screenshots: ["cli-natural-input-summary-desktop-before", "cli-natural-input-summary-desktop-after"],
+                    clicked_total: 0,
+                    drag_total: 1,
+                    drag_truncated: false,
+                    drag: [{
+                      ordinal: 1,
+                      ok: true,
+                      selector: "canvas.main-canvas",
+                      pointer_type: "mouse",
+                      input_dispatch: "playwright_mouse",
+                      coordinate_mode: "ratio",
+                      from_x: 0.2,
+                      from_y: 0.25,
+                      to_x: 0.78,
+                      to_y: 0.58,
+                      steps: 16,
+                      duration_ms: 900,
+                      reason: null,
+                    }],
+                    window_eval_total: 1,
+                    window_eval_stored_total: 1,
+                    window_eval_captured_total: 1,
+                    window_eval_truncated: false,
+                    window_eval: [{
+                      ordinal: 2,
+                      ok: true,
+                      script_length: 1200,
+                      return_captured: true,
+                      return_stored_to: "__proof.afterNaturalInput",
+                      returned: {
+                        pointerDowns: 2,
+                        pointerMoves: 34,
+                        pointerUps: 2,
+                        trustedEvents: 38,
+                        nonWhiteDelta: 397,
+                        darkDelta: 397,
+                      },
+                      return_summary: [
+                        { label: "pointerDowns", path: "pointerDowns", exists: true, value: 2 },
+                        { label: "pointerMoves", path: "pointerMoves", exists: true, value: 34 },
+                        { label: "pointerUps", path: "pointerUps", exists: true, value: 2 },
+                        { label: "trustedEvents", path: "trustedEvents", exists: true, value: 38 },
+                        { label: "nonWhiteDelta", path: "nonWhiteDelta", exists: true, value: 397 },
+                        { label: "darkDelta", path: "darkDelta", exists: true, value: 397 },
+                      ],
+                      reason: null,
+                    }],
+                    canvas_signature_total: 2,
+                    canvas_signature_truncated: false,
+                    canvas_signature: [{
+                      ordinal: 0,
+                      ok: true,
+                      selector: "canvas.main-canvas",
+                      label: "initial-blank-canvas",
+                      hash: "1859852391",
+                      width: 683,
+                      height: 384,
+                      data_length: 8986,
+                      reason: null,
+                    }, {
+                      ordinal: 3,
+                      ok: true,
+                      selector: "canvas.main-canvas",
+                      label: "after-natural-input-stroke",
+                      hash: "3002921772",
+                      width: 683,
+                      height: 384,
+                      data_length: 10390,
+                      reason: null,
+                    }],
+                  }],
+                },
+              },
+            },
+          ],
+          summary: "cli-natural-input-summary passed.",
+          captured_at: "2026-05-20T00:01:00.000Z",
+        });
+        return;
+      }
       sendJson({ job_id: "job_cli_profile_progress" });
     });
     return;
@@ -2555,6 +2667,40 @@ try {
   const obstructionSummaryMarkdown = readFileSync(path.join(obstructionOutputDir, "summary.md"), "utf8");
   assert.match(obstructionSummaryMarkdown, /failed: setup actions succeeded/);
   assert.match(obstructionSummaryMarkdown, /obstruction desktop: target `label` intercepted by `<div class="overlay"><\/div> from <div class="main-menu">\.\.\.<\/div> subtree`/);
+
+  const naturalInputProfileFile = path.join(riddlePreviewDir, "cli-natural-input-summary.json");
+  const naturalInputOutputDir = path.join(riddlePreviewDir, "cli-natural-input-summary-output");
+  writeFileSync(naturalInputProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-natural-input-summary",
+    target: {
+      route: "/natural-input-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "selector_visible", selector: "canvas.main-canvas" }],
+  }));
+  const naturalInputResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    naturalInputProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    naturalInputOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(naturalInputResult.stdout).status, "passed");
+  const naturalInputSummaryMarkdown = readFileSync(path.join(naturalInputOutputDir, "summary.md"), "utf8");
+  assert.match(
+    naturalInputSummaryMarkdown,
+    /natural input desktop: drag `canvas\.main-canvas` `mouse` via `playwright_mouse`; events pointerDowns=2, pointerMoves=34, pointerUps=2, trustedEvents=38; pixel deltas nonWhiteDelta=397, darkDelta=397; canvas hash `1859852391` -> `3002921772`/,
+  );
 
   const blockedProfileFile = path.join(riddlePreviewDir, "cli-profile-balance-blocked.json");
   const blockedProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-balance-blocked-output");

@@ -7,6 +7,7 @@
 - fdf913e: Add held-key support for profile `press` setup actions via `hold_ms` / `holdMs` so browser games that read key-down state can be proven with real keyboard input.
 - Surface allowed console-warning totals and allowlist counts in profile summary markdown.
 - Surface intercepted-click obstruction receipts in profile setup summary markdown.
+- Add compact natural-input measured-change rollups to profile setup summary markdown.
 
 ## 0.7.180
 
