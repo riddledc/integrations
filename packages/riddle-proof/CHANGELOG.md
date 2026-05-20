@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.181
+
+### Patch Changes
+
+- fdf913e: Add held-key support for profile `press` setup actions via `hold_ms` / `holdMs` so browser games that read key-down state can be proven with real keyboard input.
+
 ## 0.7.180
 
 ### Patch Changes
