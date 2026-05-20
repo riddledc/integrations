@@ -4207,17 +4207,6 @@ function assessSetupActionsFromEvidence(
   const failed: Array<Record<string, JsonValue>> = [];
   const viewports = evidence.viewports || [];
   const expectedActionCountByViewport = new Map<string, number>();
-  const capturedViewportNames = new Set(viewports.map((viewport) => viewport.name));
-  for (const action of profile.target.setup_actions) {
-    if (action.viewports?.length && !action.viewports.some((name) => capturedViewportNames.has(name))) {
-      failed.push({
-        viewport: null,
-        action: action.type,
-        selector: action.selector ?? null,
-        reason: `setup action scoped to missing viewport(s): ${action.viewports.join(", ")}`,
-      });
-    }
-  }
   for (const viewport of viewports) {
     const expectedActionCount = setupActionsForViewport(profile.target.setup_actions, viewport.name).length;
     expectedActionCountByViewport.set(viewport.name, expectedActionCount);
@@ -5753,17 +5742,6 @@ function assessProfile(profile, evidence) {
     const actionCount = profile.target.setup_actions.length;
     const failed = [];
     const expectedActionCountsByViewport = {};
-    const capturedViewportNames = new Set(viewports.map((viewport) => viewport.name));
-    for (const action of profile.target.setup_actions) {
-      if (Array.isArray(action.viewports) && action.viewports.length && !action.viewports.some((name) => capturedViewportNames.has(name))) {
-        failed.push({
-          viewport: null,
-          action: action.type,
-          selector: action.selector || null,
-          reason: "setup action scoped to missing viewport(s): " + action.viewports.join(", "),
-        });
-      }
-    }
     for (const viewport of viewports) {
       const expectedActionCount = setupActionsForViewport(profile.target.setup_actions, viewport.name).length;
       expectedActionCountsByViewport[viewport.name] = expectedActionCount;
