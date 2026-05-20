@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.171
+
+### Patch Changes
+
+- 52aa3f2: Resolve array `length` and dot-index paths in compact setup return summaries.
+
 ## 0.7.170
 
 ### Patch Changes
