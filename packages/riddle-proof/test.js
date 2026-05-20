@@ -1742,6 +1742,92 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/click-fallback-tap-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-click-fallback-tap-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/click-fallback-tap-summary",
+            observed: "/",
+            expected_path: "/",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["click-fallback-home"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 1,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 1,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 1,
+                    observed_path: "/",
+                    setup_screenshots: [],
+                    clicked_total: 1,
+                    clicked: [{
+                      ordinal: 0,
+                      selector: ".nav-logo",
+                      fallback_to_tap: true,
+                      input_dispatch: "playwright_mouse",
+                      click_error: "locator.click: Timeout 10000ms exceeded",
+                    }],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+          ],
+          summary: "cli-click-fallback-tap-summary passed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-click-fallback-tap-summary",
+            target_url: "https://example.com/click-fallback-tap-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/click-fallback-tap-summary",
+                observed: "/",
+                expected_path: "/",
+                matched: true,
+                http_status: 200,
+              },
+              setup_action_results: [{
+                ordinal: 0,
+                ok: true,
+                action: "click",
+                selector: ".nav-logo",
+                fallback_to_tap: true,
+                input_dispatch: "playwright_mouse",
+                click_error: "locator.click: Timeout 10000ms exceeded",
+              }],
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "click-fallback-home",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/responsive-reachability-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -4170,6 +4256,48 @@ try {
   assert.match(routeExitVisibleUiSummaryMarkdown, /pack completeness: incomplete \(1 present, 1 missing\)/);
   assert.match(routeExitVisibleUiSummaryMarkdown, /present: route-exit affordance inventory before cleanup \(route-exit affordance receipt present\)/);
   assert.match(routeExitVisibleUiSummaryMarkdown, /missing: route or mode exit action receipt through visible UI \(visible UI action receipt missing\)/);
+
+  const clickFallbackTapProfileFile = path.join(riddlePreviewDir, "cli-click-fallback-tap-summary.json");
+  const clickFallbackTapOutputDir = path.join(riddlePreviewDir, "cli-click-fallback-tap-summary-output");
+  writeFileSync(clickFallbackTapProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-click-fallback-tap-summary",
+    target: {
+      route: "/click-fallback-tap-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "click_fallback_tap",
+      pack_public_name: "Click Fallback Tap Pack",
+      required_receipts: [
+        "click fallback tap route exit receipt",
+      ],
+    },
+  }));
+  const clickFallbackTapResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    clickFallbackTapProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    clickFallbackTapOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(clickFallbackTapResult.stdout).status, "passed");
+  const clickFallbackTapSummaryMarkdown = readFileSync(path.join(clickFallbackTapOutputDir, "summary.md"), "utf8");
+  assert.match(clickFallbackTapSummaryMarkdown, /## Proof Pack/);
+  assert.match(clickFallbackTapSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(clickFallbackTapSummaryMarkdown, /present: click fallback tap route exit receipt \(click fallback tap evidence present \(1\)\)/);
 
   const offlineAudioMetricsProfileFile = path.join(riddlePreviewDir, "cli-offline-audio-metrics-summary.json");
   const offlineAudioMetricsOutputDir = path.join(riddlePreviewDir, "cli-offline-audio-metrics-summary-output");
