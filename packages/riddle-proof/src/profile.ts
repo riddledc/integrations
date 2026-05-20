@@ -1202,6 +1202,7 @@ function profileSetupTapUntilReceipts(results: Array<Record<string, JsonValue>>)
       max_taps: result.max_taps ?? result.max_calls ?? null,
       tap_burst_size: result.tap_burst_size ?? null,
       condition_check_count: result.condition_check_count ?? null,
+      elapsed_ms: result.elapsed_ms ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
       reason: result.reason ?? result.error ?? null,
@@ -5848,6 +5849,7 @@ function profileSetupTapUntilReceipts(results) {
       max_taps: result.max_taps ?? result.max_calls ?? null,
       tap_burst_size: result.tap_burst_size ?? null,
       condition_check_count: result.condition_check_count ?? null,
+      elapsed_ms: result.elapsed_ms ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
       reason: result.reason || result.error || null,
@@ -7850,6 +7852,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       let lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
       const targetEvidence = setupTapTargetEvidence(prepared.target);
       if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+        const elapsedMs = Date.now() - startedAt;
         return {
           ...base,
           ...setupScopeEvidence(scope),
@@ -7863,6 +7866,7 @@ async function executeSetupAction(action, ordinal, viewport) {
           max_calls: maxTaps,
           tap_burst_size: tapBurstSize,
           condition_check_count: conditionCheckCount,
+          elapsed_ms: elapsedMs,
           interval_ms: intervalMs,
           timeout_ms: timeout,
         };
@@ -7877,6 +7881,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
         conditionCheckCount += 1;
         if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+          const elapsedMs = Date.now() - startedAt;
           return {
             ...base,
             ...setupScopeEvidence(scope),
@@ -7890,12 +7895,14 @@ async function executeSetupAction(action, ordinal, viewport) {
             max_calls: maxTaps,
             tap_burst_size: tapBurstSize,
             condition_check_count: conditionCheckCount,
+            elapsed_ms: elapsedMs,
             interval_ms: intervalMs,
             timeout_ms: timeout,
           };
         }
         if (tapCount < maxTaps && intervalMs) await page.waitForTimeout(intervalMs);
       }
+      const elapsedMs = Date.now() - startedAt;
       return {
         ...base,
         ...setupScopeEvidence(scope),
@@ -7908,9 +7915,10 @@ async function executeSetupAction(action, ordinal, viewport) {
         max_calls: maxTaps,
         tap_burst_size: tapBurstSize,
         condition_check_count: conditionCheckCount,
+        elapsed_ms: elapsedMs,
         interval_ms: intervalMs,
         timeout_ms: timeout,
-        reason: Date.now() - startedAt > timeout ? "timeout" : "until_condition_not_met",
+        reason: elapsedMs > timeout ? "timeout" : "until_condition_not_met",
         missing_part: lastPredicateResult?.missing_part || undefined,
       };
     }
