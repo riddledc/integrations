@@ -1281,6 +1281,34 @@ const cliRunProfileServer = createServer((request, response) => {
           ],
           summary: "cli-workflow-truth-summary passed.",
           captured_at: "2026-05-20T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-workflow-truth-summary",
+            target_url: "https://example.com/workflow-truth-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/workflow-truth-summary",
+                observed: "/workflow-truth-summary",
+                expected_path: "/workflow-truth-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 18,
+              bounds_overflow_px: 18,
+              overflow_offenders: [{ selector: ".long-example-url", overflow: 18 }],
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "cli-workflow-truth-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
         });
         return;
       }
@@ -2297,6 +2325,8 @@ try {
   assert.match(profileSummaryMarkdown, /passed: no_horizontal_overflow \(<= 1px\)/);
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
   assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings, 2\/2 warnings allowed, allowlist 1 text, 1 pattern\)/);
+  assert.match(profileSummaryMarkdown, /## Side Caveats/);
+  assert.match(profileSummaryMarkdown, /side caveat console warnings: 2\/2 allowed; allowlist 1 text, 1 pattern/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 4 declared, 6 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
@@ -2932,6 +2962,8 @@ try {
     workflowTruthSummaryMarkdown,
     /state contract desktop: `initialValid`=`valid` -> `invalidNavigation`=`invalid` -> `invalidState`=`invalid` -> `recoveredValid`=`recovered-valid`; signals `hasValidate=true`, `hasTryFix=true`, `hasErrorDetail=true`, `hasValid=true`, `invalidGone=true`, `repairedTrailingCommaGone=true`/,
   );
+  assert.match(workflowTruthSummaryMarkdown, /## Side Caveats/);
+  assert.match(workflowTruthSummaryMarkdown, /side caveat layout desktop: scroll overflow 18px, bounds overflow 18px; top offender `\.long-example-url` 18px/);
 
   const naturalInputProfileFile = path.join(riddlePreviewDir, "cli-natural-input-summary.json");
   const naturalInputOutputDir = path.join(riddlePreviewDir, "cli-natural-input-summary-output");

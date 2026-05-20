@@ -473,6 +473,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (stateContractSummaryLines.length) {
     lines.push("", "## State Contract", "", ...stateContractSummaryLines);
   }
+  const sideCaveatSummaryLines = profileSideCaveatSummaryMarkdown(result);
+  if (sideCaveatSummaryLines.length) {
+    lines.push("", "## Side Caveats", "", ...sideCaveatSummaryLines);
+  }
   const networkMockSummaryLines = profileNetworkMockSummaryMarkdown(result);
   if (networkMockSummaryLines.length) {
     lines.push("", "## Network Mocks", "", ...networkMockSummaryLines);
@@ -1064,6 +1068,96 @@ function profileStateContractSummaryMarkdown(result: RiddleProofProfileResult): 
     lines.push(`- state contract ${name}: ${stateChain}${omitted}${signals.length ? `; signals ${signals.map((part) => markdownInlineCode(part, 80)).join(", ")}` : ""}`);
   }
   return lines;
+}
+
+function sideCaveatAllowlistPart(evidence: Record<string, unknown>, totalKey: string, allowedKey: string): string | undefined {
+  const total = cliFiniteNumber(evidence[totalKey]);
+  const allowed = cliFiniteNumber(evidence[allowedKey]);
+  if (total === undefined || allowed === undefined || allowed <= 0) return undefined;
+  return `${allowed}/${total} allowed`;
+}
+
+function sideCaveatAllowlistCounts(evidence: Record<string, unknown>): string | undefined {
+  const textCount = Array.isArray(evidence.allowed_console_texts)
+    ? evidence.allowed_console_texts.filter((value) => typeof value === "string" && value.trim()).length
+    : 0;
+  const patternCount = Array.isArray(evidence.allowed_console_patterns)
+    ? evidence.allowed_console_patterns.filter((value) => typeof value === "string" && value.trim()).length
+    : 0;
+  return textCount || patternCount
+    ? `allowlist ${textCount} text${textCount === 1 ? "" : "s"}, ${patternCount} pattern${patternCount === 1 ? "" : "s"}`
+    : undefined;
+}
+
+function overflowCheckFailed(result: RiddleProofProfileResult): boolean {
+  return result.checks.some((check) => (
+    check.status === "failed"
+    && (
+      check.type === "no_horizontal_overflow"
+      || check.type === "no_mobile_horizontal_overflow"
+      || check.type === "frame_no_horizontal_overflow"
+    )
+  ));
+}
+
+function sideCaveatOverflowLine(viewport: Record<string, unknown>): string | undefined {
+  const name = cliString(viewport.name) || "viewport";
+  const scrollOverflow = cliFiniteNumber(viewport.overflow_px);
+  const boundsOverflow = cliFiniteNumber(viewport.bounds_overflow_px);
+  if ((scrollOverflow === undefined || scrollOverflow <= 0) && (boundsOverflow === undefined || boundsOverflow <= 0)) return undefined;
+  const parts = [
+    scrollOverflow !== undefined && scrollOverflow > 0 ? `scroll overflow ${scrollOverflow}px` : "",
+    boundsOverflow !== undefined && boundsOverflow > 0 ? `bounds overflow ${boundsOverflow}px` : "",
+  ].filter(Boolean);
+  const offenders = Array.isArray(viewport.overflow_offenders)
+    ? viewport.overflow_offenders.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+  const offender = offenders.find((item) => {
+    const overflow = cliFiniteNumber(item.bounds_overflow_px) ?? cliFiniteNumber(item.overflow_px) ?? cliFiniteNumber(item.overflow);
+    return overflow !== undefined && overflow > 0;
+  });
+  const offenderSelector = cliString(offender?.selector);
+  const offenderOverflow = offender
+    ? cliFiniteNumber(offender.bounds_overflow_px) ?? cliFiniteNumber(offender.overflow_px) ?? cliFiniteNumber(offender.overflow)
+    : undefined;
+  return `- side caveat layout ${name}: ${parts.join(", ")}${offenderSelector && offenderOverflow !== undefined ? `; top offender ${markdownInlineCode(offenderSelector, 100)} ${offenderOverflow}px` : ""}`;
+}
+
+function profileSideCaveatSummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const lines: string[] = [];
+
+  for (const check of result.checks) {
+    if (check.status !== "passed") continue;
+    const evidence = cliRecord(check.evidence);
+    if (!evidence) continue;
+    if (check.type === "no_console_warnings") {
+      const allowed = sideCaveatAllowlistPart(evidence, "total_console_warning_count", "allowed_console_warning_count");
+      if (allowed) {
+        const allowlist = sideCaveatAllowlistCounts(evidence);
+        lines.push(`- side caveat console warnings: ${allowed}${allowlist ? `; ${allowlist}` : ""}`);
+      }
+    }
+    if (check.type === "no_fatal_console_errors") {
+      const consoleAllowed = sideCaveatAllowlistPart(evidence, "total_console_fatal_count", "allowed_console_fatal_count");
+      const pageAllowed = sideCaveatAllowlistPart(evidence, "total_page_error_count", "allowed_page_error_count");
+      const parts = [
+        consoleAllowed ? `console fatal ${consoleAllowed}` : "",
+        pageAllowed ? `page errors ${pageAllowed}` : "",
+        sideCaveatAllowlistCounts(evidence),
+      ].filter(Boolean);
+      if (parts.length) lines.push(`- side caveat fatal errors: ${parts.join("; ")}`);
+    }
+  }
+
+  if (!overflowCheckFailed(result) && Array.isArray(result.evidence?.viewports)) {
+    for (const viewport of result.evidence.viewports.slice(0, 8)) {
+      const line = sideCaveatOverflowLine(cliRecord(viewport) || {});
+      if (line) lines.push(line);
+    }
+    if (result.evidence.viewports.length > 8) lines.push(`- ${result.evidence.viewports.length - 8} additional viewport side caveat(s) omitted.`);
+  }
+
+  return lines.slice(0, 12);
 }
 
 type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };

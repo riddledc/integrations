@@ -7,6 +7,8 @@
 - Surface selector-present-but-not-visible reachability receipts in profile summary markdown.
 - Surface compact state-contract rollups for workflow profiles with multiple
   state-bearing setup receipts.
+- Surface focused-pass side caveats for allowed console noise and unrelated
+  viewport overflow.
 - 0625ed0: Rename setup-summary keyboard aggregates from press-focused fields to keyboard-focused fields, while keeping CLI rendering backward-compatible with older press-labeled artifacts.
 
 ## 0.7.182
