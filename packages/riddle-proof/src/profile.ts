@@ -1199,24 +1199,31 @@ function profileSetupCanvasSignatureStableHashGroups(results: Array<Record<strin
 
   const warnings: Array<Record<string, JsonValue>> = [];
   for (const group of groups.values()) {
-    const hashes = new Set(group.receipts.map((receipt) => receipt.hash));
-    const labels = [...new Set(group.receipts.map((receipt) => receipt.label))];
-    if (group.receipts.length < 2 || labels.length < 2 || hashes.size !== 1) continue;
-    const visibleLabels = labels.slice(0, 8);
-    warnings.push({
-      selector: group.selector,
-      frame_selector: group.frame_selector ?? null,
-      hash: group.receipts[0].hash,
-      count: group.receipts.length,
-      label_count: labels.length,
-      labels: visibleLabels,
-      omitted_label_count: Math.max(0, labels.length - visibleLabels.length),
-      ordinals: group.receipts
-        .map((receipt) => receipt.ordinal)
-        .filter((value): value is number => value !== undefined)
-        .slice(0, 12),
-      reason: "stable_canvas_signature_hash",
-    });
+    const receiptsByHash = new Map<string, typeof group.receipts>();
+    for (const receipt of group.receipts) {
+      const hashReceipts = receiptsByHash.get(receipt.hash) || [];
+      hashReceipts.push(receipt);
+      receiptsByHash.set(receipt.hash, hashReceipts);
+    }
+    for (const [hash, receipts] of receiptsByHash.entries()) {
+      const labels = [...new Set(receipts.map((receipt) => receipt.label))];
+      if (receipts.length < 2 || labels.length < 2) continue;
+      const visibleLabels = labels.slice(0, 8);
+      warnings.push({
+        selector: group.selector,
+        frame_selector: group.frame_selector ?? null,
+        hash,
+        count: receipts.length,
+        label_count: labels.length,
+        labels: visibleLabels,
+        omitted_label_count: Math.max(0, labels.length - visibleLabels.length),
+        ordinals: receipts
+          .map((receipt) => receipt.ordinal)
+          .filter((value): value is number => value !== undefined)
+          .slice(0, 12),
+        reason: "stable_canvas_signature_hash",
+      });
+    }
   }
   return warnings;
 }
@@ -5652,24 +5659,31 @@ function profileSetupCanvasSignatureStableHashGroups(results) {
   }
   const warnings = [];
   for (const group of groups.values()) {
-    const hashes = new Set(group.receipts.map((receipt) => receipt.hash));
-    const labels = [...new Set(group.receipts.map((receipt) => receipt.label))];
-    if (group.receipts.length < 2 || labels.length < 2 || hashes.size !== 1) continue;
-    const visibleLabels = labels.slice(0, 8);
-    warnings.push({
-      selector: group.selector,
-      frame_selector: group.frame_selector || null,
-      hash: group.receipts[0].hash,
-      count: group.receipts.length,
-      label_count: labels.length,
-      labels: visibleLabels,
-      omitted_label_count: Math.max(0, labels.length - visibleLabels.length),
-      ordinals: group.receipts
-        .map((receipt) => receipt.ordinal)
-        .filter((value) => value !== undefined)
-        .slice(0, 12),
-      reason: "stable_canvas_signature_hash",
-    });
+    const receiptsByHash = new Map();
+    for (const receipt of group.receipts) {
+      const hashReceipts = receiptsByHash.get(receipt.hash) || [];
+      hashReceipts.push(receipt);
+      receiptsByHash.set(receipt.hash, hashReceipts);
+    }
+    for (const [hash, receipts] of receiptsByHash.entries()) {
+      const labels = [...new Set(receipts.map((receipt) => receipt.label))];
+      if (receipts.length < 2 || labels.length < 2) continue;
+      const visibleLabels = labels.slice(0, 8);
+      warnings.push({
+        selector: group.selector,
+        frame_selector: group.frame_selector || null,
+        hash,
+        count: receipts.length,
+        label_count: labels.length,
+        labels: visibleLabels,
+        omitted_label_count: Math.max(0, labels.length - visibleLabels.length),
+        ordinals: receipts
+          .map((receipt) => receipt.ordinal)
+          .filter((value) => value !== undefined)
+          .slice(0, 12),
+        reason: "stable_canvas_signature_hash",
+      });
+    }
   }
   return warnings;
 }
