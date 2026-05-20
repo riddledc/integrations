@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.174
+
+### Patch Changes
+
+- 6c5c5fa: Add a first-class `tap` setup action for profile-mode proofs, including touch/pen/mouse dispatch, coordinate-mode support, summary receipts, and README guidance.
+
 ## 0.7.173
 
 ### Patch Changes
