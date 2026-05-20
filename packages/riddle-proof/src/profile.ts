@@ -7104,19 +7104,23 @@ async function ensureProfilePageHelpers(context) {
       const existing = window.__riddleProofProfile && typeof window.__riddleProofProfile === "object"
         ? window.__riddleProofProfile
         : {};
-      Object.defineProperties(existing, {
-        current: { configurable: true, get: currentRoute },
-        appPath: { configurable: true, get: () => currentRoute().appPath },
-        appRoute: { configurable: true, get: () => currentRoute().appRoute },
-        basePath: { configurable: true, get: () => currentRoute().basePath },
-        previewMountPrefix: { configurable: true, get: () => currentRoute().previewMountPrefix },
-        mountedPath: { configurable: true, get: () => currentRoute().mountedPath },
-        mountedRoute: { configurable: true, get: () => currentRoute().mountedRoute },
-      });
+      const refreshSnapshot = () => {
+        const route = currentRoute();
+        existing.current = route;
+        existing.appPath = route.appPath;
+        existing.appRoute = route.appRoute;
+        existing.basePath = route.basePath;
+        existing.previewMountPrefix = route.previewMountPrefix;
+        existing.mountedPath = route.mountedPath;
+        existing.mountedRoute = route.mountedRoute;
+        return route;
+      };
       existing.version = "riddle-proof.profile-helper.v1";
       existing.route = currentRoute;
       existing.getRoute = currentRoute;
+      existing.refresh = refreshSnapshot;
       existing.joinRoute = joinRoute;
+      refreshSnapshot();
       window.__riddleProofProfile = existing;
     }, { targetUrl });
   } catch {

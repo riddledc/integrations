@@ -5771,6 +5771,8 @@ assert.ok(windowEvalSetupProfileScript.includes("riddle-proof.profile-helper.v1"
 assert.ok(windowEvalSetupProfileScript.includes("joinRoute"));
 assert.ok(windowEvalSetupProfileScript.includes("appRoute"));
 assert.ok(windowEvalSetupProfileScript.includes("previewMountPrefix"));
+assert.ok(windowEvalSetupProfileScript.includes("refreshSnapshot"));
+assert.ok(!windowEvalSetupProfileScript.includes("Object.defineProperties"));
 assert.ok(windowEvalSetupProfileScript.includes("missing_evaluator"));
 assert.ok(windowEvalSetupProfileScript.includes("script_threw"));
 assert.ok(windowEvalSetupProfileScript.includes("script_length"));
