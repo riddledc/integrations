@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.193
+
+### Patch Changes
+
+- 5ac2626: Add a compact JSON result format for hosted profile runs so long split-viewport
+  profiles can emit status, checks, Riddle metadata, and artifact pointers without
+  dumping the full proof evidence body to stdout.
+
 ## 0.7.192
 
 ### Patch Changes
