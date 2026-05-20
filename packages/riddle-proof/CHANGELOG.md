@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.7.173
+
+### Patch Changes
+
+- 073e43b: Warn when canvas signature hashes repeat across some labeled captures, even if
+  other captures for the same selector produce different hashes.
+
 ## 0.7.172
 
 ### Patch Changes
