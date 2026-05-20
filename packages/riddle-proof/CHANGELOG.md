@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.172
+
+### Patch Changes
+
+- c501a83: Add deterministic runtime setup actions for seeded random queues and controllable clocks.
+
 ## 0.7.171
 
 ### Patch Changes
