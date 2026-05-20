@@ -5135,6 +5135,20 @@ assert.ok(clickCoordinateProfileScript.includes("clickOptions.position = positio
 assert.ok(clickCoordinateProfileScript.includes("missing_click_coordinates"));
 assert.doesNotMatch(clickCoordinateProfileScript, /let position:/);
 assert.doesNotMatch(clickCoordinateProfileScript, /let mode:/);
+const clickFallbackProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-fallback-profile",
+  target: {
+    route: "/game",
+    setup_actions: [{ type: "click", selector: ".nav-logo", fallback_to_tap: true }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/game" }],
+}, { url: "https://example.com" });
+assert.equal(clickFallbackProfile.target.setup_actions[0].fallback_to_tap, true);
+const clickFallbackProfileScript = buildRiddleProofProfileScript(clickFallbackProfile);
+assert.ok(clickFallbackProfileScript.includes("action.fallback_to_tap"));
+assert.ok(clickFallbackProfileScript.includes("fallback_to_tap: true"));
+assert.ok(clickFallbackProfileScript.includes("page.mouse.click(fallbackPoint.x, fallbackPoint.y"));
 const tapCoordinateProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-tap-coordinate-profile",

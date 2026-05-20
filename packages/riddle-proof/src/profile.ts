@@ -263,6 +263,7 @@ export interface RiddleProofProfileSetupAction {
   frame_index?: number;
   full_page?: boolean;
   force?: boolean;
+  fallback_to_tap?: boolean;
   click_count?: number;
   coordinate_mode?: "pixels" | "ratio";
   pointer_type?: "mouse" | "touch" | "pen";
@@ -1965,6 +1966,14 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       || input.force_click === true
       || input.forceClick === true
     ),
+    fallback_to_tap: type === "click" && (
+      input.fallback_to_tap === true
+      || input.fallbackToTap === true
+      || input.fallback_to_pointer_tap === true
+      || input.fallbackToPointerTap === true
+      || input.pointer_fallback === true
+      || input.pointerFallback === true
+    ) || undefined,
     click_count: normalizeSetupActionClickCount(input, type, index),
     coordinate_mode: coordinateMode,
     pointer_type: pointerType,
@@ -8390,6 +8399,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         : { timeout, noWaitAfter: true };
       const clickCount = setupNumber(action.click_count, 1);
       if (Number.isInteger(clickCount) && clickCount > 1) clickOptions.clickCount = clickCount;
+      const target = locator.nth(targetIndex);
       const fromX = setupFiniteNumber(action.from_x ?? action.fromX ?? action.x ?? action.click_x ?? action.clickX);
       const fromY = setupFiniteNumber(action.from_y ?? action.fromY ?? action.y ?? action.click_y ?? action.clickY);
       const hasClickPosition = fromX !== undefined || fromY !== undefined;
@@ -8397,7 +8407,6 @@ async function executeSetupAction(action, ordinal, viewport) {
       let mode;
       if (hasClickPosition) {
         if (fromX === undefined || fromY === undefined) return { ...base, ...setupScopeEvidence(scope), reason: "missing_click_coordinates", count, target_index: targetIndex };
-        const target = locator.nth(targetIndex);
         const box = await target.boundingBox();
         if (!box) return { ...base, ...setupScopeEvidence(scope), reason: "bounding_box_unavailable", count, target_index: targetIndex };
         mode = String(action.coordinate_mode || action.coordinateMode || "pixels").trim();
@@ -8405,7 +8414,43 @@ async function executeSetupAction(action, ordinal, viewport) {
         position = { x: coordinate(fromX, box.width), y: coordinate(fromY, box.height) };
         clickOptions.position = position;
       }
-      await locator.nth(targetIndex).click(clickOptions);
+      try {
+        await target.click(clickOptions);
+      } catch (error) {
+        if (action.fallback_to_tap !== true) throw error;
+        const box = await target.boundingBox();
+        if (!box) {
+          return {
+            ...base,
+            ...setupScopeEvidence(scope),
+            reason: "fallback_bounding_box_unavailable",
+            count,
+            target_index: targetIndex,
+            click_error: String(error && error.message ? error.message : error).slice(0, 1000),
+          };
+        }
+        const fallbackPoint = position
+          ? { x: box.x + position.x, y: box.y + position.y }
+          : { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+        if (clickCount > 1) await page.mouse.click(fallbackPoint.x, fallbackPoint.y, { clickCount });
+        else await page.mouse.click(fallbackPoint.x, fallbackPoint.y);
+        return {
+          ...base,
+          ...setupScopeEvidence(scope),
+          ok: true,
+          count,
+          target_index: targetIndex,
+          text: matchedText,
+          force: action.force === true || undefined,
+          fallback_to_tap: true,
+          input_dispatch: "playwright_mouse",
+          click_error: String(error && error.message ? error.message : error).slice(0, 1000),
+          click_count: clickCount > 1 ? clickCount : undefined,
+          coordinate_mode: mode,
+          x: position ? fromX : undefined,
+          y: position ? fromY : undefined,
+        };
+      }
       return {
         ...base,
         ...setupScopeEvidence(scope),
