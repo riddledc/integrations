@@ -1033,6 +1033,205 @@ function cliOfflineAudioMetricsSummaryResult({ silent = false } = {}) {
   };
 }
 
+function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
+  const path = missingLoss ? "/state-hygiene-outcome-missing-summary" : "/state-hygiene-outcome-summary";
+  const lossStatus = missingLoss ? "idle" : "over";
+  const lossOutcome = missingLoss ? "ready" : "lost";
+  const lossLost = !missingLoss;
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: missingLoss ? "cli-state-hygiene-outcome-missing-summary" : "cli-state-hygiene-outcome-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: `https://example.com${path}`,
+      observed: "/",
+      expected_path: "/",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        label: "setup actions succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 6,
+          setup_summary: {
+            viewport_count: 1,
+            action_count: 6,
+            viewports: [{
+              name: "desktop",
+              ok: true,
+              result_count: 6,
+              observed_path: "/",
+              setup_screenshots: ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"],
+              clicked_total: 3,
+              window_eval_total: 6,
+              window_eval_stored_total: 6,
+              window_eval_captured_total: 6,
+              window_eval_truncated: false,
+              window_eval: [
+                {
+                  ordinal: 1,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.active",
+                  returned: {
+                    route: "/games/orbit-relay?proof=1",
+                    enabled: true,
+                    status: "idle",
+                    lastOutcome: "ready",
+                    globalCount: 1,
+                    navVisible: true,
+                  },
+                  return_summary: [
+                    { label: "route", path: "route", exists: true, value: "/games/orbit-relay?proof=1" },
+                    { label: "enabled", path: "enabled", exists: true, value: true },
+                    { label: "status", path: "status", exists: true, value: "idle" },
+                    { label: "lastOutcome", path: "lastOutcome", exists: true, value: "ready" },
+                    { label: "globalCount", path: "globalCount", exists: true, value: 1 },
+                    { label: "navVisible", path: "navVisible", exists: true, value: true },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 2,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.failureShot",
+                  returned: { ok: true, lastShotKind: "failure", status: "idle", lastOutcome: "ready" },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "lastShotKind", path: "lastShotKind", exists: true, value: "failure" },
+                    { label: "status", path: "status", exists: true, value: "idle" },
+                    { label: "lastOutcome", path: "lastOutcome", exists: true, value: "ready" },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 3,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.loss",
+                  returned: {
+                    ok: !missingLoss,
+                    status: lossStatus,
+                    lastOutcome: lossOutcome,
+                    launchCount: missingLoss ? 0 : 1,
+                    score: 0,
+                    best: 0,
+                    lastFlightLost: lossLost,
+                  },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: !missingLoss },
+                    { label: "status", path: "status", exists: true, value: lossStatus },
+                    { label: "lastOutcome", path: "lastOutcome", exists: true, value: lossOutcome },
+                    { label: "launchCount", path: "launchCount", exists: true, value: missingLoss ? 0 : 1 },
+                    { label: "score", path: "score", exists: true, value: 0 },
+                    { label: "best", path: "best", exists: true, value: 0 },
+                    { label: "lastFlightLost", path: "lastFlightLost", exists: true, value: lossLost },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 4,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.successShot",
+                  returned: { ok: true, lastShotKind: "success", lastShotStatus: "success", status: "over", lastOutcome: "lost" },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "lastShotKind", path: "lastShotKind", exists: true, value: "success" },
+                    { label: "lastShotStatus", path: "lastShotStatus", exists: true, value: "success" },
+                    { label: "status", path: "status", exists: true, value: "over" },
+                    { label: "lastOutcome", path: "lastOutcome", exists: true, value: "lost" },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 5,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.success",
+                  returned: { ok: true, status: "success", lastOutcome: "success", launchCount: 2, score: 1, best: 1 },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "status", path: "status", exists: true, value: "success" },
+                    { label: "lastOutcome", path: "lastOutcome", exists: true, value: "success" },
+                    { label: "launchCount", path: "launchCount", exists: true, value: 2 },
+                    { label: "score", path: "score", exists: true, value: 1 },
+                    { label: "best", path: "best", exists: true, value: 1 },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 6,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.cleanup",
+                  returned: { ok: true, route: "/", staleCount: 0, staleNames: [], navVisibleBeforeExit: true },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "route", path: "route", exists: true, value: "/" },
+                    { label: "staleCount", path: "staleCount", exists: true, value: 0 },
+                    { label: "staleNames", path: "staleNames", exists: true, value: [] },
+                    { label: "navVisibleBeforeExit", path: "navVisibleBeforeExit", exists: true, value: true },
+                  ],
+                  reason: null,
+                },
+              ],
+              clicked: [
+                { ordinal: 1, selector: ".orbit-start", text: "START LAUNCH" },
+                { ordinal: 2, selector: ".orbit-start", text: "LAUNCH AGAIN" },
+                { ordinal: 3, selector: ".nav-logo", text: "LILARCADE" },
+              ],
+              failed: [],
+            }],
+          },
+        },
+      },
+    ],
+    summary: missingLoss ? "cli-state-hygiene-outcome-missing-summary passed." : "cli-state-hygiene-outcome-summary passed.",
+    captured_at: "2026-05-20T17:40:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: missingLoss ? "cli-state-hygiene-outcome-missing-summary" : "cli-state-hygiene-outcome-summary",
+      target_url: `https://example.com${path}`,
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-20T17:40:00.000Z",
+      viewports: [{
+        name: "desktop",
+        width: 1280,
+        height: 900,
+        route: {
+          requested: `https://example.com${path}`,
+          observed: "/",
+          expected_path: "/",
+          matched: true,
+          http_status: 200,
+        },
+        overflow_px: 0,
+        bounds_overflow_px: 0,
+        selectors: {},
+        text_matches: {},
+        screenshot_label: "state-hygiene-outcome-desktop",
+      }],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1 },
+    },
+  };
+}
+
 const cliRunProfileServer = createServer((request, response) => {
   const sendJson = (payload, status = 200) => {
     response.writeHead(status, { "content-type": "application/json" });
@@ -1119,6 +1318,14 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/offline-audio-metrics-summary")) {
         sendJson(cliOfflineAudioMetricsSummaryResult());
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-outcome-missing-summary")) {
+        sendJson(cliStateHygieneOutcomeSummaryResult({ missingLoss: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
+        sendJson(cliStateHygieneOutcomeSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/fatal-console-summary")) {
@@ -3667,6 +3874,96 @@ try {
   assert.match(silentOfflineAudioMetricsSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 missing\)/);
   assert.match(silentOfflineAudioMetricsSummaryMarkdown, /missing required receipts: `offline audio metrics proof receipt`/);
   assert.match(silentOfflineAudioMetricsSummaryMarkdown, /missing: offline audio metrics proof receipt \(offline audio metric receipt missing\)/);
+
+  const stateHygieneOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-summary.json");
+  const stateHygieneOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-summary-output");
+  const stateHygieneOutcomeRequiredReceipts = [
+    "active route-local Orbit Relay proof helper and state receipt",
+    "controlled failure launch receipt",
+    "visible loss terminal state receipt",
+    "controlled recovery success launch receipt",
+  ];
+  writeFileSync(stateHygieneOutcomeProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-outcome-summary",
+    target: {
+      route: "/state-hygiene-outcome-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: stateHygieneOutcomeRequiredReceipts,
+    },
+  }));
+  const stateHygieneOutcomeResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneOutcomeProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneOutcomeOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneOutcomeResult.stdout).status, "passed");
+  const stateHygieneOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneOutcomeOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /pack completeness: complete \(4 present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: active route-local Orbit Relay proof helper and state receipt \(active route-local proof receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled failure launch receipt \(controlled failure launch receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible loss terminal state receipt \(terminal loss receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled recovery success launch receipt \(controlled success launch receipt present\)/);
+
+  const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
+  const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");
+  writeFileSync(stateHygieneMissingOutcomeProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-outcome-missing-summary",
+    target: {
+      route: "/state-hygiene-outcome-missing-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: stateHygieneOutcomeRequiredReceipts,
+    },
+  }));
+  const stateHygieneMissingOutcomeResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneMissingOutcomeProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneMissingOutcomeOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneMissingOutcomeResult.stdout).status, "passed");
+  const stateHygieneMissingOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneMissingOutcomeOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(3 present, 1 missing\)/);
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing required receipts: `visible loss terminal state receipt`/);
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing: visible loss terminal state receipt \(terminal loss receipt missing\)/);
 
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
