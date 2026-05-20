@@ -869,10 +869,20 @@ function resolveJsonPath(root: unknown, path: string): { exists: boolean; value?
 
   let current = root;
   for (const segment of segments) {
-    if (typeof segment === "number") {
-      if (!Array.isArray(current) || segment < 0 || segment >= current.length) return { exists: false };
-      current = current[segment];
+    if (Array.isArray(current)) {
+      if (segment === "length") {
+        current = current.length;
+        continue;
+      }
+      const index = typeof segment === "number"
+        ? segment
+        : (/^\d+$/.test(segment) ? Number(segment) : -1);
+      if (index < 0 || index >= current.length) return { exists: false };
+      current = current[index];
       continue;
+    }
+    if (typeof segment === "number") {
+      return { exists: false };
     }
     if (!isRecord(current) || !hasOwn(current, segment)) return { exists: false };
     current = current[segment];
@@ -8409,11 +8419,17 @@ function resolveJsonProbePath(root, path) {
   }
   let current = root;
   for (const segment of segments) {
-    if (typeof segment === "number") {
-      if (!Array.isArray(current) || segment < 0 || segment >= current.length) return { exists: false };
-      current = current[segment];
+    if (Array.isArray(current)) {
+      if (segment === "length") {
+        current = current.length;
+        continue;
+      }
+      const index = typeof segment === "number" ? segment : (/^\d+$/.test(segment) ? Number(segment) : -1);
+      if (index < 0 || index >= current.length) return { exists: false };
+      current = current[index];
       continue;
     }
+    if (typeof segment === "number") return { exists: false };
     if (!current || typeof current !== "object" || Array.isArray(current) || !Object.hasOwn(current, segment)) {
       return { exists: false };
     }
