@@ -897,9 +897,31 @@ function profilePackMetadataMarkdown(result: RiddleProofProfileResult): string[]
   ].filter(Boolean);
   if (packParts.length) lines.push(`- pack: ${packParts.join(" - ")}`);
   if (requiredReceipts.length) {
+    const receiptStatuses = requiredReceipts.map((receipt) => ({
+      receipt,
+      item: profilePackReceiptStatus(result, metadata, receipt),
+    }));
+    const missingReceipts = receiptStatuses.filter(({ item }) => item.status === "missing").map(({ receipt }) => receipt);
+    const failedReceipts = receiptStatuses.filter(({ item }) => item.status === "failed").map(({ receipt }) => receipt);
+    const manualCount = receiptStatuses.filter(({ item }) => item.status === "manual").length;
+    const presentCount = receiptStatuses.filter(({ item }) => item.status === "present").length;
+    const completenessParts = [
+      `${presentCount} present`,
+      manualCount ? `${manualCount} manual` : "",
+      missingReceipts.length ? `${missingReceipts.length} missing` : "",
+      failedReceipts.length ? `${failedReceipts.length} failed` : "",
+    ].filter(Boolean);
+    lines.push(`- pack completeness: ${missingReceipts.length || failedReceipts.length ? "incomplete" : "complete"} (${completenessParts.join(", ")})`);
+    if (missingReceipts.length) {
+      const listed = missingReceipts.slice(0, 5).map((receipt) => markdownInlineCode(receipt, 120)).join(", ");
+      lines.push(`- missing required receipts: ${listed}${missingReceipts.length > 5 ? `, ${missingReceipts.length - 5} more` : ""}`);
+    }
+    if (failedReceipts.length) {
+      const listed = failedReceipts.slice(0, 5).map((receipt) => markdownInlineCode(receipt, 120)).join(", ");
+      lines.push(`- failed required receipts: ${listed}${failedReceipts.length > 5 ? `, ${failedReceipts.length - 5} more` : ""}`);
+    }
     lines.push(`- required receipts: ${requiredReceipts.length}`);
-    for (const receipt of requiredReceipts.slice(0, 20)) {
-      const item = profilePackReceiptStatus(result, metadata, receipt);
+    for (const { receipt, item } of receiptStatuses.slice(0, 20)) {
       lines.push(`  - ${item.status}: ${receipt} (${item.reason})`);
     }
     if (requiredReceipts.length > 20) lines.push(`  - ${requiredReceipts.length - 20} additional required receipt(s) omitted.`);

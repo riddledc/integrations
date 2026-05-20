@@ -3251,6 +3251,50 @@ try {
   assert.match(responsiveReachabilitySummaryMarkdown, /present: safe click receipt \(click or obstruction receipt present\)/);
   assert.match(responsiveReachabilitySummaryMarkdown, /present: state-growth receipt after the click \(state-growth receipt present\)/);
 
+  const packIncompleteProfileFile = path.join(riddlePreviewDir, "cli-pack-incomplete-summary.json");
+  const packIncompleteOutputDir = path.join(riddlePreviewDir, "cli-pack-incomplete-summary-output");
+  writeFileSync(packIncompleteProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-pack-incomplete-summary",
+    target: {
+      route: "/responsive-reachability-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "selector_visible", selector: ".react-grid-layout" },
+      { type: "selector_visible", selector: "button" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "before and after static canvas signatures",
+      ],
+    },
+  }));
+  const packIncompleteResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    packIncompleteProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    packIncompleteOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(packIncompleteResult.stdout).status, "passed");
+  const packIncompleteSummaryMarkdown = readFileSync(path.join(packIncompleteOutputDir, "summary.md"), "utf8");
+  assert.match(packIncompleteSummaryMarkdown, /## Proof Pack/);
+  assert.match(packIncompleteSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 missing\)/);
+  assert.match(packIncompleteSummaryMarkdown, /missing required receipts: `before and after static canvas signatures`/);
+  assert.match(packIncompleteSummaryMarkdown, /missing: before and after static canvas signatures \(canvas signature evidence missing\)/);
+
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
   writeFileSync(workflowTruthProfileFile, JSON.stringify({
