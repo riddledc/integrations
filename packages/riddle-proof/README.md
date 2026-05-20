@@ -245,9 +245,13 @@ The package includes generic starter profiles:
 - `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
 - `examples/profiles/terminal-result-partial-evidence.json` for API-console terminal error or timeout receipts that preserve partial screenshot, console, and HAR evidence.
 - `examples/profiles/gameplay-window-call-until.json` for gameplay profiles that wait on a runtime state contract instead of a fixed sleep.
+- `examples/profiles/spa-route-exit-state-hygiene.json` for SPA routes that must clean up short-lived proof helpers, receipts, timers, input state, or touch state after visible UI navigation exits the route.
 
 Copy one of those shapes into a repository profile directory and replace the
 routes, selectors, mock URLs, and text checks with app-specific invariants.
+For route-exit hygiene profiles, replace the watched global names with state
+that is expected to exist while the route is active and expected to disappear
+after navigation returns to the owning app shell.
 
 For handled recovery profiles, prefer proving the whole boundary instead of
 only checking that an error message appears. Mock one dependent endpoint into a
