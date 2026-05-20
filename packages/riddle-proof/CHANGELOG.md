@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.7.190
+
+### Patch Changes
+
+- 9d32487: Classify visible recovery-action proof-pack receipts when setup evidence shows
+  both a real UI action and a recovered-state receipt.
+
 ## 0.7.189
 
 ### Patch Changes
