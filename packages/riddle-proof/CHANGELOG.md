@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.180
+
+### Patch Changes
+
+- 69117ca: Add `run-profile --result-format json|summary|none` so hosted profile runs can keep full JSON stdout for automation while agent loops can print a compact summary or suppress stdout when artifacts are already written.
+
 ## 0.7.179
 
 ### Patch Changes
