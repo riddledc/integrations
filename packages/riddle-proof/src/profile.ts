@@ -1415,6 +1415,9 @@ function profileSetupSummary(
             selector: result.selector ?? null,
             frame_selector: result.frame_selector ?? null,
             text: compactProfileSetupSummaryText(result.text),
+            ...(result.fallback_to_tap === true ? { fallback_to_tap: true } : {}),
+            ...(result.input_dispatch ? { input_dispatch: result.input_dispatch } : {}),
+            ...(result.click_error ? { click_error: compactProfileSetupSummaryText(result.click_error) } : {}),
             ...(clickCount ? { click_count: clickCount } : {}),
           };
         });
@@ -5992,6 +5995,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
             selector: result.selector ?? null,
             frame_selector: result.frame_selector ?? null,
             text: compactProfileSetupSummaryText(result.text),
+            ...(result.fallback_to_tap === true ? { fallback_to_tap: true } : {}),
+            ...(result.input_dispatch ? { input_dispatch: result.input_dispatch } : {}),
+            ...(result.click_error ? { click_error: compactProfileSetupSummaryText(result.click_error) } : {}),
             ...(clickCount ? { click_count: clickCount } : {}),
           };
         });

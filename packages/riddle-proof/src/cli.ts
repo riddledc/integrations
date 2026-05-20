@@ -1017,6 +1017,20 @@ function profilePackReceiptStatus(
   const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
     + profileSetupReceiptTotal(setupViewports, "click")
     + profileSetupReceiptTotal(setupViewports, "click_count");
+  const clickFallbackTapKeys = new Set<string>();
+  [
+    ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "clicked")),
+    ...evidenceViewports.flatMap((viewport) => setupReceiptArray(cliRecord(viewport) || {}, "setup_action_results")),
+  ].forEach((receipt, index) => {
+    if (receipt.ok === false || receipt.fallback_to_tap !== true) return;
+    const action = cliString(receipt.action);
+    if (action && action !== "click") return;
+    const ordinal = cliFiniteNumber(receipt.ordinal);
+    const selector = cliString(receipt.selector) || "";
+    const frameSelector = cliString(receipt.frame_selector) || "";
+    clickFallbackTapKeys.add(`${ordinal === undefined ? `idx:${index}` : `ord:${ordinal}`}:${frameSelector}:${selector}`);
+  });
+  const clickFallbackTapCount = clickFallbackTapKeys.size;
   const visibleUiActionCount = clickCount + profileSetupReceiptTotal(setupViewports, "tap");
   const setupFailureCount = profileSetupFailureCount(setupViewports);
   const setupObstructionCount = profileSetupObstructionCount(setupViewports);
@@ -1111,6 +1125,13 @@ function profilePackReceiptStatus(
   }
   if (text.includes("setup action")) {
     return profileReceiptSignalStatus(hasSetupReceipts, "setup receipts present", "setup receipts missing");
+  }
+  if (text.includes("click") && text.includes("fallback") && text.includes("tap")) {
+    return profileReceiptSignalStatus(
+      clickFallbackTapCount > 0,
+      `click fallback tap evidence present (${clickFallbackTapCount})`,
+      "click fallback tap evidence missing",
+    );
   }
   if (
     text.includes("active")
