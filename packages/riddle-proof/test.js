@@ -2906,6 +2906,9 @@ const tapCoordinateProfileScript = buildRiddleProofProfileScript(tapCoordinatePr
 assert.ok(tapCoordinateProfileScript.includes('if (type === "tap")'));
 assert.ok(tapCoordinateProfileScript.includes("missing_tap_coordinates"));
 assert.ok(tapCoordinateProfileScript.includes("Input.dispatchTouchEvent"));
+assert.ok(tapCoordinateProfileScript.includes("profileSetupTapReceipts"));
+assert.ok(tapCoordinateProfileScript.includes("tap_total: tapReceipts.length"));
+assert.ok(tapCoordinateProfileScript.includes("tap: sampledTapReceipts"));
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
