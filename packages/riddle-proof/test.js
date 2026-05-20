@@ -4346,6 +4346,33 @@ assert.equal(clickSequenceSummary.click_sequences[0].result_count, 11);
 assert.equal(clickSequenceSummary.click_sequences[0].click_total, 11);
 assert.deepEqual(clickSequenceSummary.click_sequences[0].sequence, diagonalClickSequence);
 assert.deepEqual(clickSequenceSummary.click_sequences[0].ordinals, [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+const sameSelectorClickAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    setup_action_results: [
+      ...Array.from({ length: 6 }, (_, index) => ({
+        ok: true,
+        action: "click",
+        ordinal: index + 20,
+        selector: ".basic-btn",
+        text: "Basic Jab (1 dmg)",
+      })),
+      { ok: true, action: "click", ordinal: 40, selector: ".topbar-actions .ghost" },
+    ],
+  }, profileEvidence.viewports[1]],
+});
+const sameSelectorClickSummary = sameSelectorClickAssessment.checks
+  .find((check) => check.type === "setup_actions_succeeded")
+  .evidence.setup_summary.viewports[0];
+assert.equal(sameSelectorClickSummary.clicked_total, 7);
+assert.equal(sameSelectorClickSummary.click_sequence_total, 1);
+assert.equal(sameSelectorClickSummary.click_sequences[0].selector_template, ".basic-btn");
+assert.equal(sameSelectorClickSummary.click_sequences[0].value_source, "same-selector");
+assert.equal(sameSelectorClickSummary.click_sequences[0].result_count, 6);
+assert.equal(sameSelectorClickSummary.click_sequences[0].click_total, 6);
+assert.deepEqual(sameSelectorClickSummary.click_sequences[0].sequence, []);
+assert.deepEqual(sameSelectorClickSummary.click_sequences[0].ordinals, [20, 21, 22, 23, 24, 25]);
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
 const selectorTextVisibleAssessment = profileAssessment.checks.find((check) => check.type === "selector_text_visible");

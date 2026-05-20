@@ -497,9 +497,12 @@ sequences include `clicked_total` and `clicked_truncated`; the compact `clicked`
 list keeps the first and last clicked targets so later route switches and reset
 actions stay visible. Click actions with `click_count` greater than `1` are
 included in clicked-target evidence and rolled up as `click_count_action_total`
-and `click_count_value_total`. Setup receipt sampling favors both first and last
-per-viewport receipts before filling remaining space, so late lifecycle phases
-such as terminal or restart remain visible in compact summaries.
+and `click_count_value_total`. Repeated selector runs such as long gameplay
+button loops are also grouped as compact `same-selector` click-sequence
+receipts with click totals and ordinals. Setup receipt sampling favors both
+first and last per-viewport receipts before filling remaining space, so late
+lifecycle phases such as terminal or restart remain visible in compact
+summaries.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`

@@ -1201,26 +1201,29 @@ function profileSetupClickSequenceReceipts(clickedItems: Array<Record<string, un
   for (const item of clickedItems) {
     const selector = stringValue(item.selector);
     if (!selector) continue;
-    const match = nthChildPattern.exec(selector);
-    if (!match) continue;
-
     const frameSelector = stringValue(item.frame_selector);
-    const selectorTemplate = selector.replace(nthChildTemplatePattern, ":nth-child(*)");
-    const key = `${frameSelector || ""}\n${selectorTemplate}`;
+    const clickCountValue = numberValue(item.click_count);
+    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
+    const ordinal = numberValue(item.ordinal);
+    const match = nthChildPattern.exec(selector);
+    const selectorTemplate = match
+      ? selector.replace(nthChildTemplatePattern, ":nth-child(*)")
+      : selector;
+    const valueSource = match ? "nth-child" : "same-selector";
+    const key = `${valueSource}\n${frameSelector || ""}\n${selectorTemplate}`;
     const group = groups.get(key) || {
       selector_template: selectorTemplate,
       frame_selector: frameSelector,
-      value_source: "nth-child",
+      value_source: valueSource,
       sequence: [],
       ordinals: [],
       result_count: 0,
       click_total: 0,
     };
-    const value = Number(match[1]);
-    const clickCountValue = numberValue(item.click_count);
-    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
-    for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
-    const ordinal = numberValue(item.ordinal);
+    if (match) {
+      const value = Number(match[1]);
+      for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
+    }
     if (ordinal !== undefined) group.ordinals.push(ordinal);
     group.result_count += 1;
     group.click_total += clickCount;
@@ -5564,25 +5567,29 @@ function profileSetupClickSequenceReceipts(clickedItems) {
   for (const item of clickedItems || []) {
     const selector = typeof item.selector === "string" && item.selector.trim() ? item.selector.trim() : undefined;
     if (!selector) continue;
-    const match = nthChildPattern.exec(selector);
-    if (!match) continue;
     const frameSelector = typeof item.frame_selector === "string" && item.frame_selector.trim() ? item.frame_selector.trim() : undefined;
-    const selectorTemplate = selector.replace(nthChildTemplatePattern, ":nth-child(*)");
-    const key = String(frameSelector || "") + "\\n" + selectorTemplate;
+    const clickCountValue = typeof item.click_count === "number" && Number.isFinite(item.click_count) ? item.click_count : undefined;
+    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
+    const ordinal = typeof item.ordinal === "number" && Number.isFinite(item.ordinal) ? item.ordinal : undefined;
+    const match = nthChildPattern.exec(selector);
+    const selectorTemplate = match
+      ? selector.replace(nthChildTemplatePattern, ":nth-child(*)")
+      : selector;
+    const valueSource = match ? "nth-child" : "same-selector";
+    const key = valueSource + "\\n" + String(frameSelector || "") + "\\n" + selectorTemplate;
     const group = groups.get(key) || {
       selector_template: selectorTemplate,
       frame_selector: frameSelector,
-      value_source: "nth-child",
+      value_source: valueSource,
       sequence: [],
       ordinals: [],
       result_count: 0,
       click_total: 0,
     };
-    const value = Number(match[1]);
-    const clickCountValue = typeof item.click_count === "number" && Number.isFinite(item.click_count) ? item.click_count : undefined;
-    const clickCount = clickCountValue === undefined ? 1 : Math.max(1, Math.min(100, Math.floor(clickCountValue)));
-    for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
-    const ordinal = typeof item.ordinal === "number" && Number.isFinite(item.ordinal) ? item.ordinal : undefined;
+    if (match) {
+      const value = Number(match[1]);
+      for (let index = 0; index < clickCount; index += 1) group.sequence.push(value);
+    }
     if (ordinal !== undefined) group.ordinals.push(ordinal);
     group.result_count += 1;
     group.click_total += clickCount;
