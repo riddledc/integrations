@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.7.191
+
+### Patch Changes
+
+- 02c12b5: Classify terminal success and route-continuation proof-pack receipts from
+  structured setup evidence, and expose a profile route helper for Preview-mounted
+  window setup actions.
+
 ## 0.7.190
 
 ### Patch Changes
