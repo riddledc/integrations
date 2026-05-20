@@ -3997,6 +3997,50 @@ try {
   assert.match(responsiveReachabilitySummaryMarkdown, /present: safe click receipt \(click or obstruction receipt present\)/);
   assert.match(responsiveReachabilitySummaryMarkdown, /present: state-growth receipt after the click \(state-growth receipt present\)/);
 
+  const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");
+  const routeViewportCoverageOutputDir = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary-output");
+  writeFileSync(routeViewportCoverageProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-route-viewport-coverage-summary",
+    target: {
+      route: "/responsive-reachability-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "selector_visible", selector: ".react-grid-layout" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "route and viewport evidence for every target viewport",
+      ],
+    },
+  }));
+  await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    routeViewportCoverageProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    routeViewportCoverageOutputDir,
+    "--quiet",
+  ]);
+  const routeViewportCoverageSummaryMarkdown = readFileSync(path.join(routeViewportCoverageOutputDir, "summary.md"), "utf8");
+  assert.match(routeViewportCoverageSummaryMarkdown, /## Proof Pack/);
+  assert.match(routeViewportCoverageSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(
+    routeViewportCoverageSummaryMarkdown,
+    /present: route and viewport evidence for every target viewport \(route\/setup evidence present for all 1 viewport\(s\): desktop\)/,
+  );
+
   const packIncompleteProfileFile = path.join(riddlePreviewDir, "cli-pack-incomplete-summary.json");
   const packIncompleteOutputDir = path.join(riddlePreviewDir, "cli-pack-incomplete-summary-output");
   writeFileSync(packIncompleteProfileFile, JSON.stringify({
