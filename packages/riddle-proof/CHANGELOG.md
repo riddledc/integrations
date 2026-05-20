@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.188
+
+### Patch Changes
+
+- 9f4733e: Classify non-silent offline audio metric receipts in proof-pack summaries while keeping zero-peak or zero-RMS audio renders missing.
+
 ## 0.7.187
 
 ### Patch Changes
