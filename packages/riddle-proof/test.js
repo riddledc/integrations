@@ -1058,20 +1058,20 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
         label: "setup actions succeeded",
         status: "passed",
         evidence: {
-          action_count: 6,
+          action_count: 7,
           setup_summary: {
             viewport_count: 1,
-            action_count: 6,
+            action_count: 7,
             viewports: [{
               name: "desktop",
               ok: true,
-              result_count: 6,
+              result_count: 7,
               observed_path: "/",
               setup_screenshots: ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"],
               clicked_total: 3,
-              window_eval_total: 6,
-              window_eval_stored_total: 6,
-              window_eval_captured_total: 6,
+              window_eval_total: 7,
+              window_eval_stored_total: 7,
+              window_eval_captured_total: 7,
               window_eval_truncated: false,
               window_eval: [
                 {
@@ -1174,6 +1174,28 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
                 },
                 {
                   ordinal: 6,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__proof.projectileNavigation",
+                  returned: {
+                    ok: true,
+                    fromRoute: "/",
+                    target: "/games/projectile-game?proof=1&play=1",
+                    routeAfterPush: "/games/projectile-game?proof=1&play=1",
+                    text: "Projectile Game",
+                  },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "fromRoute", path: "fromRoute", exists: true, value: "/" },
+                    { label: "target", path: "target", exists: true, value: "/games/projectile-game?proof=1&play=1" },
+                    { label: "routeAfterPush", path: "routeAfterPush", exists: true, value: "/games/projectile-game?proof=1&play=1" },
+                    { label: "text", path: "text", exists: true, value: "Projectile Game" },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 7,
                   ok: true,
                   script_length: 20,
                   return_captured: true,
@@ -4018,6 +4040,8 @@ try {
     "controlled failure launch receipt",
     "visible loss terminal state receipt",
     "controlled recovery success launch receipt",
+    "visible success terminal state receipt",
+    "home-to-Projectile route continuation receipt",
   ];
   writeFileSync(stateHygieneOutcomeProfileFile, JSON.stringify({
     version: "riddle-proof.profile.v1",
@@ -4054,11 +4078,13 @@ try {
   assert.equal(JSON.parse(stateHygieneOutcomeResult.stdout).status, "passed");
   const stateHygieneOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneOutcomeOutputDir, "summary.md"), "utf8");
   assert.match(stateHygieneOutcomeSummaryMarkdown, /## Proof Pack/);
-  assert.match(stateHygieneOutcomeSummaryMarkdown, /pack completeness: complete \(4 present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /pack completeness: complete \(6 present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: active route-local Orbit Relay proof helper and state receipt \(active route-local proof receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled failure launch receipt \(controlled failure launch receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible loss terminal state receipt \(terminal loss receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled recovery success launch receipt \(controlled success launch receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible success terminal state receipt \(terminal success receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: home-to-Projectile route continuation receipt \(route continuation receipt present\)/);
 
   const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
   const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");
@@ -4097,7 +4123,7 @@ try {
   assert.equal(JSON.parse(stateHygieneMissingOutcomeResult.stdout).status, "passed");
   const stateHygieneMissingOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneMissingOutcomeOutputDir, "summary.md"), "utf8");
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /## Proof Pack/);
-  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(3 present, 1 missing\)/);
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(5 present, 1 missing\)/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing required receipts: `visible loss terminal state receipt`/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing: visible loss terminal state receipt \(terminal loss receipt missing\)/);
 
@@ -5739,6 +5765,12 @@ assert.deepEqual(windowEvalSetupProfile.target.setup_actions[0].return_summary_f
 const windowEvalSetupProfileScript = buildRiddleProofProfileScript(windowEvalSetupProfile);
 assert.ok(windowEvalSetupProfileScript.includes('type === "window_eval"'));
 assert.ok(windowEvalSetupProfileScript.includes("setupEvaluateWindowScript"));
+assert.ok(windowEvalSetupProfileScript.includes("ensureProfilePageHelpers"));
+assert.ok(windowEvalSetupProfileScript.includes("window.__riddleProofProfile"));
+assert.ok(windowEvalSetupProfileScript.includes("riddle-proof.profile-helper.v1"));
+assert.ok(windowEvalSetupProfileScript.includes("joinRoute"));
+assert.ok(windowEvalSetupProfileScript.includes("appRoute"));
+assert.ok(windowEvalSetupProfileScript.includes("previewMountPrefix"));
 assert.ok(windowEvalSetupProfileScript.includes("missing_evaluator"));
 assert.ok(windowEvalSetupProfileScript.includes("script_threw"));
 assert.ok(windowEvalSetupProfileScript.includes("script_length"));
