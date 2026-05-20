@@ -718,6 +718,25 @@ function compactProfileReceiptReason(value: unknown, limit = 180): string | unde
   return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
+function profileCleanupInventoryHaystack(receipt: Record<string, unknown>): string {
+  const returnStoredTo = cliString(receipt.return_stored_to) || "";
+  const reason = cliString(receipt.reason) || "";
+  const error = cliString(receipt.error) || "";
+  const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+  return `${returnStoredTo} ${reason} ${error} ${summary}`.toLowerCase();
+}
+
+function profileIsCleanupInventoryReceipt(receipt: Record<string, unknown>): boolean {
+  const haystack = profileCleanupInventoryHaystack(receipt);
+  return haystack.includes("cleanup")
+    || haystack.includes("post-cleanup")
+    || haystack.includes("stale")
+    || haystack.includes("statehygiene")
+    || haystack.includes("state hygiene")
+    || haystack.includes("remained after")
+    || haystack.includes("still present");
+}
+
 function profileFailedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
   const receipts = setupViewports.flatMap((viewport) => [
     ...setupReceiptArray(viewport, "window_eval"),
@@ -725,20 +744,26 @@ function profileFailedCleanupInventoryReason(setupViewports: Record<string, unkn
   ]);
   for (const receipt of receipts) {
     if (receipt.ok !== false) continue;
-    const returnStoredTo = cliString(receipt.return_stored_to) || "";
-    const reason = cliString(receipt.reason) || "";
-    const error = cliString(receipt.error) || "";
-    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
-    const haystack = `${returnStoredTo} ${reason} ${error} ${summary}`.toLowerCase();
-    const isCleanupReceipt = haystack.includes("cleanup")
-      || haystack.includes("post-cleanup")
-      || haystack.includes("stale")
-      || haystack.includes("statehygiene")
-      || haystack.includes("state hygiene")
-      || haystack.includes("remained after")
-      || haystack.includes("still present");
-    if (!isCleanupReceipt) continue;
+    if (!profileIsCleanupInventoryReceipt(receipt)) continue;
+    const error = cliString(receipt.error);
+    const reason = cliString(receipt.reason);
     return compactProfileReceiptReason(error) || compactProfileReceiptReason(reason) || "cleanup inventory failed";
+  }
+  return undefined;
+}
+
+function profilePassedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
+  const receipts = setupViewports.flatMap((viewport) => [
+    ...setupReceiptArray(viewport, "window_eval"),
+    ...setupReceiptArray(viewport, "window_call"),
+  ]);
+  for (const receipt of receipts) {
+    if (receipt.ok === false || !profileIsCleanupInventoryReceipt(receipt)) continue;
+    if (setupReturnSummaryValue(receipt, ["ok"]) === false) continue;
+    const staleCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["staleCount"]));
+    const staleNames = setupReturnSummaryValue(receipt, ["staleNames"]);
+    if (staleCount !== 0 || !Array.isArray(staleNames) || staleNames.length !== 0) continue;
+    return "staleCount=0, staleNames=[]";
   }
   return undefined;
 }
@@ -1022,6 +1047,7 @@ function profilePackReceiptStatus(
   const hasRouteContinuationReceipt = profileHasRouteContinuationReceipt(valueReceipts);
   const hasRecoveredStateReceipt = profileHasRecoveredStateReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
+  const passedCleanupInventoryReason = profilePassedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
     return profileReceiptSignalStatus(profileResultHasArtifact(result), "artifact references listed", "no artifact references found");
@@ -1052,8 +1078,16 @@ function profilePackReceiptStatus(
     return profileReceiptSignalStatus(hasStateContract, "state contract metadata or receipts present", "state contract evidence missing");
   }
   if (text.includes("stale") || text.includes("absence")) {
-    if (failedCleanupInventoryReason && (text.includes("cleanup") || text.includes("post-cleanup") || text.includes("stale-state") || text.includes("stale state"))) {
+    const expectsCleanupInventory = text.includes("cleanup")
+      || text.includes("post-cleanup")
+      || text.includes("stale-state")
+      || text.includes("stale state")
+      || text.includes("inventory");
+    if (failedCleanupInventoryReason && expectsCleanupInventory) {
       return { status: "failed", reason: `cleanup inventory failed: ${failedCleanupInventoryReason}` };
+    }
+    if (passedCleanupInventoryReason && expectsCleanupInventory) {
+      return { status: "present", reason: `cleanup inventory passed: ${passedCleanupInventoryReason}` };
     }
     return profileReceiptSignalStatus(hasTextAbsence, "absence check passed", "absence check missing");
   }
