@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.199
+
+### Patch Changes
+
+- 4760f1a: Add opt-in `tap_burst_size` support for `tap_until` setup actions so cadence-sensitive gameplay proofs can dispatch several taps before the next predicate check while still recording compact tap and condition-check receipts.
+
 ## 0.7.198
 
 ### Patch Changes
