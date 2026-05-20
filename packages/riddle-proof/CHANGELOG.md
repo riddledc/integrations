@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.187
+
+### Patch Changes
+
+- 9e2c3d2: Classify visible UI route or mode exit receipts separately from route-exit affordance inventory so State Hygiene proof packs can stay incomplete when a profile helper-routes the transition without a real click or tap receipt.
+
 ## 0.7.186
 
 ### Patch Changes
