@@ -1047,6 +1047,53 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/obstruction-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-obstruction-summary",
+          runner: "riddle",
+          status: "product_regression",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/obstruction-summary",
+            observed: "/obstruction-summary",
+            expected_path: "/obstruction-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["cli-obstruction-summary-desktop"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "failed",
+              evidence: {
+                action_count: 1,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 1,
+                  viewports: [{
+                    name: "desktop",
+                    ok: false,
+                    result_count: 1,
+                    clicked_total: 0,
+                    failed: [{
+                      ordinal: 0,
+                      action: "click",
+                      selector: "label",
+                      reason: "locator.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for locator('label').nth(11)\n    - locator resolved to <label class=\"setting-item-toggle\">...</label>\n  - attempting click action\n      - <div class=\"overlay\"></div> from <div class=\"main-menu\">...</div> subtree intercepts pointer events",
+                    }],
+                  }],
+                },
+              },
+              message: "1 setup action(s) failed.",
+            },
+          ],
+          summary: "cli-obstruction-summary failed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+        });
+        return;
+      }
       sendJson({ job_id: "job_cli_profile_progress" });
     });
     return;
@@ -2471,6 +2518,43 @@ try {
   assert.equal(fatalConsoleCliError?.code, 1);
   const fatalConsoleSummaryMarkdown = readFileSync(path.join(fatalConsoleOutputDir, "summary.md"), "utf8");
   assert.match(fatalConsoleSummaryMarkdown, /failed: no_fatal_console_errors \(4 unallowed fatal errors, 4\/8 console fatal allowed\)/);
+
+  const obstructionProfileFile = path.join(riddlePreviewDir, "cli-obstruction-summary.json");
+  const obstructionOutputDir = path.join(riddlePreviewDir, "cli-obstruction-summary-output");
+  writeFileSync(obstructionProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-obstruction-summary",
+    target: {
+      route: "/obstruction-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "selector_visible", selector: "label" }],
+  }));
+  let obstructionCliError;
+  try {
+    await runCli([
+      "run-profile",
+      "--api-base-url",
+      `http://127.0.0.1:${address.port}`,
+      "--api-key",
+      "cli-riddle-key",
+      "--profile",
+      obstructionProfileFile,
+      "--url",
+      "https://example.com",
+      "--runner",
+      "riddle",
+      "--output",
+      obstructionOutputDir,
+      "--quiet",
+    ]);
+  } catch (error) {
+    obstructionCliError = error;
+  }
+  assert.equal(obstructionCliError?.code, 1);
+  const obstructionSummaryMarkdown = readFileSync(path.join(obstructionOutputDir, "summary.md"), "utf8");
+  assert.match(obstructionSummaryMarkdown, /failed: setup actions succeeded/);
+  assert.match(obstructionSummaryMarkdown, /obstruction desktop: target `label` intercepted by `<div class="overlay"><\/div> from <div class="main-menu">\.\.\.<\/div> subtree`/);
 
   const blockedProfileFile = path.join(riddlePreviewDir, "cli-profile-balance-blocked.json");
   const blockedProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-balance-blocked-output");

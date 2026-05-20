@@ -768,6 +768,14 @@ function cliReturnSummaryLabel(value: unknown): string | undefined {
   return parts.length ? parts.join(", ") : undefined;
 }
 
+function setupFailureObstructionSnippet(reason: string | undefined): string | undefined {
+  if (!reason || !reason.includes("intercepts pointer events")) return undefined;
+  const line = reason.split(/\r?\n/).find((item) => item.includes("intercepts pointer events"));
+  const match = line?.match(/-\s+(.+?)\s+intercepts pointer events/);
+  const snippet = match?.[1]?.replace(/\s+/g, " ").trim();
+  return snippet || undefined;
+}
+
 type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };
 
 function balancedSetupReceiptDetails(groups: CliSetupReceiptDetail[][], limit: number): CliSetupReceiptDetail[] {
@@ -1316,7 +1324,11 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const selector = cliString(failure.selector);
     const reason = cliString(failure.reason);
     const caseInsensitiveText = cliString(failure.case_insensitive_text);
+    const obstruction = setupFailureObstructionSnippet(reason);
     lines.push(`- failed ${name}: ${action}${selector ? ` ${markdownInlineCode(selector)}` : ""}${reason ? ` reason ${markdownInlineCode(reason)}` : ""}${caseInsensitiveText ? `; case-insensitive sample ${markdownInlineCode(caseInsensitiveText, 140)}` : ""}`);
+    if (obstruction) {
+      lines.push(`- obstruction ${name}: target ${selector ? markdownInlineCode(selector) : markdownInlineCode(action)} intercepted by ${markdownInlineCode(obstruction, 120)}`);
+    }
   }
   if (failedDetails.length > 8) lines.push(`- ${failedDetails.length - 8} additional failed setup action(s) omitted.`);
   if (viewports.length > 8) lines.push(`- ${viewports.length - 8} additional viewport(s) omitted from setup summary.`);
