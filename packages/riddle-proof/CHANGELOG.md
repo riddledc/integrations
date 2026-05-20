@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.198
+
+### Patch Changes
+
+- 1106bcc: Add a `tap_until` setup action for compact gameplay loops that tap a visible target until a window-state predicate matches, with setup-summary and Proof Pack receipt support.
+
 ## 0.7.197
 
 ### Patch Changes
