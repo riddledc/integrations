@@ -49,6 +49,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
 export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "click",
   "tap",
+  "tap_until",
   "drag",
   "press",
   "key_down",
@@ -1179,6 +1180,31 @@ function profileSetupTapReceipts(results: Array<Record<string, JsonValue>>): Arr
     }));
 }
 
+function profileSetupTapUntilReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "tap_until")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      pointer_type: result.pointer_type ?? null,
+      input_dispatch: result.input_dispatch ?? null,
+      coordinate_mode: result.coordinate_mode ?? null,
+      x: result.x ?? null,
+      y: result.y ?? null,
+      duration_ms: result.duration_ms ?? null,
+      until_path: result.until_path ?? null,
+      until_value: result.until_value ?? null,
+      until_expected_value: result.until_expected_value ?? null,
+      tap_count: result.tap_count ?? null,
+      max_taps: result.max_taps ?? result.max_calls ?? null,
+      interval_ms: result.interval_ms ?? null,
+      timeout_ms: result.timeout_ms ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function profileSetupKeyboardReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
   return results
     .filter((result) => ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
@@ -1402,6 +1428,11 @@ function profileSetupSummary(
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
+      const tapUntilReceipts = profileSetupTapUntilReceipts(results);
+      const tapUntilTapCounts = tapUntilReceipts
+        .map((result) => typeof result.tap_count === "number" && Number.isFinite(result.tap_count) ? result.tap_count : undefined)
+        .filter((value): value is number => value !== undefined);
+      const sampledTapUntilReceipts = sampleProfileSetupSummaryItems(tapUntilReceipts, 8);
       const keyboardReceipts = profileSetupKeyboardReceipts(results);
       const sampledKeyboardReceipts = sampleProfileSetupSummaryItems(keyboardReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
@@ -1484,6 +1515,10 @@ function profileSetupSummary(
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
+        tap_until_total: tapUntilReceipts.length,
+        tap_until_tap_total: tapUntilTapCounts.reduce((sum, value) => sum + value, 0),
+        tap_until_truncated: tapUntilReceipts.length > sampledTapUntilReceipts.length,
+        tap_until: sampledTapUntilReceipts,
         keyboard_total: keyboardReceipts.length,
         keyboard_truncated: keyboardReceipts.length > sampledKeyboardReceipts.length,
         keyboard: sampledKeyboardReceipts,
@@ -1563,6 +1598,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "drag"
     : normalizedInput === "pointer_tap" || normalizedInput === "touch_tap" || normalizedInput === "canvas_tap"
       ? "tap"
+    : normalizedInput === "tap_until" || normalizedInput === "pointer_tap_until" || normalizedInput === "touch_tap_until" || normalizedInput === "canvas_tap_until" || normalizedInput === "tap_repeat_until" || normalizedInput === "repeat_tap_until"
+      ? "tap_until"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
       ? "press"
     : normalizedInput === "keyboard_down" || normalizedInput === "key_down" || normalizedInput === "keydown" || normalizedInput === "press_down"
@@ -1674,8 +1711,8 @@ function normalizeSetupActionCoordinateMode(value: unknown, index: number): "pix
 
 function normalizeSetupActionPointerType(value: unknown, type: RiddleProofProfileSetupActionType, index: number): "mouse" | "touch" | "pen" | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (type !== "drag" && type !== "tap") {
-    throw new Error(`target.setup_actions[${index}].pointer_type is only supported for drag/tap actions.`);
+  if (type !== "drag" && type !== "tap" && type !== "tap_until") {
+    throw new Error(`target.setup_actions[${index}].pointer_type is only supported for drag/tap/tap_until actions.`);
   }
   const normalized = String(value).trim().replace(/-/g, "_").toLowerCase();
   if (normalized === "mouse") return "mouse";
@@ -1763,13 +1800,13 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (frameIndex !== undefined && (!Number.isInteger(frameIndex) || frameIndex < 0)) {
     throw new Error(`target.setup_actions[${index}].frame_index must be a non-negative integer.`);
   }
-  if ((type === "click" || type === "tap" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "canvas_signature" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
+  if ((type === "click" || type === "tap" || type === "tap_until" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "canvas_signature" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
-  const fromX = type === "click" || type === "tap"
+  const fromX = type === "click" || type === "tap" || type === "tap_until"
     ? numberValue(valueFromOwn(input, "from_x", "fromX", "x", "click_x", "clickX", "start_x", "startX", "x1"))
     : numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
-  const fromY = type === "click" || type === "tap"
+  const fromY = type === "click" || type === "tap" || type === "tap_until"
     ? numberValue(valueFromOwn(input, "from_y", "fromY", "y", "click_y", "clickY", "start_y", "startY", "y1"))
     : numberValue(valueFromOwn(input, "from_y", "fromY", "start_y", "startY", "y1"));
   const toX = numberValue(valueFromOwn(input, "to_x", "toX", "end_x", "endX", "x2"));
@@ -1798,18 +1835,18 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       }
     }
   }
-  if (type === "tap") {
+  if (type === "tap" || type === "tap_until") {
     const hasTapCoordinate = fromX !== undefined || fromY !== undefined;
     if (hasTapCoordinate && (fromX === undefined || fromY === undefined)) {
-      throw new Error(`target.setup_actions[${index}] tap coordinates require both x and y.`);
+      throw new Error(`target.setup_actions[${index}] ${type} coordinates require both x and y.`);
     }
     if (hasTapCoordinate && fromX !== undefined && fromY !== undefined) {
       const tapCoordinates = [fromX, fromY];
       if (coordinateMode === "ratio" && tapCoordinates.some((value) => value < 0 || value > 1)) {
-        throw new Error(`target.setup_actions[${index}] tap ratio coordinates must be between 0 and 1.`);
+        throw new Error(`target.setup_actions[${index}] ${type} ratio coordinates must be between 0 and 1.`);
       }
       if ((coordinateMode === undefined || coordinateMode === "pixels") && tapCoordinates.some((value) => value < 0)) {
-        throw new Error(`target.setup_actions[${index}] tap pixel coordinates must be non-negative.`);
+        throw new Error(`target.setup_actions[${index}] ${type} pixel coordinates must be non-negative.`);
       }
     }
   }
@@ -1938,7 +1975,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     || hasOwn(input, "expected_value")
     || hasOwn(input, "expectedValue")
     || hasOwn(input, "expected");
-  if (type === "window_call_until") {
+  if (type === "window_call_until" || type === "tap_until") {
     if (!untilPath) {
       throw new Error(`target.setup_actions[${index}] ${type} requires until_path.`);
     }
@@ -1946,12 +1983,12 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       throw new Error(`target.setup_actions[${index}] ${type} requires until_expected_value.`);
     }
   }
-  const maxCalls = numberValue(valueFromOwn(input, "max_calls", "maxCalls", "max_attempts", "maxAttempts", "attempts"));
-  if (type === "window_call_until" && (maxCalls === undefined || !Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 100)) {
+  const maxCalls = numberValue(valueFromOwn(input, "max_calls", "maxCalls", "max_attempts", "maxAttempts", "attempts", "max_taps", "maxTaps", "tap_limit", "tapLimit"));
+  if ((type === "window_call_until" || type === "tap_until") && (maxCalls === undefined || !Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > 100)) {
     throw new Error(`target.setup_actions[${index}].max_calls must be an integer from 1 to 100.`);
   }
   const intervalMs = numberValue(valueFromOwn(input, "interval_ms", "intervalMs", "poll_ms", "pollMs", "call_interval_ms", "callIntervalMs"));
-  if (type === "window_call_until" && intervalMs !== undefined && (!Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 5000)) {
+  if ((type === "window_call_until" || type === "tap_until") && intervalMs !== undefined && (!Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 5000)) {
     throw new Error(`target.setup_actions[${index}].interval_ms must be an integer from 0 to 5000.`);
   }
   const steps = numberValue(input.steps);
@@ -5780,6 +5817,30 @@ function profileSetupTapReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
+function profileSetupTapUntilReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "tap_until")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      selector: result.selector ?? null,
+      frame_selector: result.frame_selector ?? null,
+      pointer_type: result.pointer_type ?? null,
+      input_dispatch: result.input_dispatch ?? null,
+      coordinate_mode: result.coordinate_mode ?? null,
+      x: result.x ?? null,
+      y: result.y ?? null,
+      duration_ms: result.duration_ms ?? null,
+      until_path: result.until_path ?? null,
+      until_value: result.until_value ?? null,
+      until_expected_value: result.until_expected_value ?? null,
+      tap_count: result.tap_count ?? null,
+      max_taps: result.max_taps ?? result.max_calls ?? null,
+      interval_ms: result.interval_ms ?? null,
+      timeout_ms: result.timeout_ms ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function profileSetupKeyboardReceipts(results) {
   return (results || [])
     .filter((result) => result && ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
@@ -5982,6 +6043,11 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
+      const tapUntilReceipts = profileSetupTapUntilReceipts(results);
+      const tapUntilTapCounts = tapUntilReceipts
+        .map((result) => typeof result.tap_count === "number" && Number.isFinite(result.tap_count) ? result.tap_count : undefined)
+        .filter((value) => value !== undefined);
+      const sampledTapUntilReceipts = sampleProfileSetupSummaryItems(tapUntilReceipts, 8);
       const keyboardReceipts = profileSetupKeyboardReceipts(results);
       const sampledKeyboardReceipts = sampleProfileSetupSummaryItems(keyboardReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
@@ -6064,6 +6130,10 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
+        tap_until_total: tapUntilReceipts.length,
+        tap_until_tap_total: tapUntilTapCounts.reduce((sum, value) => sum + value, 0),
+        tap_until_truncated: tapUntilReceipts.length > sampledTapUntilReceipts.length,
+        tap_until: sampledTapUntilReceipts,
         keyboard_total: keyboardReceipts.length,
         keyboard_truncated: keyboardReceipts.length > sampledKeyboardReceipts.length,
         keyboard: sampledKeyboardReceipts,
@@ -7011,6 +7081,108 @@ async function waitForAnyVisibleSelector(context, selector, timeout) {
   }
   throw new Error("No visible match for selector " + selector + ": " + lastReason);
 }
+async function dispatchSetupTapPoint(point, pointerType, durationMs) {
+  if (pointerType === "touch" || pointerType === "pen") {
+    const client = await page.context().newCDPSession(page);
+    try {
+      if (pointerType === "touch") {
+        const touchPoint = {
+          x: point.x,
+          y: point.y,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+          id: 11,
+        };
+        await client.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [touchPoint],
+        });
+        if (durationMs) await page.waitForTimeout(durationMs);
+        await client.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        });
+      } else {
+        await client.send("Input.dispatchMouseEvent", {
+          type: "mousePressed",
+          x: point.x,
+          y: point.y,
+          button: "left",
+          buttons: 1,
+          clickCount: 1,
+          pointerType: "pen",
+        });
+        if (durationMs) await page.waitForTimeout(durationMs);
+        await client.send("Input.dispatchMouseEvent", {
+          type: "mouseReleased",
+          x: point.x,
+          y: point.y,
+          button: "left",
+          buttons: 0,
+          clickCount: 1,
+          pointerType: "pen",
+        });
+      }
+    } finally {
+      await client.detach().catch(() => {});
+    }
+  } else {
+    await page.mouse.click(point.x, point.y);
+  }
+}
+async function resolveSetupTapTarget(action, base, scope, timeout) {
+  const locator = scope.context.locator(action.selector);
+  const count = await locator.count();
+  if (!count) return { result: { ...base, ...setupScopeEvidence(scope), reason: "selector_not_found", count } };
+  const targetIndex = Number.isInteger(action.index) ? action.index : 0;
+  if (targetIndex < 0 || targetIndex >= count) return { result: { ...base, ...setupScopeEvidence(scope), reason: "index_out_of_range", count, target_index: targetIndex } };
+  const target = locator.nth(targetIndex);
+  await target.waitFor({ state: "visible", timeout });
+  const box = await target.boundingBox();
+  if (!box) return { result: { ...base, ...setupScopeEvidence(scope), reason: "bounding_box_unavailable", count, target_index: targetIndex } };
+  const fromX = setupFiniteNumber(action.from_x ?? action.fromX ?? action.x ?? action.click_x ?? action.clickX);
+  const fromY = setupFiniteNumber(action.from_y ?? action.fromY ?? action.y ?? action.click_y ?? action.clickY);
+  const hasTapPosition = fromX !== undefined || fromY !== undefined;
+  if (hasTapPosition && (fromX === undefined || fromY === undefined)) return { result: { ...base, ...setupScopeEvidence(scope), reason: "missing_tap_coordinates", count, target_index: targetIndex } };
+  const mode = String(action.coordinate_mode || action.coordinateMode || (hasTapPosition ? "pixels" : "ratio")).trim();
+  if (hasTapPosition && mode === "ratio" && [fromX, fromY].some((value) => value < 0 || value > 1)) return { result: { ...base, ...setupScopeEvidence(scope), reason: "invalid_ratio_coordinates", count, target_index: targetIndex } };
+  if (hasTapPosition && mode !== "ratio" && [fromX, fromY].some((value) => value < 0)) return { result: { ...base, ...setupScopeEvidence(scope), reason: "invalid_pixel_coordinates", count, target_index: targetIndex } };
+  const coordinate = (value, size) => mode === "ratio" ? value * size : value;
+  const localX = hasTapPosition && fromX !== undefined ? fromX : 0.5;
+  const localY = hasTapPosition && fromY !== undefined ? fromY : 0.5;
+  const point = {
+    x: box.x + coordinate(localX, box.width),
+    y: box.y + coordinate(localY, box.height),
+  };
+  const durationMs = setupNumber(action.duration_ms ?? action.durationMs, 0);
+  const pointerType = String(action.pointer_type || action.pointerType || "touch").trim().toLowerCase();
+  return {
+    target: {
+      count,
+      targetIndex,
+      point,
+      mode,
+      fromX,
+      fromY,
+      hasTapPosition,
+      pointerType,
+      durationMs,
+    },
+  };
+}
+function setupTapTargetEvidence(tapTarget) {
+  return {
+    count: tapTarget.count,
+    target_index: tapTarget.targetIndex,
+    coordinate_mode: tapTarget.hasTapPosition ? tapTarget.mode : undefined,
+    x: tapTarget.hasTapPosition ? tapTarget.fromX : undefined,
+    y: tapTarget.hasTapPosition ? tapTarget.fromY : undefined,
+    pointer_type: tapTarget.pointerType,
+    input_dispatch: tapTarget.pointerType === "touch" || tapTarget.pointerType === "pen" ? "cdp" : "playwright_mouse",
+    duration_ms: tapTarget.durationMs || undefined,
+  };
+}
 function setupHasOwn(action, key) {
   return Boolean(action) && Object.keys(action).includes(key);
 }
@@ -7613,91 +7785,108 @@ async function executeSetupAction(action, ordinal, viewport) {
     if (type === "tap") {
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
-      const locator = scope.context.locator(action.selector);
-      const count = await locator.count();
-      if (!count) return { ...base, ...setupScopeEvidence(scope), reason: "selector_not_found", count };
-      const targetIndex = Number.isInteger(action.index) ? action.index : 0;
-      if (targetIndex < 0 || targetIndex >= count) return { ...base, ...setupScopeEvidence(scope), reason: "index_out_of_range", count, target_index: targetIndex };
-      const target = locator.nth(targetIndex);
-      await target.waitFor({ state: "visible", timeout });
-      const box = await target.boundingBox();
-      if (!box) return { ...base, ...setupScopeEvidence(scope), reason: "bounding_box_unavailable", count, target_index: targetIndex };
-      const fromX = setupFiniteNumber(action.from_x ?? action.fromX ?? action.x ?? action.click_x ?? action.clickX);
-      const fromY = setupFiniteNumber(action.from_y ?? action.fromY ?? action.y ?? action.click_y ?? action.clickY);
-      const hasTapPosition = fromX !== undefined || fromY !== undefined;
-      if (hasTapPosition && (fromX === undefined || fromY === undefined)) return { ...base, ...setupScopeEvidence(scope), reason: "missing_tap_coordinates", count, target_index: targetIndex };
-      const mode = String(action.coordinate_mode || action.coordinateMode || (hasTapPosition ? "pixels" : "ratio")).trim();
-      if (hasTapPosition && mode === "ratio" && [fromX, fromY].some((value) => value < 0 || value > 1)) return { ...base, ...setupScopeEvidence(scope), reason: "invalid_ratio_coordinates", count, target_index: targetIndex };
-      if (hasTapPosition && mode !== "ratio" && [fromX, fromY].some((value) => value < 0)) return { ...base, ...setupScopeEvidence(scope), reason: "invalid_pixel_coordinates", count, target_index: targetIndex };
-      const coordinate = (value, size) => mode === "ratio" ? value * size : value;
-      const localX = hasTapPosition && fromX !== undefined ? fromX : 0.5;
-      const localY = hasTapPosition && fromY !== undefined ? fromY : 0.5;
-      const point = {
-        x: box.x + coordinate(localX, box.width),
-        y: box.y + coordinate(localY, box.height),
-      };
-      const durationMs = setupNumber(action.duration_ms ?? action.durationMs, 0);
-      const pointerType = String(action.pointer_type || action.pointerType || "touch").trim().toLowerCase();
-      if (pointerType === "touch" || pointerType === "pen") {
-        const client = await page.context().newCDPSession(page);
-        try {
-          if (pointerType === "touch") {
-            const touchPoint = {
-              x: point.x,
-              y: point.y,
-              radiusX: 1,
-              radiusY: 1,
-              force: 1,
-              id: 11,
-            };
-            await client.send("Input.dispatchTouchEvent", {
-              type: "touchStart",
-              touchPoints: [touchPoint],
-            });
-            if (durationMs) await page.waitForTimeout(durationMs);
-            await client.send("Input.dispatchTouchEvent", {
-              type: "touchEnd",
-              touchPoints: [],
-            });
-          } else {
-            await client.send("Input.dispatchMouseEvent", {
-              type: "mousePressed",
-              x: point.x,
-              y: point.y,
-              button: "left",
-              buttons: 1,
-              clickCount: 1,
-              pointerType: "pen",
-            });
-            if (durationMs) await page.waitForTimeout(durationMs);
-            await client.send("Input.dispatchMouseEvent", {
-              type: "mouseReleased",
-              x: point.x,
-              y: point.y,
-              button: "left",
-              buttons: 0,
-              clickCount: 1,
-              pointerType: "pen",
-            });
-          }
-        } finally {
-          await client.detach().catch(() => {});
-        }
-      } else {
-        await page.mouse.click(point.x, point.y);
-      }
+      const prepared = await resolveSetupTapTarget(action, base, scope, timeout);
+      if (prepared.result) return prepared.result;
+      await dispatchSetupTapPoint(prepared.target.point, prepared.target.pointerType, prepared.target.durationMs);
       return {
         ...base,
         ...setupScopeEvidence(scope),
         ok: true,
-        count,
-        target_index: targetIndex,
-        coordinate_mode: hasTapPosition ? mode : undefined,
-        x: hasTapPosition ? fromX : undefined,
-        y: hasTapPosition ? fromY : undefined,
-        pointer_type: pointerType,
-        input_dispatch: pointerType === "touch" || pointerType === "pen" ? "cdp" : "playwright_mouse",
-        duration_ms: durationMs || undefined,
+        ...setupTapTargetEvidence(prepared.target),
+      };
+    }
+    if (type === "tap_until") {
+      const untilPath = String(action.until_path || action.untilPath || action.until_state_path || action.untilStatePath || action.until_window_path || action.untilWindowPath || action.until || "");
+      const hasUntilExpected = setupHasOwn(action, "until_expected_value")
+        || setupHasOwn(action, "untilExpectedValue")
+        || setupHasOwn(action, "until_expected")
+        || setupHasOwn(action, "untilExpected")
+        || setupHasOwn(action, "until_value")
+        || setupHasOwn(action, "untilValue")
+        || setupHasOwn(action, "expected_value")
+        || setupHasOwn(action, "expectedValue")
+        || setupHasOwn(action, "expected");
+      const untilExpected = setupHasOwn(action, "until_expected_value")
+        ? action.until_expected_value
+        : setupHasOwn(action, "untilExpectedValue")
+          ? action.untilExpectedValue
+          : setupHasOwn(action, "until_expected")
+            ? action.until_expected
+            : setupHasOwn(action, "untilExpected")
+              ? action.untilExpected
+              : setupHasOwn(action, "until_value")
+                ? action.until_value
+                : setupHasOwn(action, "untilValue")
+                  ? action.untilValue
+                  : setupHasOwn(action, "expected_value")
+                    ? action.expected_value
+                    : setupHasOwn(action, "expectedValue")
+                      ? action.expectedValue
+                      : action.expected;
+      if (!untilPath) return { ...base, reason: "missing_until_path" };
+      if (!hasUntilExpected) return { ...base, until_path: untilPath, reason: "missing_until_expected_value" };
+      const maxTaps = Math.min(100, Math.max(1, Math.floor(setupNumber(action.max_taps ?? action.maxTaps ?? action.tap_limit ?? action.tapLimit ?? action.max_calls ?? action.maxCalls ?? action.max_attempts ?? action.maxAttempts ?? action.attempts, 1) || 1)));
+      const intervalMs = Math.min(5000, Math.max(0, Math.floor(setupNumber(action.interval_ms ?? action.intervalMs ?? action.poll_ms ?? action.pollMs ?? action.tap_interval_ms ?? action.tapIntervalMs, 100) || 0)));
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const prepared = await resolveSetupTapTarget(action, base, scope, timeout);
+      if (prepared.result) return prepared.result;
+      const startedAt = Date.now();
+      let tapCount = 0;
+      let lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
+      const targetEvidence = setupTapTargetEvidence(prepared.target);
+      if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+        return {
+          ...base,
+          ...setupScopeEvidence(scope),
+          ok: true,
+          ...targetEvidence,
+          until_path: untilPath,
+          until_value: setupJsonValue(lastPredicateResult.value),
+          until_expected_value: setupJsonValue(untilExpected),
+          tap_count: tapCount,
+          max_taps: maxTaps,
+          max_calls: maxTaps,
+          interval_ms: intervalMs,
+          timeout_ms: timeout,
+        };
+      }
+      while (tapCount < maxTaps && Date.now() - startedAt <= timeout) {
+        await dispatchSetupTapPoint(prepared.target.point, prepared.target.pointerType, prepared.target.durationMs);
+        tapCount += 1;
+        lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
+        if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
+          return {
+            ...base,
+            ...setupScopeEvidence(scope),
+            ok: true,
+            ...targetEvidence,
+            until_path: untilPath,
+            until_value: setupJsonValue(lastPredicateResult.value),
+            until_expected_value: setupJsonValue(untilExpected),
+            tap_count: tapCount,
+            max_taps: maxTaps,
+            max_calls: maxTaps,
+            interval_ms: intervalMs,
+            timeout_ms: timeout,
+          };
+        }
+        if (tapCount < maxTaps && intervalMs) await page.waitForTimeout(intervalMs);
+      }
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ...targetEvidence,
+        until_path: untilPath,
+        until_value: setupJsonValue(lastPredicateResult?.value),
+        until_expected_value: setupJsonValue(untilExpected),
+        tap_count: tapCount,
+        max_taps: maxTaps,
+        max_calls: maxTaps,
+        interval_ms: intervalMs,
+        timeout_ms: timeout,
+        reason: Date.now() - startedAt > timeout ? "timeout" : "until_condition_not_met",
+        missing_part: lastPredicateResult?.missing_part || undefined,
       };
     }
     if (type === "drag") {

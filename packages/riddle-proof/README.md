@@ -406,7 +406,7 @@ when body matching overrides sequence order.
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
-`click`, `tap`, `drag`, `press`, `key_down`, `key_up`, `fill`, `set_input_value`, `set_range_value`,
+`click`, `tap`, `tap_until`, `drag`, `press`, `key_down`, `key_up`, `fill`, `set_input_value`, `set_range_value`,
 `deterministic_runtime`, `canvas_signature`, `assert_text_visible`, `assert_text_absent`,
 `assert_selector_count`, `assert_window_value`, `assert_window_number`,
 `local_storage`, `session_storage`, `clear_storage`, `clear_console`,
@@ -436,6 +436,14 @@ It requires `selector`, defaults to a touch tap at the target center, and
 accepts `x` / `y` or `from_x` / `from_y` plus `coordinate_mode: "ratio"` for
 element-relative coordinates. Set `pointer_type` to `mouse`, `touch`, or `pen`
 when the proof must distinguish input modality.
+Use `tap_until` for gameplay loops where the proof should tap a visible target
+until a browser-state predicate is satisfied. It accepts the same selector,
+coordinate, and pointer options as `tap`, plus `until_path`,
+`until_expected_value`, `max_taps` / `max_calls` from 1 to 100, and optional
+`interval_ms`. The action stops early when the predicate matches and records one
+compact receipt with `tap_count`, final `until_value`, and input dispatch
+details, so long canvas interaction loops do not need dozens of repeated setup
+actions.
 Use `set_range_value` for HTML range inputs and React-controlled sliders. It
 accepts aliases such as `set-slider-value`, requires `selector` plus `value`,
 uses the native input value setter, dispatches bubbling `input` and `change`
@@ -531,7 +539,9 @@ actions stay visible. Click actions with `click_count` greater than `1` are
 included in clicked-target evidence and rolled up as `click_count_action_total`
 and `click_count_value_total`. Repeated selector runs such as long gameplay
 button loops are also grouped as compact `same-selector` click-sequence
-receipts with click totals and ordinals. Setup receipt sampling favors both
+receipts with click totals and ordinals. `tap_until` actions are summarized as
+one compact receipt with total taps and the final predicate value, which is the
+preferred shape for long canvas gameplay loops. Setup receipt sampling favors both
 first and last per-viewport receipts before filling remaining space, so late
 lifecycle phases such as terminal or restart remain visible in compact
 summaries.
