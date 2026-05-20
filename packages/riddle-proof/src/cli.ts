@@ -802,6 +802,33 @@ function profileHasControlledLaunchReceipt(receipts: Record<string, unknown>[], 
   });
 }
 
+function profileHasRecoveredStateReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${summary}`.toLowerCase();
+    const labelsRecovery = haystack.includes("recover")
+      || haystack.includes("repaired")
+      || haystack.includes("repair")
+      || haystack.includes("try fix")
+      || haystack.includes("tryfix")
+      || haystack.includes("after-fix")
+      || haystack.includes("fixed");
+    if (!labelsRecovery) return false;
+
+    const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "result"]);
+    const hasRecoveredState = ["valid", "success", "recovered", "fixed", "ready"].includes(status)
+      || ["valid", "success", "recovered", "fixed", "ready"].includes(outcome);
+    const hasValid = setupReturnSummaryValue(receipt, ["hasValid", "valid", "isValid"]) === true;
+    const hasInvalid = setupReturnSummaryValue(receipt, ["hasInvalid", "invalid", "isInvalid"]);
+    const success = setupReturnSummaryValue(receipt, ["success", "recovered", "fixed"]) === true;
+    return hasRecoveredState || success || (hasValid && hasInvalid === false);
+  });
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -892,6 +919,7 @@ function profilePackReceiptStatus(
   const hasTerminalLossReceipt = profileHasTerminalLossReceipt(valueReceipts);
   const hasControlledFailureLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "failure");
   const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
+  const hasRecoveredStateReceipt = profileHasRecoveredStateReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
@@ -961,6 +989,18 @@ function profilePackReceiptStatus(
       hasControlledSuccessLaunchReceipt,
       "controlled success launch receipt present",
       "controlled success launch receipt missing",
+    );
+  }
+  if (
+    text.includes("recovery action")
+    || text.includes("recover action")
+    || text.includes("try fix")
+    || ((text.includes("retry") || text.includes("repair")) && text.includes("action"))
+  ) {
+    return profileReceiptSignalStatus(
+      visibleUiActionCount > 0 && hasRecoveredStateReceipt,
+      "visible recovery-action receipt present",
+      "visible recovery-action receipt missing",
     );
   }
   if (

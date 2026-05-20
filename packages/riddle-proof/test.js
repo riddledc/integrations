@@ -1232,6 +1232,134 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
   };
 }
 
+function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false } = {}) {
+  const path = missingRecovered ? "/state-hygiene-recovery-action-missing-summary" : "/state-hygiene-recovery-action-summary";
+  const recoveredReceipt = missingRecovered
+    ? {
+        ordinal: 2,
+        ok: true,
+        script_length: 20,
+        return_captured: true,
+        return_stored_to: "__jsonlint.afterTryFix",
+        returned: { state: "invalid", hasValid: false, hasInvalid: true, hasTryFix: true },
+        return_summary: [
+          { label: "state", path: "state", exists: true, value: "invalid" },
+          { label: "hasValid", path: "hasValid", exists: true, value: false },
+          { label: "hasInvalid", path: "hasInvalid", exists: true, value: true },
+          { label: "hasTryFix", path: "hasTryFix", exists: true, value: true },
+        ],
+        reason: null,
+      }
+    : {
+        ordinal: 2,
+        ok: true,
+        script_length: 20,
+        return_captured: true,
+        return_stored_to: "__jsonlint.recovered",
+        returned: { state: "valid", hasValid: true, hasInvalid: false, hasTryFix: false },
+        return_summary: [
+          { label: "state", path: "state", exists: true, value: "valid" },
+          { label: "hasValid", path: "hasValid", exists: true, value: true },
+          { label: "hasInvalid", path: "hasInvalid", exists: true, value: false },
+          { label: "hasTryFix", path: "hasTryFix", exists: true, value: false },
+        ],
+        reason: null,
+      };
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary" : "cli-state-hygiene-recovery-action-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: `https://example.com${path}`,
+      observed: "/",
+      expected_path: "/",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: ["state-hygiene-invalid", "state-hygiene-recovered"], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        label: "setup actions succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 3,
+          setup_summary: {
+            viewport_count: 1,
+            action_count: 3,
+            viewports: [{
+              name: "desktop",
+              ok: true,
+              result_count: 3,
+              observed_path: "/",
+              setup_screenshots: ["state-hygiene-invalid", "state-hygiene-recovered"],
+              clicked_total: 1,
+              window_eval_total: 2,
+              window_eval_stored_total: 2,
+              window_eval_captured_total: 2,
+              window_eval_truncated: false,
+              window_eval: [
+                {
+                  ordinal: 1,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
+                  return_stored_to: "__jsonlint.invalid",
+                  returned: { state: "invalid", hasValid: false, hasInvalid: true, hasTryFix: true, hasErrorDetail: true },
+                  return_summary: [
+                    { label: "state", path: "state", exists: true, value: "invalid" },
+                    { label: "hasValid", path: "hasValid", exists: true, value: false },
+                    { label: "hasInvalid", path: "hasInvalid", exists: true, value: true },
+                    { label: "hasTryFix", path: "hasTryFix", exists: true, value: true },
+                    { label: "hasErrorDetail", path: "hasErrorDetail", exists: true, value: true },
+                  ],
+                  reason: null,
+                },
+                recoveredReceipt,
+              ],
+              clicked: [
+                { ordinal: 1, selector: "button", text: "Try Fix" },
+              ],
+              failed: [],
+            }],
+          },
+        },
+      },
+    ],
+    summary: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary passed." : "cli-state-hygiene-recovery-action-summary passed.",
+    captured_at: "2026-05-20T17:45:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary" : "cli-state-hygiene-recovery-action-summary",
+      target_url: `https://example.com${path}`,
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-20T17:45:00.000Z",
+      viewports: [{
+        name: "desktop",
+        width: 1280,
+        height: 900,
+        route: {
+          requested: `https://example.com${path}`,
+          observed: "/",
+          expected_path: "/",
+          matched: true,
+          http_status: 200,
+        },
+        overflow_px: 0,
+        bounds_overflow_px: 0,
+        selectors: {},
+        text_matches: {},
+        screenshot_label: "state-hygiene-recovery-action-desktop",
+      }],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1 },
+    },
+  };
+}
+
 const cliRunProfileServer = createServer((request, response) => {
   const sendJson = (payload, status = 200) => {
     response.writeHead(status, { "content-type": "application/json" });
@@ -1326,6 +1454,14 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
         sendJson(cliStateHygieneOutcomeSummaryResult());
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-recovery-action-missing-summary")) {
+        sendJson(cliStateHygieneRecoveryActionSummaryResult({ missingRecovered: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-recovery-action-summary")) {
+        sendJson(cliStateHygieneRecoveryActionSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/fatal-console-summary")) {
@@ -3964,6 +4100,90 @@ try {
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(3 present, 1 missing\)/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing required receipts: `visible loss terminal state receipt`/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing: visible loss terminal state receipt \(terminal loss receipt missing\)/);
+
+  const stateHygieneRecoveryActionProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-summary.json");
+  const stateHygieneRecoveryActionOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-summary-output");
+  const stateHygieneRecoveryActionRequiredReceipts = [
+    "visible Try Fix recovery action receipt",
+  ];
+  writeFileSync(stateHygieneRecoveryActionProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-recovery-action-summary",
+    target: {
+      route: "/state-hygiene-recovery-action-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: stateHygieneRecoveryActionRequiredReceipts,
+    },
+  }));
+  const stateHygieneRecoveryActionResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneRecoveryActionProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneRecoveryActionOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneRecoveryActionResult.stdout).status, "passed");
+  const stateHygieneRecoveryActionSummaryMarkdown = readFileSync(path.join(stateHygieneRecoveryActionOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneRecoveryActionSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneRecoveryActionSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(stateHygieneRecoveryActionSummaryMarkdown, /present: visible Try Fix recovery action receipt \(visible recovery-action receipt present\)/);
+
+  const stateHygieneMissingRecoveryActionProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary.json");
+  const stateHygieneMissingRecoveryActionOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary-output");
+  writeFileSync(stateHygieneMissingRecoveryActionProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-recovery-action-missing-summary",
+    target: {
+      route: "/state-hygiene-recovery-action-missing-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: stateHygieneRecoveryActionRequiredReceipts,
+    },
+  }));
+  const stateHygieneMissingRecoveryActionResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneMissingRecoveryActionProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneMissingRecoveryActionOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneMissingRecoveryActionResult.stdout).status, "passed");
+  const stateHygieneMissingRecoveryActionSummaryMarkdown = readFileSync(path.join(stateHygieneMissingRecoveryActionOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneMissingRecoveryActionSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneMissingRecoveryActionSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 missing\)/);
+  assert.match(stateHygieneMissingRecoveryActionSummaryMarkdown, /missing required receipts: `visible Try Fix recovery action receipt`/);
+  assert.match(stateHygieneMissingRecoveryActionSummaryMarkdown, /missing: visible Try Fix recovery action receipt \(visible recovery-action receipt missing\)/);
 
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
