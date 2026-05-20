@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.189
+
+### Patch Changes
+
+- d940b4e: Classify active proof-helper, terminal loss, and controlled launch receipts in Proof Pack summaries from structured setup return evidence.
+
 ## 0.7.188
 
 ### Patch Changes
