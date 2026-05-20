@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.178
+
+### Patch Changes
+
+- 6edd05a: Render compact press key sequences in profile setup summary markdown.
+
 ## 0.7.177
 
 ### Patch Changes
