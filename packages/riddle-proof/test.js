@@ -1175,6 +1175,100 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/route-exit-affordance-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-route-exit-affordance-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/route-exit-affordance-summary",
+            observed: "/route-exit-affordance-summary",
+            expected_path: "/route-exit-affordance-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["route-exit-home"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 1,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 1,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 1,
+                    observed_path: "/",
+                    setup_screenshots: [],
+                    clicked_total: 0,
+                    window_call_total: 1,
+                    window_call_stored_total: 1,
+                    window_call_captured_total: 1,
+                    window_call_truncated: false,
+                    window_call: [{
+                      ordinal: 1,
+                      ok: true,
+                      function_name: "__routeExitHome",
+                      return_captured: true,
+                      return_stored_to: "__proof.routeExitPush",
+                      returned: {
+                        route: "/",
+                        browserPath: "/",
+                        navVisibleBeforeExit: false,
+                        activeGlobalCount: 5,
+                      },
+                      return_summary: [
+                        { label: "route", path: "route", exists: true, value: "/" },
+                        { label: "browserPath", path: "browserPath", exists: true, value: "/" },
+                        { label: "navVisibleBeforeExit", path: "navVisibleBeforeExit", exists: true, value: false },
+                        { label: "activeGlobalCount", path: "activeGlobalCount", exists: true, value: 5 },
+                      ],
+                      reason: null,
+                    }],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+          ],
+          summary: "cli-route-exit-affordance-summary passed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-route-exit-affordance-summary",
+            target_url: "https://example.com/route-exit-affordance-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/route-exit-affordance-summary",
+                observed: "/",
+                expected_path: "/",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "route-exit-home",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/responsive-reachability-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -3294,6 +3388,48 @@ try {
   assert.match(packIncompleteSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 missing\)/);
   assert.match(packIncompleteSummaryMarkdown, /missing required receipts: `before and after static canvas signatures`/);
   assert.match(packIncompleteSummaryMarkdown, /missing: before and after static canvas signatures \(canvas signature evidence missing\)/);
+
+  const routeExitAffordanceProfileFile = path.join(riddlePreviewDir, "cli-route-exit-affordance-summary.json");
+  const routeExitAffordanceOutputDir = path.join(riddlePreviewDir, "cli-route-exit-affordance-summary-output");
+  writeFileSync(routeExitAffordanceProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-route-exit-affordance-summary",
+    target: {
+      route: "/route-exit-affordance-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "route-exit affordance inventory before cleanup",
+      ],
+    },
+  }));
+  const routeExitAffordanceResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    routeExitAffordanceProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    routeExitAffordanceOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(routeExitAffordanceResult.stdout).status, "passed");
+  const routeExitAffordanceSummaryMarkdown = readFileSync(path.join(routeExitAffordanceOutputDir, "summary.md"), "utf8");
+  assert.match(routeExitAffordanceSummaryMarkdown, /## Proof Pack/);
+  assert.match(routeExitAffordanceSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(routeExitAffordanceSummaryMarkdown, /present: route-exit affordance inventory before cleanup \(route-exit affordance receipt present\)/);
 
   const workflowTruthProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-summary.json");
   const workflowTruthOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-summary-output");
@@ -8390,7 +8526,10 @@ assert.ok(gameplayWindowCallUntilProfile.target.setup_actions.some(
 assert.ok(gameplayWindowCallUntilProfile.metadata.purpose.includes("fixed sleeps"));
 
 const spaRouteExitStateHygieneProfile = readJson("./examples/profiles/spa-route-exit-state-hygiene.json");
+const spaRouteExitStateHygieneProfileSource = readFileSync(new URL("./examples/profiles/spa-route-exit-state-hygiene.json", import.meta.url), "utf8");
 assert.equal(spaRouteExitStateHygieneProfile.name, "spa-route-exit-state-hygiene");
+assert.ok(!spaRouteExitStateHygieneProfileSource.includes("Object.prototype"));
+assert.ok(!spaRouteExitStateHygieneProfileSource.includes("hasOwnProperty"));
 const normalizedSpaRouteExitStateHygieneProfile = normalizeRiddleProofProfile(
   spaRouteExitStateHygieneProfile,
   { url: "https://example.com" },
