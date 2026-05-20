@@ -1057,7 +1057,10 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
   const dragTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.drag_total) || 0), 0);
   const tapTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.tap_total) || 0), 0);
-  const pressTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.press_total) || 0), 0);
+  const keyboardTotal = viewports.reduce((sum, viewport) => {
+    const total = cliFiniteNumber(viewport.keyboard_total);
+    return sum + (total === undefined ? (cliFiniteNumber(viewport.press_total) || 0) : total);
+  }, 0);
   const canvasSignatureTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.canvas_signature_total) || 0), 0);
   const failedTotal = viewports.reduce((sum, viewport) => (
     sum + (Array.isArray(viewport.failed) ? viewport.failed.length : 0)
@@ -1096,8 +1099,8 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (tapTotal) {
     lines.push(`- tap: ${tapTotal} action(s)`);
   }
-  if (pressTotal) {
-    lines.push(`- press: ${pressTotal} action(s)`);
+  if (keyboardTotal) {
+    lines.push(`- keyboard: ${keyboardTotal} action(s)`);
   }
   if (canvasSignatureTotal) {
     lines.push(`- canvas_signature: ${canvasSignatureTotal} action(s)`);
@@ -1126,10 +1129,10 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
     const dragActions = cliFiniteNumber(viewport.drag_total) || 0;
     const tapActions = cliFiniteNumber(viewport.tap_total) || 0;
-    const pressActions = cliFiniteNumber(viewport.press_total) || 0;
+    const keyboardActions = cliFiniteNumber(viewport.keyboard_total) ?? cliFiniteNumber(viewport.press_total) ?? 0;
     const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${tapActions ? `, ${tapActions} tap action(s)` : ""}${pressActions ? `, ${pressActions} press action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${tapActions ? `, ${tapActions} tap action(s)` : ""}${keyboardActions ? `, ${keyboardActions} keyboard action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   const clickSequenceGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
@@ -1210,15 +1213,16 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} tap: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (tapDetails.length > sampledTapDetails.length) lines.push(`- ${tapDetails.length - sampledTapDetails.length} additional tap receipt(s) omitted.`);
-  const pressGroups = viewports.map((viewport) => {
+  const keyboardGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
-    const receipts = Array.isArray(viewport.press)
-      ? viewport.press.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+    const rawReceipts = Array.isArray(viewport.keyboard) ? viewport.keyboard : viewport.press;
+    const receipts = Array.isArray(rawReceipts)
+      ? rawReceipts.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
       : [];
     return receipts.map((receipt) => ({ name, receipt }));
   });
-  const pressDetails = pressGroups.flat();
-  for (const group of pressGroups.slice(0, 8)) {
+  const keyboardDetails = keyboardGroups.flat();
+  for (const group of keyboardGroups.slice(0, 8)) {
     if (!group.length) continue;
     const name = group[0].name;
     const keys = group
@@ -1233,10 +1237,10 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const omittedOrdinalCount = Math.max(0, ordinals.length - visibleOrdinals.length);
     const keyText = visibleKeys.join(",");
     const ordinalText = visibleOrdinals.join(",");
-    lines.push(`- ${name} press_sequence: keys ${markdownInlineCode(keyText, 200)}${omittedKeyCount ? ` (+${omittedKeyCount} omitted)` : ""}${ordinalText ? `, ordinals ${markdownInlineCode(ordinalText, 120)}${omittedOrdinalCount ? ` (+${omittedOrdinalCount} omitted)` : ""}` : ""}`);
+    lines.push(`- ${name} keyboard_sequence: keys ${markdownInlineCode(keyText, 200)}${omittedKeyCount ? ` (+${omittedKeyCount} omitted)` : ""}${ordinalText ? `, ordinals ${markdownInlineCode(ordinalText, 120)}${omittedOrdinalCount ? ` (+${omittedOrdinalCount} omitted)` : ""}` : ""}`);
   }
-  const sampledPressDetails = balancedSetupReceiptDetails(pressGroups, 12);
-  for (const { name, receipt } of sampledPressDetails) {
+  const sampledKeyboardDetails = balancedSetupReceiptDetails(keyboardGroups, 12);
+  for (const { name, receipt } of sampledKeyboardDetails) {
     const action = cliString(receipt.action) || "press";
     const key = cliString(receipt.key) || "key";
     const selector = cliString(receipt.selector);
@@ -1246,7 +1250,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const reason = cliString(receipt.reason);
     lines.push(`- ${name} ${action}: ${ok}, ${markdownInlineCode(key)}${selector ? ` on ${markdownInlineCode(selector)}` : ""}${frameSelector ? ` in frame ${markdownInlineCode(frameSelector)}` : ""}${holdMs === undefined ? "" : `, held ${holdMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
-  if (pressDetails.length > sampledPressDetails.length) lines.push(`- ${pressDetails.length - sampledPressDetails.length} additional press receipt(s) omitted.`);
+  if (keyboardDetails.length > sampledKeyboardDetails.length) lines.push(`- ${keyboardDetails.length - sampledKeyboardDetails.length} additional keyboard receipt(s) omitted.`);
   const canvasSignatureGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.canvas_signature)
