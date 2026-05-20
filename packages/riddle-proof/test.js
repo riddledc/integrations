@@ -1766,7 +1766,13 @@ const cliRunProfileServer = createServer((request, response) => {
         {
           type: "no_console_warnings",
           status: "passed",
-          evidence: { console_warning_count: 0 },
+          evidence: {
+            console_warning_count: 0,
+            total_console_warning_count: 2,
+            allowed_console_warning_count: 2,
+            allowed_console_texts: ["Canvas2D readback performance warning"],
+            allowed_console_patterns: ["cdn\\.example\\.com/known-warning\\.js"],
+          },
         },
         {
           type: "route_inventory",
@@ -1941,7 +1947,7 @@ try {
   assert.match(profileSummaryMarkdown, /passed: text_absent \(`NaN`\)/);
   assert.match(profileSummaryMarkdown, /passed: no_horizontal_overflow \(<= 1px\)/);
   assert.match(profileSummaryMarkdown, /passed: no_fatal_console_errors \(0 unallowed fatal errors\)/);
-  assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings\)/);
+  assert.match(profileSummaryMarkdown, /passed: no_console_warnings \(0 unallowed warnings, 2\/2 warnings allowed, allowlist 1 text, 1 pattern\)/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
   assert.match(profileSummaryMarkdown, /setup actions: 4 declared, 6 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);

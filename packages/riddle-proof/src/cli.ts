@@ -705,7 +705,22 @@ function profileCheckMarkdownTarget(check: RiddleProofProfileResult["checks"][nu
   }
   if (check.type === "no_console_warnings") {
     const warningCount = cliFiniteNumber(evidence.console_warning_count) ?? 0;
-    return `${warningCount} unallowed warning${warningCount === 1 ? "" : "s"}`;
+    const totalConsoleCount = cliFiniteNumber(evidence.total_console_warning_count);
+    const allowedConsoleCount = cliFiniteNumber(evidence.allowed_console_warning_count);
+    const allowedTextCount = Array.isArray(evidence.allowed_console_texts)
+      ? evidence.allowed_console_texts.filter((value) => typeof value === "string" && value.trim()).length
+      : 0;
+    const allowedPatternCount = Array.isArray(evidence.allowed_console_patterns)
+      ? evidence.allowed_console_patterns.filter((value) => typeof value === "string" && value.trim()).length
+      : 0;
+    const parts = [`${warningCount} unallowed warning${warningCount === 1 ? "" : "s"}`];
+    if (totalConsoleCount !== undefined && allowedConsoleCount !== undefined) {
+      parts.push(`${allowedConsoleCount}/${totalConsoleCount} warning${totalConsoleCount === 1 ? "" : "s"} allowed`);
+    }
+    if (allowedTextCount || allowedPatternCount) {
+      parts.push(`allowlist ${allowedTextCount} text${allowedTextCount === 1 ? "" : "s"}, ${allowedPatternCount} pattern${allowedPatternCount === 1 ? "" : "s"}`);
+    }
+    return parts.join(", ");
   }
   return undefined;
 }
