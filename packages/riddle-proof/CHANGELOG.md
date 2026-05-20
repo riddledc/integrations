@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.182
+
+### Patch Changes
+
+- b72eb9f: Add `key_down` and `key_up` setup actions so gameplay profiles can hold a real key across separate wait, animation-frame, and evidence actions.
+
 ## 0.7.181
 
 ### Patch Changes
