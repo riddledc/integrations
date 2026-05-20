@@ -51,6 +51,8 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "tap",
   "drag",
   "press",
+  "key_down",
+  "key_up",
   "fill",
   "set_input_value",
   "set_range_value",
@@ -1175,8 +1177,9 @@ function profileSetupTapReceipts(results: Array<Record<string, JsonValue>>): Arr
 
 function profileSetupPressReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
   return results
-    .filter((result) => profileSetupResultAction(result) === "press")
+    .filter((result) => ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
     .map((result) => ({
+      action: profileSetupResultAction(result),
       ordinal: result.ordinal ?? null,
       ok: result.ok !== false,
       selector: result.selector ?? null,
@@ -1553,6 +1556,10 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "tap"
     : normalizedInput === "keyboard_press" || normalizedInput === "key_press"
       ? "press"
+    : normalizedInput === "keyboard_down" || normalizedInput === "key_down" || normalizedInput === "keydown" || normalizedInput === "press_down"
+      ? "key_down"
+    : normalizedInput === "keyboard_up" || normalizedInput === "key_up" || normalizedInput === "keyup" || normalizedInput === "press_up" || normalizedInput === "release_key" || normalizedInput === "key_release"
+      ? "key_up"
     : normalizedInput === "set_slider_value" || normalizedInput === "slider_value" || normalizedInput === "set_slider" || normalizedInput === "set_range" || normalizedInput === "range_value" || normalizedInput === "range_input" || normalizedInput === "set_range_input"
       ? "set_range_value"
     : normalizedInput === "deterministic_runtime" || normalizedInput === "mock_runtime" || normalizedInput === "mock_random" || normalizedInput === "mock_random_queue" || normalizedInput === "seed_random_queue" || normalizedInput === "set_random_queue" || normalizedInput === "mock_clock" || normalizedInput === "set_mock_clock" || normalizedInput === "set_runtime_determinism" || normalizedInput === "runtime_determinism"
@@ -1847,7 +1854,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
       dialogAccept = true;
     }
   }
-  if (type === "press" && !key) {
+  if ((type === "press" || type === "key_down" || type === "key_up") && !key) {
     throw new Error(`target.setup_actions[${index}] ${type} requires key.`);
   }
   if ((type === "local_storage" || type === "session_storage") && !key) {
@@ -5753,8 +5760,9 @@ function profileSetupTapReceipts(results) {
 }
 function profileSetupPressReceipts(results) {
   return (results || [])
-    .filter((result) => result && profileSetupResultAction(result) === "press")
+    .filter((result) => result && ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
     .map((result) => ({
+      action: profileSetupResultAction(result),
       ordinal: result.ordinal ?? null,
       ok: result.ok !== false,
       selector: result.selector ?? null,
@@ -7693,6 +7701,37 @@ async function executeSetupAction(action, ordinal, viewport) {
         input_dispatch: pointerType === "touch" || pointerType === "pen" ? "cdp" : "playwright_mouse",
         steps,
         duration_ms: durationMs || undefined,
+      };
+    }
+    if (type === "key_down" || type === "key_up") {
+      const key = String(action.key || "").trim();
+      if (!key) return { ...base, reason: "missing_key" };
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      let count;
+      let targetIndex;
+      if (action.selector) {
+        const locator = scope.context.locator(action.selector);
+        count = await locator.count();
+        if (!count) return { ...base, reason: "selector_not_found", count, key };
+        targetIndex = Number.isInteger(action.index) ? action.index : 0;
+        if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex, key };
+        await locator.nth(targetIndex).focus({ timeout }).catch(() => {});
+      } else if (scope.frame_selector) {
+        await scope.context.locator("body").focus({ timeout }).catch(() => {});
+      }
+      if (type === "key_down") {
+        await page.keyboard.down(key);
+      } else {
+        await page.keyboard.up(key);
+      }
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: true,
+        count,
+        target_index: targetIndex,
+        key,
       };
     }
     if (type === "press") {

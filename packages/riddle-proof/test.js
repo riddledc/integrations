@@ -3745,6 +3745,8 @@ assert.ok(buildRiddleProofProfileScript(consoleWarningProfile).includes("no_cons
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("tap"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("key_down"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("key_up"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_range_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("deterministic_runtime"));
@@ -3825,6 +3827,24 @@ assert.equal(formSetupProfile.target.setup_actions[5].value, "Riddle Proof Maze"
 assert.equal(formSetupProfile.target.setup_actions[6].type, "press");
 assert.equal(formSetupProfile.target.setup_actions[6].key, "Enter");
 assert.equal(formSetupProfile.target.setup_actions[6].hold_ms, 650);
+const keyHoldSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-key-hold-actions",
+  target: {
+    route: "/game",
+    setup_actions: [
+      { type: "key-down", key: "Shift" },
+      { type: "keyboard-up", key: "Shift" },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/game" },
+  ],
+}, { url: "https://example.com" });
+assert.equal(keyHoldSetupProfile.target.setup_actions[0].type, "key_down");
+assert.equal(keyHoldSetupProfile.target.setup_actions[0].key, "Shift");
+assert.equal(keyHoldSetupProfile.target.setup_actions[1].type, "key_up");
+assert.equal(keyHoldSetupProfile.target.setup_actions[1].key, "Shift");
 const rangeSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-range-action",
@@ -4454,6 +4474,15 @@ assert.throws(() => normalizeRiddleProofProfile({
 }, { url: "https://example.com" }), /press requires key/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
+  name: "bad-key-down",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "key_down" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /key_down requires key/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
   name: "bad-held-press",
   target: {
     route: "/",
@@ -4476,6 +4505,8 @@ assert.ok(formSetupProfileScript.includes("setupHasOwn"));
 assert.ok(formSetupProfileScript.includes("page.keyboard.press"));
 assert.ok(formSetupProfileScript.includes("page.keyboard.down"));
 assert.ok(formSetupProfileScript.includes("page.keyboard.up"));
+assert.ok(formSetupProfileScript.includes('type === "key_down"'));
+assert.ok(formSetupProfileScript.includes('type === "key_up"'));
 assert.ok(formSetupProfileScript.includes("window.localStorage"));
 assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));

@@ -402,7 +402,7 @@ when body matching overrides sequence order.
 `target.setup_actions` is optional. Use it when the meaningful proof surface
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
-`click`, `tap`, `drag`, `press`, `fill`, `set_input_value`, `set_range_value`,
+`click`, `tap`, `drag`, `press`, `key_down`, `key_up`, `fill`, `set_input_value`, `set_range_value`,
 `deterministic_runtime`, `canvas_signature`, `assert_text_visible`, `assert_text_absent`,
 `assert_selector_count`, `assert_window_value`, `assert_window_number`,
 `local_storage`, `session_storage`, `clear_storage`, `clear_console`,
@@ -418,7 +418,10 @@ with a Playwright key name, such as `Enter`, `Space`, or `ArrowLeft`,
 when a route's intended browser control is keyboard-driven; omit `selector` for
 a page-level key press, or provide `selector` to press against a focused element.
 For canvas games that read key state rather than keypress events, add `hold_ms`
-or `holdMs` to keep the key down before releasing it.
+or `holdMs` to keep the key down before releasing it. When the profile needs
+to observe or wait on runtime evidence while a key remains held, use paired
+`key_down` / `key_up` actions around `wait`, `window_eval`, or
+`window_call_until` actions.
 Use `click_count` / `clickCount` / `clicks` from 1 to 10 on a single `click`
 action for atomic double-click or double-submit contracts where modeling the
 interaction as repeated setup actions would incorrectly require the target to
