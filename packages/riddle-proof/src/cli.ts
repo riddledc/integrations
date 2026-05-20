@@ -712,6 +712,48 @@ function profileReceiptSignalStatus(
     : { status: "missing", reason: missingReason };
 }
 
+function profileViewportNameList(viewports: Record<string, unknown>[]): string {
+  const names = [...new Set(viewports
+    .map((viewport) => cliString(viewport.name) || cliString(viewport.viewport))
+    .filter((name): name is string => Boolean(name)))];
+  if (!names.length) return "unnamed";
+  const shown = names.slice(0, 6).join(", ");
+  return names.length > 6 ? `${shown}, +${names.length - 6} more` : shown;
+}
+
+function profileEveryRouteViewportStatus(
+  result: RiddleProofProfileResult,
+  setupSummary: Record<string, unknown> | undefined,
+  setupViewports: Record<string, unknown>[],
+  evidenceViewports: unknown[],
+): { status: "present" | "missing"; reason: string } {
+  const evidenceViewportRecords = evidenceViewports
+    .map(cliRecord)
+    .filter((viewport): viewport is Record<string, unknown> => Boolean(viewport));
+  const domSummary = cliRecord(result.evidence?.dom_summary);
+  const expectedViewportCount = cliFiniteNumber(domSummary?.expected_viewport_count)
+    ?? cliFiniteNumber(setupSummary?.viewport_count)
+    ?? cliFiniteNumber(domSummary?.viewport_count)
+    ?? Math.max(evidenceViewportRecords.length, setupViewports.length);
+  const evidenceWithRoute = evidenceViewportRecords.filter((viewport) => (
+    Boolean(cliRecord(viewport.route))
+    || (Boolean(result.route) && Boolean(cliString(viewport.screenshot_label)))
+  ));
+  const setupOkCount = setupViewports.filter((viewport) => viewport.ok !== false).length;
+  const setupComplete = !setupViewports.length || setupOkCount >= expectedViewportCount;
+  if (expectedViewportCount > 0 && evidenceWithRoute.length >= expectedViewportCount && setupComplete) {
+    return {
+      status: "present",
+      reason: `route/setup evidence present for all ${expectedViewportCount} viewport(s): ${profileViewportNameList(evidenceWithRoute)}`,
+    };
+  }
+  const setupPart = setupViewports.length ? `, setup ok ${setupOkCount}/${expectedViewportCount}` : "";
+  return {
+    status: "missing",
+    reason: `route/viewport evidence incomplete: expected ${expectedViewportCount}, route evidence ${evidenceWithRoute.length}${setupPart}`,
+  };
+}
+
 function compactProfileReceiptReason(value: unknown, limit = 180): string | undefined {
   const text = cliString(value)?.replace(/\s+/g, " ").trim();
   if (!text) return undefined;
@@ -1058,6 +1100,13 @@ function profilePackReceiptStatus(
     return profileReceiptSignalStatus(hasConsoleAccounting, "console checks or evidence present", "console accounting evidence missing");
   }
   if (text.includes("route") && text.includes("viewport")) {
+    if (
+      text.includes("every target viewport")
+      || text.includes("all target viewport")
+      || (text.includes("every") && text.includes("viewport"))
+    ) {
+      return profileEveryRouteViewportStatus(result, setupSummary, setupViewports, evidenceViewports);
+    }
     return profileReceiptSignalStatus(hasRouteViewport, "route and viewport evidence present", "route or viewport evidence missing");
   }
   if (text.includes("setup action")) {
