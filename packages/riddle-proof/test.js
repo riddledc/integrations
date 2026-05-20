@@ -1571,6 +1571,138 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/state-hygiene-failed-cleanup-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-state-hygiene-failed-cleanup-summary",
+          runner: "riddle",
+          status: "product_regression",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/state-hygiene-failed-cleanup-summary",
+            observed: "/state-hygiene-failed-cleanup-summary",
+            expected_path: "/state-hygiene-failed-cleanup-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "state-hygiene-initial",
+              "state-hygiene-progress",
+              "state-hygiene-reset-control",
+              "cli-state-hygiene-failed-cleanup-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "failed",
+              evidence: {
+                action_count: 7,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 7,
+                  viewports: [{
+                    name: "desktop",
+                    ok: false,
+                    result_count: 7,
+                    observed_path: "/state-hygiene-failed-cleanup-summary",
+                    setup_screenshots: ["state-hygiene-initial", "state-hygiene-progress", "state-hygiene-reset-control"],
+                    clicked_total: 2,
+                    window_eval_total: 4,
+                    window_eval_stored_total: 4,
+                    window_eval_captured_total: 4,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 440,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.initial",
+                        returned: { ok: true, state: "initial-clean", currentLevel: 0, totalCorrect: 0 },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "initial-clean" },
+                          { label: "currentLevel", path: "currentLevel", exists: true, value: 0 },
+                          { label: "totalCorrect", path: "totalCorrect", exists: true, value: 0 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 3,
+                        ok: true,
+                        script_length: 620,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.progress",
+                        returned: { ok: true, state: "temporary-progress", currentLevel: 1, totalCorrect: 1 },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "temporary-progress" },
+                          { label: "currentLevel", path: "currentLevel", exists: true, value: 1 },
+                          { label: "totalCorrect", path: "totalCorrect", exists: true, value: 1 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 5,
+                        ok: true,
+                        script_length: 520,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.preCleanup",
+                        returned: { ok: true, state: "reset-control-reachable", totalCorrect: 1 },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "reset-control-reachable" },
+                          { label: "totalCorrect", path: "totalCorrect", exists: true, value: 1 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 7,
+                        ok: false,
+                        script_length: 900,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.cleanup",
+                        returned: null,
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: false },
+                          { label: "state", path: "state", exists: false },
+                          { label: "totalCorrect", path: "totalCorrect", exists: false },
+                        ],
+                        reason: "script_threw",
+                        error: "stale CSS Diner progress remained after reset: {\"totalCorrect\":1,\"guessHistoryKeys\":[\"0\"],\"completedLinks\":1}",
+                      },
+                    ],
+                    clicked: [
+                      { ordinal: 2, selector: ".enter-button", text: "enter" },
+                      { ordinal: 6, selector: ".reset-progress", text: "Reset Progress" },
+                    ],
+                    failed: [{
+                      ordinal: 7,
+                      action: "window_eval",
+                      reason: "script_threw",
+                      error: "stale CSS Diner progress remained after reset: {\"totalCorrect\":1,\"guessHistoryKeys\":[\"0\"],\"completedLinks\":1}",
+                    }],
+                  }],
+                },
+              },
+              message: "1 setup action(s) failed.",
+            },
+            { type: "text_visible", label: "text_visible", status: "passed", evidence: { text: "Select the plates", matches: [true] } },
+            { type: "text_absent", label: "text_absent", status: "passed", evidence: { text: "Select the bento boxes", matches: [false] } },
+            { type: "no_fatal_console_errors", label: "no_fatal_console_errors", status: "passed", evidence: { console_fatal_count: 0 } },
+            { type: "no_console_warnings", label: "no_console_warnings", status: "passed", evidence: { warning_count: 0 } },
+          ],
+          summary: "cli-state-hygiene-failed-cleanup-summary failed.",
+          captured_at: "2026-05-20T00:02:00.000Z",
+        });
+        return;
+      }
       sendJson({ job_id: "job_cli_profile_progress" });
     });
     return;
@@ -3231,6 +3363,60 @@ try {
   assert.match(
     naturalInputSummaryMarkdown,
     /natural input desktop: drag `canvas\.main-canvas` `mouse` via `playwright_mouse`; events pointerDowns=2, pointerMoves=34, pointerUps=2, trustedEvents=38; pixel deltas nonWhiteDelta=397, darkDelta=397; canvas hash `1859852391` -> `3002921772`/,
+  );
+
+  const stateHygieneFailedCleanupProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-failed-cleanup-summary.json");
+  const stateHygieneFailedCleanupOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-failed-cleanup-summary-output");
+  writeFileSync(stateHygieneFailedCleanupProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-failed-cleanup-summary",
+    target: {
+      route: "/state-hygiene-failed-cleanup-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "text_visible", text: "Select the plates" },
+      { type: "text_absent", text: "Select the bento boxes" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "post-cleanup stale-state inventory for visible copy, localStorage progress, and completed markers",
+      ],
+    },
+  }));
+  let stateHygieneFailedCleanupError;
+  try {
+    await runCli([
+      "run-profile",
+      "--api-base-url",
+      `http://127.0.0.1:${address.port}`,
+      "--api-key",
+      "cli-riddle-key",
+      "--profile",
+      stateHygieneFailedCleanupProfileFile,
+      "--url",
+      "https://example.com",
+      "--runner",
+      "riddle",
+      "--output",
+      stateHygieneFailedCleanupOutputDir,
+      "--quiet",
+    ]);
+  } catch (error) {
+    stateHygieneFailedCleanupError = error;
+  }
+  assert.equal(stateHygieneFailedCleanupError?.code, 1);
+  const stateHygieneFailedCleanupSummaryMarkdown = readFileSync(path.join(stateHygieneFailedCleanupOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneFailedCleanupSummaryMarkdown, /## Proof Pack/);
+  assert.match(
+    stateHygieneFailedCleanupSummaryMarkdown,
+    /failed: post-cleanup stale-state inventory for visible copy, localStorage progress, and completed markers \(cleanup inventory failed: stale CSS Diner progress remained after reset:/,
+  );
+  assert.doesNotMatch(
+    stateHygieneFailedCleanupSummaryMarkdown,
+    /present: post-cleanup stale-state inventory for visible copy, localStorage progress, and completed markers \(absence check passed\)/,
   );
 
   const blockedProfileFile = path.join(riddlePreviewDir, "cli-profile-balance-blocked.json");
