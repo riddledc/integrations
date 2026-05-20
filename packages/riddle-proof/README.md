@@ -441,11 +441,12 @@ until a browser-state predicate is satisfied. It accepts the same selector,
 coordinate, and pointer options as `tap`, plus `until_path`,
 `until_expected_value`, `max_taps` / `max_calls` from 1 to 100, and optional
 `interval_ms`. Set `tap_burst_size` from 1 to 100 when gameplay needs several
-fast taps before the next predicate check. The action stops early when the
-predicate matches and records one compact receipt with `tap_count`,
-`condition_check_count`, `elapsed_ms`, final `until_value`, and input dispatch
-details, so long canvas interaction loops do not need dozens of repeated setup
-actions.
+fast taps before the next predicate check, and `settle_ms` when the app needs a
+short post-burst frame/update delay before the predicate is trustworthy. The
+action stops early when the predicate matches and records one compact receipt
+with `tap_count`, `condition_check_count`, `settle_ms`, `elapsed_ms`, final
+`until_value`, and input dispatch details, so long canvas interaction loops do
+not need dozens of repeated setup actions.
 Use `set_range_value` for HTML range inputs and React-controlled sliders. It
 accepts aliases such as `set-slider-value`, requires `selector` plus `value`,
 uses the native input value setter, dispatches bubbling `input` and `change`
@@ -543,10 +544,11 @@ and `click_count_value_total`. Repeated selector runs such as long gameplay
 button loops are also grouped as compact `same-selector` click-sequence
 receipts with click totals and ordinals. `tap_until` actions are summarized as
 one compact receipt with total taps, optional burst size, predicate-check count,
-elapsed time, and the final predicate value, which is the preferred shape for
-long canvas gameplay loops. Setup receipt sampling favors both first and last
-per-viewport receipts before filling remaining space, so late lifecycle phases
-such as terminal or restart remain visible in compact summaries.
+optional settle time, elapsed time, and the final predicate value, which is the
+preferred shape for long canvas gameplay loops. Setup receipt sampling favors
+both first and last per-viewport receipts before filling remaining space, so
+late lifecycle phases such as terminal or restart remain visible in compact
+summaries.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`

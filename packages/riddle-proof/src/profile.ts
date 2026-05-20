@@ -297,6 +297,7 @@ export interface RiddleProofProfileSetupAction {
   until_expected_value?: JsonValue;
   max_calls?: number;
   tap_burst_size?: number;
+  settle_ms?: number;
   interval_ms?: number;
   expected_value?: JsonValue;
   min_value?: number;
@@ -1202,6 +1203,7 @@ function profileSetupTapUntilReceipts(results: Array<Record<string, JsonValue>>)
       max_taps: result.max_taps ?? result.max_calls ?? null,
       tap_burst_size: result.tap_burst_size ?? null,
       condition_check_count: result.condition_check_count ?? null,
+      settle_ms: result.settle_ms ?? null,
       elapsed_ms: result.elapsed_ms ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
@@ -1997,6 +1999,12 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if (type === "tap_until" && tapBurstSize !== undefined && (!Number.isInteger(tapBurstSize) || tapBurstSize < 1 || tapBurstSize > 100)) {
     throw new Error(`target.setup_actions[${index}].tap_burst_size must be an integer from 1 to 100.`);
   }
+  const settleMs = type === "tap_until"
+    ? numberValue(valueFromOwn(input, "settle_ms", "settleMs", "predicate_settle_ms", "predicateSettleMs", "post_burst_wait_ms", "postBurstWaitMs", "after_burst_ms", "afterBurstMs", "settle_after_tap_ms", "settleAfterTapMs"))
+    : undefined;
+  if (type === "tap_until" && settleMs !== undefined && (!Number.isInteger(settleMs) || settleMs < 0 || settleMs > 10000)) {
+    throw new Error(`target.setup_actions[${index}].settle_ms must be an integer from 0 to 10000.`);
+  }
   const intervalMs = numberValue(valueFromOwn(input, "interval_ms", "intervalMs", "poll_ms", "pollMs", "call_interval_ms", "callIntervalMs"));
   if ((type === "window_call_until" || type === "tap_until") && intervalMs !== undefined && (!Number.isInteger(intervalMs) || intervalMs < 0 || intervalMs > 5000)) {
     throw new Error(`target.setup_actions[${index}].interval_ms must be an integer from 0 to 5000.`);
@@ -2056,6 +2064,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
     max_calls: maxCalls,
     tap_burst_size: tapBurstSize,
+    settle_ms: settleMs,
     interval_ms: intervalMs,
     expected_value: hasExpectedValue ? toJsonValue(rawExpectedValue) : undefined,
     min_value: minValue,
@@ -5849,6 +5858,7 @@ function profileSetupTapUntilReceipts(results) {
       max_taps: result.max_taps ?? result.max_calls ?? null,
       tap_burst_size: result.tap_burst_size ?? null,
       condition_check_count: result.condition_check_count ?? null,
+      settle_ms: result.settle_ms ?? null,
       elapsed_ms: result.elapsed_ms ?? null,
       interval_ms: result.interval_ms ?? null,
       timeout_ms: result.timeout_ms ?? null,
@@ -7841,6 +7851,7 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (!hasUntilExpected) return { ...base, until_path: untilPath, reason: "missing_until_expected_value" };
       const maxTaps = Math.min(100, Math.max(1, Math.floor(setupNumber(action.max_taps ?? action.maxTaps ?? action.tap_limit ?? action.tapLimit ?? action.max_calls ?? action.maxCalls ?? action.max_attempts ?? action.maxAttempts ?? action.attempts, 1) || 1)));
       const tapBurstSize = Math.min(maxTaps, Math.min(100, Math.max(1, Math.floor(setupNumber(action.tap_burst_size ?? action.tapBurstSize ?? action.burst_size ?? action.burstSize ?? action.check_every_taps ?? action.checkEveryTaps ?? action.predicate_interval_taps ?? action.predicateIntervalTaps, 1) || 1))));
+      const settleMs = Math.min(10000, Math.max(0, Math.floor(setupNumber(action.settle_ms ?? action.settleMs ?? action.predicate_settle_ms ?? action.predicateSettleMs ?? action.post_burst_wait_ms ?? action.postBurstWaitMs ?? action.after_burst_ms ?? action.afterBurstMs ?? action.settle_after_tap_ms ?? action.settleAfterTapMs, 0) || 0)));
       const intervalMs = Math.min(5000, Math.max(0, Math.floor(setupNumber(action.interval_ms ?? action.intervalMs ?? action.poll_ms ?? action.pollMs ?? action.tap_interval_ms ?? action.tapIntervalMs, 100) || 0)));
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
@@ -7866,6 +7877,7 @@ async function executeSetupAction(action, ordinal, viewport) {
           max_calls: maxTaps,
           tap_burst_size: tapBurstSize,
           condition_check_count: conditionCheckCount,
+          settle_ms: settleMs,
           elapsed_ms: elapsedMs,
           interval_ms: intervalMs,
           timeout_ms: timeout,
@@ -7878,6 +7890,7 @@ async function executeSetupAction(action, ordinal, viewport) {
           tapCount += 1;
           if (tapCount < maxTaps && burstIndex < burstCount - 1 && intervalMs) await page.waitForTimeout(intervalMs);
         }
+        if (settleMs) await page.waitForTimeout(settleMs);
         lastPredicateResult = await setupReadWindowValue(scope.context, untilPath);
         conditionCheckCount += 1;
         if (lastPredicateResult.ok && setupValuesEqual(lastPredicateResult.value, untilExpected)) {
@@ -7895,6 +7908,7 @@ async function executeSetupAction(action, ordinal, viewport) {
             max_calls: maxTaps,
             tap_burst_size: tapBurstSize,
             condition_check_count: conditionCheckCount,
+            settle_ms: settleMs,
             elapsed_ms: elapsedMs,
             interval_ms: intervalMs,
             timeout_ms: timeout,
@@ -7915,6 +7929,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         max_calls: maxTaps,
         tap_burst_size: tapBurstSize,
         condition_check_count: conditionCheckCount,
+        settle_ms: settleMs,
         elapsed_ms: elapsedMs,
         interval_ms: intervalMs,
         timeout_ms: timeout,
