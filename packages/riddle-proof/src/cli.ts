@@ -1073,6 +1073,23 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     return receipts.map((receipt) => ({ name, receipt }));
   });
   const pressDetails = pressGroups.flat();
+  for (const group of pressGroups.slice(0, 8)) {
+    if (!group.length) continue;
+    const name = group[0].name;
+    const keys = group
+      .map(({ receipt }) => cliString(receipt.key) || "key")
+      .filter(Boolean);
+    const ordinals = group
+      .map(({ receipt }) => cliFiniteNumber(receipt.ordinal))
+      .filter((value): value is number => value !== undefined);
+    const visibleKeys = keys.slice(0, 16);
+    const omittedKeyCount = Math.max(0, keys.length - visibleKeys.length);
+    const visibleOrdinals = ordinals.slice(0, 16);
+    const omittedOrdinalCount = Math.max(0, ordinals.length - visibleOrdinals.length);
+    const keyText = visibleKeys.join(",");
+    const ordinalText = visibleOrdinals.join(",");
+    lines.push(`- ${name} press_sequence: keys ${markdownInlineCode(keyText, 200)}${omittedKeyCount ? ` (+${omittedKeyCount} omitted)` : ""}${ordinalText ? `, ordinals ${markdownInlineCode(ordinalText, 120)}${omittedOrdinalCount ? ` (+${omittedOrdinalCount} omitted)` : ""}` : ""}`);
+  }
   const sampledPressDetails = balancedSetupReceiptDetails(pressGroups, 12);
   for (const { name, receipt } of sampledPressDetails) {
     const key = cliString(receipt.key) || "key";
