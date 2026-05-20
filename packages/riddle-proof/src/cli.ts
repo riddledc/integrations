@@ -1853,6 +1853,43 @@ function withSplitViewportWarnings(profile: RiddleProofProfile, result: RiddlePr
   };
 }
 
+function withSplitViewportChildStatusCheck(
+  profile: RiddleProofProfile,
+  result: RiddleProofProfileResult,
+  childRuns: SplitViewportRunResult[],
+): RiddleProofProfileResult {
+  const nonPassed = childRuns.filter(({ result: childResult }) => childResult.status !== "passed");
+  if (!nonPassed.length) return result;
+  const hasProductRegression = nonPassed.some(({ result: childResult }) => childResult.status === "product_regression");
+  const status = hasProductRegression ? "product_regression" : "needs_human_review";
+  const checkStatus = hasProductRegression ? "failed" : "needs_human_review";
+  const childStatuses = childRuns.map(({ viewport, result: childResult }) => ({
+    viewport: viewport.name,
+    profile_name: childResult.profile_name,
+    status: childResult.status,
+    job_id: childResult.riddle?.job_id || null,
+  }));
+  const failedLabels = nonPassed
+    .map(({ viewport, result: childResult }) => `${viewport.name}: ${childResult.status}`)
+    .join("; ");
+  const checks: RiddleProofProfileResult["checks"] = [
+    {
+      type: "split_viewport_children",
+      label: "split_viewport_children",
+      status: checkStatus,
+      evidence: { child_statuses: childStatuses },
+      message: `Split viewport child run(s) did not all pass: ${failedLabels}.`,
+    },
+    ...result.checks,
+  ];
+  const viewportCount = result.evidence?.viewports?.length || profile.target.viewports.length;
+  const failedChecks = checks.filter((check) => check.status === "failed").length;
+  const summary = status === "product_regression"
+    ? `${profile.name} failed ${failedChecks} product invariant(s) across ${viewportCount} viewport(s).`
+    : `${profile.name} collected split viewport artifacts but needs human review.`;
+  return { ...result, status, checks, summary };
+}
+
 async function runSingleRiddleProfileForCli(
   profile: RiddleProofProfile,
   options: CliOptions,
@@ -2003,7 +2040,7 @@ async function runSplitViewportProfileForCli(
     riddle: splitViewportRiddleMetadata(childRuns),
     artifacts,
   });
-  return withSplitViewportWarnings(profile, result);
+  return withSplitViewportWarnings(profile, withSplitViewportChildStatusCheck(profile, result, childRuns));
 }
 
 async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
