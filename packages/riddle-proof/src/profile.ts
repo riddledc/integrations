@@ -4165,12 +4165,15 @@ function assessCheckFromEvidence(
       ? viewports.filter((viewport) => viewport.width <= 820)
       : viewports;
     if (!applicable.length) {
+      const mobileOnly = check.type === "no_mobile_horizontal_overflow";
       return {
         type: check.type,
         label: checkLabel(check),
-        status: "failed",
-        evidence: { max_overflow_px: maxOverflow },
-        message: "No applicable viewport evidence was captured for overflow check.",
+        status: mobileOnly ? "skipped" : "failed",
+        evidence: { max_overflow_px: maxOverflow, viewports: [] },
+        message: mobileOnly
+          ? "No mobile viewport evidence was captured; mobile overflow check skipped."
+          : "No applicable viewport evidence was captured for overflow check.",
       };
     }
     const failed = applicable.filter((viewport) => horizontalBoundsOverflowPx(viewport) > maxOverflow);
@@ -6363,12 +6366,15 @@ function assessProfile(profile, evidence) {
       const maxOverflow = check.max_overflow_px == null ? 4 : check.max_overflow_px;
       const applicable = check.type === "no_mobile_horizontal_overflow" ? checkViewports.filter((viewport) => viewport.width <= 820) : checkViewports;
       if (!applicable.length) {
+        const mobileOnly = check.type === "no_mobile_horizontal_overflow";
         checks.push({
           type: check.type,
           label: check.label || check.type,
-          status: "failed",
-          evidence: { max_overflow_px: maxOverflow },
-          message: "No applicable viewport evidence was captured for overflow check.",
+          status: mobileOnly ? "skipped" : "failed",
+          evidence: { max_overflow_px: maxOverflow, viewports: [] },
+          message: mobileOnly
+            ? "No mobile viewport evidence was captured; mobile overflow check skipped."
+            : "No applicable viewport evidence was captured for overflow check.",
         });
         continue;
       }

@@ -123,11 +123,13 @@ function runCli(args, options = {}) {
     });
     child.on("error", reject);
     child.on("close", (code) => {
-      if (code === 0) {
-        resolve({ stdout, stderr });
+      if (options.expectFailure ? code !== 0 : code === 0) {
+        resolve({ stdout, stderr, code });
         return;
       }
-      const error = new Error(`CLI exited with code ${code}: ${stderr || stdout}`);
+      const error = new Error(options.expectFailure
+        ? `CLI was expected to fail but exited with code 0: ${stdout}`
+        : `CLI exited with code ${code}: ${stderr || stdout}`);
       error.code = code;
       error.stdout = stdout;
       error.stderr = stderr;
@@ -759,6 +761,17 @@ function cliRunProfileSplitResult(viewportName, width, height) {
         status: "passed",
         evidence: { max_overflow_px: 0, overflow_px: [0], bounds_overflow_px: [0] },
       },
+      {
+        type: "no_mobile_horizontal_overflow",
+        status: viewportName === "desktop" ? "skipped" : "passed",
+        evidence: {
+          max_overflow_px: 0,
+          viewports: viewportName === "desktop" ? [] : [viewportName],
+          overflow_px: viewportName === "desktop" ? [] : [0],
+          bounds_overflow_px: viewportName === "desktop" ? [] : [0],
+        },
+        ...(viewportName === "desktop" ? { message: "No mobile viewport evidence was captured; mobile overflow check skipped." } : {}),
+      },
     ],
     summary: `cli-profile-split-${viewportName} passed.`,
     captured_at: "2026-05-19T14:40:00.000Z",
@@ -810,6 +823,43 @@ function cliRunProfileSplitResult(viewportName, width, height) {
       dom_summary: { viewport_count: 1, split_fixture: viewportName },
     },
   };
+}
+
+function cliRunProfileSplitChildFailResult(viewportName, width, height) {
+  const result = cliRunProfileSplitResult(viewportName, width, height);
+  result.profile_name = `cli-profile-split-child-fail-${viewportName}`;
+  result.route = {
+    ...result.route,
+    requested: "https://example.com/split-child-fail-profile",
+    observed: "/split-child-fail-profile",
+    expected_path: "/split-child-fail-profile",
+  };
+  result.evidence.profile_name = result.profile_name;
+  result.evidence.target_url = "https://example.com/split-child-fail-profile";
+  result.evidence.viewports[0].url = "https://example.com/split-child-fail-profile";
+  result.evidence.viewports[0].route = {
+    ...result.evidence.viewports[0].route,
+    requested: "https://example.com/split-child-fail-profile",
+    observed: "/split-child-fail-profile",
+    expected_path: "/split-child-fail-profile",
+  };
+  result.checks[0] = {
+    ...result.checks[0],
+    evidence: { expected_path: "/split-child-fail-profile", observed_paths: ["/split-child-fail-profile"], http_statuses: [200] },
+  };
+  if (viewportName === "desktop") {
+    result.status = "product_regression";
+    result.checks.push({
+      type: "fixture_child_failure",
+      status: "failed",
+      evidence: { viewport: "desktop" },
+      message: "Fixture child failure that parent aggregate evidence cannot recompute.",
+    });
+    result.summary = "cli-profile-split-child-fail-desktop failed.";
+  } else {
+    result.summary = "cli-profile-split-child-fail-phone passed.";
+  }
+  return result;
 }
 
 function cliBalancedSetupSummaryResult() {
@@ -905,6 +955,11 @@ const cliRunProfileServer = createServer((request, response) => {
       if (String(body.url || "").includes("/split-profile")) {
         const viewportName = body.viewport?.width === 390 ? "phone" : "desktop";
         sendJson({ job_id: `job_cli_profile_split_${viewportName}` });
+        return;
+      }
+      if (String(body.url || "").includes("/split-child-fail-profile")) {
+        const viewportName = body.viewport?.width === 390 ? "phone" : "desktop";
+        sendJson({ job_id: `job_cli_profile_split_child_fail_${viewportName}` });
         return;
       }
       if (String(body.url || "").includes("/blocked-profile")) {
@@ -1307,6 +1362,19 @@ const cliRunProfileServer = createServer((request, response) => {
     return;
   }
 
+  const splitChildFailJobMatch = request.url.match(/^\/v1\/jobs\/job_cli_profile_split_child_fail_(desktop|phone)$/);
+  if (request.method === "GET" && splitChildFailJobMatch) {
+    const viewportName = splitChildFailJobMatch[1];
+    sendJson({
+      job_id: `job_cli_profile_split_child_fail_${viewportName}`,
+      status: "completed",
+      created_at: "2026-05-19T14:38:00.000Z",
+      submitted_at: "2026-05-19T14:38:10.000Z",
+      completed_at: "2026-05-19T14:39:00.000Z",
+    });
+    return;
+  }
+
   const splitArtifactMatch = request.url.match(/^\/v1\/jobs\/job_cli_profile_split_(desktop|phone)\/artifacts$/);
   if (request.method === "GET" && splitArtifactMatch) {
     const viewportName = splitArtifactMatch[1];
@@ -1321,12 +1389,35 @@ const cliRunProfileServer = createServer((request, response) => {
     return;
   }
 
+  const splitChildFailArtifactMatch = request.url.match(/^\/v1\/jobs\/job_cli_profile_split_child_fail_(desktop|phone)\/artifacts$/);
+  if (request.method === "GET" && splitChildFailArtifactMatch) {
+    const viewportName = splitChildFailArtifactMatch[1];
+    sendJson({
+      artifacts: [
+        {
+          name: "proof.json",
+          url: `http://127.0.0.1:${cliRunProfilePort}/split-child-fail-proof-${viewportName}.json`,
+        },
+      ],
+    });
+    return;
+  }
+
   const splitProofMatch = request.url.match(/^\/split-proof-(desktop|phone)\.json$/);
   if (request.method === "GET" && splitProofMatch) {
     const viewportName = splitProofMatch[1];
     sendJson(viewportName === "phone"
       ? cliRunProfileSplitResult("phone", 390, 844)
       : cliRunProfileSplitResult("desktop", 1280, 900));
+    return;
+  }
+
+  const splitChildFailProofMatch = request.url.match(/^\/split-child-fail-proof-(desktop|phone)\.json$/);
+  if (request.method === "GET" && splitChildFailProofMatch) {
+    const viewportName = splitChildFailProofMatch[1];
+    sendJson(viewportName === "phone"
+      ? cliRunProfileSplitChildFailResult("phone", 390, 844)
+      : cliRunProfileSplitChildFailResult("desktop", 1280, 900));
     return;
   }
 
@@ -2125,6 +2216,7 @@ try {
         viewports: ["desktop"],
       },
       { type: "no_horizontal_overflow", max_overflow_px: 0 },
+      { type: "no_mobile_horizontal_overflow", max_overflow_px: 0 },
     ],
   }));
   const cliSplitProfileResult = await runCli([
@@ -2171,7 +2263,9 @@ try {
   assert.match(String(splitProfileRunRequests[0].body.script), /desktop-only-status/);
   assert.doesNotMatch(String(splitProfileRunRequests[1].body.script), /desktop-only-status/);
   assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "profile-result.json"), "utf8")).status, "passed");
-  assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "desktop", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-desktop");
+  const splitDesktopChildResult = JSON.parse(readFileSync(path.join(splitProfileOutputDir, "desktop", "profile-result.json"), "utf8"));
+  assert.equal(splitDesktopChildResult.profile_name, "cli-profile-split-desktop");
+  assert.equal(splitDesktopChildResult.checks.find((check) => check.type === "no_mobile_horizontal_overflow").status, "skipped");
   assert.equal(JSON.parse(readFileSync(path.join(splitProfileOutputDir, "phone", "profile-result.json"), "utf8")).profile_name, "cli-profile-split-phone");
   const splitProfileSummary = readFileSync(path.join(splitProfileOutputDir, "summary.md"), "utf8");
   assert.match(splitProfileSummary, /mode `split-viewports`, jobs 2, status `split-viewports`, terminal true/);
@@ -2179,6 +2273,54 @@ try {
   assert.match(splitProfileSummary, /phone: job `job_cli_profile_split_phone`, status `completed`, terminal true/);
   assert.match(splitProfileSummary, /desktop\/proof\.json/);
   assert.match(splitProfileSummary, /phone\/proof\.json/);
+
+  const splitChildFailProfileFile = path.join(riddlePreviewDir, "cli-profile-split-child-fail.json");
+  const splitChildFailOutputDir = path.join(riddlePreviewDir, "cli-profile-split-child-fail-output");
+  writeFileSync(splitChildFailProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-split-child-fail",
+    target: {
+      route: "/split-child-fail-profile",
+      viewports: [
+        { name: "desktop", width: 1280, height: 900 },
+        { name: "phone", width: 390, height: 844 },
+      ],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/split-child-fail-profile" },
+      { type: "no_horizontal_overflow", max_overflow_px: 0 },
+    ],
+  }));
+  const cliSplitChildFailResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    splitChildFailProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    splitChildFailOutputDir,
+    "--pollAttempts",
+    "1",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--split-viewports",
+    "true",
+    "--quiet",
+  ], { expectFailure: true });
+  const parsedSplitChildFailResult = JSON.parse(cliSplitChildFailResult.stdout);
+  assert.equal(parsedSplitChildFailResult.status, "product_regression");
+  assert.equal(parsedSplitChildFailResult.checks[0].type, "split_viewport_children");
+  assert.equal(parsedSplitChildFailResult.checks[0].status, "failed");
+  assert.deepEqual(parsedSplitChildFailResult.evidence.dom_summary.child_statuses.map((item) => item.status), ["product_regression", "passed"]);
+  assert.match(readFileSync(path.join(splitChildFailOutputDir, "summary.md"), "utf8"), /split_viewport_children/);
 
   const fatalConsoleProfileFile = path.join(riddlePreviewDir, "cli-fatal-console-summary.json");
   const fatalConsoleOutputDir = path.join(riddlePreviewDir, "cli-fatal-console-summary-output");
@@ -4237,6 +4379,28 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].selec
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].pointer_type, "touch");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].input_dispatch, "cdp");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const desktopOnlyMobileOverflowProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "desktop-only-mobile-overflow",
+  target: {
+    route: "/pricing",
+    viewports: [{ name: "desktop", width: 1440, height: 1000 }],
+  },
+  checks: [
+    { type: "route_loaded", expected_path: "/pricing" },
+    { type: "no_mobile_horizontal_overflow", max_overflow_px: 0 },
+  ],
+}, { url: "https://example.com" });
+const desktopOnlyMobileOverflowAssessment = assessRiddleProofProfileEvidence(desktopOnlyMobileOverflowProfile, {
+  ...profileEvidence,
+  profile_name: "desktop-only-mobile-overflow",
+  viewports: [profileEvidence.viewports[1]],
+  dom_summary: { viewport_count: 1 },
+});
+const desktopOnlyMobileOverflowCheck = desktopOnlyMobileOverflowAssessment.checks.find((check) => check.type === "no_mobile_horizontal_overflow");
+assert.equal(desktopOnlyMobileOverflowAssessment.status, "passed");
+assert.equal(desktopOnlyMobileOverflowCheck.status, "skipped");
+assert.equal(desktopOnlyMobileOverflowCheck.evidence.viewports.length, 0);
 const scopedSetupSubsetProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "scoped-setup-subset",
