@@ -1992,6 +1992,57 @@ try {
   assert.match(profileSummaryMarkdown, /## HTTP Status/);
   assert.match(profileSummaryMarkdown, /public proof artifact: GET `https:\/\/example\.com\/proof\.json`, statuses 200, body_contains 2\/2, body_not_contains clean 1\/1, body_not_patterns clean 1\/1, failures 0/);
 
+  const cliProfileSummaryResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--pollAttempts",
+    "4",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+    "--result-format",
+    "summary",
+  ]);
+  assert.match(cliProfileSummaryResult.stdout, /^# Riddle Proof Profile: cli-profile-progress/m);
+  assert.match(cliProfileSummaryResult.stdout, /Status: passed/);
+  assert.match(cliProfileSummaryResult.stdout, /## Riddle Job/);
+  assert.throws(() => JSON.parse(cliProfileSummaryResult.stdout));
+
+  const cliProfileNoResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--pollAttempts",
+    "4",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+    "--result-format",
+    "none",
+  ]);
+  assert.equal(cliProfileNoResult.stdout, "");
+
   const balancedSetupProfileFile = path.join(riddlePreviewDir, "cli-balanced-setup-summary.json");
   const balancedSetupOutputDir = path.join(riddlePreviewDir, "cli-balanced-setup-summary-output");
   writeFileSync(balancedSetupProfileFile, JSON.stringify({

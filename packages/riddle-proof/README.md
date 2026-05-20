@@ -192,6 +192,10 @@ riddle-proof-loop run-profile \
 Hosted profile runs emit Riddle poll progress to stderr while waiting. Use
 `--quiet` to suppress progress lines, or `--progress-every-ms` to tune the
 heartbeat cadence for long route-inventory or workflow profiles.
+By default, `run-profile` writes the full JSON result to stdout for automation.
+For agent loops where the saved artifacts are the source of truth, use
+`--result-format summary` to print the same compact Markdown summary that is
+written to `summary.md`, or `--result-format none` to leave stdout empty.
 Hosted `run-profile` submits package-generated profile scripts with
 `strict=false` by default because the generated runner is larger than Riddle's
 generic inline-script warning threshold. Use `--strict=true` when you
