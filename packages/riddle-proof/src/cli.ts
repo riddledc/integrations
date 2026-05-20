@@ -721,6 +721,25 @@ function profileHasRouteExitAffordanceReceipt(receipts: Record<string, unknown>[
   });
 }
 
+function profileHasOfflineAudioMetricsReceipt(receipts: Record<string, unknown>[]): boolean {
+  const metricFields = [
+    "mixPeak",
+    "mixRms",
+    "maxPeak",
+    "avgRms",
+    "audioPeak",
+    "audioRms",
+    "offlinePeak",
+    "offlineRms",
+    "peak",
+    "rms",
+  ];
+  return receipts.some((receipt) => metricFields.some((name) => {
+    const value = cliFiniteNumber(setupReturnSummaryValue(receipt, [name]));
+    return value !== undefined && value > 0;
+  }));
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -806,6 +825,7 @@ function profilePackReceiptStatus(
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
   ));
   const hasRouteExitAffordanceReceipt = profileHasRouteExitAffordanceReceipt(valueReceipts);
+  const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
@@ -931,6 +951,13 @@ function profilePackReceiptStatus(
   }
   if (text.includes("input dispatch") || text.includes("pointer") || text.includes("touch") || text.includes("key event") || text.includes("trusted-event")) {
     return profileReceiptSignalStatus(inputDispatchCount > 0 || hasNaturalInput, "input dispatch evidence present", "input dispatch evidence missing");
+  }
+  if (text.includes("offline audio") || (text.includes("audio") && text.includes("metric"))) {
+    return profileReceiptSignalStatus(
+      hasOfflineAudioMetricsReceipt,
+      "offline audio metric receipt present",
+      "offline audio metric receipt missing",
+    );
   }
   if (text.includes("measured") || text.includes("state-change") || text.includes("pixel delta") || text.includes("movement receipt") || text.includes("canvas hash")) {
     return profileReceiptSignalStatus(hasMeasuredStateChange, "measured-change evidence present", "measured-change evidence missing");
