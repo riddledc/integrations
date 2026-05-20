@@ -3718,6 +3718,30 @@ function successfulRoute(route: RiddleProofProfileRouteEvidence, targetUrl?: str
   return matched && !route.error && (route.http_status === null || route.http_status === undefined || route.http_status < 400);
 }
 
+function routeReadinessFailed(route: RiddleProofProfileRouteEvidence, targetUrl?: string) {
+  const matched = route.matched || routePathMatches(route.observed, route.expected_path, targetUrl);
+  const httpOk = route.http_status === null || route.http_status === undefined || route.http_status < 400;
+  return matched && httpOk && Boolean(route.error);
+}
+
+function compactRouteError(error: string | undefined) {
+  const text = typeof error === "string" ? error.replace(/\s+/g, " ").trim() : "";
+  return text ? text.slice(0, 240) : undefined;
+}
+
+function routeLoadedFailureMessage(failedRoutes: RiddleProofProfileRouteEvidence[], expectedPath: string, targetUrl?: string) {
+  const readinessFailures = failedRoutes.filter((route) => routeReadinessFailed(route, targetUrl));
+  if (readinessFailures.length === failedRoutes.length && readinessFailures.length) {
+    const sample = compactRouteError(readinessFailures.find((route) => route.error)?.error);
+    return `Route matched ${expectedPath}, but readiness failed in ${readinessFailures.length} viewport(s)${sample ? `: ${sample}` : "."}`;
+  }
+  if (readinessFailures.length) {
+    const sample = compactRouteError(readinessFailures.find((route) => route.error)?.error);
+    return `Route did not become ready as ${expectedPath} in ${failedRoutes.length} viewport(s); ${readinessFailures.length} matched path and HTTP but failed readiness${sample ? `: ${sample}` : "."}`;
+  }
+  return `Route did not load as ${expectedPath} in ${failedRoutes.length} viewport(s).`;
+}
+
 function parseEvidenceUrl(value: string | undefined, targetUrl: string | undefined): URL | undefined {
   if (!value) return undefined;
   try {
@@ -3820,12 +3844,13 @@ function assessCheckFromEvidence(
   }
 
   if (check.type === "route_loaded") {
-      const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
-      const failed = viewports.filter((viewport) => !successfulRoute({
-        ...viewport.route,
-        expected_path: expectedPath,
-        matched: routePathMatches(viewport.route.observed, expectedPath, evidence.target_url) || viewport.route.matched,
-      }, evidence.target_url));
+    const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
+    const routes = viewports.map((viewport) => ({
+      ...viewport.route,
+      expected_path: expectedPath,
+      matched: routePathMatches(viewport.route.observed, expectedPath, evidence.target_url) || viewport.route.matched,
+    }));
+    const failed = routes.filter((route) => !successfulRoute(route, evidence.target_url));
     return {
       type: check.type,
       label: checkLabel(check),
@@ -3834,8 +3859,9 @@ function assessCheckFromEvidence(
         expected_path: expectedPath,
         observed_paths: viewports.map((viewport) => viewport.route.observed),
         http_statuses: viewports.map((viewport) => viewport.route.http_status ?? null),
+        route_errors: viewports.map((viewport) => viewport.route.error ?? null),
       },
-      message: failed.length ? `Route did not load as ${expectedPath} in ${failed.length} viewport(s).` : undefined,
+      message: failed.length ? routeLoadedFailureMessage(failed, expectedPath, evidence.target_url) : undefined,
     };
   }
 
@@ -4835,6 +4861,29 @@ function routePathMatches(observed, expected, targetUrl) {
 }
 function routeOk(route, targetUrl) {
   return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path, targetUrl)) && !route.error && (route.http_status == null || route.http_status < 400));
+}
+function routeReadinessFailed(route, targetUrl) {
+  const matched = route && (route.matched || routePathMatches(route.observed, route.expected_path, targetUrl));
+  const httpOk = route && (route.http_status == null || route.http_status < 400);
+  return Boolean(matched && httpOk && route.error);
+}
+function compactRouteError(error) {
+  const text = typeof error === "string" ? error.replace(/\s+/g, " ").trim() : "";
+  return text ? text.slice(0, 240) : undefined;
+}
+function routeLoadedFailureMessage(failedRoutes, expectedPath, targetUrl) {
+  const readinessFailures = failedRoutes.filter((route) => routeReadinessFailed(route, targetUrl));
+  if (readinessFailures.length === failedRoutes.length && readinessFailures.length) {
+    const sampleRoute = readinessFailures.find((route) => route && route.error);
+    const sample = compactRouteError(sampleRoute && sampleRoute.error);
+    return "Route matched " + expectedPath + ", but readiness failed in " + readinessFailures.length + " viewport(s)" + (sample ? ": " + sample : ".");
+  }
+  if (readinessFailures.length) {
+    const sampleRoute = readinessFailures.find((route) => route && route.error);
+    const sample = compactRouteError(sampleRoute && sampleRoute.error);
+    return "Route did not become ready as " + expectedPath + " in " + failedRoutes.length + " viewport(s); " + readinessFailures.length + " matched path and HTTP but failed readiness" + (sample ? ": " + sample : ".");
+  }
+  return "Route did not load as " + expectedPath + " in " + failedRoutes.length + " viewport(s).";
 }
 function parseEvidenceUrl(value, targetUrl) {
   if (!value) return null;
@@ -6137,11 +6186,12 @@ function assessProfile(profile, evidence) {
     }
     if (check.type === "route_loaded") {
       const expectedPath = check.expected_path || new URL(evidence.target_url).pathname || "/";
-      const failed = checkViewports.filter((viewport) => {
+      const routes = checkViewports.map((viewport) => {
         const route = { ...(viewport.route || {}), expected_path: expectedPath };
         route.matched = routePathMatches(route.observed, expectedPath, evidence.target_url) || route.matched;
-        return !routeOk(route, evidence.target_url);
+        return route;
       });
+      const failed = routes.filter((route) => !routeOk(route, evidence.target_url));
       checks.push({
         type: check.type,
         label: check.label || check.type,
@@ -6150,8 +6200,9 @@ function assessProfile(profile, evidence) {
           expected_path: expectedPath,
           observed_paths: checkViewports.map((viewport) => viewport.route && viewport.route.observed),
           http_statuses: checkViewports.map((viewport) => viewport.route ? viewport.route.http_status ?? null : null),
+          route_errors: checkViewports.map((viewport) => viewport.route ? viewport.route.error ?? null : null),
         },
-        message: failed.length ? "Route did not load as " + expectedPath + " in " + failed.length + " viewport(s)." : undefined,
+        message: failed.length ? routeLoadedFailureMessage(failed, expectedPath, evidence.target_url) : undefined,
       });
       continue;
     }

@@ -2931,6 +2931,8 @@ assert.ok(profileScript.includes("sampleProfileSetupSummaryItems"));
 assert.ok(profileScript.includes("setupLocatorVisible"));
 assert.ok(profileScript.includes("matching_element_not_visible"));
 assert.ok(profileScript.includes("previewMountPrefix"));
+assert.ok(profileScript.includes("routeLoadedFailureMessage"));
+assert.ok(profileScript.includes("route_errors"));
 assert.ok(profileScript.includes("saveProfileArtifacts(viewports)"));
 assert.ok(profileScript.includes("expected_viewport_count"));
 assert.ok(profileScript.includes("compactSetupResultText"));
@@ -4490,6 +4492,46 @@ const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvide
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 13);
+const routeReadinessFailureProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "route-readiness-failure",
+  target: {
+    route: "/games/luge-run?proof=1",
+    viewports: [{ name: "desktop", width: 1440, height: 1000 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/luge-run" }],
+}, { url: "https://example.com" });
+const routeReadinessFailureAssessment = assessRiddleProofProfileEvidence(routeReadinessFailureProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "route-readiness-failure",
+  target_url: "https://example.com/games/luge-run?proof=1",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-20T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1440,
+    height: 1000,
+    route: {
+      requested: "https://example.com/games/luge-run?proof=1",
+      observed: "/games/luge-run",
+      expected_path: "/games/luge-run",
+      matched: true,
+      http_status: 200,
+      error: "No visible match for selector .luge-pov__canvas: selector_not_found",
+    },
+    overflow_px: 0,
+    selectors: {},
+    screenshot_label: "route-readiness-failure-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const routeReadinessFailureCheck = routeReadinessFailureAssessment.checks.find((check) => check.type === "route_loaded");
+assert.equal(routeReadinessFailureAssessment.status, "product_regression");
+assert.equal(routeReadinessFailureCheck.status, "failed");
+assert.match(routeReadinessFailureCheck.message, /Route matched \/games\/luge-run, but readiness failed in 1 viewport/);
+assert.deepEqual(routeReadinessFailureCheck.evidence.route_errors, ["No visible match for selector .luge-pov__canvas: selector_not_found"]);
 const profileSetupCheck = profileAssessment.checks.find((check) => check.type === "setup_actions_succeeded");
 assert.equal(profileSetupCheck.status, "passed");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewport_count, 2);
