@@ -692,6 +692,11 @@ function profilePackReceiptStatus(
   const hasCanvasChange = canvasReceipts.some((item) => item.ok !== false && item.changed === true);
   const hasNaturalInput = setupNaturalInputSummaryMarkdown(setupViewports).length > 0;
   const hasStateContract = profileStateContractSummaryMarkdown(result).length > 0 || Boolean(cliRecord(metadata.declared_state_contract));
+  const hasInvalidStateReceipt = valueReceipts.some((item) => {
+    const state = setupReturnSummaryValue(item, ["state", "nextState"]);
+    return typeof state === "string" && state.toLowerCase().includes("invalid");
+  });
+  const hasErrorDetailReceipt = valueReceipts.some((item) => setupReturnSummaryValue(item, ["hasErrorDetail", "errorDetail", "error_detail"]) === true);
   const hasReachability = profileReachabilitySummaryMarkdown(result).length > 0
     || result.checks.some((check) => check.type === "selector_visible" && Boolean(cliRecord(check.evidence)?.selector));
   const hasOverflowEvidence = result.checks.some((check) => (
@@ -739,6 +744,17 @@ function profilePackReceiptStatus(
   }
   if (text.includes("recovered") || text.includes("final state")) {
     return profileReceiptSignalStatus(hasStateContract || hasTextVisibility, "final state receipt present", "final state receipt missing");
+  }
+  if (text.includes("error detail")) {
+    const hasRequiredState = !text.includes("invalid") || hasInvalidStateReceipt;
+    return profileReceiptSignalStatus(
+      hasRequiredState && hasErrorDetailReceipt,
+      "error-detail state receipt present",
+      "error-detail state receipt missing",
+    );
+  }
+  if (text.includes("invalid state")) {
+    return profileReceiptSignalStatus(hasStateContract || hasInvalidStateReceipt, "invalid-state receipt present", "invalid-state receipt missing");
   }
   if (text.includes("retry") || text.includes("repair") || text.includes("reset") || text.includes("affordance")) {
     return profileReceiptSignalStatus(hasStateContract || clickCount > 0, "affordance or transition receipt present", "affordance receipt missing");

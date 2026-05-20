@@ -2948,6 +2948,7 @@ try {
       },
       required_receipts: [
         "declared state contract",
+        "invalid state with error detail",
         "screenshots at each state boundary",
         "DOM summary",
         "artifact links or paths",
@@ -2977,8 +2978,9 @@ try {
   const workflowTruthSummaryMarkdown = readFileSync(path.join(workflowTruthOutputDir, "summary.md"), "utf8");
   assert.match(workflowTruthSummaryMarkdown, /## Proof Pack/);
   assert.match(workflowTruthSummaryMarkdown, /pack: `workflow_truth` - Workflow Truth Pack/);
-  assert.match(workflowTruthSummaryMarkdown, /required receipts: 5/);
+  assert.match(workflowTruthSummaryMarkdown, /required receipts: 6/);
   assert.match(workflowTruthSummaryMarkdown, /present: declared state contract \(state contract metadata or receipts present\)/);
+  assert.match(workflowTruthSummaryMarkdown, /present: invalid state with error detail \(error-detail state receipt present\)/);
   assert.match(workflowTruthSummaryMarkdown, /present: screenshots at each state boundary \(multiple screenshots present\)/);
   assert.match(workflowTruthSummaryMarkdown, /present: DOM summary \(DOM summary evidence present\)/);
   assert.match(workflowTruthSummaryMarkdown, /present: artifact links or paths \(artifact references listed\)/);
