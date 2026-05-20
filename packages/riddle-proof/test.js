@@ -1405,8 +1405,21 @@ const cliRunProfileServer = createServer((request, response) => {
                 final_screenshot: "cli-profile-progress-desktop",
                 final_screenshot_full_page: false,
                 setup_screenshots: ["cli-profile-progress-desktop-ready"],
-                clicked_total: 1,
-                clicked_truncated: false,
+                clicked_total: 11,
+                clicked_truncated: true,
+                click_sequence_total: 1,
+                click_sequence_truncated: false,
+                click_sequences: [{
+                  selector_template: ".orbitfour-drop-row .orbitfour-drop:nth-child(*)",
+                  frame_selector: null,
+                  value_source: "nth-child",
+                  result_count: 11,
+                  click_total: 11,
+                  sequence: [1, 2, 2, 3, 4, 3, 3, 4, 4, 5, 4],
+                  omitted_sequence_count: 0,
+                  ordinals: [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+                  omitted_ordinal_count: 0,
+                }],
                 click_count_action_total: 1,
                 click_count_value_total: 2,
                 drag_total: 1,
@@ -1794,13 +1807,15 @@ try {
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
+  assert.match(profileSummaryMarkdown, /click sequences: 1 group\(s\)/);
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 1 click\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
@@ -4302,6 +4317,35 @@ assert.deepEqual(longClickSummary.clicked.map((item) => item.selector), [
   "[data-click='8']",
   "[data-click='9']",
 ]);
+const diagonalClickSequence = [1, 2, 2, 3, 4, 3, 3, 4, 4, 5, 4];
+const clickSequenceProfileAssessment = assessRiddleProofProfileEvidence(profile, {
+  ...profileEvidence,
+  viewports: [{
+    ...profileEvidence.viewports[0],
+    setup_action_results: [
+      ...diagonalClickSequence.map((value, index) => ({
+        ok: true,
+        action: "click",
+        ordinal: index + 8,
+        selector: `.orbitfour-drop-row .orbitfour-drop:nth-child(${value})`,
+      })),
+      { ok: true, action: "click", ordinal: 40, selector: ".orbitfour-actions .orbitfour-btn.primary" },
+      { ok: true, action: "click", ordinal: 44, selector: ".orbitfour-actions .orbitfour-btn.ghost" },
+    ],
+  }, profileEvidence.viewports[1]],
+});
+const clickSequenceSummary = clickSequenceProfileAssessment.checks
+  .find((check) => check.type === "setup_actions_succeeded")
+  .evidence.setup_summary.viewports[0];
+assert.equal(clickSequenceSummary.clicked_total, 13);
+assert.equal(clickSequenceSummary.click_sequence_total, 1);
+assert.equal(clickSequenceSummary.click_sequence_truncated, false);
+assert.equal(clickSequenceSummary.click_sequences[0].selector_template, ".orbitfour-drop-row .orbitfour-drop:nth-child(*)");
+assert.equal(clickSequenceSummary.click_sequences[0].value_source, "nth-child");
+assert.equal(clickSequenceSummary.click_sequences[0].result_count, 11);
+assert.equal(clickSequenceSummary.click_sequences[0].click_total, 11);
+assert.deepEqual(clickSequenceSummary.click_sequences[0].sequence, diagonalClickSequence);
+assert.deepEqual(clickSequenceSummary.click_sequences[0].ordinals, [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_absent").status, "passed");
 assert.equal(profileAssessment.checks.find((check) => check.type === "selector_count_equals").status, "passed");
 const selectorTextVisibleAssessment = profileAssessment.checks.find((check) => check.type === "selector_text_visible");
