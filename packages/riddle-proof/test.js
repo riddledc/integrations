@@ -1254,9 +1254,29 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
   };
 }
 
-function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false } = {}) {
-  const path = missingRecovered ? "/state-hygiene-recovery-action-missing-summary" : "/state-hygiene-recovery-action-summary";
-  const recoveredReceipt = missingRecovered
+function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, restartRecovered = false } = {}) {
+  const path = restartRecovered
+    ? "/state-hygiene-restart-recovery-action-summary"
+    : missingRecovered
+      ? "/state-hygiene-recovery-action-missing-summary"
+      : "/state-hygiene-recovery-action-summary";
+  const recoveredReceipt = restartRecovered
+    ? {
+        ordinal: 2,
+        ok: true,
+        script_length: 20,
+        return_captured: true,
+        return_stored_to: "__canvasLifecycle.afterPlayAgainRestart",
+        returned: { state: "ready", success: true, recovered: true, playAgainVisible: true },
+        return_summary: [
+          { label: "state", path: "state", exists: true, value: "ready" },
+          { label: "success", path: "success", exists: true, value: true },
+          { label: "recovered", path: "recovered", exists: true, value: true },
+          { label: "playAgainVisible", path: "playAgainVisible", exists: true, value: true },
+        ],
+        reason: null,
+      }
+    : missingRecovered
     ? {
         ordinal: 2,
         ok: true,
@@ -1289,7 +1309,11 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false }
       };
   return {
     version: "riddle-proof.profile-result.v1",
-    profile_name: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary" : "cli-state-hygiene-recovery-action-summary",
+    profile_name: restartRecovered
+      ? "cli-state-hygiene-restart-recovery-action-summary"
+      : missingRecovered
+        ? "cli-state-hygiene-recovery-action-missing-summary"
+        : "cli-state-hygiene-recovery-action-summary",
     runner: "riddle",
     status: "passed",
     baseline_policy: "invariant_only",
@@ -1342,7 +1366,7 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false }
                 recoveredReceipt,
               ],
               clicked: [
-                { ordinal: 1, selector: "button", text: "Try Fix" },
+                { ordinal: 1, selector: restartRecovered ? "canvas#game" : "button", text: restartRecovered ? "Play Again" : "Try Fix" },
               ],
               failed: [],
             }],
@@ -1350,11 +1374,19 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false }
         },
       },
     ],
-    summary: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary passed." : "cli-state-hygiene-recovery-action-summary passed.",
+    summary: restartRecovered
+      ? "cli-state-hygiene-restart-recovery-action-summary passed."
+      : missingRecovered
+        ? "cli-state-hygiene-recovery-action-missing-summary passed."
+        : "cli-state-hygiene-recovery-action-summary passed.",
     captured_at: "2026-05-20T17:45:00.000Z",
     evidence: {
       version: "riddle-proof.profile-evidence.v1",
-      profile_name: missingRecovered ? "cli-state-hygiene-recovery-action-missing-summary" : "cli-state-hygiene-recovery-action-summary",
+      profile_name: restartRecovered
+        ? "cli-state-hygiene-restart-recovery-action-summary"
+        : missingRecovered
+          ? "cli-state-hygiene-recovery-action-missing-summary"
+          : "cli-state-hygiene-recovery-action-summary",
       target_url: `https://example.com${path}`,
       baseline_policy: "invariant_only",
       captured_at: "2026-05-20T17:45:00.000Z",
@@ -1480,6 +1512,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-recovery-action-missing-summary")) {
         sendJson(cliStateHygieneRecoveryActionSummaryResult({ missingRecovered: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-restart-recovery-action-summary")) {
+        sendJson(cliStateHygieneRecoveryActionSummaryResult({ restartRecovered: true }));
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-recovery-action-summary")) {
@@ -4876,6 +4912,48 @@ try {
   assert.match(stateHygieneRecoveryActionSummaryMarkdown, /## Proof Pack/);
   assert.match(stateHygieneRecoveryActionSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(stateHygieneRecoveryActionSummaryMarkdown, /present: visible Try Fix recovery action receipt \(visible recovery-action receipt present\)/);
+
+  const stateHygieneRestartRecoveryActionProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-restart-recovery-action-summary.json");
+  const stateHygieneRestartRecoveryActionOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-restart-recovery-action-summary-output");
+  writeFileSync(stateHygieneRestartRecoveryActionProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-restart-recovery-action-summary",
+    target: {
+      route: "/state-hygiene-restart-recovery-action-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "recovery action receipt for Play Again restart to active state",
+      ],
+    },
+  }));
+  const stateHygieneRestartRecoveryActionResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneRestartRecoveryActionProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneRestartRecoveryActionOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneRestartRecoveryActionResult.stdout).status, "passed");
+  const stateHygieneRestartRecoveryActionSummaryMarkdown = readFileSync(path.join(stateHygieneRestartRecoveryActionOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /present: recovery action receipt for Play Again restart to active state \(visible recovery-action receipt present\)/);
 
   const stateHygieneMissingRecoveryActionProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary.json");
   const stateHygieneMissingRecoveryActionOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary-output");
