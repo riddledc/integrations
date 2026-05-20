@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.200
+
+### Patch Changes
+
+- 833d768: Add `elapsed_ms` to `tap_until` receipts and summary output so gameplay tap-loop calibration shows timing without a separate diagnostic rerun.
+
 ## 0.7.199
 
 ### Patch Changes
