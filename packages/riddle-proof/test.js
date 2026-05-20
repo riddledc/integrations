@@ -1544,6 +1544,23 @@ const cliRunProfileServer = createServer((request, response) => {
                   duration_ms: 80,
                   reason: null,
                 }],
+                press_total: 2,
+                press_truncated: false,
+                press: [{
+                  ordinal: 9,
+                  ok: true,
+                  selector: null,
+                  frame_selector: null,
+                  key: "ArrowUp",
+                  reason: null,
+                }, {
+                  ordinal: 10,
+                  ok: true,
+                  selector: ".signal-input.short",
+                  frame_selector: null,
+                  key: "Enter",
+                  reason: null,
+                }],
                 set_range_value_total: 1,
                 set_range_value_truncated: false,
                 set_range_value: [{
@@ -1933,15 +1950,18 @@ try {
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /tap: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /press: 2 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /deterministic_runtime: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 2 press action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
+  assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`/);
+  assert.match(profileSummaryMarkdown, /desktop press: ok, `Enter` on `\.signal-input\.short`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
   assert.match(profileSummaryMarkdown, /desktop deterministic_runtime: ok, random on replace \+6 -> 6, clock on 1000/);
@@ -2909,6 +2929,8 @@ assert.ok(tapCoordinateProfileScript.includes("Input.dispatchTouchEvent"));
 assert.ok(tapCoordinateProfileScript.includes("profileSetupTapReceipts"));
 assert.ok(tapCoordinateProfileScript.includes("tap_total: tapReceipts.length"));
 assert.ok(tapCoordinateProfileScript.includes("tap: sampledTapReceipts"));
+assert.ok(tapCoordinateProfileScript.includes("press_total: pressReceipts.length"));
+assert.ok(tapCoordinateProfileScript.includes("press: sampledPressReceipts"));
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
@@ -4557,6 +4579,55 @@ assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].selec
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].pointer_type, "touch");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].drag[0].input_dispatch, "cdp");
 assert.equal(profileSetupCheck.evidence.setup_summary.viewports[0].text_samples[0].text, "Start building");
+const pressSummaryProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "press-summary-profile",
+  target: {
+    route: "/games/signal-sprint",
+    viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    setup_actions: [
+      { type: "press", key: "ArrowUp" },
+      { type: "press", key: "Enter", selector: ".signal-input.short" },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/signal-sprint" }],
+}, { url: "https://example.com" });
+const pressSummaryAssessment = assessRiddleProofProfileEvidence(pressSummaryProfile, {
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: "press-summary-profile",
+  target_url: "https://example.com/games/signal-sprint",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-05-20T00:00:00.000Z",
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 900,
+    route: {
+      requested: "https://example.com/games/signal-sprint",
+      observed: "/games/signal-sprint",
+      expected_path: "/games/signal-sprint",
+      matched: true,
+      http_status: 200,
+    },
+    overflow_px: 0,
+    selectors: {},
+    setup_action_results: [
+      { ok: true, action: "press", ordinal: 0, key: "ArrowUp" },
+      { ok: true, action: "press", ordinal: 1, key: "Enter", selector: ".signal-input.short" },
+    ],
+    screenshot_label: "press-summary-profile-desktop",
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { viewport_count: 1 },
+});
+const pressSummary = pressSummaryAssessment.checks
+  .find((check) => check.type === "setup_actions_succeeded")
+  .evidence.setup_summary.viewports[0];
+assert.equal(pressSummary.press_total, 2);
+assert.equal(pressSummary.press_truncated, false);
+assert.deepEqual(pressSummary.press.map((receipt) => receipt.key), ["ArrowUp", "Enter"]);
+assert.equal(pressSummary.press[1].selector, ".signal-input.short");
 const arrayReturnSummaryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "array-return-summary-profile",
