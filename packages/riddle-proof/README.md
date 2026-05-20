@@ -417,6 +417,8 @@ stable enough for Playwright's default click actionability checks. Use `press`
 with a Playwright key name, such as `Enter`, `Space`, or `ArrowLeft`,
 when a route's intended browser control is keyboard-driven; omit `selector` for
 a page-level key press, or provide `selector` to press against a focused element.
+For canvas games that read key state rather than keypress events, add `hold_ms`
+or `holdMs` to keep the key down before releasing it.
 Use `click_count` / `clickCount` / `clicks` from 1 to 10 on a single `click`
 action for atomic double-click or double-submit contracts where modeling the
 interaction as repeated setup actions would incorrectly require the target to
