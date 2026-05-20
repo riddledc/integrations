@@ -14,6 +14,8 @@
   proof-pack checklists.
 - Classify responsive reachability visible-control and state-growth receipts
   from setup return summaries in proof-pack checklists.
+- Classify natural-input tool-selection and canvas-signature receipts from
+  setup evidence in proof-pack checklists.
 - 0625ed0: Rename setup-summary keyboard aggregates from press-focused fields to keyboard-focused fields, while keeping CLI rendering backward-compatible with older press-labeled artifacts.
 
 ## 0.7.182

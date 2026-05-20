@@ -1523,6 +1523,7 @@ const cliRunProfileServer = createServer((request, response) => {
                         pointerMoves: 34,
                         pointerUps: 2,
                         trustedEvents: 38,
+                        rectangleChecked: true,
                         nonWhiteDelta: 397,
                         darkDelta: 397,
                       },
@@ -1531,6 +1532,7 @@ const cliRunProfileServer = createServer((request, response) => {
                         { label: "pointerMoves", path: "pointerMoves", exists: true, value: 34 },
                         { label: "pointerUps", path: "pointerUps", exists: true, value: 2 },
                         { label: "trustedEvents", path: "trustedEvents", exists: true, value: 38 },
+                        { label: "rectangleChecked", path: "rectangleChecked", exists: true, value: true },
                         { label: "nonWhiteDelta", path: "nonWhiteDelta", exists: true, value: 397 },
                         { label: "darkDelta", path: "darkDelta", exists: true, value: 397 },
                       ],
@@ -3195,6 +3197,14 @@ try {
       viewports: [{ name: "desktop", width: 1280, height: 900 }],
     },
     checks: [{ type: "selector_visible", selector: "canvas.main-canvas" }],
+    metadata: {
+      pack_id: "natural_input",
+      pack_public_name: "Natural Input Pack",
+      required_receipts: [
+        "rectangle tool selected receipt",
+        "before and after static canvas signatures",
+      ],
+    },
   }));
   const naturalInputResult = await runCli([
     "run-profile",
@@ -3214,6 +3224,10 @@ try {
   ]);
   assert.equal(JSON.parse(naturalInputResult.stdout).status, "passed");
   const naturalInputSummaryMarkdown = readFileSync(path.join(naturalInputOutputDir, "summary.md"), "utf8");
+  assert.match(naturalInputSummaryMarkdown, /## Proof Pack/);
+  assert.match(naturalInputSummaryMarkdown, /pack: `natural_input` - Natural Input Pack/);
+  assert.match(naturalInputSummaryMarkdown, /present: rectangle tool selected receipt \(tool-selection receipt present\)/);
+  assert.match(naturalInputSummaryMarkdown, /present: before and after static canvas signatures \(canvas signature change evidence present\)/);
   assert.match(
     naturalInputSummaryMarkdown,
     /natural input desktop: drag `canvas\.main-canvas` `mouse` via `playwright_mouse`; events pointerDowns=2, pointerMoves=34, pointerUps=2, trustedEvents=38; pixel deltas nonWhiteDelta=397, darkDelta=397; canvas hash `1859852391` -> `3002921772`/,

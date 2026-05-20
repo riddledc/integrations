@@ -690,6 +690,11 @@ function profilePackReceiptStatus(
     + profileSetupReceiptTotal(setupViewports, "keyboard_sequence");
   const canvasReceipts = setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "canvas_signature"));
   const hasCanvasChange = canvasReceipts.some((item) => item.ok !== false && item.changed === true);
+  const canvasSignatureHashes = canvasReceipts
+    .filter((item) => item.ok !== false)
+    .map((item) => cliString(item.hash))
+    .filter(Boolean);
+  const hasCanvasSignatureChange = hasCanvasChange || new Set(canvasSignatureHashes).size >= 2;
   const hasNaturalInput = setupNaturalInputSummaryMarkdown(setupViewports).length > 0;
   const hasStateContract = profileStateContractSummaryMarkdown(result).length > 0 || Boolean(cliRecord(metadata.declared_state_contract));
   const hasInvalidStateReceipt = valueReceipts.some((item) => {
@@ -703,6 +708,9 @@ function profilePackReceiptStatus(
   const hasVisibleControlReceipt = valueReceipts.some((item) => (
     setupReturnSummaryValue(item, ["visibleButtonCount", "visibleControlCount"]) !== undefined
     || setupReturnSummaryValue(item, ["buttonStillVisible", "controlStillVisible"]) === true
+  ));
+  const hasToolSelectionReceipt = valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["rectangleChecked", "toolSelected", "toolChecked", "selected"]) === true
   ));
   const hasStateGrowthReceipt = valueReceipts.some((item) => {
     const delta = cliFiniteNumber(setupReturnSummaryValue(item, ["delta", "countDelta", "itemDelta", "stateDelta"]));
@@ -788,6 +796,12 @@ function profilePackReceiptStatus(
       "visible grid/control evidence present",
       "visible grid/control evidence missing",
     );
+  }
+  if ((text.includes("tool") && text.includes("selected")) || text.includes("rectangle tool")) {
+    return profileReceiptSignalStatus(hasToolSelectionReceipt, "tool-selection receipt present", "tool-selection receipt missing");
+  }
+  if (text.includes("canvas signature")) {
+    return profileReceiptSignalStatus(hasCanvasSignatureChange, "canvas signature change evidence present", "canvas signature evidence missing");
   }
   if (text.includes("selector count") || text.includes("visible count") || text.includes("control visibility") || text.includes("reachability gate") || text.includes("visible control")) {
     return profileReceiptSignalStatus(hasReachability, "selector visibility or reachability evidence present", "reachability evidence missing");
