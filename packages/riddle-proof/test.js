@@ -2942,7 +2942,7 @@ const cliRunProfileServer = createServer((request, response) => {
               viewports: [{
                 name: "desktop",
                 ok: true,
-                result_count: 6,
+                result_count: 7,
                 observed_path: "/profile",
                 final_screenshot: "cli-profile-progress-desktop",
                 final_screenshot_full_page: false,
@@ -2993,6 +2993,28 @@ const cliRunProfileServer = createServer((request, response) => {
                   x: 0.5,
                   y: 0.88,
                   duration_ms: 80,
+                  reason: null,
+                }],
+                tap_until_total: 1,
+                tap_until_tap_total: 12,
+                tap_until_truncated: false,
+                tap_until: [{
+                  ordinal: 11,
+                  ok: true,
+                  selector: ".game-canvas",
+                  pointer_type: "touch",
+                  input_dispatch: "cdp",
+                  coordinate_mode: "ratio",
+                  x: 0.5,
+                  y: 0.65,
+                  duration_ms: 40,
+                  until_path: "__proof.winner",
+                  until_value: "green",
+                  until_expected_value: "green",
+                  tap_count: 12,
+                  max_taps: 20,
+                  interval_ms: 25,
+                  timeout_ms: 30000,
                   reason: null,
                 }],
                 keyboard_total: 2,
@@ -3402,7 +3424,7 @@ try {
   assert.match(profileSummaryMarkdown, /## Side Caveats/);
   assert.match(profileSummaryMarkdown, /side caveat console warnings: 2\/2 allowed; allowlist 1 text, 1 pattern/);
   assert.match(profileSummaryMarkdown, /## Setup Summary/);
-  assert.match(profileSummaryMarkdown, /setup actions: 4 declared, 6 recorded result\(s\) across 1 viewport\(s\)/);
+  assert.match(profileSummaryMarkdown, /setup actions: 4 declared, 7 recorded result\(s\) across 1 viewport\(s\)/);
   assert.match(profileSummaryMarkdown, /final screenshots: 1, mode viewport/);
   assert.match(profileSummaryMarkdown, /setup screenshots: 1/);
   assert.match(profileSummaryMarkdown, /click counts: 1 action\(s\), click_count total 2/);
@@ -3410,16 +3432,18 @@ try {
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /tap: 1 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /tap_until: 1 action\(s\), tap_count total 12/);
   assert.match(profileSummaryMarkdown, /keyboard: 2 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /deterministic_runtime: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 2 keyboard action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 7 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 1 tap_until action\(s\), 12 tap\(s\), 2 keyboard action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
+  assert.match(profileSummaryMarkdown, /desktop tap_until: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.65`, duration 40ms until `__proof\.winner` == `green` in 12\/20 tap\(s\), observed `green`/);
   assert.match(profileSummaryMarkdown, /desktop keyboard_sequence: keys `ArrowUp,Enter`, ordinals `9,10`/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`, held 600ms/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `Enter` on `\.signal-input\.short`/);
@@ -4298,6 +4322,48 @@ try {
   assert.match(clickFallbackTapSummaryMarkdown, /## Proof Pack/);
   assert.match(clickFallbackTapSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(clickFallbackTapSummaryMarkdown, /present: click fallback tap route exit receipt \(click fallback tap evidence present \(1\)\)/);
+
+  const tapUntilProfileFile = path.join(riddlePreviewDir, "cli-tap-until-summary.json");
+  const tapUntilOutputDir = path.join(riddlePreviewDir, "cli-tap-until-summary-output");
+  writeFileSync(tapUntilProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-tap-until-summary",
+    target: {
+      route: "/tap-until-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "tap_until",
+      pack_public_name: "Tap Until Pack",
+      required_receipts: [
+        "tap_until gameplay receipt",
+      ],
+    },
+  }));
+  const tapUntilResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    tapUntilProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    tapUntilOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(tapUntilResult.stdout).status, "passed");
+  const tapUntilSummaryMarkdown = readFileSync(path.join(tapUntilOutputDir, "summary.md"), "utf8");
+  assert.match(tapUntilSummaryMarkdown, /## Proof Pack/);
+  assert.match(tapUntilSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(tapUntilSummaryMarkdown, /present: tap_until gameplay receipt \(tap_until receipt present \(1\)\)/);
 
   const offlineAudioMetricsProfileFile = path.join(riddlePreviewDir, "cli-offline-audio-metrics-summary.json");
   const offlineAudioMetricsOutputDir = path.join(riddlePreviewDir, "cli-offline-audio-metrics-summary-output");
@@ -5301,6 +5367,39 @@ const touchTapAliasProfile = normalizeRiddleProofProfile({
   checks: [{ type: "route_loaded", expected_path: "/game" }],
 }, { url: "https://example.com" });
 assert.equal(touchTapAliasProfile.target.setup_actions[0].type, "tap");
+const tapUntilProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-tap-until-profile",
+  target: {
+    route: "/game",
+    setup_actions: [{
+      type: "canvas-tap-until",
+      selector: "canvas",
+      pointer_type: "touch",
+      coordinate_mode: "ratio",
+      x: 0.5,
+      y: 0.66,
+      until_path: "__proof.winner",
+      until_expected_value: "green",
+      max_taps: 12,
+      interval_ms: 25,
+    }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/game" }],
+}, { url: "https://example.com" });
+assert.equal(tapUntilProfile.target.setup_actions[0].type, "tap_until");
+assert.equal(tapUntilProfile.target.setup_actions[0].pointer_type, "touch");
+assert.equal(tapUntilProfile.target.setup_actions[0].coordinate_mode, "ratio");
+assert.equal(tapUntilProfile.target.setup_actions[0].until_path, "__proof.winner");
+assert.equal(tapUntilProfile.target.setup_actions[0].until_expected_value, "green");
+assert.equal(tapUntilProfile.target.setup_actions[0].max_calls, 12);
+assert.equal(tapUntilProfile.target.setup_actions[0].interval_ms, 25);
+const tapUntilProfileScript = buildRiddleProofProfileScript(tapUntilProfile);
+assert.ok(tapUntilProfileScript.includes('if (type === "tap_until")'));
+assert.ok(tapUntilProfileScript.includes("dispatchSetupTapPoint"));
+assert.ok(tapUntilProfileScript.includes("tap_count: tapCount"));
+assert.ok(tapUntilProfileScript.includes("tap_until_total"));
+assert.ok(tapUntilProfileScript.includes("tap_until_tap_total"));
 const tapCoordinateProfileScript = buildRiddleProofProfileScript(tapCoordinateProfile);
 assert.ok(tapCoordinateProfileScript.includes('if (type === "tap")'));
 assert.ok(tapCoordinateProfileScript.includes("missing_tap_coordinates"));
@@ -5834,6 +5933,7 @@ assert.ok(consoleAllowedProfileScript.includes("allowed_console_patterns"));
 assert.ok(buildRiddleProofProfileScript(consoleWarningProfile).includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("tap"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("tap_until"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("key_down"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("key_up"));
@@ -6293,6 +6393,33 @@ assert.throws(() => normalizeRiddleProofProfile({
 }, { url: "https://example.com" }), /max_calls must be an integer from 1 to 100/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
+  name: "bad-tap-until-path",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "tap-until", selector: "canvas", until_expected_value: true, max_taps: 3 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /tap_until requires until_path/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-tap-until-expected",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "tap-until", selector: "canvas", until_path: "__proof.done", max_taps: 3 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /tap_until requires until_expected_value/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-tap-until-max",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "tap-until", selector: "canvas", until_path: "__proof.done", until_expected_value: true, max_taps: 101 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /max_calls must be an integer from 1 to 100/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
   name: "bad-setup-repeat",
   target: {
     route: "/",
@@ -6407,7 +6534,7 @@ assert.throws(() => normalizeRiddleProofProfile({
     setup_actions: [{ type: "click", selector: ".game-area", pointer_type: "touch" }],
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
-}, { url: "https://example.com" }), /pointer_type is only supported for drag\/tap actions/);
+}, { url: "https://example.com" }), /pointer_type is only supported for drag\/tap\/tap_until actions/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-steps",

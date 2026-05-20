@@ -1031,11 +1031,13 @@ function profilePackReceiptStatus(
     clickFallbackTapKeys.add(`${ordinal === undefined ? `idx:${index}` : `ord:${ordinal}`}:${frameSelector}:${selector}`);
   });
   const clickFallbackTapCount = clickFallbackTapKeys.size;
-  const visibleUiActionCount = clickCount + profileSetupReceiptTotal(setupViewports, "tap");
+  const tapUntilCount = profileSetupReceiptTotal(setupViewports, "tap_until");
+  const visibleUiActionCount = clickCount + profileSetupReceiptTotal(setupViewports, "tap") + tapUntilCount;
   const setupFailureCount = profileSetupFailureCount(setupViewports);
   const setupObstructionCount = profileSetupObstructionCount(setupViewports);
   const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
     + profileSetupReceiptTotal(setupViewports, "tap")
+    + tapUntilCount
     + profileSetupReceiptTotal(setupViewports, "press")
     + profileSetupReceiptTotal(setupViewports, "keyboard_sequence");
   const canvasReceipts = setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "canvas_signature"));
@@ -1131,6 +1133,13 @@ function profilePackReceiptStatus(
       clickFallbackTapCount > 0,
       `click fallback tap evidence present (${clickFallbackTapCount})`,
       "click fallback tap evidence missing",
+    );
+  }
+  if (text.includes("tap_until") || text.includes("tap until") || text.includes("tap-until")) {
+    return profileReceiptSignalStatus(
+      tapUntilCount > 0,
+      `tap_until receipt present (${tapUntilCount})`,
+      "tap_until receipt missing",
     );
   }
   if (
@@ -1647,6 +1656,7 @@ function setupNaturalInputSummaryMarkdown(viewports: Record<string, unknown>[]):
     const inputReceipts = [
       ...setupReceiptArray(viewport, "drag").map((receipt) => ({ kind: "drag", receipt })),
       ...setupReceiptArray(viewport, "tap").map((receipt) => ({ kind: "tap", receipt })),
+      ...setupReceiptArray(viewport, "tap_until").map((receipt) => ({ kind: "tap_until", receipt })),
       ...setupReceiptArray(viewport, "press").map((receipt) => ({ kind: "press", receipt })),
     ].filter(({ receipt }) => receipt.ok !== false);
     if (!inputReceipts.length) continue;
@@ -2128,6 +2138,8 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
   const dragTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.drag_total) || 0), 0);
   const tapTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.tap_total) || 0), 0);
+  const tapUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.tap_until_total) || 0), 0);
+  const tapUntilTapTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.tap_until_tap_total) || 0), 0);
   const keyboardTotal = viewports.reduce((sum, viewport) => {
     const total = cliFiniteNumber(viewport.keyboard_total);
     return sum + (total === undefined ? (cliFiniteNumber(viewport.press_total) || 0) : total);
@@ -2170,6 +2182,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   if (tapTotal) {
     lines.push(`- tap: ${tapTotal} action(s)`);
   }
+  if (tapUntilTotal) {
+    lines.push(`- tap_until: ${tapUntilTotal} action(s), tap_count total ${tapUntilTapTotal}`);
+  }
   if (keyboardTotal) {
     lines.push(`- keyboard: ${keyboardTotal} action(s)`);
   }
@@ -2200,10 +2215,12 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
     const dragActions = cliFiniteNumber(viewport.drag_total) || 0;
     const tapActions = cliFiniteNumber(viewport.tap_total) || 0;
+    const tapUntilActions = cliFiniteNumber(viewport.tap_until_total) || 0;
+    const tapUntilTaps = cliFiniteNumber(viewport.tap_until_tap_total) || 0;
     const keyboardActions = cliFiniteNumber(viewport.keyboard_total) ?? cliFiniteNumber(viewport.press_total) ?? 0;
     const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${tapActions ? `, ${tapActions} tap action(s)` : ""}${keyboardActions ? `, ${keyboardActions} keyboard action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${tapActions ? `, ${tapActions} tap action(s)` : ""}${tapUntilActions ? `, ${tapUntilActions} tap_until action(s), ${tapUntilTaps} tap(s)` : ""}${keyboardActions ? `, ${keyboardActions} keyboard action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   const clickSequenceGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
@@ -2284,6 +2301,39 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} tap: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (tapDetails.length > sampledTapDetails.length) lines.push(`- ${tapDetails.length - sampledTapDetails.length} additional tap receipt(s) omitted.`);
+  const tapUntilGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.tap_until)
+      ? viewport.tap_until.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  const tapUntilDetails = tapUntilGroups.flat();
+  const sampledTapUntilDetails = balancedSetupReceiptDetails(tapUntilGroups, 12);
+  for (const { name, receipt } of sampledTapUntilDetails) {
+    const selector = cliString(receipt.selector) || "target";
+    const pointerType = cliString(receipt.pointer_type);
+    const inputDispatch = cliString(receipt.input_dispatch);
+    const coordinateMode = cliString(receipt.coordinate_mode);
+    const x = cliValueLabel(receipt.x);
+    const y = cliValueLabel(receipt.y);
+    const durationMs = cliFiniteNumber(receipt.duration_ms);
+    const untilPath = cliString(receipt.until_path) || "until_path";
+    const expected = cliValueLabel(receipt.until_expected_value);
+    const actual = cliValueLabel(receipt.until_value);
+    const tapCount = cliFiniteNumber(receipt.tap_count);
+    const maxTaps = cliFiniteNumber(receipt.max_taps) ?? cliFiniteNumber(receipt.max_calls);
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const reason = cliString(receipt.reason);
+    const coordinateText = x && y
+      ? `, ${coordinateMode ? `${coordinateMode} ` : ""}${markdownInlineCode(`${x},${y}`)}`
+      : "";
+    const tapText = tapCount === undefined
+      ? ""
+      : ` in ${tapCount}${maxTaps === undefined ? "" : `/${maxTaps}`} tap(s)`;
+    lines.push(`- ${name} tap_until: ${ok}, ${markdownInlineCode(selector)}${pointerType ? ` ${markdownInlineCode(pointerType)}` : ""}${inputDispatch ? ` via ${markdownInlineCode(inputDispatch)}` : ""}${coordinateText}${durationMs === undefined ? "" : `, duration ${durationMs}ms`} until ${markdownInlineCode(untilPath)}${expected === undefined ? "" : ` == ${markdownInlineCode(expected, 80)}`}${tapText}${actual === undefined ? "" : `, observed ${markdownInlineCode(actual, 80)}`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (tapUntilDetails.length > sampledTapUntilDetails.length) lines.push(`- ${tapUntilDetails.length - sampledTapUntilDetails.length} additional tap_until receipt(s) omitted.`);
   const keyboardGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const rawReceipts = Array.isArray(viewport.keyboard) ? viewport.keyboard : viewport.press;
