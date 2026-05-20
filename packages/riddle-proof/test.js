@@ -8159,6 +8159,33 @@ assert.ok(gameplayWindowCallUntilProfile.target.setup_actions.some(
 ));
 assert.ok(gameplayWindowCallUntilProfile.metadata.purpose.includes("fixed sleeps"));
 
+const spaRouteExitStateHygieneProfile = readJson("./examples/profiles/spa-route-exit-state-hygiene.json");
+assert.equal(spaRouteExitStateHygieneProfile.name, "spa-route-exit-state-hygiene");
+const normalizedSpaRouteExitStateHygieneProfile = normalizeRiddleProofProfile(
+  spaRouteExitStateHygieneProfile,
+  { url: "https://example.com" },
+);
+assert.equal(normalizedSpaRouteExitStateHygieneProfile.target.route, "/games/example?proof=1");
+assert.ok(spaRouteExitStateHygieneProfile.target.setup_actions.some(
+  (action) => action.type === "window_eval" && action.store_return_to === "__rpRouteExit.cleanup",
+));
+assert.ok(spaRouteExitStateHygieneProfile.target.setup_actions.some(
+  (action) => action.type === "assert_window_value" && action.path === "__rpRouteExit.cleanup.ok" && action.expected_value === true,
+));
+assert.ok(spaRouteExitStateHygieneProfile.target.setup_actions.some(
+  (action) => action.type === "assert_window_number" && action.path === "__rpRouteExit.cleanup.staleCount" && action.expected_value === 0,
+));
+assert.ok(spaRouteExitStateHygieneProfile.target.setup_actions.some(
+  (action) => action.type === "click" && action.selector.includes("nav-home"),
+));
+assert.ok(spaRouteExitStateHygieneProfile.checks.some(
+  (check) => check.type === "route_loaded" && check.expected_path === "/",
+));
+assert.ok(spaRouteExitStateHygieneProfile.checks.some(
+  (check) => check.type === "no_mobile_horizontal_overflow",
+));
+assert.ok(spaRouteExitStateHygieneProfile.metadata.purpose.includes("route-exit hygiene"));
+
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
 const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
 const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");
