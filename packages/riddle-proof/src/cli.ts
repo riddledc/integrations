@@ -907,6 +907,7 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   const windowEvalTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_total) || 0), 0);
   const windowEvalStoredTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_stored_total) || 0), 0);
   const windowEvalCapturedTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_eval_captured_total) || 0), 0);
+  const deterministicRuntimeTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.deterministic_runtime_total) || 0), 0);
   const windowCallUntilTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_total) || 0), 0);
   const windowCallUntilCallTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.window_call_until_call_total) || 0), 0);
   const rangeValueTotal = viewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.set_range_value_total) || 0), 0);
@@ -933,6 +934,9 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
   }
   if (windowEvalTotal) {
     lines.push(`- window_eval: ${windowEvalTotal} action(s), stored returns ${windowEvalStoredTotal}, captured returns ${windowEvalCapturedTotal}`);
+  }
+  if (deterministicRuntimeTotal) {
+    lines.push(`- deterministic_runtime: ${deterministicRuntimeTotal} action(s)`);
   }
   if (windowCallUntilTotal) {
     lines.push(`- window_call_until: ${windowCallUntilTotal} action(s), call_count total ${windowCallUntilCallTotal}`);
@@ -963,13 +967,14 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const windowEvalActions = cliFiniteNumber(viewport.window_eval_total) || 0;
     const windowEvalStored = cliFiniteNumber(viewport.window_eval_stored_total) || 0;
     const windowEvalCaptured = cliFiniteNumber(viewport.window_eval_captured_total) || 0;
+    const deterministicRuntimeActions = cliFiniteNumber(viewport.deterministic_runtime_total) || 0;
     const windowCallUntilActions = cliFiniteNumber(viewport.window_call_until_total) || 0;
     const windowCallUntilCalls = cliFiniteNumber(viewport.window_call_until_call_total) || 0;
     const rangeValueActions = cliFiniteNumber(viewport.set_range_value_total) || 0;
     const dragActions = cliFiniteNumber(viewport.drag_total) || 0;
     const canvasSignatureActions = cliFiniteNumber(viewport.canvas_signature_total) || 0;
     const observedPath = cliString(viewport.observed_path);
-    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
+    lines.push(`- ${name}: ${ok}, ${resultCount} result(s), ${screenshotCount} setup screenshot(s), ${clicked} click(s)${clickSequenceCount ? `, ${clickSequenceCount} click sequence(s)` : ""}${clickCountActions ? `, ${clickCountActions} click_count action(s)` : ""}${rangeValueActions ? `, ${rangeValueActions} set_range_value action(s)` : ""}${dragActions ? `, ${dragActions} drag action(s)` : ""}${canvasSignatureActions ? `, ${canvasSignatureActions} canvas_signature action(s)` : ""}${deterministicRuntimeActions ? `, ${deterministicRuntimeActions} deterministic_runtime action(s)` : ""}${windowCallActions ? `, ${windowCallActions} window_call action(s), ${windowCallStored} stored return(s), ${windowCallCaptured} captured return(s)` : ""}${windowEvalActions ? `, ${windowEvalActions} window_eval action(s), ${windowEvalStored} stored return(s), ${windowEvalCaptured} captured return(s)` : ""}${windowCallUntilActions ? `, ${windowCallUntilActions} window_call_until action(s), ${windowCallUntilCalls} call(s)` : ""}${observedPath ? `, path ${observedPath}` : ""}`);
   }
   const clickSequenceGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
@@ -1077,6 +1082,37 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     lines.push(`- ${name} canvas_signature warning: ${markdownInlineCode(selector)}${frameSelector ? ` in frame ${markdownInlineCode(frameSelector)}` : ""} returned the same hash${hash ? ` ${markdownInlineCode(hash, 80)}` : ""} for ${count ?? labelCount ?? "multiple"} labeled capture(s)${labelText}; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes.`);
   }
   if (canvasSignatureWarnings.length > sampledCanvasSignatureWarnings.length) lines.push(`- ${canvasSignatureWarnings.length - sampledCanvasSignatureWarnings.length} additional canvas_signature warning(s) omitted.`);
+  const deterministicRuntimeGroups = viewports.map((viewport) => {
+    const name = cliString(viewport.name) || "viewport";
+    const receipts = Array.isArray(viewport.deterministic_runtime)
+      ? viewport.deterministic_runtime.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return receipts.map((receipt) => ({ name, receipt }));
+  });
+  const deterministicRuntimeDetails = deterministicRuntimeGroups.flat();
+  const sampledDeterministicRuntimeDetails = balancedSetupReceiptDetails(deterministicRuntimeGroups, 12);
+  for (const { name, receipt } of sampledDeterministicRuntimeDetails) {
+    const ok = receipt.ok === false ? "failed" : "ok";
+    const randomEnabled = receipt.random_enabled === true ? "on" : receipt.random_enabled === false ? "off" : "unknown";
+    const clockEnabled = receipt.clock_enabled === true ? "on" : receipt.clock_enabled === false ? "off" : "unknown";
+    const randomQueueAdded = cliFiniteNumber(receipt.random_queue_added);
+    const randomQueueLength = cliFiniteNumber(receipt.random_queue_length);
+    const randomQueueMode = cliString(receipt.random_queue_mode);
+    const randomUnderflowCount = cliFiniteNumber(receipt.random_underflow_count);
+    const previousNow = cliFiniteNumber(receipt.previous_now);
+    const now = cliFiniteNumber(receipt.now);
+    const advanceMs = cliFiniteNumber(receipt.advance_ms);
+    const restored = receipt.restored === true;
+    const reason = cliString(receipt.reason);
+    const randomText = randomQueueAdded === undefined && randomQueueLength === undefined
+      ? `random ${randomEnabled}`
+      : `random ${randomEnabled}${randomQueueMode ? ` ${randomQueueMode}` : ""}${randomQueueAdded === undefined ? "" : ` +${randomQueueAdded}`}${randomQueueLength === undefined ? "" : ` -> ${randomQueueLength}`}`;
+    const clockText = now === undefined
+      ? `clock ${clockEnabled}`
+      : `clock ${clockEnabled}${previousNow === undefined ? "" : ` ${previousNow} ->`} ${now}`;
+    lines.push(`- ${name} deterministic_runtime: ${ok}, ${restored ? "restored, " : ""}${randomText}${randomUnderflowCount ? `, underflows ${randomUnderflowCount}` : ""}, ${clockText}${advanceMs === undefined ? "" : `, advance ${advanceMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+  }
+  if (deterministicRuntimeDetails.length > sampledDeterministicRuntimeDetails.length) lines.push(`- ${deterministicRuntimeDetails.length - sampledDeterministicRuntimeDetails.length} additional deterministic_runtime receipt(s) omitted.`);
   const rangeValueGroups = viewports.map((viewport) => {
     const name = cliString(viewport.name) || "viewport";
     const receipts = Array.isArray(viewport.set_range_value)

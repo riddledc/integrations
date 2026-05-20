@@ -1628,6 +1628,23 @@ const cliRunProfileServer = createServer((request, response) => {
                   ],
                   reason: null,
                 }],
+                deterministic_runtime_total: 1,
+                deterministic_runtime_truncated: false,
+                deterministic_runtime: [{
+                  ordinal: 8,
+                  ok: true,
+                  random_enabled: true,
+                  random_queue_added: 6,
+                  random_queue_length: 6,
+                  random_queue_mode: "replace",
+                  random_underflow_count: 0,
+                  clock_enabled: true,
+                  previous_now: null,
+                  now: 1000,
+                  advance_ms: null,
+                  restored: false,
+                  reason: null,
+                }],
                 window_call_until_total: 1,
                 window_call_until_call_total: 3,
                 window_call_until_truncated: false,
@@ -1904,12 +1921,14 @@ try {
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
+  assert.match(profileSummaryMarkdown, /deterministic_runtime: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
+  assert.match(profileSummaryMarkdown, /desktop deterministic_runtime: ok, random on replace \+6 -> 6, clock on 1000/);
   assert.match(profileSummaryMarkdown, /desktop set_range_value: ok, `input\[type='range'\]` requested `0\.500` -> `0\.5`, before `0\.129`, number 0\.5, range `0\.01`\.\.`0\.5` step `0\.001`/);
   assert.match(profileSummaryMarkdown, /desktop window_call: ok, `__proof\.capture`, stored `__proof\.lastCapture`, return not captured/);
   assert.match(profileSummaryMarkdown, /desktop window_eval: ok, script 52 chars, stored `__proof\.lastEval`, return captured, summary `ok=true, moves=16`, returned `\{"ok":true,"sum":5,"nested":\{"moves":16\}\}`/);
@@ -3367,6 +3386,7 @@ assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("fill"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("press"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_input_value"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("set_range_value"));
+assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("deterministic_runtime"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("canvas_signature"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES.includes("assert_text_absent"));
@@ -3465,6 +3485,47 @@ assert.ok(rangeSetupProfileScript.includes("HTMLInputElement.prototype"));
 assert.ok(rangeSetupProfileScript.includes('new Event("input"'));
 assert.ok(rangeSetupProfileScript.includes('new Event("change"'));
 assert.ok(rangeSetupProfileScript.includes("not_range_input"));
+const deterministicRuntimeSetupProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "profile-deterministic-runtime-action",
+  target: {
+    route: "/games/number-battle",
+    setup_actions: [
+      {
+        type: "mock-runtime",
+        randomValues: [0.9, 0.1, 0.2, 0.8],
+        mockNow: 1000,
+      },
+      {
+        type: "deterministic-runtime",
+        random_queue: [0.5],
+        append: true,
+        advance_ms: 250,
+      },
+      {
+        type: "deterministic-runtime",
+        restore: true,
+      },
+    ],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/games/number-battle" }],
+}, { url: "https://example.com" });
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[0].type, "deterministic_runtime");
+assert.deepEqual(deterministicRuntimeSetupProfile.target.setup_actions[0].random_queue, [0.9, 0.1, 0.2, 0.8]);
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[0].now, 1000);
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[1].type, "deterministic_runtime");
+assert.deepEqual(deterministicRuntimeSetupProfile.target.setup_actions[1].random_queue, [0.5]);
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[1].append, true);
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[1].advance_ms, 250);
+assert.equal(deterministicRuntimeSetupProfile.target.setup_actions[2].restore, true);
+const deterministicRuntimeSetupProfileScript = buildRiddleProofProfileScript(deterministicRuntimeSetupProfile);
+assert.ok(deterministicRuntimeSetupProfileScript.includes('type === "deterministic_runtime"'));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("__RIDDLE_PROOF_DETERMINISTIC_RUNTIME__"));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("Math.random"));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("Date.now"));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("random_underflow_count"));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("profileSetupDeterministicRuntimeReceipts"));
+assert.ok(deterministicRuntimeSetupProfileScript.includes("deterministic_runtime_total"));
 const canvasSignatureProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-canvas-signature-action",
@@ -3803,6 +3864,33 @@ assert.throws(() => normalizeRiddleProofProfile({
   },
   checks: [{ type: "route_loaded", expected_path: "/" }],
 }, { url: "https://example.com" }), /set_range_value requires value/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-deterministic-runtime-empty",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "deterministic-runtime" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /deterministic_runtime requires random_queue, now, advance_ms, or restore/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-deterministic-runtime-random",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "mock-random", random_queue: [0.25, 1] }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /random_queue\[1\] must be a finite number from 0 inclusive to 1 exclusive/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "bad-deterministic-runtime-now",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "mock-clock", now: -1 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /now must be a finite non-negative number/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "bad-drag-coordinates",

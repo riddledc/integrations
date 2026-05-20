@@ -398,7 +398,7 @@ when body matching overrides sequence order.
 appears only after a picker, tab, login stub, storage seed, form fill,
 transport control, or other bounded interaction. Supported setup actions are
 `click`, `drag`, `press`, `fill`, `set_input_value`, `set_range_value`,
-`canvas_signature`, `assert_text_visible`, `assert_text_absent`,
+`deterministic_runtime`, `canvas_signature`, `assert_text_visible`, `assert_text_absent`,
 `assert_selector_count`, `assert_window_value`, `assert_window_number`,
 `local_storage`, `session_storage`, `clear_storage`, `clear_console`,
 `screenshot`, `wait`, `wait_for_selector`, `wait_for_text`, `window_eval`,
@@ -423,6 +423,14 @@ events, and records the requested value plus the browser's actual normalized
 value, numeric value, `min`, `max`, and `step`. The action is intentionally
 strict: if the target is not an `input[type="range"]`, setup fails with
 `not_range_input` instead of silently treating the control like a text field.
+Use `deterministic_runtime` when randomized or clock-driven gameplay needs a
+stable proof path. It can install a deterministic `Math.random` queue with
+`random_queue` / `randomValues`, pin `Date.now()` with `now` / `mockNow`,
+advance the pinned clock with `advance_ms`, append more random values with
+`append: true`, and restore browser originals with `restore: true`. Receipts
+record whether random and clock mocks are active, queue length, clock time, and
+random-queue underflows. Values in `random_queue` must be finite numbers from
+`0` inclusive to `1` exclusive.
 Use `canvas_signature` for canvas-only proof surfaces. It requires `selector`,
 reads the selected canvas with `toDataURL("image/png")`, records a sampled hash,
 canvas dimensions, CSS dimensions, and data length, and can store the result

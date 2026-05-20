@@ -53,6 +53,7 @@ export const RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES = [
   "fill",
   "set_input_value",
   "set_range_value",
+  "deterministic_runtime",
   "canvas_signature",
   "assert_text_visible",
   "assert_text_absent",
@@ -271,6 +272,11 @@ export interface RiddleProofProfileSetupAction {
   key?: string;
   value?: string;
   value_json?: JsonValue;
+  random_queue?: number[];
+  now?: number;
+  advance_ms?: number;
+  append?: boolean;
+  restore?: boolean;
   label?: string;
   script?: string;
   path?: string;
@@ -1053,6 +1059,26 @@ function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>
     });
 }
 
+function profileSetupDeterministicRuntimeReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+  return results
+    .filter((result) => profileSetupResultAction(result) === "deterministic_runtime")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      random_enabled: result.random_enabled ?? null,
+      random_queue_added: result.random_queue_added ?? null,
+      random_queue_length: result.random_queue_length ?? null,
+      random_queue_mode: result.random_queue_mode ?? null,
+      random_underflow_count: result.random_underflow_count ?? null,
+      clock_enabled: result.clock_enabled ?? null,
+      previous_now: result.previous_now ?? null,
+      now: result.now ?? null,
+      advance_ms: result.advance_ms ?? null,
+      restored: result.restored ?? null,
+      reason: result.reason ?? result.error ?? null,
+    }));
+}
+
 function profileSetupReturnSummaryFields(result: Record<string, JsonValue>): RiddleProofProfileReturnSummaryField[] {
   const input = result.return_summary_fields;
   if (!Array.isArray(input)) return [];
@@ -1320,6 +1346,8 @@ function profileSetupSummary(
       const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
+      const deterministicRuntimeReceipts = profileSetupDeterministicRuntimeReceipts(results);
+      const sampledDeterministicRuntimeReceipts = sampleProfileSetupSummaryItems(deterministicRuntimeReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
       const dragReceipts = profileSetupDragReceipts(results);
@@ -1389,6 +1417,9 @@ function profileSetupSummary(
         window_eval_captured_total: windowEvalCapturedTotal,
         window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
         window_eval: sampledWindowEvalReceipts,
+        deterministic_runtime_total: deterministicRuntimeReceipts.length,
+        deterministic_runtime_truncated: deterministicRuntimeReceipts.length > sampledDeterministicRuntimeReceipts.length,
+        deterministic_runtime: sampledDeterministicRuntimeReceipts,
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
@@ -1471,6 +1502,8 @@ function normalizeSetupActionType(value: string | undefined, index: number): Rid
       ? "press"
     : normalizedInput === "set_slider_value" || normalizedInput === "slider_value" || normalizedInput === "set_slider" || normalizedInput === "set_range" || normalizedInput === "range_value" || normalizedInput === "range_input" || normalizedInput === "set_range_input"
       ? "set_range_value"
+    : normalizedInput === "deterministic_runtime" || normalizedInput === "mock_runtime" || normalizedInput === "mock_random" || normalizedInput === "mock_random_queue" || normalizedInput === "seed_random_queue" || normalizedInput === "set_random_queue" || normalizedInput === "mock_clock" || normalizedInput === "set_mock_clock" || normalizedInput === "set_runtime_determinism" || normalizedInput === "runtime_determinism"
+      ? "deterministic_runtime"
     : normalizedInput === "canvas_hash" || normalizedInput === "capture_canvas_hash" || normalizedInput === "capture_canvas_signature" || normalizedInput === "canvas_state_signature"
       ? "canvas_signature"
     : normalizedInput === "capture_screenshot" || normalizedInput === "save_screenshot" || normalizedInput === "setup_screenshot"
@@ -1616,6 +1649,41 @@ function normalizeSetupActionScreenshotFullPage(input: Record<string, unknown>, 
   return values[0];
 }
 
+function normalizeSetupActionRandomQueue(input: Record<string, unknown>, index: number): number[] | undefined {
+  const rawQueue = valueFromOwn(
+    input,
+    "random_queue",
+    "randomQueue",
+    "random_values",
+    "randomValues",
+    "random_sequence",
+    "randomSequence",
+    "math_random",
+    "mathRandom",
+  );
+  if (rawQueue === undefined) return undefined;
+  if (!Array.isArray(rawQueue) || rawQueue.length === 0) {
+    throw new Error(`target.setup_actions[${index}].random_queue must be a non-empty array of numbers from 0 inclusive to 1 exclusive.`);
+  }
+  return rawQueue.map((item, queueIndex) => {
+    const value = numberValue(item);
+    if (value === undefined || value < 0 || value >= 1) {
+      throw new Error(`target.setup_actions[${index}].random_queue[${queueIndex}] must be a finite number from 0 inclusive to 1 exclusive.`);
+    }
+    return value;
+  });
+}
+
+function normalizeSetupActionNonNegativeNumber(input: Record<string, unknown>, index: number, outputKey: string, ...keys: string[]): number | undefined {
+  const rawValue = valueFromOwn(input, ...keys);
+  if (rawValue === undefined) return undefined;
+  const value = numberValue(rawValue);
+  if (value === undefined || value < 0) {
+    throw new Error(`target.setup_actions[${index}].${outputKey} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
 function normalizeSetupAction(input: unknown, index: number): RiddleProofProfileSetupAction {
   if (!isRecord(input)) throw new Error(`target.setup_actions[${index}] must be an object.`);
   const type = normalizeSetupActionType(stringValue(input.type), index);
@@ -1679,6 +1747,14 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   const hasJsonValue = hasOwn(input, "value_json") || hasOwn(input, "valueJson") || hasOwn(input, "json");
   if ((type === "fill" || type === "set_input_value" || type === "set_range_value") && value === undefined && !hasJsonValue) {
     throw new Error(`target.setup_actions[${index}] ${type} requires value.`);
+  }
+  const randomQueue = type === "deterministic_runtime" ? normalizeSetupActionRandomQueue(input, index) : undefined;
+  const deterministicNow = type === "deterministic_runtime" ? normalizeSetupActionNonNegativeNumber(input, index, "now", "now", "date_now", "dateNow", "mock_now", "mockNow", "clock", "timestamp", "time_ms", "timeMs") : undefined;
+  const deterministicAdvanceMs = type === "deterministic_runtime" ? normalizeSetupActionNonNegativeNumber(input, index, "advance_ms", "advance_ms", "advanceMs", "tick_ms", "tickMs", "add_ms", "addMs") : undefined;
+  const deterministicAppend = type === "deterministic_runtime" && booleanValue(valueFromOwn(input, "append", "append_random", "appendRandom")) === true;
+  const deterministicRestore = type === "deterministic_runtime" && booleanValue(valueFromOwn(input, "restore", "reset", "restore_originals", "restoreOriginals")) === true;
+  if (type === "deterministic_runtime" && randomQueue === undefined && deterministicNow === undefined && deterministicAdvanceMs === undefined && !deterministicRestore) {
+    throw new Error(`target.setup_actions[${index}] deterministic_runtime requires random_queue, now, advance_ms, or restore.`);
   }
   const key = stringValue(input.key);
   let dialogAccept: boolean | undefined;
@@ -1814,6 +1890,11 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     key,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
+    random_queue: randomQueue,
+    now: deterministicNow,
+    advance_ms: deterministicAdvanceMs,
+    append: deterministicAppend || undefined,
+    restore: deterministicRestore || undefined,
     label: stringFromOwn(input, "label", "name", "screenshot_label", "screenshotLabel"),
     script,
     path,
@@ -5439,6 +5520,25 @@ function profileSetupWindowEvalReceipts(results) {
       return receipt;
     });
 }
+function profileSetupDeterministicRuntimeReceipts(results) {
+  return (results || [])
+    .filter((result) => result && profileSetupResultAction(result) === "deterministic_runtime")
+    .map((result) => ({
+      ordinal: result.ordinal ?? null,
+      ok: result.ok !== false,
+      random_enabled: result.random_enabled ?? null,
+      random_queue_added: result.random_queue_added ?? null,
+      random_queue_length: result.random_queue_length ?? null,
+      random_queue_mode: result.random_queue_mode ?? null,
+      random_underflow_count: result.random_underflow_count ?? null,
+      clock_enabled: result.clock_enabled ?? null,
+      previous_now: result.previous_now ?? null,
+      now: result.now ?? null,
+      advance_ms: result.advance_ms ?? null,
+      restored: result.restored ?? null,
+      reason: result.reason || result.error || null,
+    }));
+}
 function profileSetupReturnSummaryFields(result) {
   const input = result && result.return_summary_fields;
   if (!Array.isArray(input)) return [];
@@ -5682,6 +5782,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const windowEvalStoredTotal = windowEvalReceipts.filter((result) => typeof result.return_stored_to === "string" && result.return_stored_to.trim()).length;
       const windowEvalCapturedTotal = windowEvalReceipts.filter((result) => result.return_captured === true).length;
       const sampledWindowEvalReceipts = sampleProfileSetupSummaryItems(windowEvalReceipts, 8);
+      const deterministicRuntimeReceipts = profileSetupDeterministicRuntimeReceipts(results);
+      const sampledDeterministicRuntimeReceipts = sampleProfileSetupSummaryItems(deterministicRuntimeReceipts, 8);
       const rangeValueReceipts = profileSetupRangeValueReceipts(results);
       const sampledRangeValueReceipts = sampleProfileSetupSummaryItems(rangeValueReceipts, 8);
       const dragReceipts = profileSetupDragReceipts(results);
@@ -5751,6 +5853,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         window_eval_captured_total: windowEvalCapturedTotal,
         window_eval_truncated: windowEvalReceipts.length > sampledWindowEvalReceipts.length,
         window_eval: sampledWindowEvalReceipts,
+        deterministic_runtime_total: deterministicRuntimeReceipts.length,
+        deterministic_runtime_truncated: deterministicRuntimeReceipts.length > sampledDeterministicRuntimeReceipts.length,
+        deterministic_runtime: sampledDeterministicRuntimeReceipts,
         set_range_value_total: rangeValueReceipts.length,
         set_range_value_truncated: rangeValueReceipts.length > sampledRangeValueReceipts.length,
         set_range_value: sampledRangeValueReceipts,
@@ -7372,6 +7477,111 @@ async function executeSetupAction(action, ordinal, viewport) {
         await page.reload({ waitUntil: "domcontentloaded", timeout: 45000 });
       }
       return { ...base, ...setupScopeEvidence(scope), ok: true, storage, reload: action.reload === true };
+    }
+    if (type === "deterministic_runtime") {
+      const scope = await setupActionScope(action, timeout);
+      if (!scope.ok) return setupScopeFailure(base, scope);
+      const randomQueue = Array.isArray(action.random_queue)
+        ? action.random_queue
+        : Array.isArray(action.randomQueue)
+          ? action.randomQueue
+          : null;
+      const now = setupFiniteNumber(action.now ?? action.date_now ?? action.dateNow ?? action.mock_now ?? action.mockNow ?? action.clock ?? action.timestamp ?? action.time_ms ?? action.timeMs);
+      const advanceMs = setupFiniteNumber(action.advance_ms ?? action.advanceMs ?? action.tick_ms ?? action.tickMs ?? action.add_ms ?? action.addMs);
+      const append = action.append === true || action.append_random === true || action.appendRandom === true;
+      const restore = action.restore === true || action.reset === true || action.restore_originals === true || action.restoreOriginals === true;
+      const runtimeResult = await scope.context.evaluate((payload) => {
+        const root = window;
+        const stateKey = "__RIDDLE_PROOF_DETERMINISTIC_RUNTIME__";
+        const state = root[stateKey] && typeof root[stateKey] === "object" && !Array.isArray(root[stateKey])
+          ? root[stateKey]
+          : {};
+        root[stateKey] = state;
+        if (typeof state.originalRandom !== "function") state.originalRandom = Math.random;
+        if (typeof state.originalDateNow !== "function") state.originalDateNow = Date.now;
+        const previousNow = typeof state.now === "number" && Number.isFinite(state.now)
+          ? state.now
+          : Date.now === state.originalDateNow
+            ? null
+            : Date.now();
+        if (payload.restore) {
+          Math.random = state.originalRandom;
+          Date.now = state.originalDateNow;
+          delete root[stateKey];
+          return {
+            ok: true,
+            restored: true,
+            random_enabled: false,
+            random_queue_added: 0,
+            random_queue_length: 0,
+            random_queue_mode: null,
+            random_underflow_count: typeof state.randomUnderflowCount === "number" ? state.randomUnderflowCount : 0,
+            clock_enabled: false,
+            previous_now: previousNow,
+            now: null,
+            advance_ms: null,
+          };
+        }
+        let randomQueueAdded = null;
+        let randomQueueMode = null;
+        if (Array.isArray(payload.random_queue)) {
+          const queue = payload.random_queue.filter((value) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1);
+          const existing = Array.isArray(state.randomQueue) ? state.randomQueue : [];
+          state.randomQueue = payload.append ? existing.concat(queue) : queue.slice();
+          randomQueueAdded = queue.length;
+          randomQueueMode = payload.append ? "append" : "replace";
+          Math.random = function riddleProofMockRandom() {
+            const activeQueue = Array.isArray(state.randomQueue) ? state.randomQueue : [];
+            if (activeQueue.length) return activeQueue.shift();
+            state.randomUnderflowCount = (typeof state.randomUnderflowCount === "number" ? state.randomUnderflowCount : 0) + 1;
+            return 0;
+          };
+        }
+        if (typeof payload.now === "number" && Number.isFinite(payload.now)) {
+          state.now = payload.now;
+          Date.now = function riddleProofMockDateNow() {
+            return state.now;
+          };
+        }
+        if (typeof payload.advance_ms === "number" && Number.isFinite(payload.advance_ms)) {
+          const baseNow = typeof state.now === "number" && Number.isFinite(state.now)
+            ? state.now
+            : Date.now();
+          state.now = baseNow + payload.advance_ms;
+          Date.now = function riddleProofMockDateNow() {
+            return state.now;
+          };
+        }
+        return {
+          ok: true,
+          restored: false,
+          random_enabled: Math.random !== state.originalRandom,
+          random_queue_added: randomQueueAdded,
+          random_queue_length: Array.isArray(state.randomQueue) ? state.randomQueue.length : 0,
+          random_queue_mode: randomQueueMode,
+          random_underflow_count: typeof state.randomUnderflowCount === "number" ? state.randomUnderflowCount : 0,
+          clock_enabled: Date.now !== state.originalDateNow,
+          previous_now: previousNow,
+          now: typeof state.now === "number" && Number.isFinite(state.now) ? state.now : null,
+          advance_ms: typeof payload.advance_ms === "number" && Number.isFinite(payload.advance_ms) ? payload.advance_ms : null,
+        };
+      }, { random_queue: randomQueue, now, advance_ms: advanceMs, append, restore });
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: runtimeResult && runtimeResult.ok === true,
+        random_enabled: runtimeResult?.random_enabled,
+        random_queue_added: runtimeResult?.random_queue_added,
+        random_queue_length: runtimeResult?.random_queue_length,
+        random_queue_mode: runtimeResult?.random_queue_mode,
+        random_underflow_count: runtimeResult?.random_underflow_count,
+        clock_enabled: runtimeResult?.clock_enabled,
+        previous_now: runtimeResult?.previous_now,
+        now: runtimeResult?.now,
+        advance_ms: runtimeResult?.advance_ms,
+        restored: runtimeResult?.restored,
+        reason: runtimeResult && runtimeResult.ok === true ? undefined : runtimeResult?.reason || "deterministic_runtime_not_applied",
+      };
     }
     if (type === "window_eval") {
       const script = String(action.script || action.code || action.source || action.body || "");
