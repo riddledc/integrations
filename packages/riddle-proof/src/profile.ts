@@ -1175,7 +1175,7 @@ function profileSetupTapReceipts(results: Array<Record<string, JsonValue>>): Arr
     }));
 }
 
-function profileSetupPressReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
+function profileSetupKeyboardReceipts(results: Array<Record<string, JsonValue>>): Array<Record<string, JsonValue>> {
   return results
     .filter((result) => ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
     .map((result) => ({
@@ -1398,8 +1398,8 @@ function profileSetupSummary(
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
-      const pressReceipts = profileSetupPressReceipts(results);
-      const sampledPressReceipts = sampleProfileSetupSummaryItems(pressReceipts, 8);
+      const keyboardReceipts = profileSetupKeyboardReceipts(results);
+      const sampledKeyboardReceipts = sampleProfileSetupSummaryItems(keyboardReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -1477,9 +1477,9 @@ function profileSetupSummary(
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
-        press_total: pressReceipts.length,
-        press_truncated: pressReceipts.length > sampledPressReceipts.length,
-        press: sampledPressReceipts,
+        keyboard_total: keyboardReceipts.length,
+        keyboard_truncated: keyboardReceipts.length > sampledKeyboardReceipts.length,
+        keyboard: sampledKeyboardReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,
@@ -5758,7 +5758,7 @@ function profileSetupTapReceipts(results) {
       reason: result.reason || result.error || null,
     }));
 }
-function profileSetupPressReceipts(results) {
+function profileSetupKeyboardReceipts(results) {
   return (results || [])
     .filter((result) => result && ["press", "key_down", "key_up"].includes(profileSetupResultAction(result)))
     .map((result) => ({
@@ -5960,8 +5960,8 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
       const sampledDragReceipts = sampleProfileSetupSummaryItems(dragReceipts, 8);
       const tapReceipts = profileSetupTapReceipts(results);
       const sampledTapReceipts = sampleProfileSetupSummaryItems(tapReceipts, 8);
-      const pressReceipts = profileSetupPressReceipts(results);
-      const sampledPressReceipts = sampleProfileSetupSummaryItems(pressReceipts, 8);
+      const keyboardReceipts = profileSetupKeyboardReceipts(results);
+      const sampledKeyboardReceipts = sampleProfileSetupSummaryItems(keyboardReceipts, 8);
       const canvasSignatureReceipts = profileSetupCanvasSignatureReceipts(results);
       const sampledCanvasSignatureReceipts = sampleProfileSetupSummaryItems(canvasSignatureReceipts, 8);
       const clickedItems = results
@@ -6039,9 +6039,9 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
         tap_total: tapReceipts.length,
         tap_truncated: tapReceipts.length > sampledTapReceipts.length,
         tap: sampledTapReceipts,
-        press_total: pressReceipts.length,
-        press_truncated: pressReceipts.length > sampledPressReceipts.length,
-        press: sampledPressReceipts,
+        keyboard_total: keyboardReceipts.length,
+        keyboard_truncated: keyboardReceipts.length > sampledKeyboardReceipts.length,
+        keyboard: sampledKeyboardReceipts,
         canvas_signature_total: canvasSignatureReceipts.length,
         canvas_signature_truncated: canvasSignatureReceipts.length > sampledCanvasSignatureReceipts.length,
         canvas_signature: sampledCanvasSignatureReceipts,

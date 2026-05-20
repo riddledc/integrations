@@ -1703,9 +1703,9 @@ const cliRunProfileServer = createServer((request, response) => {
                   duration_ms: 80,
                   reason: null,
                 }],
-                press_total: 2,
-                press_truncated: false,
-                press: [{
+                keyboard_total: 2,
+                keyboard_truncated: false,
+                keyboard: [{
                   ordinal: 9,
                   ok: true,
                   selector: null,
@@ -2116,17 +2116,17 @@ try {
   assert.match(profileSummaryMarkdown, /set_range_value: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /drag: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /tap: 1 action\(s\)/);
-  assert.match(profileSummaryMarkdown, /press: 2 action\(s\)/);
+  assert.match(profileSummaryMarkdown, /keyboard: 2 action\(s\)/);
   assert.match(profileSummaryMarkdown, /canvas_signature: 3 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call: 1 action\(s\), stored returns 1, captured returns 0/);
   assert.match(profileSummaryMarkdown, /window_eval: 1 action\(s\), stored returns 1, captured returns 1/);
   assert.match(profileSummaryMarkdown, /deterministic_runtime: 1 action\(s\)/);
   assert.match(profileSummaryMarkdown, /window_call_until: 1 action\(s\), call_count total 3/);
-  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 2 press action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
+  assert.match(profileSummaryMarkdown, /desktop: ok, 6 result\(s\), 1 setup screenshot\(s\), 11 click\(s\), 1 click sequence\(s\), 1 click_count action\(s\), 1 set_range_value action\(s\), 1 drag action\(s\), 1 tap action\(s\), 2 keyboard action\(s\), 3 canvas_signature action\(s\), 1 deterministic_runtime action\(s\), 1 window_call action\(s\), 1 stored return\(s\), 0 captured return\(s\), 1 window_eval action\(s\), 1 stored return\(s\), 1 captured return\(s\), 1 window_call_until action\(s\), 3 call\(s\), path \/profile/);
   assert.match(profileSummaryMarkdown, /desktop click_sequence: `\.orbitfour-drop-row \.orbitfour-drop:nth-child\(\*\)` nth-child sequence `1,2,2,3,4,3,3,4,4,5,4`, clicks 11, results 11, ordinals `8,9,10,11,12,13,14,15,16,17,18`/);
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
-  assert.match(profileSummaryMarkdown, /desktop press_sequence: keys `ArrowUp,Enter`, ordinals `9,10`/);
+  assert.match(profileSummaryMarkdown, /desktop keyboard_sequence: keys `ArrowUp,Enter`, ordinals `9,10`/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`, held 600ms/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `Enter` on `\.signal-input\.short`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
@@ -3218,8 +3218,8 @@ assert.ok(tapCoordinateProfileScript.includes("Input.dispatchTouchEvent"));
 assert.ok(tapCoordinateProfileScript.includes("profileSetupTapReceipts"));
 assert.ok(tapCoordinateProfileScript.includes("tap_total: tapReceipts.length"));
 assert.ok(tapCoordinateProfileScript.includes("tap: sampledTapReceipts"));
-assert.ok(tapCoordinateProfileScript.includes("press_total: pressReceipts.length"));
-assert.ok(tapCoordinateProfileScript.includes("press: sampledPressReceipts"));
+assert.ok(tapCoordinateProfileScript.includes("keyboard_total: keyboardReceipts.length"));
+assert.ok(tapCoordinateProfileScript.includes("keyboard: sampledKeyboardReceipts"));
 const profileScript = buildRiddleProofProfileScript(profile);
 assert.ok(profileScript.includes('saveJson("proof.json"'));
 assert.ok(profileScript.includes('saveScreenshot(screenshotLabel, screenshotOptions)'));
@@ -4957,11 +4957,11 @@ const pressSummaryAssessment = assessRiddleProofProfileEvidence(pressSummaryProf
 const pressSummary = pressSummaryAssessment.checks
   .find((check) => check.type === "setup_actions_succeeded")
   .evidence.setup_summary.viewports[0];
-assert.equal(pressSummary.press_total, 2);
-assert.equal(pressSummary.press_truncated, false);
-assert.deepEqual(pressSummary.press.map((receipt) => receipt.key), ["ArrowUp", "Enter"]);
-assert.equal(pressSummary.press[0].hold_ms, 750);
-assert.equal(pressSummary.press[1].selector, ".signal-input.short");
+assert.equal(pressSummary.keyboard_total, 2);
+assert.equal(pressSummary.keyboard_truncated, false);
+assert.deepEqual(pressSummary.keyboard.map((receipt) => receipt.key), ["ArrowUp", "Enter"]);
+assert.equal(pressSummary.keyboard[0].hold_ms, 750);
+assert.equal(pressSummary.keyboard[1].selector, ".signal-input.short");
 const arrayReturnSummaryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "array-return-summary-profile",
