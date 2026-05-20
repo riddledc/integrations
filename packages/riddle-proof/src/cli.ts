@@ -1111,9 +1111,10 @@ function profileSetupSummaryMarkdown(result: RiddleProofProfileResult): string[]
     const key = cliString(receipt.key) || "key";
     const selector = cliString(receipt.selector);
     const frameSelector = cliString(receipt.frame_selector);
+    const holdMs = cliFiniteNumber(receipt.hold_ms);
     const ok = receipt.ok === false ? "failed" : "ok";
     const reason = cliString(receipt.reason);
-    lines.push(`- ${name} press: ${ok}, ${markdownInlineCode(key)}${selector ? ` on ${markdownInlineCode(selector)}` : ""}${frameSelector ? ` in frame ${markdownInlineCode(frameSelector)}` : ""}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
+    lines.push(`- ${name} press: ${ok}, ${markdownInlineCode(key)}${selector ? ` on ${markdownInlineCode(selector)}` : ""}${frameSelector ? ` in frame ${markdownInlineCode(frameSelector)}` : ""}${holdMs === undefined ? "" : `, held ${holdMs}ms`}${reason ? `, reason ${markdownInlineCode(reason, 100)}` : ""}`);
   }
   if (pressDetails.length > sampledPressDetails.length) lines.push(`- ${pressDetails.length - sampledPressDetails.length} additional press receipt(s) omitted.`);
   const canvasSignatureGroups = viewports.map((viewport) => {

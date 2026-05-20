@@ -271,6 +271,7 @@ export interface RiddleProofProfileSetupAction {
   duration_ms?: number;
   steps?: number;
   key?: string;
+  hold_ms?: number;
   value?: string;
   value_json?: JsonValue;
   random_queue?: number[];
@@ -1181,6 +1182,7 @@ function profileSetupPressReceipts(results: Array<Record<string, JsonValue>>): A
       selector: result.selector ?? null,
       frame_selector: result.frame_selector ?? null,
       key: result.key ?? null,
+      hold_ms: result.hold_ms ?? null,
       reason: result.reason ?? result.error ?? null,
     }));
 }
@@ -1758,6 +1760,13 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   const toY = numberValue(valueFromOwn(input, "to_y", "toY", "end_y", "endY", "y2"));
   const coordinateMode = normalizeSetupActionCoordinateMode(valueFromOwn(input, "coordinate_mode", "coordinateMode", "coords", "units"), index);
   const pointerType = normalizeSetupActionPointerType(valueFromOwn(input, "pointer_type", "pointerType", "input_type", "inputType"), type, index);
+  const durationMs = numberValue(input.duration_ms) ?? numberValue(input.durationMs);
+  const holdMs = type === "press"
+    ? normalizeSetupActionNonNegativeNumber(input, index, "hold_ms", "hold_ms", "holdMs", "key_down_ms", "keyDownMs", "down_ms", "downMs") ?? durationMs
+    : undefined;
+  if (type === "press" && holdMs !== undefined && (holdMs < 0 || holdMs > 30000)) {
+    throw new Error(`target.setup_actions[${index}].hold_ms must be a finite number from 0 to 30000.`);
+  }
   if (type === "click") {
     const hasClickCoordinate = fromX !== undefined || fromY !== undefined;
     if (hasClickCoordinate && (fromX === undefined || fromY === undefined)) {
@@ -1951,9 +1960,10 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     from_y: fromY,
     to_x: toX,
     to_y: toY,
-    duration_ms: numberValue(input.duration_ms) ?? numberValue(input.durationMs),
+    duration_ms: durationMs,
     steps,
     key,
+    hold_ms: holdMs,
     value,
     value_json: hasJsonValue ? toJsonValue(input.value_json ?? input.valueJson ?? input.json) : undefined,
     random_queue: randomQueue,
@@ -5750,6 +5760,7 @@ function profileSetupPressReceipts(results) {
       selector: result.selector ?? null,
       frame_selector: result.frame_selector ?? null,
       key: result.key ?? null,
+      hold_ms: result.hold_ms ?? null,
       reason: result.reason || result.error || null,
     }));
 }
@@ -7687,9 +7698,22 @@ async function executeSetupAction(action, ordinal, viewport) {
     if (type === "press") {
       const key = String(action.key || "").trim();
       if (!key) return { ...base, reason: "missing_key" };
+      const holdMs = Math.min(30000, Math.max(0, Math.floor(setupNumber(action.hold_ms ?? action.holdMs ?? action.key_down_ms ?? action.keyDownMs ?? action.down_ms ?? action.downMs ?? action.duration_ms ?? action.durationMs, 0) || 0)));
       const scope = await setupActionScope(action, timeout);
       if (!scope.ok) return setupScopeFailure(base, scope);
       if (!action.selector) {
+        if (holdMs > 0) {
+          if (scope.frame_selector) {
+            await scope.context.locator("body").focus({ timeout }).catch(() => {});
+          }
+          await page.keyboard.down(key);
+          try {
+            await page.waitForTimeout(holdMs);
+          } finally {
+            await page.keyboard.up(key).catch(() => {});
+          }
+          return { ...base, ...setupScopeEvidence(scope), ok: true, key, hold_ms: holdMs };
+        }
         if (scope.frame_selector) {
           await scope.context.locator("body").press(key, { timeout });
         } else {
@@ -7702,6 +7726,16 @@ async function executeSetupAction(action, ordinal, viewport) {
       if (!count) return { ...base, reason: "selector_not_found", count, key };
       const targetIndex = Number.isInteger(action.index) ? action.index : 0;
       if (targetIndex < 0 || targetIndex >= count) return { ...base, reason: "index_out_of_range", count, target_index: targetIndex, key };
+      if (holdMs > 0) {
+        await locator.nth(targetIndex).focus({ timeout });
+        await page.keyboard.down(key);
+        try {
+          await page.waitForTimeout(holdMs);
+        } finally {
+          await page.keyboard.up(key).catch(() => {});
+        }
+        return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, key, hold_ms: holdMs };
+      }
       await locator.nth(targetIndex).press(key, { timeout });
       return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, key };
     }

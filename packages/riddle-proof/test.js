@@ -1552,6 +1552,7 @@ const cliRunProfileServer = createServer((request, response) => {
                   selector: null,
                   frame_selector: null,
                   key: "ArrowUp",
+                  hold_ms: 600,
                   reason: null,
                 }, {
                   ordinal: 10,
@@ -1961,7 +1962,7 @@ try {
   assert.match(profileSummaryMarkdown, /desktop drag: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.64` -> `0\.88,0\.64`, steps 16, duration 1100ms/);
   assert.match(profileSummaryMarkdown, /desktop tap: ok, `\.game-canvas` `touch` via `cdp`, ratio `0\.5,0\.88`, duration 80ms/);
   assert.match(profileSummaryMarkdown, /desktop press_sequence: keys `ArrowUp,Enter`, ordinals `9,10`/);
-  assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`/);
+  assert.match(profileSummaryMarkdown, /desktop press: ok, `ArrowUp`, held 600ms/);
   assert.match(profileSummaryMarkdown, /desktop press: ok, `Enter` on `\.signal-input\.short`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature: ok, `\.game-canvas` `ready` hash `123456789`, 800x450, css 800x450, data chars 2048, compared `__proof\.previousCanvas` previous `987654321`, changed true, stored `__proof\.canvasReady`/);
   assert.match(profileSummaryMarkdown, /desktop canvas_signature warning: `\.game-canvas` returned the same hash `123456789` for 3 labeled capture\(s\) across `ready`, `playing`, `terminal`; treat canvas signatures as diagnostic when runtime evidence or screenshots show state changes\./);
@@ -3564,6 +3565,7 @@ const formSetupProfile = normalizeRiddleProofProfile({
       {
         type: "keyboard-press",
         key: "Enter",
+        holdMs: 650,
       },
     ],
   },
@@ -3586,6 +3588,7 @@ assert.equal(formSetupProfile.target.setup_actions[5].type, "set_input_value");
 assert.equal(formSetupProfile.target.setup_actions[5].value, "Riddle Proof Maze");
 assert.equal(formSetupProfile.target.setup_actions[6].type, "press");
 assert.equal(formSetupProfile.target.setup_actions[6].key, "Enter");
+assert.equal(formSetupProfile.target.setup_actions[6].hold_ms, 650);
 const rangeSetupProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "profile-range-action",
@@ -4215,6 +4218,15 @@ assert.throws(() => normalizeRiddleProofProfile({
 }, { url: "https://example.com" }), /press requires key/);
 assert.throws(() => normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
+  name: "bad-held-press",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "press", key: "ArrowDown", hold_ms: 30001 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+}, { url: "https://example.com" }), /hold_ms must be a finite number from 0 to 30000/);
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
   name: "bad-storage",
   target: {
     route: "/create",
@@ -4226,6 +4238,8 @@ const formSetupProfileScript = buildRiddleProofProfileScript(formSetupProfile);
 assert.ok(formSetupProfileScript.includes("setupActionValue"));
 assert.ok(formSetupProfileScript.includes("setupHasOwn"));
 assert.ok(formSetupProfileScript.includes("page.keyboard.press"));
+assert.ok(formSetupProfileScript.includes("page.keyboard.down"));
+assert.ok(formSetupProfileScript.includes("page.keyboard.up"));
 assert.ok(formSetupProfileScript.includes("window.localStorage"));
 assert.ok(formSetupProfileScript.includes("window.sessionStorage"));
 assert.ok(formSetupProfileScript.includes("storage.setItem"));
@@ -4664,7 +4678,7 @@ const pressSummaryAssessment = assessRiddleProofProfileEvidence(pressSummaryProf
     overflow_px: 0,
     selectors: {},
     setup_action_results: [
-      { ok: true, action: "press", ordinal: 0, key: "ArrowUp" },
+      { ok: true, action: "press", ordinal: 0, key: "ArrowUp", hold_ms: 750 },
       { ok: true, action: "press", ordinal: 1, key: "Enter", selector: ".signal-input.short" },
     ],
     screenshot_label: "press-summary-profile-desktop",
@@ -4679,6 +4693,7 @@ const pressSummary = pressSummaryAssessment.checks
 assert.equal(pressSummary.press_total, 2);
 assert.equal(pressSummary.press_truncated, false);
 assert.deepEqual(pressSummary.press.map((receipt) => receipt.key), ["ArrowUp", "Enter"]);
+assert.equal(pressSummary.press[0].hold_ms, 750);
 assert.equal(pressSummary.press[1].selector, ".signal-input.short");
 const arrayReturnSummaryProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
