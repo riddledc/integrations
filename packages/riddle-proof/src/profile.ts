@@ -1550,12 +1550,31 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
   if ((type === "click" || type === "drag" || type === "fill" || type === "set_input_value" || type === "set_range_value" || type === "canvas_signature" || type === "wait_for_selector" || type === "wait_for_text" || type === "assert_text_visible" || type === "assert_text_absent" || type === "assert_selector_count") && !selector) {
     throw new Error(`target.setup_actions[${index}] ${type} requires selector.`);
   }
-  const fromX = numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
-  const fromY = numberValue(valueFromOwn(input, "from_y", "fromY", "start_y", "startY", "y1"));
+  const fromX = type === "click"
+    ? numberValue(valueFromOwn(input, "from_x", "fromX", "x", "click_x", "clickX", "start_x", "startX", "x1"))
+    : numberValue(valueFromOwn(input, "from_x", "fromX", "start_x", "startX", "x1"));
+  const fromY = type === "click"
+    ? numberValue(valueFromOwn(input, "from_y", "fromY", "y", "click_y", "clickY", "start_y", "startY", "y1"))
+    : numberValue(valueFromOwn(input, "from_y", "fromY", "start_y", "startY", "y1"));
   const toX = numberValue(valueFromOwn(input, "to_x", "toX", "end_x", "endX", "x2"));
   const toY = numberValue(valueFromOwn(input, "to_y", "toY", "end_y", "endY", "y2"));
   const coordinateMode = normalizeSetupActionCoordinateMode(valueFromOwn(input, "coordinate_mode", "coordinateMode", "coords", "units"), index);
   const pointerType = normalizeSetupActionPointerType(valueFromOwn(input, "pointer_type", "pointerType", "input_type", "inputType"), type, index);
+  if (type === "click") {
+    const hasClickCoordinate = fromX !== undefined || fromY !== undefined;
+    if (hasClickCoordinate && (fromX === undefined || fromY === undefined)) {
+      throw new Error(`target.setup_actions[${index}] click coordinates require both x and y.`);
+    }
+    if (hasClickCoordinate && fromX !== undefined && fromY !== undefined) {
+      const clickCoordinates = [fromX, fromY];
+      if (coordinateMode === "ratio" && clickCoordinates.some((value) => value < 0 || value > 1)) {
+        throw new Error(`target.setup_actions[${index}] click ratio coordinates must be between 0 and 1.`);
+      }
+      if ((coordinateMode === undefined || coordinateMode === "pixels") && clickCoordinates.some((value) => value < 0)) {
+        throw new Error(`target.setup_actions[${index}] click pixel coordinates must be non-negative.`);
+      }
+    }
+  }
   if (type === "drag") {
     if (fromX === undefined || fromY === undefined || toX === undefined || toY === undefined) {
       throw new Error(`target.setup_actions[${index}] drag requires from_x, from_y, to_x, and to_y.`);
@@ -7588,8 +7607,35 @@ async function executeSetupAction(action, ordinal, viewport) {
         : { timeout, noWaitAfter: true };
       const clickCount = setupNumber(action.click_count, 1);
       if (Number.isInteger(clickCount) && clickCount > 1) clickOptions.clickCount = clickCount;
+      const fromX = setupFiniteNumber(action.from_x ?? action.fromX ?? action.x ?? action.click_x ?? action.clickX);
+      const fromY = setupFiniteNumber(action.from_y ?? action.fromY ?? action.y ?? action.click_y ?? action.clickY);
+      const hasClickPosition = fromX !== undefined || fromY !== undefined;
+      let position;
+      let mode;
+      if (hasClickPosition) {
+        if (fromX === undefined || fromY === undefined) return { ...base, ...setupScopeEvidence(scope), reason: "missing_click_coordinates", count, target_index: targetIndex };
+        const target = locator.nth(targetIndex);
+        const box = await target.boundingBox();
+        if (!box) return { ...base, ...setupScopeEvidence(scope), reason: "bounding_box_unavailable", count, target_index: targetIndex };
+        mode = String(action.coordinate_mode || action.coordinateMode || "pixels").trim();
+        const coordinate = (value, size) => mode === "ratio" ? value * size : value;
+        position = { x: coordinate(fromX, box.width), y: coordinate(fromY, box.height) };
+        clickOptions.position = position;
+      }
       await locator.nth(targetIndex).click(clickOptions);
-      return { ...base, ...setupScopeEvidence(scope), ok: true, count, target_index: targetIndex, text: matchedText, force: action.force === true || undefined, click_count: clickCount > 1 ? clickCount : undefined };
+      return {
+        ...base,
+        ...setupScopeEvidence(scope),
+        ok: true,
+        count,
+        target_index: targetIndex,
+        text: matchedText,
+        force: action.force === true || undefined,
+        click_count: clickCount > 1 ? clickCount : undefined,
+        coordinate_mode: mode,
+        x: position ? fromX : undefined,
+        y: position ? fromY : undefined,
+      };
     }
     if (type === "fill" || type === "set_input_value") {
       const scope = await setupActionScope(action, timeout);
