@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.177
+
+### Patch Changes
+
+- 23cb883: Include sampled press key receipts in hosted profile setup summaries.
+
 ## 0.7.176
 
 ### Patch Changes
