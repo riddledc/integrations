@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.7.197
+
+### Patch Changes
+
+- c4fdf0a: Classify Proof Pack receipts that require click fallback tap evidence from
+  profile setup results that recorded `fallback_to_tap=true`.
+
 ## 0.7.196
 
 ### Patch Changes
