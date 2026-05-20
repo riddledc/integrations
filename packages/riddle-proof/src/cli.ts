@@ -660,11 +660,42 @@ function profileReceiptSignalStatus(
     : { status: "missing", reason: missingReason };
 }
 
+function compactProfileReceiptReason(value: unknown, limit = 180): string | undefined {
+  const text = cliString(value)?.replace(/\s+/g, " ").trim();
+  if (!text) return undefined;
+  return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
+}
+
+function profileFailedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
+  const receipts = setupViewports.flatMap((viewport) => [
+    ...setupReceiptArray(viewport, "window_eval"),
+    ...setupReceiptArray(viewport, "window_call"),
+  ]);
+  for (const receipt of receipts) {
+    if (receipt.ok !== false) continue;
+    const returnStoredTo = cliString(receipt.return_stored_to) || "";
+    const reason = cliString(receipt.reason) || "";
+    const error = cliString(receipt.error) || "";
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${returnStoredTo} ${reason} ${error} ${summary}`.toLowerCase();
+    const isCleanupReceipt = haystack.includes("cleanup")
+      || haystack.includes("post-cleanup")
+      || haystack.includes("stale")
+      || haystack.includes("statehygiene")
+      || haystack.includes("state hygiene")
+      || haystack.includes("remained after")
+      || haystack.includes("still present");
+    if (!isCleanupReceipt) continue;
+    return compactProfileReceiptReason(error) || compactProfileReceiptReason(reason) || "cleanup inventory failed";
+  }
+  return undefined;
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
   receipt: string,
-): { status: "present" | "missing" | "manual"; reason: string } {
+): { status: "present" | "missing" | "manual" | "failed"; reason: string } {
   const text = receipt.toLowerCase();
   const setupSummary = profileSetupSummaryRecord(result);
   const setupViewports = profileSetupSummaryViewports(result);
@@ -743,6 +774,7 @@ function profilePackReceiptStatus(
     setupReturnSummaryValue(item, ["changed"]) === true
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
   ));
+  const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
 
   if (text.includes("artifact link") || text.includes("artifact path")) {
     return profileReceiptSignalStatus(profileResultHasArtifact(result), "artifact references listed", "no artifact references found");
@@ -762,6 +794,9 @@ function profilePackReceiptStatus(
     return profileReceiptSignalStatus(hasStateContract, "state contract metadata or receipts present", "state contract evidence missing");
   }
   if (text.includes("stale") || text.includes("absence")) {
+    if (failedCleanupInventoryReason && (text.includes("cleanup") || text.includes("post-cleanup") || text.includes("stale-state") || text.includes("stale state"))) {
+      return { status: "failed", reason: `cleanup inventory failed: ${failedCleanupInventoryReason}` };
+    }
     return profileReceiptSignalStatus(hasTextAbsence, "absence check passed", "absence check missing");
   }
   if (text.includes("recovered") || text.includes("final state")) {

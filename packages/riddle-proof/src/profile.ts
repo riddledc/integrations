@@ -1034,8 +1034,9 @@ function profileSetupWindowCallReceipts(results: Array<Record<string, JsonValue>
         path: result.path ?? null,
         return_captured: result.return_captured ?? null,
         return_stored_to: result.return_stored_to ?? null,
-        reason: result.reason ?? result.error ?? result.store_reason ?? null,
+        reason: result.reason ?? result.store_reason ?? null,
       };
+      if (result.error !== undefined) receipt.error = result.error;
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
       const returnSummary = profileSetupReturnSummary(result);
@@ -1054,8 +1055,9 @@ function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>
         script_length: result.script_length ?? null,
         return_captured: result.return_captured ?? null,
         return_stored_to: result.return_stored_to ?? null,
-        reason: result.reason ?? result.error ?? result.store_reason ?? null,
+        reason: result.reason ?? result.store_reason ?? null,
       };
+      if (result.error !== undefined) receipt.error = result.error;
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
       const returnSummary = profileSetupReturnSummary(result);
@@ -1493,6 +1495,7 @@ function profileSetupSummary(
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason ?? result.error ?? null,
+          error: result.error ?? null,
           case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
         optional_failed: optionalFailed.map((result) => ({
@@ -1501,6 +1504,7 @@ function profileSetupSummary(
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason ?? result.error ?? null,
+          error: result.error ?? null,
           case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
       };
@@ -5628,8 +5632,9 @@ function profileSetupWindowCallReceipts(results) {
         path: result.path ?? null,
         return_captured: result.return_captured ?? null,
         return_stored_to: result.return_stored_to ?? null,
-        reason: result.reason || result.error || result.store_reason || null,
+        reason: result.reason || result.store_reason || null,
       };
+      if (result.error !== undefined) receipt.error = result.error;
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
       const returnSummary = profileSetupReturnSummary(result);
@@ -5647,8 +5652,9 @@ function profileSetupWindowEvalReceipts(results) {
         script_length: result.script_length ?? null,
         return_captured: result.return_captured ?? null,
         return_stored_to: result.return_stored_to ?? null,
-        reason: result.reason || result.error || result.store_reason || null,
+        reason: result.reason || result.store_reason || null,
       };
+      if (result.error !== undefined) receipt.error = result.error;
       if (result.returned !== undefined) receipt.returned = result.returned;
       if (result.expected_return !== undefined) receipt.expected_return = result.expected_return;
       const returnSummary = profileSetupReturnSummary(result);
@@ -6058,6 +6064,7 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason || result.error || null,
+          error: result.error || null,
           case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
         optional_failed: optionalFailed.map((result) => ({
@@ -6066,6 +6073,7 @@ function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewp
           selector: result.selector ?? null,
           frame_selector: result.frame_selector ?? null,
           reason: result.reason || result.error || null,
+          error: result.error || null,
           case_insensitive_text: compactProfileSetupSummaryText(result.case_insensitive_text),
         })),
       };
