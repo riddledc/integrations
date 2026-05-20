@@ -465,6 +465,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   if (setupSummaryLines.length) {
     lines.push("", "## Setup Summary", "", ...setupSummaryLines);
   }
+  const reachabilitySummaryLines = profileReachabilitySummaryMarkdown(result);
+  if (reachabilitySummaryLines.length) {
+    lines.push("", "## Reachability", "", ...reachabilitySummaryLines);
+  }
   const networkMockSummaryLines = profileNetworkMockSummaryMarkdown(result);
   if (networkMockSummaryLines.length) {
     lines.push("", "## Network Mocks", "", ...networkMockSummaryLines);
@@ -879,6 +883,96 @@ function setupNaturalInputSummaryMarkdown(viewports: Record<string, unknown>[]):
     lines.push(`- natural input ${name}: ${parts.join("; ")}`);
   }
   return lines;
+}
+
+function reachabilityFailureReason(reason: string | undefined): string | undefined {
+  if (!reason) return undefined;
+  const noVisibleMatch = /No visible match for selector [\s\S]*?:\s*([^\n]+)/.exec(reason);
+  if (noVisibleMatch?.[1]) return noVisibleMatch[1].trim().slice(0, 120);
+  if (/no_visible_match/.test(reason)) return "no_visible_match";
+  if (/not visible/i.test(reason)) return "not_visible";
+  return undefined;
+}
+
+function viewportTopBoundsOverflowPx(viewport: Record<string, unknown>): number | undefined {
+  const direct = cliFiniteNumber(viewport.bounds_overflow_px);
+  if (direct !== undefined && direct > 0) return direct;
+  const offenders = Array.isArray(viewport.overflow_offenders)
+    ? viewport.overflow_offenders.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+    : [];
+  for (const offender of offenders) {
+    const overflow = cliFiniteNumber(offender.bounds_overflow_px)
+      ?? cliFiniteNumber(offender.overflow_px)
+      ?? cliFiniteNumber(offender.overflow);
+    if (overflow !== undefined && overflow > 0) return overflow;
+  }
+  const scrollOverflow = cliFiniteNumber(viewport.overflow_px);
+  return scrollOverflow !== undefined && scrollOverflow > 0 ? scrollOverflow : undefined;
+}
+
+function profileReachabilitySummaryMarkdown(result: RiddleProofProfileResult): string[] {
+  const evidenceViewports = Array.isArray(result.evidence?.viewports)
+    ? result.evidence.viewports.map((viewport) => cliRecord(viewport)).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+  if (!evidenceViewports.length) return [];
+
+  const evidenceByName = new Map<string, Record<string, unknown>>();
+  for (const viewport of evidenceViewports) {
+    const name = cliString(viewport.name);
+    if (name) evidenceByName.set(name, viewport);
+  }
+
+  const receipts: string[] = [];
+  const seen = new Set<string>();
+  const addReceipt = (viewportName: string, selector: string, reason: string | undefined) => {
+    const viewport = evidenceByName.get(viewportName);
+    if (!viewport) return;
+    const selectors = cliRecord(viewport.selectors);
+    const selectorEvidence = cliRecord(selectors?.[selector]);
+    const count = cliFiniteNumber(selectorEvidence?.count);
+    const visibleCount = cliFiniteNumber(selectorEvidence?.visible_count);
+    if (count === undefined || count <= 0 || visibleCount === undefined || visibleCount > 0) return;
+    const key = `${viewportName}\0${selector}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const reasonText = reason || "no_visible_match";
+    const boundsOverflow = viewportTopBoundsOverflowPx(viewport);
+    receipts.push(`- reachability ${viewportName}: ${markdownInlineCode(selector, 120)} exists ${count}, visible ${visibleCount}, reason ${markdownInlineCode(reasonText, 80)}${boundsOverflow === undefined ? "" : `, top bounds overflow ${boundsOverflow}px`}`);
+  };
+
+  const setupCheck = result.checks.find((check) => check.type === "setup_actions_succeeded");
+  const setupSummary = cliRecord(setupCheck?.evidence?.setup_summary);
+  const setupViewports = Array.isArray(setupSummary?.viewports)
+    ? setupSummary.viewports.map(cliRecord).filter((viewport): viewport is Record<string, unknown> => Boolean(viewport))
+    : [];
+  for (const viewport of setupViewports) {
+    const viewportName = cliString(viewport.name) || "viewport";
+    const failed = [
+      ...(Array.isArray(viewport.failed) ? viewport.failed : []),
+      ...(Array.isArray(viewport.optional_failed) ? viewport.optional_failed : []),
+    ].map(cliRecord).filter((failure): failure is Record<string, unknown> => Boolean(failure));
+    for (const failure of failed) {
+      const selector = cliString(failure.selector);
+      const reason = reachabilityFailureReason(cliString(failure.reason));
+      if (selector && reason) addReceipt(viewportName, selector, reason);
+    }
+  }
+
+  for (const check of result.checks) {
+    if (check.type !== "selector_visible" || check.status !== "failed") continue;
+    const evidence = cliRecord(check.evidence);
+    const selector = cliString(evidence?.selector);
+    if (!selector) continue;
+    for (const viewport of evidenceViewports) {
+      const viewportName = cliString(viewport.name) || "viewport";
+      addReceipt(viewportName, selector, "no_visible_match");
+    }
+  }
+
+  if (receipts.length > 8) {
+    return [...receipts.slice(0, 8), `- ${receipts.length - 8} additional reachability receipt(s) omitted.`];
+  }
+  return receipts;
 }
 
 type CliSetupReceiptDetail = { name: string; receipt: Record<string, unknown> };

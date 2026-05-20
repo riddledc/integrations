@@ -1094,6 +1094,87 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/reachability-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-reachability-summary",
+          runner: "riddle",
+          status: "product_regression",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/reachability-summary",
+            observed: "/reachability-summary",
+            expected_path: "/reachability-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: { screenshots: ["cli-reachability-summary-phone"], proof_json: "proof.json" },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "failed",
+              evidence: {
+                action_count: 1,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 1,
+                  viewports: [{
+                    name: "phone",
+                    ok: false,
+                    result_count: 1,
+                    clicked_total: 0,
+                    failed: [{
+                      ordinal: 0,
+                      action: "wait_for_selector",
+                      selector: "input.search",
+                      reason: "No visible match for selector input.search: no_visible_match",
+                    }],
+                  }],
+                },
+              },
+              message: "1 setup action(s) failed.",
+            },
+            {
+              type: "selector_visible",
+              label: "selector_visible",
+              status: "failed",
+              evidence: { selector: "input.search", visible_counts: [0] },
+              message: "Selector input.search was not visible in 1 viewport(s).",
+            },
+          ],
+          summary: "cli-reachability-summary failed.",
+          captured_at: "2026-05-20T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-reachability-summary",
+            target_url: "https://example.com/reachability-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-20T00:00:00.000Z",
+            viewports: [{
+              name: "phone",
+              width: 390,
+              height: 844,
+              route: {
+                requested: "https://example.com/reachability-summary",
+                observed: "/reachability-summary",
+                expected_path: "/reachability-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 37,
+              selectors: { "input.search": { count: 1, visible_count: 0 } },
+              text_matches: {},
+              screenshot_label: "cli-reachability-summary-phone",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/natural-input-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -2667,6 +2748,43 @@ try {
   const obstructionSummaryMarkdown = readFileSync(path.join(obstructionOutputDir, "summary.md"), "utf8");
   assert.match(obstructionSummaryMarkdown, /failed: setup actions succeeded/);
   assert.match(obstructionSummaryMarkdown, /obstruction desktop: target `label` intercepted by `<div class="overlay"><\/div> from <div class="main-menu">\.\.\.<\/div> subtree`/);
+
+  const reachabilityProfileFile = path.join(riddlePreviewDir, "cli-reachability-summary.json");
+  const reachabilityOutputDir = path.join(riddlePreviewDir, "cli-reachability-summary-output");
+  writeFileSync(reachabilityProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-reachability-summary",
+    target: {
+      route: "/reachability-summary",
+      viewports: [{ name: "phone", width: 390, height: 844 }],
+    },
+    checks: [{ type: "selector_visible", selector: "input.search" }],
+  }));
+  let reachabilityCliError;
+  try {
+    await runCli([
+      "run-profile",
+      "--api-base-url",
+      `http://127.0.0.1:${address.port}`,
+      "--api-key",
+      "cli-riddle-key",
+      "--profile",
+      reachabilityProfileFile,
+      "--url",
+      "https://example.com",
+      "--runner",
+      "riddle",
+      "--output",
+      reachabilityOutputDir,
+      "--quiet",
+    ]);
+  } catch (error) {
+    reachabilityCliError = error;
+  }
+  assert.equal(reachabilityCliError?.code, 1);
+  const reachabilitySummaryMarkdown = readFileSync(path.join(reachabilityOutputDir, "summary.md"), "utf8");
+  assert.match(reachabilitySummaryMarkdown, /## Reachability/);
+  assert.match(reachabilitySummaryMarkdown, /reachability phone: `input\.search` exists 1, visible 0, reason `no_visible_match`, top bounds overflow 37px/);
 
   const naturalInputProfileFile = path.join(riddlePreviewDir, "cli-natural-input-summary.json");
   const naturalInputOutputDir = path.join(riddlePreviewDir, "cli-natural-input-summary-output");
