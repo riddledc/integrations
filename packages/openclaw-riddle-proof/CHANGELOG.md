@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.108
+
+### Patch Changes
+
+- 1ab5676: Refresh the bundled Riddle Proof dependency to include terminal game-over proof-pack receipt classification.
+
 ## 0.4.107
 
 ### Patch Changes
