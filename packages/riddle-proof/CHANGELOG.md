@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.211
+
+### Patch Changes
+
+- b9167ba: Recognize solved-board step deltas as runtime and measured state-change proof receipts.
+
 ## 0.7.210
 
 ### Patch Changes
