@@ -2195,6 +2195,163 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/keyboard-boost-receipt-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-keyboard-boost-receipt-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/keyboard-boost-receipt-summary",
+            observed: "/keyboard-boost-receipt-summary",
+            expected_path: "/keyboard-boost-receipt-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "keyboard-boost-before",
+              "keyboard-boost-after",
+              "cli-keyboard-boost-receipt-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 4,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 4,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 4,
+                    observed_path: "/keyboard-boost-receipt-summary",
+                    setup_screenshots: ["keyboard-boost-before", "keyboard-boost-after"],
+                    action_counts: { key_down: 1, key_up: 1, window_eval: 2 },
+                    keyboard_total: 2,
+                    keyboard_truncated: false,
+                    keyboard: [
+                      {
+                        action: "key_down",
+                        ordinal: 1,
+                        ok: true,
+                        selector: null,
+                        frame_selector: null,
+                        key: "Shift",
+                        reason: null,
+                      },
+                      {
+                        action: "key_up",
+                        ordinal: 3,
+                        ok: true,
+                        selector: null,
+                        frame_selector: null,
+                        key: "Shift",
+                        reason: null,
+                      },
+                    ],
+                    window_eval_total: 2,
+                    window_eval_stored_total: 2,
+                    window_eval_captured_total: 2,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 2,
+                        ok: true,
+                        script_length: 520,
+                        return_captured: true,
+                        return_stored_to: "__boost.afterHeldShift",
+                        returned: {
+                          ok: true,
+                          boostEnergy: 91.25,
+                          energyDrop: 8.75,
+                          distanceGain: 3.9,
+                          scoreGain: 30,
+                          shiftBoostDown: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "boostEnergy", path: "boostEnergy", exists: true, value: 91.25 },
+                          { label: "energyDrop", path: "energyDrop", exists: true, value: 8.75 },
+                          { label: "distanceGain", path: "distanceGain", exists: true, value: 3.9 },
+                          { label: "scoreGain", path: "scoreGain", exists: true, value: 30 },
+                          { label: "shiftBoostDown", path: "shiftBoostDown", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 4,
+                        ok: true,
+                        script_length: 420,
+                        return_captured: true,
+                        return_stored_to: "__boost.recovery",
+                        returned: {
+                          ok: true,
+                          boostEnergy: 98.5,
+                          energyRecovered: 7.25,
+                          shiftBoostDown: false,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "boostEnergy", path: "boostEnergy", exists: true, value: 98.5 },
+                          { label: "energyRecovered", path: "energyRecovered", exists: true, value: 7.25 },
+                          { label: "shiftBoostDown", path: "shiftBoostDown", exists: true, value: false },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            {
+              type: "route_loaded",
+              label: "route_loaded",
+              status: "passed",
+              evidence: { expected_path: "/keyboard-boost-receipt-summary", observed_paths: ["/keyboard-boost-receipt-summary"], http_statuses: [200] },
+            },
+          ],
+          summary: "cli-keyboard-boost-receipt-summary passed.",
+          captured_at: "2026-05-21T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-keyboard-boost-receipt-summary",
+            target_url: "https://example.com/keyboard-boost-receipt-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-21T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/keyboard-boost-receipt-summary",
+                observed: "/keyboard-boost-receipt-summary",
+                expected_path: "/keyboard-boost-receipt-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "cli-keyboard-boost-receipt-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/responsive-reachability-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -4884,6 +5041,56 @@ try {
   assert.match(responsiveReachabilitySummaryMarkdown, /present: visible grid and control evidence \(visible grid\/control evidence present\)/);
   assert.match(responsiveReachabilitySummaryMarkdown, /present: safe click receipt \(click or obstruction receipt present\)/);
   assert.match(responsiveReachabilitySummaryMarkdown, /present: state-growth receipt after the click \(state-growth receipt present\)/);
+
+  const keyboardBoostReceiptProfileFile = path.join(riddlePreviewDir, "cli-keyboard-boost-receipt-summary.json");
+  const keyboardBoostReceiptOutputDir = path.join(riddlePreviewDir, "cli-keyboard-boost-receipt-summary-output");
+  writeFileSync(keyboardBoostReceiptProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-keyboard-boost-receipt-summary",
+    target: {
+      route: "/keyboard-boost-receipt-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/keyboard-boost-receipt-summary" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "input dispatch receipts for held Shift key_down and key_up",
+        "measured boost state-change receipt",
+      ],
+    },
+  }));
+  const keyboardBoostReceiptResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    keyboardBoostReceiptProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    keyboardBoostReceiptOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(keyboardBoostReceiptResult.stdout).status, "passed");
+  const keyboardBoostReceiptSummaryMarkdown = readFileSync(path.join(keyboardBoostReceiptOutputDir, "summary.md"), "utf8");
+  assert.match(keyboardBoostReceiptSummaryMarkdown, /## Proof Pack/);
+  assert.match(keyboardBoostReceiptSummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(
+    keyboardBoostReceiptSummaryMarkdown,
+    /present: input dispatch receipts for held Shift key_down and key_up \(keyboard key_down\/key_up dispatch evidence present\)/,
+  );
+  assert.match(
+    keyboardBoostReceiptSummaryMarkdown,
+    /present: measured boost state-change receipt \(measured-change evidence present\)/,
+  );
 
   const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");
   const routeViewportCoverageOutputDir = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary-output");
