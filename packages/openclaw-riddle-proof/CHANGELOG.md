@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.115
+
+### Patch Changes
+
+- e07dff6: Refresh the OpenClaw wrapper release for @riddledc/riddle-proof 0.7.214 selector wait diagnostics.
+
 ## 0.4.114
 
 ### Patch Changes
