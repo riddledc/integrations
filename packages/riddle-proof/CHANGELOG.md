@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.210
+
+### Patch Changes
+
+- df3580c: Recognize active route-local runtime metric receipts in proof pack summaries.
+
 ## 0.7.209
 
 ### Patch Changes
