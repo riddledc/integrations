@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.214
+
+### Patch Changes
+
+- c53b38d: Improve profile selector wait diagnostics when a selector matches only hidden or zero-size elements but visible descendants are present.
+
 ## 0.7.213
 
 ### Patch Changes
