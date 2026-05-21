@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.215
+
+### Patch Changes
+
+- c55564d: Recognize nested offline-audio metric return summaries, such as window mix health peak and RMS values, as proof-pack audio metric receipts.
+
 ## 0.7.214
 
 ### Patch Changes
