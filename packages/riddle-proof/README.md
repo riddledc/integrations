@@ -227,6 +227,23 @@ riddle-proof-loop run-profile recover \
   --output artifacts/riddle-proof/pricing-ipad-mini-recovered
 ```
 
+When a matrix run is executed as separate named-viewport jobs, aggregate the
+saved child outputs back into one profile judgment:
+
+```sh
+riddle-proof-loop run-profile aggregate \
+  --profile .riddle-proof/profiles/pricing.json \
+  --url https://example.com \
+  --input-dir artifacts/riddle-proof/pricing-matrix \
+  --output artifacts/riddle-proof/pricing-matrix
+```
+
+`--input-dir` reads child `*/profile-result.json` files such as
+`desktop/profile-result.json` and `ipad-mini/profile-result.json`, then writes
+the combined `profile-result.json` and `summary.md`. Use `--inputs` with a
+comma-separated list of files or directories when the child outputs do not
+share one parent directory.
+
 When promoting proof artifacts into a durable public profile, avoid guessing
 which backend or runner tokens are preserved inside `proof.json`. Derive the
 `body_contains` fragments from the artifact body first:

@@ -4301,6 +4301,70 @@ try {
   assert.equal(JSON.parse(readFileSync(path.join(recoveredProfileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   assert.match(readFileSync(path.join(recoveredProfileOutputDir, "summary.md"), "utf8"), /artifact recovery/);
 
+  const aggregateProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-aggregate-output");
+  const aggregateProfileResult = await runCli([
+    "run-profile",
+    "aggregate",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--input-dir",
+    splitProfileOutputDir,
+    "--output",
+    aggregateProfileOutputDir,
+    "--result-format",
+    "compact-json",
+  ]);
+  const parsedAggregateProfileResult = JSON.parse(aggregateProfileResult.stdout);
+  assert.equal(parsedAggregateProfileResult.version, "riddle-proof.profile-compact-result.v1");
+  assert.equal(parsedAggregateProfileResult.status, "passed");
+  assert.equal(parsedAggregateProfileResult.profile_name, "cli-profile-split");
+  assert.equal(parsedAggregateProfileResult.riddle.mode, "named-viewport-aggregate");
+  assert.equal(parsedAggregateProfileResult.riddle.job_count, 2);
+  assert.deepEqual(parsedAggregateProfileResult.riddle.split_jobs.map((job) => job.viewport), ["desktop", "phone"]);
+  assert.deepEqual(parsedAggregateProfileResult.riddle.split_jobs.map((job) => job.job_id), ["job_cli_profile_split_desktop", "job_cli_profile_split_phone"]);
+  const aggregateProfileResultJson = JSON.parse(readFileSync(path.join(aggregateProfileOutputDir, "profile-result.json"), "utf8"));
+  assert.equal(aggregateProfileResultJson.status, "passed");
+  assert.equal(aggregateProfileResultJson.evidence.dom_summary.child_result_count, 2);
+  assert.deepEqual(aggregateProfileResultJson.evidence.viewports.map((viewport) => viewport.name), ["desktop", "phone"]);
+  const aggregateProfileSummary = readFileSync(path.join(aggregateProfileOutputDir, "summary.md"), "utf8");
+  assert.match(aggregateProfileSummary, /mode `named-viewport-aggregate`, jobs 2, status `named-viewport-aggregate`, terminal true/);
+  assert.match(aggregateProfileSummary, /desktop: job `job_cli_profile_split_desktop`, status `completed`, terminal true/);
+  assert.match(aggregateProfileSummary, /phone: job `job_cli_profile_split_phone`, status `completed`, terminal true/);
+
+  const aggregateProfileInPlaceOutputDir = path.join(splitProfileOutputDir, "aggregate");
+  await runCli([
+    "run-profile",
+    "aggregate",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--input-dir",
+    splitProfileOutputDir,
+    "--output",
+    aggregateProfileInPlaceOutputDir,
+    "--result-format",
+    "none",
+  ]);
+  const aggregateProfileRerunResult = await runCli([
+    "run-profile",
+    "aggregate",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--input-dir",
+    splitProfileOutputDir,
+    "--output",
+    aggregateProfileInPlaceOutputDir,
+    "--result-format",
+    "compact-json",
+  ]);
+  assert.equal(JSON.parse(aggregateProfileRerunResult.stdout).status, "passed");
+  assert.equal(JSON.parse(readFileSync(path.join(aggregateProfileInPlaceOutputDir, "profile-result.json"), "utf8")).riddle.mode, "named-viewport-aggregate");
+
   const splitChildFailProfileFile = path.join(riddlePreviewDir, "cli-profile-split-child-fail.json");
   const splitChildFailOutputDir = path.join(riddlePreviewDir, "cli-profile-split-child-fail-output");
   writeFileSync(splitChildFailProfileFile, JSON.stringify({
