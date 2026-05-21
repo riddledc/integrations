@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.208
+
+### Patch Changes
+
+- 7b6407c: Recognize keyboard key_down/key_up receipts and game-state delta metrics in Proof Pack classification.
+
 ## 0.7.207
 
 ### Patch Changes
