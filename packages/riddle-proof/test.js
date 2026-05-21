@@ -704,6 +704,7 @@ try {
 }
 
 const cliRunProfileRequests = [];
+const cliRunProfileBalanceRequests = [];
 let cliRunProfilePollCount = 0;
 let cliRunProfileArtifactRecoveryPollCount = 0;
 let cliRunProfileUnsubmittedArtifactRecoveryRunCount = 0;
@@ -1833,6 +1834,43 @@ const cliRunProfileServer = createServer((request, response) => {
     response.writeHead(status, { "content-type": "application/json" });
     response.end(JSON.stringify(payload));
   };
+
+  if (request.method === "GET" && request.url === "/v1/balance") {
+    const auth = request.headers.authorization || null;
+    cliRunProfileBalanceRequests.push({
+      url: request.url,
+      method: request.method,
+      auth,
+    });
+    if (auth === "Bearer cli-low-balance-key") {
+      sendJson({
+        available_seconds: 47,
+        reserved_seconds: 0,
+        total_seconds: 47,
+        available_time: "47s",
+        total_time: "47s",
+        available_dollars: 0.006528,
+        reserved_dollars: 0,
+        total_dollars: 0.006528,
+        currency: "USD",
+        holds_count: 0,
+      });
+      return;
+    }
+    sendJson({
+      available_seconds: 3600,
+      reserved_seconds: 0,
+      total_seconds: 3600,
+      available_time: "1h 0m",
+      total_time: "1h 0m",
+      available_dollars: 0.5,
+      reserved_dollars: 0,
+      total_dollars: 0.5,
+      currency: "USD",
+      holds_count: 0,
+    });
+    return;
+  }
 
   if (request.method === "POST" && request.url === "/v1/run") {
     let rawBody = "";
@@ -5100,6 +5138,62 @@ try {
   assert.match(splitProfileSummary, /phone: job `job_cli_profile_split_phone`, status `completed`, terminal true/);
   assert.match(splitProfileSummary, /desktop\/proof\.json/);
   assert.match(splitProfileSummary, /phone\/proof\.json/);
+
+  const splitBalanceBlockedProfileFile = path.join(riddlePreviewDir, "cli-profile-split-balance-blocked.json");
+  const splitBalanceBlockedOutputDir = path.join(riddlePreviewDir, "cli-profile-split-balance-blocked-output");
+  writeFileSync(splitBalanceBlockedProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-split-balance-blocked",
+    target: {
+      route: "/split-balance-blocked-profile",
+      viewports: [
+        { name: "desktop", width: 1280, height: 900 },
+        { name: "phone", width: 390, height: 844 },
+      ],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/split-balance-blocked-profile" }],
+  }));
+  const splitBalanceRunRequestStart = cliRunProfileRequests.length;
+  const splitBalanceRequestStart = cliRunProfileBalanceRequests.length;
+  const cliSplitBalanceBlockedResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-low-balance-key",
+    "--profile",
+    splitBalanceBlockedProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    splitBalanceBlockedOutputDir,
+    "--split-viewports",
+    "true",
+  ]);
+  const parsedSplitBalanceBlockedResult = JSON.parse(cliSplitBalanceBlockedResult.stdout);
+  assert.equal(parsedSplitBalanceBlockedResult.status, "environment_blocked");
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.reason, "insufficient_balance");
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.balance_preflight, true);
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.required_seconds, 60);
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.available_seconds, 47);
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.deficit_seconds, 13);
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.job_count, 2);
+  assert.equal(parsedSplitBalanceBlockedResult.environment_blocker.api_key_source, "option");
+  assert.equal(parsedSplitBalanceBlockedResult.riddle.mode, "split-viewports");
+  assert.equal(parsedSplitBalanceBlockedResult.riddle.job_count, 2);
+  assert.deepEqual(parsedSplitBalanceBlockedResult.riddle.split_jobs.map((job) => job.viewport), ["desktop", "phone"]);
+  assert.equal(cliRunProfileRequests.length, splitBalanceRunRequestStart);
+  assert.equal(cliRunProfileBalanceRequests.length, splitBalanceRequestStart + 1);
+  assert.equal(cliRunProfileBalanceRequests.at(-1).auth, "Bearer cli-low-balance-key");
+  assert.match(cliSplitBalanceBlockedResult.stderr, /environment_blocked insufficient_balance required=60s available=47s deficit=13s/);
+  const splitBalanceBlockedSummary = readFileSync(path.join(splitBalanceBlockedOutputDir, "summary.md"), "utf8");
+  assert.match(splitBalanceBlockedSummary, /## Environment Blocker/);
+  assert.match(splitBalanceBlockedSummary, /preflight: balance/);
+  assert.match(splitBalanceBlockedSummary, /job estimate: 2 job\(s\), 30s minimum per job/);
+  assert.match(splitBalanceBlockedSummary, /seconds: required 60, available 47, deficit 13/);
+  assert.match(splitBalanceBlockedSummary, /auth: option/);
 
   const namedViewportOutputDir = path.join(riddlePreviewDir, "cli-profile-named-viewport-output");
   const namedViewportRequestStart = cliRunProfileRequests.length;

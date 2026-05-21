@@ -202,6 +202,12 @@ generic inline-script warning threshold. Use `--strict=true` when you
 deliberately want Riddle's non-critical script-safety warnings to block the run.
 Critical script-safety violations remain blocked by Riddle either way.
 
+Hosted `run-profile` checks `/v1/balance` before submitting Riddle jobs. For a
+split viewport matrix, the preflight estimates the 30-second hosted minimum per
+viewport and returns an `environment_blocked` result without starting partial
+jobs when the account balance cannot cover the intended sweep. Use
+`--balance-preflight=false` to bypass this check.
+
 Use `--viewport-name <name>` to run only one named viewport from a
 multi-viewport profile while preserving viewport-scoped setup actions and
 checks:

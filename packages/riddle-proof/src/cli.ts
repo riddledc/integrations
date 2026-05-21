@@ -22,6 +22,7 @@ import {
   type RiddlePollJobOptions,
   type RiddlePollProgressSnapshot,
   type RiddlePollSummary,
+  type RiddleBalanceResult,
   type RiddleClientConfig,
 } from "./riddle-client";
 import {
@@ -51,6 +52,8 @@ import type { JsonValue, RiddleProofCheckpointResponse, RiddleProofRunParams, Ri
 type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
 
+const RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB = 30;
+
 function usage() {
   return [
     "Usage:",
@@ -59,7 +62,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
@@ -121,6 +124,10 @@ function optionBoolean(options: CliOptions, key: string) {
 
 function runProfileStrictOption(options: CliOptions) {
   return optionBoolean(options, "strict") ?? false;
+}
+
+function runProfileBalancePreflightOption(options: CliOptions) {
+  return optionBoolean(options, "balancePreflight") ?? true;
 }
 
 function runProfileSplitViewportsOption(options: CliOptions) {
@@ -2564,16 +2571,26 @@ function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): st
   const availableSeconds = cliFiniteNumber(blocker.available_seconds);
   const deficitSeconds = cliFiniteNumber(blocker.deficit_seconds);
   const minimumPurchaseDollars = cliFiniteNumber(blocker.minimum_purchase_dollars);
+  const balancePreflight = blocker.balance_preflight === true;
+  const jobCount = cliFiniteNumber(blocker.job_count);
+  const secondsPerJob = cliFiniteNumber(blocker.seconds_per_job);
+  const apiKeySource = cliString(blocker.api_key_source);
+  const apiKeyFile = cliString(blocker.api_key_file);
 
   if (reason) lines.push(`- reason: ${reason}`);
   if (source || endpoint || httpStatus !== undefined) {
     lines.push(`- source: ${source || "runner"}${endpoint ? ` ${endpoint}` : ""}${httpStatus === undefined ? "" : ` HTTP ${httpStatus}`}`);
   }
+  if (balancePreflight) lines.push("- preflight: balance");
   if (error) lines.push(`- error: ${error}`);
+  if (jobCount !== undefined || secondsPerJob !== undefined) {
+    lines.push(`- job estimate: ${jobCount ?? "unknown"} job(s), ${secondsPerJob ?? "unknown"}s minimum per job`);
+  }
   if (requiredSeconds !== undefined || availableSeconds !== undefined || deficitSeconds !== undefined) {
     lines.push(`- seconds: required ${requiredSeconds ?? "unknown"}, available ${availableSeconds ?? "unknown"}, deficit ${deficitSeconds ?? "unknown"}`);
   }
   if (minimumPurchaseDollars !== undefined) lines.push(`- minimum purchase: $${minimumPurchaseDollars}`);
+  if (apiKeySource) lines.push(`- auth: ${apiKeySource}${apiKeyFile ? ` ${apiKeyFile}` : ""}`);
   return lines;
 }
 
@@ -3965,6 +3982,115 @@ function withSplitViewportChildStatusCheck(
   return { ...result, status, checks, summary };
 }
 
+function profileRiddleJobCountForCli(profile: RiddleProofProfile, options: CliOptions) {
+  return runProfileSplitViewportsOption(options) && profile.target.viewports.length > 1
+    ? profile.target.viewports.length
+    : 1;
+}
+
+function riddleBalanceAvailableSeconds(balance: RiddleBalanceResult): number | undefined {
+  const availableSeconds = cliFiniteNumber(balance.available_seconds);
+  if (availableSeconds !== undefined) return availableSeconds;
+  const totalSeconds = cliFiniteNumber(balance.total_seconds);
+  const reservedSeconds = cliFiniteNumber(balance.reserved_seconds) ?? 0;
+  return totalSeconds === undefined ? undefined : totalSeconds - reservedSeconds;
+}
+
+function riddleBalancePreflightMetadata(profile: RiddleProofProfile, options: CliOptions): RiddleProofProfileResult["riddle"] {
+  const split = runProfileSplitViewportsOption(options) && profile.target.viewports.length > 1;
+  if (!split) return { status: "balance_preflight_blocked", terminal: false };
+  return {
+    mode: "split-viewports",
+    job_count: profile.target.viewports.length,
+    status: "balance_preflight_blocked",
+    terminal: false,
+    split_jobs: profile.target.viewports.map((viewport) => ({ viewport: viewport.name })),
+  };
+}
+
+function apiKeySourceBlockerMetadata(client: RiddleApiClient): Record<string, JsonValue> {
+  try {
+    const source = client.apiKeySource();
+    return {
+      api_key_source: source.source,
+      ...(source.file ? { api_key_file: source.file } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function riddleApiErrorBlockerMetadata(error: unknown): Record<string, JsonValue> {
+  const record = error && typeof error === "object" ? error as Record<string, unknown> : undefined;
+  const status = cliFiniteNumber(record?.status);
+  const pathValue = cliString(record?.path);
+  const body = cliString(record?.body);
+  return {
+    ...(pathValue ? { endpoint: pathValue } : {}),
+    ...(status === undefined ? {} : { http_status: status }),
+    ...(body ? { error: body } : {}),
+  };
+}
+
+async function preflightRiddleProfileBalanceForCli(
+  profile: RiddleProofProfile,
+  options: CliOptions,
+  input: { client: RiddleApiClient; runner: RiddleProofProfileRunner },
+): Promise<RiddleProofProfileResult | undefined> {
+  if (!runProfileBalancePreflightOption(options)) return undefined;
+
+  let balance: RiddleBalanceResult;
+  try {
+    balance = await input.client.getBalance();
+  } catch (error) {
+    return createRiddleProofProfileEnvironmentBlockedResult({
+      profile,
+      runner: input.runner,
+      error,
+      environmentBlocker: {
+        source: "riddle_api",
+        endpoint: "/v1/balance",
+        reason: "balance_preflight_failed",
+        balance_preflight: true,
+        ...riddleApiErrorBlockerMetadata(error),
+        ...apiKeySourceBlockerMetadata(input.client),
+      },
+      riddle: riddleBalancePreflightMetadata(profile, options),
+    });
+  }
+
+  const jobCount = profileRiddleJobCountForCli(profile, options);
+  const requiredSeconds = jobCount * RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB;
+  const availableSeconds = riddleBalanceAvailableSeconds(balance);
+  if (availableSeconds === undefined || availableSeconds >= requiredSeconds) return undefined;
+  const reservedSeconds = cliFiniteNumber(balance.reserved_seconds);
+  const totalSeconds = cliFiniteNumber(balance.total_seconds);
+  const holdsCount = cliFiniteNumber(balance.holds_count);
+
+  return createRiddleProofProfileEnvironmentBlockedResult({
+    profile,
+    runner: input.runner,
+    error: `Riddle balance preflight failed: ${availableSeconds}s available for ${jobCount} intended hosted job(s), minimum ${requiredSeconds}s required.`,
+    environmentBlocker: {
+      source: "riddle_api",
+      endpoint: "/v1/balance",
+      reason: "insufficient_balance",
+      error: "Insufficient available balance",
+      balance_preflight: true,
+      job_count: jobCount,
+      seconds_per_job: RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB,
+      required_seconds: requiredSeconds,
+      available_seconds: availableSeconds,
+      deficit_seconds: requiredSeconds - availableSeconds,
+      ...(reservedSeconds === undefined ? {} : { reserved_seconds: reservedSeconds }),
+      ...(totalSeconds === undefined ? {} : { total_seconds: totalSeconds }),
+      ...(holdsCount === undefined ? {} : { holds_count: holdsCount }),
+      ...apiKeySourceBlockerMetadata(input.client),
+    },
+    riddle: riddleBalancePreflightMetadata(profile, options),
+  });
+}
+
 async function runSingleRiddleProfileForCli(
   profile: RiddleProofProfile,
   options: CliOptions,
@@ -4215,6 +4341,8 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
     throw new Error(`Unsupported --runner ${runner}. The current CLI supports --runner riddle.`);
   }
   const client = createRiddleApiClient(riddleClientConfig(options));
+  const balanceBlocked = await preflightRiddleProfileBalanceForCli(profile, options, { client, runner });
+  if (balanceBlocked) return balanceBlocked;
   if (runProfileSplitViewportsOption(options) && profile.target.viewports.length > 1) {
     return runSplitViewportProfileForCli(profile, options, { client, runner });
   }
