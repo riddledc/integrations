@@ -6963,6 +6963,9 @@ assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_count_equals"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_accept_count_equals"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_dismiss_count_equals"));
+const visibilityDiagnosticProfileScript = buildRiddleProofProfileScript(profile);
+assert.match(visibilityDiagnosticProfileScript, /selectorVisibilityDiagnostic/);
+assert.match(visibilityDiagnosticProfileScript, /visible_descendant/);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile), 420);
 assert.equal(resolveRiddleProofProfileTimeoutSec(profile, 180), 180);
 assert.equal(
