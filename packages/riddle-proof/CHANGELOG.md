@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.205
+
+### Patch Changes
+
+- c1eb031: Classify proof-pack receipts from full setup action results so truncated setup summaries do not hide route-continuation evidence.
+
 ## 0.7.204
 
 ### Patch Changes
