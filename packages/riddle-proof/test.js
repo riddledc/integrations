@@ -1500,6 +1500,106 @@ function cliStateHygieneRuntimeMetricSummaryResult() {
   };
 }
 
+function cliStateHygieneSolveMetricSummaryResult() {
+  const path = "/state-hygiene-solve-metric-summary";
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: "cli-state-hygiene-solve-metric-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: `https://example.com${path}`,
+      observed: "/",
+      expected_path: "/",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: ["solve-initial", "solve-complete"], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        label: "setup actions succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 2,
+          setup_summary: {
+            viewport_count: 1,
+            action_count: 2,
+            viewports: [{
+              name: "desktop",
+              ok: true,
+              result_count: 2,
+              observed_path: "/",
+              setup_screenshots: ["solve-initial", "solve-complete"],
+              window_eval_total: 1,
+              window_eval_stored_total: 1,
+              window_eval_captured_total: 1,
+              window_eval_truncated: false,
+              window_eval: [
+                {
+                  ordinal: 1,
+                  ok: true,
+                  return_captured: true,
+                  return_stored_to: "__stateHygiene.solve",
+                  returned: {
+                    route: "/games/cupcake-courier?play=1",
+                    beforeDeliveries: 3,
+                    afterDeliveries: 0,
+                    won: true,
+                    planLength: 11,
+                    stepDelta: 11,
+                    visibleControlCount: 4,
+                  },
+                  return_summary: [
+                    { label: "route", path: "route", exists: true, value: "/games/cupcake-courier?play=1" },
+                    { label: "beforeDeliveries", path: "beforeDeliveries", exists: true, value: 3 },
+                    { label: "afterDeliveries", path: "afterDeliveries", exists: true, value: 0 },
+                    { label: "won", path: "won", exists: true, value: true },
+                    { label: "planLength", path: "planLength", exists: true, value: 11 },
+                    { label: "stepDelta", path: "stepDelta", exists: true, value: 11 },
+                    { label: "visibleControlCount", path: "visibleControlCount", exists: true, value: 4 },
+                  ],
+                },
+              ],
+              failed: [],
+            }],
+          },
+        },
+      },
+    ],
+    summary: "cli-state-hygiene-solve-metric-summary passed.",
+    captured_at: "2026-05-21T05:28:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: "cli-state-hygiene-solve-metric-summary",
+      target_url: `https://example.com${path}`,
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-21T05:28:00.000Z",
+      viewports: [{
+        name: "desktop",
+        width: 1280,
+        height: 900,
+        route: {
+          requested: `https://example.com${path}`,
+          observed: "/",
+          expected_path: "/",
+          matched: true,
+          http_status: 200,
+        },
+        overflow_px: 0,
+        bounds_overflow_px: 0,
+        selectors: {},
+        text_matches: {},
+        screenshot_label: "solve-complete",
+      }],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1 },
+    },
+  };
+}
+
 function cliStateHygieneOutcomeTruncatedNavigationSummaryResult() {
   const result = cliStateHygieneOutcomeSummaryResult();
   result.profile_name = "cli-state-hygiene-outcome-truncated-navigation-summary";
@@ -1830,6 +1930,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-runtime-metric-summary")) {
         sendJson(cliStateHygieneRuntimeMetricSummaryResult());
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-solve-metric-summary")) {
+        sendJson(cliStateHygieneSolveMetricSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
@@ -6016,6 +6120,50 @@ try {
   assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /## Proof Pack/);
   assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /present: active route-local Slalom 3D runtime metric receipt before route exit \(active route-local proof receipt present\)/);
+
+  const stateHygieneSolveMetricProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-solve-metric-summary.json");
+  const stateHygieneSolveMetricOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-solve-metric-summary-output");
+  writeFileSync(stateHygieneSolveMetricProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-solve-metric-summary",
+    target: {
+      route: "/state-hygiene-solve-metric-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "active route-local Cupcake Courier runtime metric receipt before route exit",
+        "measured Cupcake Courier solve state-change receipt with delivered cupcakes and step delta",
+      ],
+    },
+  }));
+  const stateHygieneSolveMetricResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneSolveMetricProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneSolveMetricOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneSolveMetricResult.stdout).status, "passed");
+  const stateHygieneSolveMetricSummaryMarkdown = readFileSync(path.join(stateHygieneSolveMetricOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneSolveMetricSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneSolveMetricSummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(stateHygieneSolveMetricSummaryMarkdown, /present: active route-local Cupcake Courier runtime metric receipt before route exit \(active route-local proof receipt present\)/);
+  assert.match(stateHygieneSolveMetricSummaryMarkdown, /present: measured Cupcake Courier solve state-change receipt with delivered cupcakes and step delta \(measured-change evidence present\)/);
 
   const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
   const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");
