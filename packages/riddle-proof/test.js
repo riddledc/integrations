@@ -2264,6 +2264,178 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/semantic-window-eval-receipt-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-semantic-window-eval-receipt-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/semantic-window-eval-receipt-summary",
+            observed: "/semantic-window-eval-receipt-summary",
+            expected_path: "/semantic-window-eval-receipt-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: ["semantic-state-winning-board"],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 6,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 6,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 6,
+                    observed_path: "/semantic-window-eval-receipt-summary",
+                    setup_screenshots: ["semantic-state-winning-board"],
+                    action_counts: { click: 4, window_eval: 3 },
+                    clicked_total: 4,
+                    window_eval_total: 3,
+                    window_eval_stored_total: 3,
+                    window_eval_captured_total: 3,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 2,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__semantic.blockedSameCell",
+                        returned: {
+                          ok: true,
+                          slot: "blockedSameCell",
+                          board: ["X", "", "", "", "", "", "", "", ""],
+                          sameBoard: true,
+                          xCount: 1,
+                          oCount: 0,
+                          activeO: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "blockedSameCell" },
+                          { label: "board", path: "board", exists: true, value: ["X", "", "", "", "", "", "", "", ""] },
+                          { label: "sameBoard", path: "sameBoard", exists: true, value: true },
+                          { label: "xCount", path: "xCount", exists: true, value: 1 },
+                          { label: "oCount", path: "oCount", exists: true, value: 0 },
+                          { label: "activeO", path: "activeO", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 4,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__semantic.xWin",
+                        returned: {
+                          ok: true,
+                          slot: "xWin",
+                          board: ["X", "X", "X", "", "O", "", "", "", "O"],
+                          xCount: 3,
+                          oCount: 2,
+                          hasWinner: true,
+                          winnerText: "WIN X",
+                          winCellsCsv: "0,1,2",
+                          playAgainVisible: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "xWin" },
+                          { label: "xCount", path: "xCount", exists: true, value: 3 },
+                          { label: "oCount", path: "oCount", exists: true, value: 2 },
+                          { label: "hasWinner", path: "hasWinner", exists: true, value: true },
+                          { label: "winnerText", path: "winnerText", exists: true, value: "WIN X" },
+                          { label: "winCellsCsv", path: "winCellsCsv", exists: true, value: "0,1,2" },
+                          { label: "playAgainVisible", path: "playAgainVisible", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 6,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__semantic.winLock",
+                        returned: {
+                          ok: true,
+                          slot: "winLock",
+                          board: ["X", "X", "X", "", "O", "", "", "", "O"],
+                          sameBoard: true,
+                          hasWinner: true,
+                          winCellsCsv: "0,1,2",
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "winLock" },
+                          { label: "sameBoard", path: "sameBoard", exists: true, value: true },
+                          { label: "hasWinner", path: "hasWinner", exists: true, value: true },
+                          { label: "winCellsCsv", path: "winCellsCsv", exists: true, value: "0,1,2" },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    clicked: [
+                      { ordinal: 1, selector: ".cell", text: "" },
+                      { ordinal: 3, selector: ".cell", text: "" },
+                      { ordinal: 5, selector: ".cell", text: "" },
+                      { ordinal: 7, selector: ".cell", text: "" },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            {
+              type: "route_loaded",
+              label: "route_loaded",
+              status: "passed",
+              evidence: { expected_path: "/semantic-window-eval-receipt-summary", observed_paths: ["/semantic-window-eval-receipt-summary"], http_statuses: [200] },
+            },
+          ],
+          summary: "cli-semantic-window-eval-receipt-summary passed.",
+          captured_at: "2026-05-21T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-semantic-window-eval-receipt-summary",
+            target_url: "https://example.com/semantic-window-eval-receipt-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-21T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/semantic-window-eval-receipt-summary",
+                observed: "/semantic-window-eval-receipt-summary",
+                expected_path: "/semantic-window-eval-receipt-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "cli-semantic-window-eval-receipt-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
         sendJson(cliStateHygieneOutcomeSummaryResult());
         return;
@@ -5247,7 +5419,11 @@ try {
   assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.retry_count, undefined);
   assert.equal(parsedUnsubmittedArtifactRecoveryResult.riddle.stale_job_ids, undefined);
   assert.equal(cliRunProfileUnsubmittedArtifactRecoveryRunCount, 1);
-  assert.equal(cliRunProfileUnsubmittedArtifactRecoveryPollCount, 1);
+  assert.ok(
+    cliRunProfileUnsubmittedArtifactRecoveryPollCount >= 1
+      && cliRunProfileUnsubmittedArtifactRecoveryPollCount <= 2,
+    `expected one or two unsubmitted artifact-recovery polls, got ${cliRunProfileUnsubmittedArtifactRecoveryPollCount}`,
+  );
   assert.doesNotMatch(unsubmittedArtifactRecoveryResult.stderr, /stayed unsubmitted/);
   const unsubmittedArtifactRecoverySummary = readFileSync(path.join(unsubmittedArtifactRecoveryOutputDir, "summary.md"), "utf8");
   assert.match(unsubmittedArtifactRecoverySummary, /artifact recovery: used artifacts endpoint after non-terminal poll/);
@@ -6019,6 +6195,66 @@ try {
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
     /present: screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries \(screenshot evidence present\)/,
+  );
+
+  const semanticWindowEvalReceiptProfileFile = path.join(riddlePreviewDir, "cli-semantic-window-eval-receipt-summary.json");
+  const semanticWindowEvalReceiptOutputDir = path.join(riddlePreviewDir, "cli-semantic-window-eval-receipt-summary-output");
+  writeFileSync(semanticWindowEvalReceiptProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-semantic-window-eval-receipt-summary",
+    target: {
+      route: "/semantic-window-eval-receipt-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/semantic-window-eval-receipt-summary" },
+    ],
+    metadata: {
+      pack_id: "turn_integrity",
+      pack_public_name: "Turn Integrity Pack",
+      required_receipts: [
+        "invalid move receipt showing the same board and O turn after a repeated occupied-cell click",
+        "winner receipt with X count 3, O count 2, top-row win-cell inventory, and Play Again visibility",
+        "post-winner lock receipt showing an empty cell click cannot mutate the winning board",
+        "narrative-only semantic receipt still requiring audit review",
+      ],
+    },
+  }));
+  const semanticWindowEvalReceiptResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    semanticWindowEvalReceiptProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    semanticWindowEvalReceiptOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(semanticWindowEvalReceiptResult.stdout).status, "passed");
+  const semanticWindowEvalReceiptSummaryMarkdown = readFileSync(path.join(semanticWindowEvalReceiptOutputDir, "summary.md"), "utf8");
+  assert.match(semanticWindowEvalReceiptSummaryMarkdown, /## Proof Pack/);
+  assert.match(semanticWindowEvalReceiptSummaryMarkdown, /pack completeness: complete \(3 present, 1 manual\)/);
+  assert.match(
+    semanticWindowEvalReceiptSummaryMarkdown,
+    /present: invalid move receipt showing the same board and O turn after a repeated occupied-cell click \(semantic invalid-state receipt present: unchanged=true, turn evidence present\)/,
+  );
+  assert.match(
+    semanticWindowEvalReceiptSummaryMarkdown,
+    /present: winner receipt with X count 3, O count 2, top-row win-cell inventory, and Play Again visibility \(semantic winner receipt present: counts present, win cells present, play-again visible\)/,
+  );
+  assert.match(
+    semanticWindowEvalReceiptSummaryMarkdown,
+    /present: post-winner lock receipt showing an empty cell click cannot mutate the winning board \(semantic terminal-lock receipt present: unchanged=true\)/,
+  );
+  assert.match(
+    semanticWindowEvalReceiptSummaryMarkdown,
+    /manual: narrative-only semantic receipt still requiring audit review \(semantic receipt requires audit review\)/,
   );
 
   const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");

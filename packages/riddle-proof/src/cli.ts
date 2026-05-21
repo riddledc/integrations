@@ -1475,6 +1475,171 @@ function profileHasGeneratedOutputReceipt(receipts: Record<string, unknown>[]): 
   return outputReady && outputChanged;
 }
 
+function profileSemanticReceiptPassed(receipt: Record<string, unknown>): boolean {
+  if (receipt.ok === false) return false;
+  return setupReturnSummaryValue(receipt, ["ok", "success", "passed", "completed", "valid"]) === true;
+}
+
+function profileSemanticArrayEvidence(value: unknown): boolean {
+  if (Array.isArray(value)) return value.length > 0;
+  const text = cliString(value);
+  return Boolean(text && text.trim());
+}
+
+function profileSemanticTruthyField(receipt: Record<string, unknown>, names: string[]): boolean {
+  return names.some((name) => setupReturnSummaryValue(receipt, [name]) === true);
+}
+
+function profileHasBoardEvidence(receipt: Record<string, unknown>): boolean {
+  return [
+    "board",
+    "beforeBoard",
+    "afterBoard",
+    "cells",
+    "grid",
+    "state",
+  ].some((name) => setupReturnSummaryValue(receipt, [name]) !== undefined);
+}
+
+function profileHasTurnEvidence(receipt: Record<string, unknown>): boolean {
+  return [
+    "activeX",
+    "activeO",
+    "turn",
+    "currentTurn",
+    "nextTurn",
+    "currentPlayer",
+    "nextPlayer",
+    "isXNext",
+  ].some((name) => setupReturnSummaryValue(receipt, [name]) !== undefined);
+}
+
+function profileSemanticInvalidStateReason(receipts: Record<string, unknown>[], text: string): string | undefined {
+  const asksInvalidOrBlocked = text.includes("invalid")
+    || text.includes("blocked")
+    || text.includes("occupied")
+    || text.includes("replay")
+    || text.includes("ignored")
+    || text.includes("reject")
+    || text.includes("same board")
+    || text.includes("unchanged");
+  if (!asksInvalidOrBlocked) return undefined;
+  const asksTurn = text.includes("turn") || text.includes("player");
+  for (const receipt of receipts) {
+    if (!profileSemanticReceiptPassed(receipt)) continue;
+    const unchanged = profileSemanticTruthyField(receipt, [
+      "sameBoard",
+      "same_board",
+      "boardUnchanged",
+      "stateUnchanged",
+      "unchanged",
+      "noMutation",
+      "no_mutation",
+    ]);
+    const blocked = profileSemanticTruthyField(receipt, [
+      "blocked",
+      "invalid",
+      "rejected",
+      "ignored",
+      "prevented",
+    ]);
+    if (!(unchanged || blocked)) continue;
+    if (!profileHasBoardEvidence(receipt)) continue;
+    if (asksTurn && !profileHasTurnEvidence(receipt)) continue;
+    const parts = [
+      unchanged ? "unchanged=true" : "",
+      blocked ? "blocked=true" : "",
+      profileHasTurnEvidence(receipt) ? "turn evidence present" : "",
+    ].filter(Boolean);
+    return `semantic invalid-state receipt present${parts.length ? `: ${parts.join(", ")}` : ""}`;
+  }
+  return undefined;
+}
+
+function profileSemanticTerminalLockReason(receipts: Record<string, unknown>[], text: string): string | undefined {
+  const asksLock = text.includes("lock")
+    || text.includes("cannot mutate")
+    || text.includes("can not mutate")
+    || text.includes("can't mutate")
+    || text.includes("cannot change")
+    || text.includes("unchanged after")
+    || (text.includes("post-winner") && text.includes("click"))
+    || (text.includes("post winner") && text.includes("click"));
+  if (!asksLock) return undefined;
+  for (const receipt of receipts) {
+    if (!profileSemanticReceiptPassed(receipt)) continue;
+    const unchanged = profileSemanticTruthyField(receipt, [
+      "sameBoard",
+      "same_board",
+      "boardUnchanged",
+      "stateUnchanged",
+      "unchanged",
+      "noMutation",
+      "no_mutation",
+      "locked",
+    ]);
+    if (!unchanged) continue;
+    const hasTerminal = profileSemanticTruthyField(receipt, ["hasWinner", "winner", "won", "gameWon", "terminal", "locked"])
+      || profileSemanticArrayEvidence(setupReturnSummaryValue(receipt, ["winCells", "winningCells", "winningLine"]))
+      || Boolean(cliString(setupReturnSummaryValue(receipt, ["winCellsCsv", "winnerText", "terminalText", "statusText"])));
+    if (!hasTerminal) continue;
+    return "semantic terminal-lock receipt present: unchanged=true";
+  }
+  return undefined;
+}
+
+function profileSemanticWinnerReason(receipts: Record<string, unknown>[], text: string): string | undefined {
+  const asksWinner = text.includes("winner")
+    || text.includes("win-cell")
+    || text.includes("winning")
+    || /\bwin\b/.test(text);
+  if (!asksWinner) return undefined;
+  const asksCounts = text.includes("count");
+  const asksWinCells = text.includes("win-cell") || text.includes("winning") || text.includes("inventory") || text.includes("top-row");
+  const asksPlayAgain = text.includes("play again") || text.includes("play-again") || text.includes("playagain");
+  for (const receipt of receipts) {
+    if (!profileSemanticReceiptPassed(receipt)) continue;
+    const winnerText = (cliString(setupReturnSummaryValue(receipt, ["winnerText", "terminalText", "statusText"])) || "").toLowerCase();
+    const hasWinner = profileSemanticTruthyField(receipt, ["hasWinner", "winner", "won", "gameWon"])
+      || winnerText.includes("win")
+      || profileSemanticArrayEvidence(setupReturnSummaryValue(receipt, ["winCells", "winningCells", "winningLine"]))
+      || Boolean(cliString(setupReturnSummaryValue(receipt, ["winCellsCsv"])));
+    if (!hasWinner) continue;
+    const hasCounts = [
+      "xCount",
+      "oCount",
+      "count",
+      "filledCount",
+      "winnerCount",
+      "score",
+    ].some((name) => setupReturnSummaryValue(receipt, [name]) !== undefined);
+    const hasWinCells = profileSemanticArrayEvidence(setupReturnSummaryValue(receipt, ["winCells", "winningCells", "winningLine"]))
+      || Boolean(cliString(setupReturnSummaryValue(receipt, ["winCellsCsv"])));
+    const hasPlayAgain = profileSemanticTruthyField(receipt, [
+      "playAgainVisible",
+      "play_again_visible",
+      "restartVisible",
+      "resetVisible",
+    ]);
+    if (asksCounts && !hasCounts) continue;
+    if (asksWinCells && !hasWinCells) continue;
+    if (asksPlayAgain && !hasPlayAgain) continue;
+    const parts = [
+      hasCounts ? "counts present" : "",
+      hasWinCells ? "win cells present" : "",
+      hasPlayAgain ? "play-again visible" : "",
+    ].filter(Boolean);
+    return `semantic winner receipt present${parts.length ? `: ${parts.join(", ")}` : ""}`;
+  }
+  return undefined;
+}
+
+function profileSemanticStateReceiptReason(receipts: Record<string, unknown>[], text: string): string | undefined {
+  return profileSemanticTerminalLockReason(receipts, text)
+    || profileSemanticInvalidStateReason(receipts, text)
+    || profileSemanticWinnerReason(receipts, text);
+}
+
 function profilePackReceiptStatus(
   result: RiddleProofProfileResult,
   metadata: Record<string, unknown>,
@@ -2115,6 +2280,10 @@ function profilePackReceiptStatus(
   }
   if (text.includes("measured") || text.includes("state-change") || text.includes("pixel delta") || text.includes("movement receipt") || text.includes("canvas hash")) {
     return profileReceiptSignalStatus(hasMeasuredStateChange, "measured-change evidence present", "measured-change evidence missing");
+  }
+  const semanticStateReason = profileSemanticStateReceiptReason(valueReceipts, text);
+  if (semanticStateReason) {
+    return { status: "present", reason: semanticStateReason };
   }
 
   return { status: "manual", reason: "semantic receipt requires audit review" };
