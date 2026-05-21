@@ -2682,6 +2682,143 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/state-hygiene-nonthrowing-failed-cleanup-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-state-hygiene-nonthrowing-failed-cleanup-summary",
+          runner: "riddle",
+          status: "product_regression",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/state-hygiene-nonthrowing-failed-cleanup-summary",
+            observed: "/state-hygiene-nonthrowing-failed-cleanup-summary",
+            expected_path: "/state-hygiene-nonthrowing-failed-cleanup-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "state-hygiene-initial",
+              "state-hygiene-active",
+              "state-hygiene-post-cleanup",
+              "cli-state-hygiene-nonthrowing-failed-cleanup-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 5,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 5,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 5,
+                    observed_path: "/state-hygiene-nonthrowing-failed-cleanup-summary",
+                    setup_screenshots: ["state-hygiene-initial", "state-hygiene-active", "state-hygiene-post-cleanup"],
+                    clicked_total: 2,
+                    window_eval_total: 3,
+                    window_eval_stored_total: 3,
+                    window_eval_captured_total: 3,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 440,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.initial",
+                        returned: {
+                          ok: true,
+                          state: "initial-clean-state",
+                          staleNames: [],
+                          staleCount: 0,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "initial-clean-state" },
+                          { label: "staleCount", path: "staleCount", exists: true, value: 0 },
+                          { label: "staleNames", path: "staleNames", exists: true, value: [] },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 3,
+                        ok: true,
+                        script_length: 620,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.active",
+                        returned: {
+                          ok: true,
+                          state: "active-editor-preview-state",
+                          staleNames: ["visible editor text"],
+                          staleCount: 1,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "state", path: "state", exists: true, value: "active-editor-preview-state" },
+                          { label: "staleCount", path: "staleCount", exists: true, value: 1 },
+                          { label: "staleNames", path: "staleNames", exists: true, value: ["visible editor text"] },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 5,
+                        ok: true,
+                        script_length: 900,
+                        return_captured: true,
+                        return_stored_to: "__stateHygiene.cleanup",
+                        returned: {
+                          ok: false,
+                          state: "after-clear-clean-state",
+                          editorHasSentinel: true,
+                          staleNames: ["visible editor text"],
+                          staleCount: 1,
+                          productIssue: "visible Clear left the editor sentinel behind",
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: false },
+                          { label: "state", path: "state", exists: true, value: "after-clear-clean-state" },
+                          { label: "editorHasSentinel", path: "editorHasSentinel", exists: true, value: true },
+                          { label: "staleCount", path: "staleCount", exists: true, value: 1 },
+                          { label: "staleNames", path: "staleNames", exists: true, value: ["visible editor text"] },
+                          { label: "productIssue", path: "productIssue", exists: true, value: "visible Clear left the editor sentinel behind" },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    clicked: [
+                      { ordinal: 2, selector: "#run", text: "Run" },
+                      { ordinal: 4, selector: "#clear", text: "Clear" },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+              message: "5 setup action(s) succeeded.",
+            },
+            { type: "text_visible", label: "text_visible", status: "passed", evidence: { text: "Playground", matches: [true] } },
+            {
+              type: "text_absent",
+              label: "text_absent",
+              status: "failed",
+              evidence: { text: "riddle-proof-mdn-clear", matches: [true], reason: "text_still_present" },
+              message: "text still present after cleanup",
+            },
+            { type: "no_fatal_console_errors", label: "no_fatal_console_errors", status: "passed", evidence: { console_fatal_count: 0 } },
+          ],
+          summary: "cli-state-hygiene-nonthrowing-failed-cleanup-summary failed.",
+          captured_at: "2026-05-21T00:01:00.000Z",
+        });
+        return;
+      }
       if (String(body.url || "").includes("/state-hygiene-passed-cleanup-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -5479,6 +5616,64 @@ try {
   assert.doesNotMatch(
     stateHygieneFailedCleanupSummaryMarkdown,
     /present: post-cleanup stale-state inventory for visible copy, localStorage progress, and completed markers \(absence check passed\)/,
+  );
+
+  const stateHygieneNonThrowingFailedCleanupProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-nonthrowing-failed-cleanup-summary.json");
+  const stateHygieneNonThrowingFailedCleanupOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-nonthrowing-failed-cleanup-summary-output");
+  writeFileSync(stateHygieneNonThrowingFailedCleanupProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-nonthrowing-failed-cleanup-summary",
+    target: {
+      route: "/state-hygiene-nonthrowing-failed-cleanup-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "text_visible", text: "Playground" },
+      { type: "text_absent", text: "riddle-proof-mdn-clear" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "post-cleanup stale-state inventory for editor, body, runner frame, and iframe URL",
+      ],
+    },
+  }));
+  let stateHygieneNonThrowingFailedCleanupError;
+  try {
+    await runCli([
+      "run-profile",
+      "--api-base-url",
+      `http://127.0.0.1:${address.port}`,
+      "--api-key",
+      "cli-riddle-key",
+      "--profile",
+      stateHygieneNonThrowingFailedCleanupProfileFile,
+      "--url",
+      "https://example.com",
+      "--runner",
+      "riddle",
+      "--output",
+      stateHygieneNonThrowingFailedCleanupOutputDir,
+      "--quiet",
+    ]);
+  } catch (error) {
+    stateHygieneNonThrowingFailedCleanupError = error;
+  }
+  assert.equal(stateHygieneNonThrowingFailedCleanupError?.code, 1);
+  const stateHygieneNonThrowingFailedCleanupSummaryMarkdown = readFileSync(
+    path.join(stateHygieneNonThrowingFailedCleanupOutputDir, "summary.md"),
+    "utf8",
+  );
+  assert.match(stateHygieneNonThrowingFailedCleanupSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneNonThrowingFailedCleanupSummaryMarkdown, /pack completeness: incomplete \(0 present, 1 failed\)/);
+  assert.match(
+    stateHygieneNonThrowingFailedCleanupSummaryMarkdown,
+    /failed: post-cleanup stale-state inventory for editor, body, runner frame, and iframe URL \(cleanup inventory failed: ok=false, staleCount=1, staleNames=\["visible editor text"\], visible Clear left the editor sentinel behind\)/,
+  );
+  assert.doesNotMatch(
+    stateHygieneNonThrowingFailedCleanupSummaryMarkdown,
+    /present: post-cleanup stale-state inventory for editor, body, runner frame, and iframe URL \(cleanup inventory passed: staleCount=0, staleNames=\[\]\)/,
   );
 
   const stateHygienePassedCleanupProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-passed-cleanup-summary.json");

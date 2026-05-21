@@ -787,33 +787,87 @@ function profileIsCleanupInventoryReceipt(receipt: Record<string, unknown>): boo
     || haystack.includes("still present");
 }
 
-function profileFailedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
-  const receipts = setupViewports.flatMap((viewport) => [
+function profileIsCleanupPhaseInventoryReceipt(receipt: Record<string, unknown>): boolean {
+  const storedTo = (cliString(receipt.return_stored_to) || "").toLowerCase();
+  const storedSegments = storedTo.split(/[.[\]/]/).filter(Boolean);
+  const storedSegment = storedSegments[storedSegments.length - 1] || storedTo;
+  const state = (cliString(setupReturnSummaryValue(receipt, ["state", "phase"])) || "").toLowerCase();
+  const summary = (cliReturnSummaryLabel(receipt.return_summary) || "").toLowerCase();
+  const markers = [storedSegment, state, summary];
+  return markers.some((marker) => (
+    marker === "cleanup"
+    || marker === "postcleanup"
+    || marker === "post-cleanup"
+    || marker === "aftercleanup"
+    || marker === "after-cleanup"
+    || marker.includes("post-cleanup")
+    || marker.includes("after-cleanup")
+    || marker.includes("after-clear")
+    || marker.includes("after-reset")
+    || marker.includes("after-undo")
+    || marker.includes("after-discard")
+    || marker.includes("after-new")
+  ));
+}
+
+function profileCleanupPhaseInventoryReceipts(setupViewports: Record<string, unknown>[]): Record<string, unknown>[] {
+  return setupViewports.flatMap((viewport) => [
     ...setupReceiptArray(viewport, "window_eval"),
     ...setupReceiptArray(viewport, "window_call"),
-  ]);
-  for (const receipt of receipts) {
-    if (receipt.ok !== false) continue;
-    if (!profileIsCleanupInventoryReceipt(receipt)) continue;
+  ]).filter((receipt) => profileIsCleanupInventoryReceipt(receipt) && profileIsCleanupPhaseInventoryReceipt(receipt));
+}
+
+function profileFailedCleanupInventoryReceiptReason(receipt: Record<string, unknown>): string | undefined {
+  if (receipt.ok === false) {
     const error = cliString(receipt.error);
     const reason = cliString(receipt.reason);
     return compactProfileReceiptReason(error) || compactProfileReceiptReason(reason) || "cleanup inventory failed";
   }
+
+  const parts: string[] = [];
+  if (setupReturnedSummaryValue(receipt, ["ok"]) === false) parts.push("ok=false");
+  if (setupReturnedSummaryValue(receipt, ["success"]) === false) parts.push("success=false");
+
+  const staleCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["staleCount"]));
+  if (staleCount !== undefined && staleCount > 0) parts.push(`staleCount=${staleCount}`);
+
+  const staleNames = setupReturnSummaryValue(receipt, ["staleNames"]);
+  if (Array.isArray(staleNames) && staleNames.length > 0) {
+    const staleNamesLabel = cliValueLabel(staleNames);
+    if (staleNamesLabel) parts.push(`staleNames=${compactProfileReceiptReason(staleNamesLabel, 120) ?? staleNamesLabel}`);
+  }
+
+  const productIssue = setupReturnedSummaryValue(receipt, ["productIssue", "issue"]);
+  const productIssueLabel = typeof productIssue === "string" ? compactProfileReceiptReason(productIssue, 120) : undefined;
+  if (parts.length && productIssueLabel) parts.push(productIssueLabel);
+
+  return parts.length ? parts.join(", ") : undefined;
+}
+
+function profileFailedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
+  const receipts = profileCleanupPhaseInventoryReceipts(setupViewports);
+  for (const receipt of [...receipts].reverse()) {
+    const reason = profileFailedCleanupInventoryReceiptReason(receipt);
+    if (reason) return reason;
+  }
   return undefined;
 }
 
+function profilePassedCleanupInventoryReceiptReason(receipt: Record<string, unknown>): string | undefined {
+  if (receipt.ok === false) return undefined;
+  if (setupReturnedSummaryValue(receipt, ["ok"]) === false) return undefined;
+  if (setupReturnedSummaryValue(receipt, ["success"]) === false) return undefined;
+  const staleCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["staleCount"]));
+  const staleNames = setupReturnSummaryValue(receipt, ["staleNames"]);
+  if (staleCount !== 0 || !Array.isArray(staleNames) || staleNames.length !== 0) return undefined;
+  return "staleCount=0, staleNames=[]";
+}
+
 function profilePassedCleanupInventoryReason(setupViewports: Record<string, unknown>[]): string | undefined {
-  const receipts = setupViewports.flatMap((viewport) => [
-    ...setupReceiptArray(viewport, "window_eval"),
-    ...setupReceiptArray(viewport, "window_call"),
-  ]);
-  for (const receipt of receipts) {
-    if (receipt.ok === false || !profileIsCleanupInventoryReceipt(receipt)) continue;
-    if (setupReturnSummaryValue(receipt, ["ok"]) === false) continue;
-    const staleCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["staleCount"]));
-    const staleNames = setupReturnSummaryValue(receipt, ["staleNames"]);
-    if (staleCount !== 0 || !Array.isArray(staleNames) || staleNames.length !== 0) continue;
-    return "staleCount=0, staleNames=[]";
+  const receipts = profileCleanupPhaseInventoryReceipts(setupViewports);
+  for (const receipt of [...receipts].reverse()) {
+    const reason = profilePassedCleanupInventoryReceiptReason(receipt);
+    if (reason) return reason;
   }
   return undefined;
 }
@@ -1775,6 +1829,10 @@ function setupReturnSummaryValue(receipt: Record<string, unknown>, names: string
   for (const name of names) {
     if (receipt[name] !== undefined) return receipt[name];
   }
+  return setupReturnedSummaryValue(receipt, names);
+}
+
+function setupReturnedSummaryValue(receipt: Record<string, unknown>, names: string[]): unknown {
   const returned = cliRecord(receipt.returned);
   for (const name of names) {
     if (returned?.[name] !== undefined) return returned[name];
