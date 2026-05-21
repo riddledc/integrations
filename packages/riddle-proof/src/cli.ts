@@ -1054,6 +1054,33 @@ function profileHasTerminalLossReceipt(receipts: Record<string, unknown>[]): boo
   });
 }
 
+function profileHasTerminalGameOverReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "terminalOutcome", "terminal", "result"]);
+    const gameOver = setupReturnSummaryValue(receipt, ["gameOver", "game_over", "isGameOver"]) === true;
+    const caught = setupReturnSummaryValue(receipt, ["caught", "playerCaught", "wasCaught"]) === true;
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const slot = cliString(setupReturnSummaryValue(receipt, ["slot"])) || "";
+    const haystack = `${storedTo} ${label} ${path} ${slot}`.toLowerCase();
+    const labelsTerminal = haystack.includes("gameover")
+      || haystack.includes("game_over")
+      || haystack.includes("game-over")
+      || haystack.includes("game over")
+      || haystack.includes("terminal")
+      || haystack.includes("caught")
+      || haystack.includes("catch");
+    const terminalStatus = ["over", "game_over", "gameover"].includes(status)
+      || ["game_over", "gameover"].includes(outcome);
+    if (!labelsTerminal && !caught && !gameOver && !terminalStatus) return false;
+    return gameOver
+      || caught
+      || terminalStatus;
+  });
+}
+
 function profileHasTerminalSuccessReceipt(receipts: Record<string, unknown>[]): boolean {
   return receipts.some((receipt) => {
     const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
@@ -1328,6 +1355,7 @@ function profilePackReceiptStatus(
   const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
   const hasActiveRouteLocalProofReceipt = profileHasActiveRouteLocalProofReceipt(valueReceipts);
   const hasTerminalLossReceipt = profileHasTerminalLossReceipt(valueReceipts);
+  const hasTerminalGameOverReceipt = profileHasTerminalGameOverReceipt(valueReceipts);
   const hasTerminalSuccessReceipt = profileHasTerminalSuccessReceipt(valueReceipts);
   const hasControlledFailureLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "failure");
   const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
@@ -1439,6 +1467,22 @@ function profilePackReceiptStatus(
       hasTerminalLossReceipt,
       "terminal loss receipt present",
       "terminal loss receipt missing",
+    );
+  }
+  if (
+    text.includes("terminal")
+    && (
+      text.includes("game-over")
+      || text.includes("game over")
+      || text.includes("gameover")
+      || text.includes("caught")
+      || text.includes("catch")
+    )
+  ) {
+    return profileReceiptSignalStatus(
+      hasTerminalGameOverReceipt,
+      "terminal game-over receipt present",
+      "terminal game-over receipt missing",
     );
   }
   if (text.includes("success") && text.includes("terminal")) {
