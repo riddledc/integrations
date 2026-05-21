@@ -5897,6 +5897,7 @@ try {
         "visible UI input receipt for the known short-long-short level-one sequence",
         "state-growth receipt with streak=1 and best=1 after the correct sequence",
         "restart receipt with level=1, streak=0, best=1, and input controls re-enabled",
+        "screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries",
       ],
     },
   }));
@@ -5919,7 +5920,7 @@ try {
   assert.equal(JSON.parse(sequenceMemoryReceiptResult.stdout).status, "passed");
   const sequenceMemoryReceiptSummaryMarkdown = readFileSync(path.join(sequenceMemoryReceiptOutputDir, "summary.md"), "utf8");
   assert.match(sequenceMemoryReceiptSummaryMarkdown, /## Proof Pack/);
-  assert.match(sequenceMemoryReceiptSummaryMarkdown, /pack completeness: complete \(3 present\)/);
+  assert.match(sequenceMemoryReceiptSummaryMarkdown, /pack completeness: complete \(4 present\)/);
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
     /present: visible UI input receipt for the known short-long-short level-one sequence \(sequence input receipt present\)/,
@@ -5931,6 +5932,10 @@ try {
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
     /present: restart receipt with level=1, streak=0, best=1, and input controls re-enabled \(restart-ready receipt present\)/,
+  );
+  assert.match(
+    sequenceMemoryReceiptSummaryMarkdown,
+    /present: screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries \(screenshot evidence present\)/,
   );
 
   const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");
