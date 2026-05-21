@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   createDisabledRiddleProofAgentAdapter,
@@ -60,6 +60,7 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
+    "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
@@ -3362,6 +3363,105 @@ function splitViewportOutputDir(outputDir: string, viewportName: string, seen: M
   return path.join(outputDir, count ? `${base}-${count + 1}` : base);
 }
 
+function profileResultPathFromInput(inputPath: string): string[] {
+  if (!existsSync(inputPath)) throw new Error(`Profile aggregate input path does not exist: ${inputPath}`);
+  const stat = statSync(inputPath);
+  if (stat.isFile()) return [inputPath];
+  if (!stat.isDirectory()) throw new Error(`Profile aggregate input path must be a file or directory: ${inputPath}`);
+  const childProfileResults = readdirSync(inputPath, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(inputPath, entry.name, "profile-result.json"))
+    .filter((candidate) => existsSync(candidate));
+  if (childProfileResults.length) return childProfileResults;
+  const directProfileResult = path.join(inputPath, "profile-result.json");
+  if (existsSync(directProfileResult)) return [directProfileResult];
+  throw new Error(`Profile aggregate input directory has no child profile-result.json files: ${inputPath}`);
+}
+
+function runProfileAggregateInputPathsOption(options: CliOptions): string[] {
+  const rawInputs = [
+    optionString(options, "input"),
+    optionString(options, "inputs"),
+    optionString(options, "inputFile"),
+    optionString(options, "inputFiles"),
+  ].filter((value): value is string => Boolean(value));
+  const explicitInputs = rawInputs
+    .flatMap((raw) => raw.split(",").map((part) => part.trim()).filter(Boolean));
+  const inputDir = optionString(options, "inputDir") ?? optionString(options, "resultsDir") ?? optionString(options, "runDir");
+  const discoveredInputs = inputDir ? profileResultPathFromInput(inputDir) : [];
+  const paths = [...explicitInputs.flatMap(profileResultPathFromInput), ...discoveredInputs];
+  const uniquePaths = [...new Set(paths.map((inputPath) => path.resolve(inputPath)))];
+  if (!uniquePaths.length) {
+    throw new Error("run-profile aggregate requires --input-dir <dir> or --inputs <path[,path...]>.");
+  }
+  return uniquePaths;
+}
+
+function readProfileResultForAggregate(resultPath: string): RiddleProofProfileResult {
+  const parsed = readJsonValue(resultPath, resultPath);
+  if (parsed.version !== "riddle-proof.profile-result.v1" || !Array.isArray(parsed.checks)) {
+    throw new Error(`Profile aggregate input is not a riddle-proof.profile-result.v1 result: ${resultPath}`);
+  }
+  return parsed as unknown as RiddleProofProfileResult;
+}
+
+function profileResultIsAggregateParent(result: RiddleProofProfileResult): boolean {
+  const mode = cliString(cliRecord(result.riddle)?.mode);
+  return (mode === "split-viewports" || mode === "named-viewport-aggregate")
+    && (result.evidence?.viewports?.length || 0) > 1;
+}
+
+function aggregateProfileResultViewportName(result: RiddleProofProfileResult): string | undefined {
+  const evidenceViewports = result.evidence?.viewports || [];
+  if (evidenceViewports.length === 1) return evidenceViewports[0].name;
+  const metadata = cliRecord(result.metadata);
+  const splitViewport = cliString(metadata?.split_viewport);
+  if (splitViewport) return splitViewport;
+  const selectedViewports = Array.isArray(metadata?.selected_viewports)
+    ? metadata.selected_viewports.map(cliString).filter((name): name is string => Boolean(name))
+    : [];
+  if (selectedViewports.length === 1) return selectedViewports[0];
+  return undefined;
+}
+
+function aggregateProfileResultViewport(
+  profile: RiddleProofProfile,
+  result: RiddleProofProfileResult,
+  resultPath: string,
+): RiddleProofProfileViewport {
+  const viewportName = aggregateProfileResultViewportName(result);
+  const parentViewport = viewportName
+    ? profile.target.viewports.find((viewport) => viewport.name === viewportName)
+    : undefined;
+  if (parentViewport) return parentViewport;
+  const evidenceViewport = result.evidence?.viewports?.length === 1 ? result.evidence.viewports[0] : undefined;
+  if (
+    evidenceViewport
+    && typeof evidenceViewport.name === "string"
+    && typeof evidenceViewport.width === "number"
+    && Number.isFinite(evidenceViewport.width)
+    && typeof evidenceViewport.height === "number"
+    && Number.isFinite(evidenceViewport.height)
+  ) {
+    return {
+      name: evidenceViewport.name,
+      width: evidenceViewport.width,
+      height: evidenceViewport.height,
+    };
+  }
+  throw new Error(`Profile aggregate input must be a single named viewport result or include selected viewport metadata: ${resultPath}`);
+}
+
+function sortAggregateChildRuns(profile: RiddleProofProfile, childRuns: SplitViewportRunResult[]): SplitViewportRunResult[] {
+  const viewportOrder = new Map(profile.target.viewports.map((viewport, index) => [viewport.name, index]));
+  return [...childRuns].sort((a, b) => {
+    const aIndex = viewportOrder.get(a.viewport.name) ?? Number.MAX_SAFE_INTEGER;
+    const bIndex = viewportOrder.get(b.viewport.name) ?? Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return a.viewport.name.localeCompare(b.viewport.name);
+  });
+}
+
 function splitViewportArtifactRefs(input: SplitViewportRunResult): RiddleProofProfileArtifactRef[] {
   return (input.result.artifacts.riddle_artifacts || []).map((artifact) => ({
     ...artifact,
@@ -3374,7 +3474,10 @@ function sumDefinedNumbers(values: Array<number | null | undefined>) {
   return numbers.length ? numbers.reduce((sum, value) => sum + value, 0) : undefined;
 }
 
-function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): RiddleProofProfileResult["riddle"] {
+function splitViewportRiddleMetadata(
+  childRuns: SplitViewportRunResult[],
+  mode: "split-viewports" | "named-viewport-aggregate" = "split-viewports",
+): RiddleProofProfileResult["riddle"] {
   const splitJobs = childRuns.map(({ viewport, result }) => ({
     viewport: viewport.name,
     job_id: result.riddle?.job_id,
@@ -3391,9 +3494,9 @@ function splitViewportRiddleMetadata(childRuns: SplitViewportRunResult[]): Riddl
     artifact_recovery: result.riddle?.artifact_recovery,
   }));
   return {
-    mode: "split-viewports",
+    mode,
     job_count: childRuns.length,
-    status: "split-viewports",
+    status: mode,
     terminal: childRuns.every(({ result }) => result.riddle?.terminal !== false),
     artifact_recovery: childRuns.some(({ result }) => result.riddle?.artifact_recovery === true),
     queue_elapsed_ms: sumDefinedNumbers(splitJobs.map((job) => job.queue_elapsed_ms)),
@@ -3697,6 +3800,43 @@ async function runSplitViewportProfileForCli(
   return withSplitViewportWarnings(profile, withSplitViewportChildStatusCheck(profile, result, childRuns));
 }
 
+async function aggregateProfileResultsForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
+  const resultPaths = runProfileAggregateInputPathsOption(options);
+  const seenViewports = new Set<string>();
+  const childInputs = resultPaths
+    .map((resultPath) => ({ resultPath, result: readProfileResultForAggregate(resultPath) }))
+    .filter(({ result }) => !profileResultIsAggregateParent(result));
+  if (!childInputs.length) {
+    throw new Error("run-profile aggregate found no single-viewport child profile results.");
+  }
+  const childRuns = sortAggregateChildRuns(profile, childInputs.map(({ resultPath, result }) => {
+    const viewport = aggregateProfileResultViewport(profile, result, resultPath);
+    if (seenViewports.has(viewport.name)) {
+      throw new Error(`Profile aggregate received more than one result for viewport ${viewport.name}.`);
+    }
+    seenViewports.add(viewport.name);
+    return { viewport, profile: profileForSplitViewport(profile, viewport), result };
+  }));
+  const artifacts = childRuns.flatMap(splitViewportArtifactRefs);
+  const blocked = childRuns.filter(({ result }) => !result.evidence || result.status === "environment_blocked" || result.status === "configuration_error");
+  if (blocked.length) {
+    return createRiddleProofProfileEnvironmentBlockedResult({
+      profile,
+      runner: "riddle",
+      error: splitViewportBlockedMessage(childRuns),
+      riddle: splitViewportRiddleMetadata(childRuns, "named-viewport-aggregate"),
+      artifacts,
+    });
+  }
+  const evidence = aggregateSplitViewportEvidence(profile, childRuns);
+  const result = assessRiddleProofProfileEvidence(profile, evidence, {
+    runner: "riddle",
+    riddle: splitViewportRiddleMetadata(childRuns, "named-viewport-aggregate"),
+    artifacts,
+  });
+  return withSplitViewportWarnings(profile, withSplitViewportChildStatusCheck(profile, result, childRuns));
+}
+
 async function recoverProfileForCli(profile: RiddleProofProfile, options: CliOptions): Promise<RiddleProofProfileResult> {
   const runner = (optionString(options, "runner") || "riddle") as RiddleProofProfileRunner;
   if (runner !== "riddle") {
@@ -3815,6 +3955,8 @@ async function main() {
     const profile = profileWithSelectedViewportNamesForCli(normalizeProfileForCli(options), options);
     const result = positional[1] === "recover"
       ? await recoverProfileForCli(profile, options)
+      : positional[1] === "aggregate"
+        ? await aggregateProfileResultsForCli(profile, options)
       : await runProfileForCli(profile, options);
     writeProfileOutput(profileOutputDirOption(options), result);
     const diagnosticLine = profileCliDiagnosticLine(result);
