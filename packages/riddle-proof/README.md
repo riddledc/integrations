@@ -202,6 +202,31 @@ generic inline-script warning threshold. Use `--strict=true` when you
 deliberately want Riddle's non-critical script-safety warnings to block the run.
 Critical script-safety violations remain blocked by Riddle either way.
 
+Use `--viewport-name <name>` to run only one named viewport from a
+multi-viewport profile while preserving viewport-scoped setup actions and
+checks:
+
+```sh
+riddle-proof-loop run-profile \
+  --profile .riddle-proof/profiles/pricing.json \
+  --url https://example.com \
+  --viewport-name ipad-mini \
+  --output artifacts/riddle-proof/pricing-ipad-mini
+```
+
+When `--output` / `--output-dir` is set, hosted profile runs write
+`riddle-job.json` as soon as Riddle returns a job id. If the local process is
+interrupted or pruned, recover the profile artifacts from the hosted job:
+
+```sh
+riddle-proof-loop run-profile recover \
+  --profile .riddle-proof/profiles/pricing.json \
+  --url https://example.com \
+  --job job_abc123 \
+  --viewport-name ipad-mini \
+  --output artifacts/riddle-proof/pricing-ipad-mini-recovered
+```
+
 When promoting proof artifacts into a durable public profile, avoid guessing
 which backend or runner tokens are preserved inside `proof.json`. Derive the
 `body_contains` fragments from the artifact body first:
