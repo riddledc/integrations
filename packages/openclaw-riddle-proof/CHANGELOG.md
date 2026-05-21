@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.105
+
+### Patch Changes
+
+- 6e1faab: Refresh the OpenClaw wrapper release so new installs resolve the current `@riddledc/riddle-proof` aggregate timing summary improvements.
+
 ## 0.4.104
 
 ### Patch Changes
