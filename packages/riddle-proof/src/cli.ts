@@ -1309,6 +1309,20 @@ function profilePackReceiptStatus(
     setupReturnSummaryValue(item, ["changed"]) === true
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
   ));
+  const hasMovingPlayabilityReceipt = valueReceipts.some((item) => {
+    const started = setupReturnSummaryValue(item, ["started", "runStarted", "playStarted"]) === true;
+    const distance = cliFiniteNumber(setupReturnSummaryValue(item, ["distance", "distanceMeters", "travelDistance"]));
+    const speed = cliFiniteNumber(setupReturnSummaryValue(item, ["speed", "velocity"]));
+    return started && ((distance !== undefined && distance > 0) || (speed !== undefined && speed > 0));
+  });
+  const hasAcceptedPlayabilityInputReceipt = valueReceipts.some((item) => {
+    const accepted = setupReturnSummaryValue(item, ["acceptedInput", "inputAccepted", "steeringAccepted", "touchInputAccepted"]) === true;
+    const inputModality = (cliString(setupReturnSummaryValue(item, ["inputModality", "inputKind", "pointerType", "modality"])) || "").toLowerCase();
+    const distance = cliFiniteNumber(setupReturnSummaryValue(item, ["distance", "distanceMeters", "travelDistance"]));
+    const speed = cliFiniteNumber(setupReturnSummaryValue(item, ["speed", "velocity"]));
+    const moving = (distance !== undefined && distance > 0) || (speed !== undefined && speed > 0);
+    return accepted && Boolean(inputModality) && inputModality !== "none" && moving;
+  });
   const hasRouteExitAffordanceReceipt = profileHasRouteExitAffordanceReceipt(valueReceipts);
   const hasCleanupBoundaryAffordanceReceipt = profileHasCleanupBoundaryAffordanceReceipt(valueReceipts);
   const hasOfflineAudioMetricsReceipt = profileHasOfflineAudioMetricsReceipt(valueReceipts);
@@ -1362,7 +1376,13 @@ function profilePackReceiptStatus(
   if (
     text.includes("active")
     && (text.includes("route-local") || text.includes("route local"))
-    && (text.includes("proof helper") || text.includes("proof api") || text.includes("proof state"))
+    && (
+      text.includes("proof helper")
+      || text.includes("proof api")
+      || text.includes("proof state")
+      || text.includes("proof globals")
+      || text.includes("playability state")
+    )
   ) {
     return profileReceiptSignalStatus(
       hasActiveRouteLocalProofReceipt,
@@ -1569,6 +1589,27 @@ function profilePackReceiptStatus(
       needsBoundaryScreenshots ? screenshotCount >= 2 : screenshotCount > 0,
       needsBoundaryScreenshots ? "multiple screenshots present" : "screenshot evidence present",
       needsBoundaryScreenshots ? "multiple screenshots missing" : "screenshot evidence missing",
+    );
+  }
+  if (
+    text.includes("input")
+    && (
+      text.includes("playability")
+      || text.includes("moving")
+      || text.includes("steering")
+      || text.includes("real")
+      || text.includes("natural")
+    )
+  ) {
+    const needsAcceptedInput = text.includes("steering") || text.includes("accepted");
+    const hasInputDispatch = inputDispatchCount > 0 || hasNaturalInput;
+    const hasInputStateReceipt = needsAcceptedInput
+      ? hasAcceptedPlayabilityInputReceipt
+      : (hasAcceptedPlayabilityInputReceipt || hasMovingPlayabilityReceipt);
+    return profileReceiptSignalStatus(
+      hasInputDispatch && hasInputStateReceipt,
+      needsAcceptedInput ? "accepted playability input receipt present" : "playability input receipt present",
+      needsAcceptedInput ? "accepted playability input receipt missing" : "playability input receipt missing",
     );
   }
   if (text.includes("input dispatch") || text.includes("pointer") || text.includes("touch") || text.includes("key event") || text.includes("trusted-event")) {

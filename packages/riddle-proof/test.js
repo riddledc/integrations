@@ -1254,6 +1254,126 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
   };
 }
 
+function cliStateHygienePlayabilityInputSummaryResult() {
+  const path = "/state-hygiene-playability-input-summary";
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: "cli-state-hygiene-playability-input-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: `https://example.com${path}`,
+      observed: "/",
+      expected_path: "/",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: ["playability-active", "playability-started"], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        label: "setup actions succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 4,
+          setup_summary: {
+            viewport_count: 1,
+            action_count: 4,
+            viewports: [{
+              name: "desktop",
+              ok: true,
+              result_count: 4,
+              observed_path: "/",
+              setup_screenshots: ["playability-active", "playability-started"],
+              press: [
+                { ordinal: 1, ok: true, key: "Space" },
+                { ordinal: 2, ok: true, key: "ArrowRight", hold_ms: 650 },
+              ],
+              window_eval_total: 2,
+              window_eval_stored_total: 2,
+              window_eval_captured_total: 2,
+              window_eval_truncated: false,
+              window_eval: [
+                {
+                  ordinal: 3,
+                  ok: true,
+                  return_captured: true,
+                  return_stored_to: "__proof.active",
+                  returned: {
+                    route: "/games/luge-run?proof=1",
+                    globalNames: ["__LUGE_PLAYABILITY_STATE__", "__LUGE_TRACK_TRUTH__"],
+                    globalCount: 2,
+                    navVisible: true,
+                  },
+                  return_summary: [
+                    { label: "route", path: "route", exists: true, value: "/games/luge-run?proof=1" },
+                    { label: "globalNames", path: "globalNames", exists: true, value: ["__LUGE_PLAYABILITY_STATE__", "__LUGE_TRACK_TRUTH__"] },
+                    { label: "globalCount", path: "globalCount", exists: true, value: 2 },
+                    { label: "navVisible", path: "navVisible", exists: true, value: true },
+                  ],
+                },
+                {
+                  ordinal: 4,
+                  ok: true,
+                  return_captured: true,
+                  return_stored_to: "__proof.started",
+                  returned: {
+                    started: true,
+                    distance: 106.351,
+                    speed: 78.857,
+                    acceptedInput: true,
+                    inputModality: "keyboard",
+                    globalCount: 2,
+                  },
+                  return_summary: [
+                    { label: "started", path: "started", exists: true, value: true },
+                    { label: "distance", path: "distance", exists: true, value: 106.351 },
+                    { label: "speed", path: "speed", exists: true, value: 78.857 },
+                    { label: "acceptedInput", path: "acceptedInput", exists: true, value: true },
+                    { label: "inputModality", path: "inputModality", exists: true, value: "keyboard" },
+                    { label: "globalCount", path: "globalCount", exists: true, value: 2 },
+                  ],
+                },
+              ],
+              failed: [],
+            }],
+          },
+        },
+      },
+    ],
+    summary: "cli-state-hygiene-playability-input-summary passed.",
+    captured_at: "2026-05-21T03:05:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: "cli-state-hygiene-playability-input-summary",
+      target_url: `https://example.com${path}`,
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-21T03:05:00.000Z",
+      viewports: [{
+        name: "desktop",
+        width: 1280,
+        height: 900,
+        route: {
+          requested: `https://example.com${path}`,
+          observed: "/",
+          expected_path: "/",
+          matched: true,
+          http_status: 200,
+        },
+        overflow_px: 0,
+        bounds_overflow_px: 0,
+        selectors: {},
+        text_matches: {},
+        screenshot_label: "playability-started",
+      }],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1 },
+    },
+  };
+}
+
 function cliStateHygieneOutcomeTruncatedNavigationSummaryResult() {
   const result = cliStateHygieneOutcomeSummaryResult();
   result.profile_name = "cli-state-hygiene-outcome-truncated-navigation-summary";
@@ -1576,6 +1696,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-truncated-navigation-summary")) {
         sendJson(cliStateHygieneOutcomeTruncatedNavigationSummaryResult());
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-playability-input-summary")) {
+        sendJson(cliStateHygienePlayabilityInputSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
@@ -5217,6 +5341,50 @@ try {
   assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /## Proof Pack/);
   assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /present: home-to-Projectile route continuation receipt \(route continuation receipt present\)/);
+
+  const stateHygienePlayabilityInputProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-playability-input-summary.json");
+  const stateHygienePlayabilityInputOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-playability-input-summary-output");
+  writeFileSync(stateHygienePlayabilityInputProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-playability-input-summary",
+    target: {
+      route: "/state-hygiene-playability-input-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "active route-local New Luge proof globals and playability state receipt",
+        "real start and steering input with moving playability state receipt",
+      ],
+    },
+  }));
+  const stateHygienePlayabilityInputResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygienePlayabilityInputProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygienePlayabilityInputOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygienePlayabilityInputResult.stdout).status, "passed");
+  const stateHygienePlayabilityInputSummaryMarkdown = readFileSync(path.join(stateHygienePlayabilityInputOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygienePlayabilityInputSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygienePlayabilityInputSummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(stateHygienePlayabilityInputSummaryMarkdown, /present: active route-local New Luge proof globals and playability state receipt \(active route-local proof receipt present\)/);
+  assert.match(stateHygienePlayabilityInputSummaryMarkdown, /present: real start and steering input with moving playability state receipt \(accepted playability input receipt present\)/);
 
   const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
   const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");
