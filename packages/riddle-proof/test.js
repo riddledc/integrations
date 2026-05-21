@@ -2018,6 +2018,196 @@ const cliRunProfileServer = createServer((request, response) => {
         sendJson(cliStateHygieneSolveMetricSummaryResult());
         return;
       }
+      if (String(body.url || "").includes("/sequence-memory-receipt-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-sequence-memory-receipt-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/sequence-memory-receipt-summary",
+            observed: "/sequence-memory-receipt-summary",
+            expected_path: "/sequence-memory-receipt-summary",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "sequence-ready",
+              "sequence-input-ready",
+              "sequence-success",
+              "sequence-restart-ready",
+              "cli-sequence-memory-receipt-summary-desktop",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 8,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 8,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 8,
+                    observed_path: "/sequence-memory-receipt-summary",
+                    setup_screenshots: [
+                      "sequence-ready",
+                      "sequence-input-ready",
+                      "sequence-success",
+                      "sequence-restart-ready",
+                    ],
+                    action_counts: { click: 5, window_eval: 3 },
+                    clicked_total: 5,
+                    window_eval_total: 3,
+                    window_eval_stored_total: 3,
+                    window_eval_captured_total: 3,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 180,
+                        return_captured: true,
+                        return_stored_to: "__sequence.level1Input",
+                        returned: {
+                          ok: true,
+                          slot: "level1Input",
+                          statusText: "Your turn: 1/3",
+                          level: 1,
+                          streak: 0,
+                          best: 0,
+                          expectedSteps: 3,
+                          shortDisabled: false,
+                          longDisabled: false,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "level1Input" },
+                          { label: "statusText", path: "statusText", exists: true, value: "Your turn: 1/3" },
+                          { label: "level", path: "level", exists: true, value: 1 },
+                          { label: "expectedSteps", path: "expectedSteps", exists: true, value: 3 },
+                          { label: "shortDisabled", path: "shortDisabled", exists: true, value: false },
+                          { label: "longDisabled", path: "longDisabled", exists: true, value: false },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 5,
+                        ok: true,
+                        script_length: 240,
+                        return_captured: true,
+                        return_stored_to: "__sequence.success",
+                        returned: {
+                          ok: true,
+                          slot: "success",
+                          statusText: "Perfect! Next block ahead.",
+                          expectedSequence: "short,long,short",
+                          level: 1,
+                          streak: 1,
+                          best: 1,
+                          shortDisabled: true,
+                          longDisabled: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "success" },
+                          { label: "statusText", path: "statusText", exists: true, value: "Perfect! Next block ahead." },
+                          { label: "expectedSequence", path: "expectedSequence", exists: true, value: "short,long,short" },
+                          { label: "level", path: "level", exists: true, value: 1 },
+                          { label: "streak", path: "streak", exists: true, value: 1 },
+                          { label: "best", path: "best", exists: true, value: 1 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 8,
+                        ok: true,
+                        script_length: 220,
+                        return_captured: true,
+                        return_stored_to: "__sequence.restart",
+                        returned: {
+                          ok: true,
+                          slot: "restart",
+                          statusText: "Your turn: 1/3",
+                          level: 1,
+                          streak: 0,
+                          best: 1,
+                          shortDisabled: false,
+                          longDisabled: false,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "restart" },
+                          { label: "statusText", path: "statusText", exists: true, value: "Your turn: 1/3" },
+                          { label: "level", path: "level", exists: true, value: 1 },
+                          { label: "streak", path: "streak", exists: true, value: 0 },
+                          { label: "best", path: "best", exists: true, value: 1 },
+                          { label: "shortDisabled", path: "shortDisabled", exists: true, value: false },
+                          { label: "longDisabled", path: "longDisabled", exists: true, value: false },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    clicked: [
+                      { ordinal: 2, selector: "button", text: "Start Run" },
+                      { ordinal: 3, selector: "button", text: "Short" },
+                      { ordinal: 4, selector: "button", text: "Long" },
+                      { ordinal: 5, selector: "button", text: "Short" },
+                      { ordinal: 7, selector: "button", text: "Restart" },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            {
+              type: "route_loaded",
+              label: "route_loaded",
+              status: "passed",
+              evidence: { expected_path: "/sequence-memory-receipt-summary", observed_paths: ["/sequence-memory-receipt-summary"], http_statuses: [200] },
+            },
+          ],
+          summary: "cli-sequence-memory-receipt-summary passed.",
+          captured_at: "2026-05-21T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-sequence-memory-receipt-summary",
+            target_url: "https://example.com/sequence-memory-receipt-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-21T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/sequence-memory-receipt-summary",
+                observed: "/sequence-memory-receipt-summary",
+                expected_path: "/sequence-memory-receipt-summary",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "cli-sequence-memory-receipt-summary-desktop",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
         sendJson(cliStateHygieneOutcomeSummaryResult());
         return;
@@ -5686,6 +5876,61 @@ try {
   assert.match(
     economyRouteHygieneSummaryMarkdown,
     /present: persisted return-state receipt proving saved upgrades and totals reload correctly \(persisted return-state receipt present\)/,
+  );
+
+  const sequenceMemoryReceiptProfileFile = path.join(riddlePreviewDir, "cli-sequence-memory-receipt-summary.json");
+  const sequenceMemoryReceiptOutputDir = path.join(riddlePreviewDir, "cli-sequence-memory-receipt-summary-output");
+  writeFileSync(sequenceMemoryReceiptProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-sequence-memory-receipt-summary",
+    target: {
+      route: "/sequence-memory-receipt-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/sequence-memory-receipt-summary" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "visible UI input receipt for the known short-long-short level-one sequence",
+        "state-growth receipt with streak=1 and best=1 after the correct sequence",
+        "restart receipt with level=1, streak=0, best=1, and input controls re-enabled",
+      ],
+    },
+  }));
+  const sequenceMemoryReceiptResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    sequenceMemoryReceiptProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    sequenceMemoryReceiptOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(sequenceMemoryReceiptResult.stdout).status, "passed");
+  const sequenceMemoryReceiptSummaryMarkdown = readFileSync(path.join(sequenceMemoryReceiptOutputDir, "summary.md"), "utf8");
+  assert.match(sequenceMemoryReceiptSummaryMarkdown, /## Proof Pack/);
+  assert.match(sequenceMemoryReceiptSummaryMarkdown, /pack completeness: complete \(3 present\)/);
+  assert.match(
+    sequenceMemoryReceiptSummaryMarkdown,
+    /present: visible UI input receipt for the known short-long-short level-one sequence \(sequence input receipt present\)/,
+  );
+  assert.match(
+    sequenceMemoryReceiptSummaryMarkdown,
+    /present: state-growth receipt with streak=1 and best=1 after the correct sequence \(state-growth receipt present\)/,
+  );
+  assert.match(
+    sequenceMemoryReceiptSummaryMarkdown,
+    /present: restart receipt with level=1, streak=0, best=1, and input controls re-enabled \(restart-ready receipt present\)/,
   );
 
   const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");
