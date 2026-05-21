@@ -7082,6 +7082,59 @@ function setupCaseInsensitiveTextSample(sample, action) {
   if (!normalizedSample.toLowerCase().includes(normalizedExpected.toLowerCase())) return "";
   return compactSetupResultText(normalizedSample);
 }
+async function selectorVisibilityDiagnostic(context, selector) {
+  return await context.locator(selector).evaluateAll((elements) => {
+    const isVisible = (element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style && style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+    };
+    const describeElement = (element) => {
+      const tag = String(element.tagName || "element").toLowerCase();
+      const id = element.id ? "#" + String(element.id).slice(0, 40) : "";
+      const classes = String(element.getAttribute("class") || "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((name) => "." + name.slice(0, 32))
+        .join("");
+      return (tag + id + classes).slice(0, 120);
+    };
+    const describeBox = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      const width = Math.round(rect.width * 10) / 10;
+      const height = Math.round(rect.height * 10) / 10;
+      return describeElement(element)
+        + " " + width + "x" + height
+        + " display=" + (style ? style.display : "unknown")
+        + " visibility=" + (style ? style.visibility : "unknown");
+    };
+    if (!elements.length) return "selector_not_found";
+    const visibleCount = elements.filter(isVisible).length;
+    let visibleDescendant = null;
+    for (let index = 0; index < elements.length && !visibleDescendant; index += 1) {
+      const descendants = Array.from(elements[index].querySelectorAll("*"));
+      const match = descendants.find(isVisible);
+      if (match) {
+        visibleDescendant = {
+          parent_index: index,
+          label: describeElement(match),
+          box: describeBox(match),
+          text: String(match.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80),
+        };
+      }
+    }
+    const parts = ["no_visible_match", "matched " + elements.length, "visible " + visibleCount];
+    if (visibleDescendant) {
+      parts.push("visible_descendant " + visibleDescendant.label + " parent_index=" + visibleDescendant.parent_index);
+      parts.push("visible_descendant_box " + visibleDescendant.box);
+      if (visibleDescendant.text) parts.push("visible_descendant_text " + JSON.stringify(visibleDescendant.text));
+    }
+    parts.push("first " + describeBox(elements[0]));
+    return parts.join("; ").slice(0, 500);
+  }).catch((error) => "no_visible_match; diagnostic_error " + String(error && error.message ? error.message : error).slice(0, 240));
+}
 async function waitForAnyVisibleSelector(context, selector, timeout) {
   const deadline = Date.now() + setupNumber(timeout, 15000);
   let lastReason = "selector_not_found";
@@ -7092,7 +7145,7 @@ async function waitForAnyVisibleSelector(context, selector, timeout) {
       if (!count) {
         lastReason = "selector_not_found";
       } else {
-        lastReason = "no_visible_match";
+        lastReason = await selectorVisibilityDiagnostic(context, selector);
         for (let index = 0; index < count; index += 1) {
           if (await locator.nth(index).isVisible().catch(() => false)) {
             return { ok: true, count, index };
