@@ -2352,6 +2352,196 @@ const cliRunProfileServer = createServer((request, response) => {
         });
         return;
       }
+      if (String(body.url || "").includes("/economy-route-hygiene-receipt-summary")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-economy-route-hygiene-receipt-summary",
+          runner: "riddle",
+          status: "passed",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/economy-route-hygiene-receipt-summary",
+            observed: "/",
+            expected_path: "/",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: [
+              "economy-start",
+              "economy-passive-income",
+              "economy-home-stable",
+              "economy-returned",
+            ],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "setup_actions_succeeded",
+              label: "setup actions succeeded",
+              status: "passed",
+              evidence: {
+                action_count: 8,
+                setup_summary: {
+                  viewport_count: 1,
+                  action_count: 8,
+                  viewports: [{
+                    name: "desktop",
+                    ok: true,
+                    result_count: 8,
+                    observed_path: "/",
+                    setup_screenshots: ["economy-start", "economy-passive-income", "economy-home-stable", "economy-returned"],
+                    action_counts: { click: 4, window_eval: 4 },
+                    clicked_total: 4,
+                    click_sequence_total: 1,
+                    window_eval_total: 4,
+                    window_eval_stored_total: 4,
+                    window_eval_captured_total: 4,
+                    window_eval_truncated: false,
+                    window_eval: [
+                      {
+                        ordinal: 1,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__economy.initial",
+                        returned: {
+                          route: "/games/coin-clicker",
+                          coins: 0,
+                          totalEarned: 0,
+                          perClick: 1,
+                          perSecond: 0,
+                          saveTotalClicks: 0,
+                        },
+                        return_summary: [
+                          { label: "coins", path: "coins", exists: true, value: 0 },
+                          { label: "totalEarned", path: "totalEarned", exists: true, value: 0 },
+                          { label: "perClick", path: "perClick", exists: true, value: 1 },
+                          { label: "perSecond", path: "perSecond", exists: true, value: 0 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 4,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__economy.autoBought",
+                        returned: {
+                          route: "/games/coin-clicker",
+                          coins: 2,
+                          totalEarned: 67,
+                          perClick: 2,
+                          perSecond: 1,
+                          saveTotalCoins: 67,
+                          saveTotalClicks: 40,
+                          clickPowerLevel: 1,
+                          autoClickerLevel: 1,
+                        },
+                        return_summary: [
+                          { label: "coins", path: "coins", exists: true, value: 2 },
+                          { label: "totalEarned", path: "totalEarned", exists: true, value: 67 },
+                          { label: "perClick", path: "perClick", exists: true, value: 2 },
+                          { label: "perSecond", path: "perSecond", exists: true, value: 1 },
+                          { label: "saveTotalCoins", path: "saveTotalCoins", exists: true, value: 67 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 6,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__economy.homeIdleStable",
+                        returned: {
+                          route: "/",
+                          homeVisible: true,
+                          hasGame: false,
+                          storageStable: true,
+                          saveTotalCoins: 67,
+                          saveTotalClicks: 40,
+                          saveClickPowerLevel: 1,
+                          saveAutoClickerLevel: 1,
+                        },
+                        return_summary: [
+                          { label: "storageStable", path: "storageStable", exists: true, value: true },
+                          { label: "saveTotalCoins", path: "saveTotalCoins", exists: true, value: 67 },
+                          { label: "saveTotalClicks", path: "saveTotalClicks", exists: true, value: 40 },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 8,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
+                        return_stored_to: "__economy.returned",
+                        returned: {
+                          route: "/games/coin-clicker",
+                          persistedFromHome: true,
+                          coins: 2,
+                          totalEarned: 67,
+                          perClick: 2,
+                          perSecond: 1,
+                          saveTotalClicks: 40,
+                          clickPowerLevel: 1,
+                          autoClickerLevel: 1,
+                        },
+                        return_summary: [
+                          { label: "persistedFromHome", path: "persistedFromHome", exists: true, value: true },
+                          { label: "coins", path: "coins", exists: true, value: 2 },
+                          { label: "perClick", path: "perClick", exists: true, value: 2 },
+                          { label: "perSecond", path: "perSecond", exists: true, value: 1 },
+                        ],
+                        reason: null,
+                      },
+                    ],
+                    failed: [],
+                  }],
+                },
+              },
+            },
+            {
+              type: "route_loaded",
+              label: "route_loaded",
+              status: "passed",
+              evidence: { expected_path: "/", observed_paths: ["/"], http_statuses: [200] },
+            },
+          ],
+          summary: "cli-economy-route-hygiene-receipt-summary passed.",
+          captured_at: "2026-05-21T00:00:00.000Z",
+          evidence: {
+            version: "riddle-proof.profile-evidence.v1",
+            profile_name: "cli-economy-route-hygiene-receipt-summary",
+            target_url: "https://example.com/economy-route-hygiene-receipt-summary",
+            baseline_policy: "invariant_only",
+            captured_at: "2026-05-21T00:00:00.000Z",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/economy-route-hygiene-receipt-summary",
+                observed: "/",
+                expected_path: "/",
+                matched: true,
+                http_status: 200,
+              },
+              overflow_px: 0,
+              bounds_overflow_px: 0,
+              selectors: {},
+              text_matches: {},
+              screenshot_label: "economy-route-hygiene-final",
+            }],
+            console: { events: [], fatal_count: 0 },
+            page_errors: [],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/responsive-reachability-summary")) {
         sendJson({
           version: "riddle-proof.profile-result.v1",
@@ -5090,6 +5280,66 @@ try {
   assert.match(
     keyboardBoostReceiptSummaryMarkdown,
     /present: measured boost state-change receipt \(measured-change evidence present\)/,
+  );
+
+  const economyRouteHygieneProfileFile = path.join(riddlePreviewDir, "cli-economy-route-hygiene-receipt-summary.json");
+  const economyRouteHygieneOutputDir = path.join(riddlePreviewDir, "cli-economy-route-hygiene-receipt-summary-output");
+  writeFileSync(economyRouteHygieneProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-economy-route-hygiene-receipt-summary",
+    target: {
+      route: "/economy-route-hygiene-receipt-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "input dispatch receipts for visible coin and upgrade clicks",
+        "measured economy state-change receipt for coins, per-click value, passive income, and saved totals",
+        "post-exit storage-stability receipt proving passive income does not mutate save data while Coin Clicker is unmounted",
+        "persisted return-state receipt proving saved upgrades and totals reload correctly",
+      ],
+    },
+  }));
+  const economyRouteHygieneResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    economyRouteHygieneProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    economyRouteHygieneOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(economyRouteHygieneResult.stdout).status, "passed");
+  const economyRouteHygieneSummaryMarkdown = readFileSync(path.join(economyRouteHygieneOutputDir, "summary.md"), "utf8");
+  assert.match(economyRouteHygieneSummaryMarkdown, /## Proof Pack/);
+  assert.match(economyRouteHygieneSummaryMarkdown, /pack completeness: complete \(4 present\)/);
+  assert.match(
+    economyRouteHygieneSummaryMarkdown,
+    /present: input dispatch receipts for visible coin and upgrade clicks \(input dispatch evidence present\)/,
+  );
+  assert.match(
+    economyRouteHygieneSummaryMarkdown,
+    /present: measured economy state-change receipt for coins, per-click value, passive income, and saved totals \(measured-change evidence present\)/,
+  );
+  assert.match(
+    economyRouteHygieneSummaryMarkdown,
+    /present: post-exit storage-stability receipt proving passive income does not mutate save data while Coin Clicker is unmounted \(storage-stability receipt present\)/,
+  );
+  assert.match(
+    economyRouteHygieneSummaryMarkdown,
+    /present: persisted return-state receipt proving saved upgrades and totals reload correctly \(persisted return-state receipt present\)/,
   );
 
   const routeViewportCoverageProfileFile = path.join(riddlePreviewDir, "cli-route-viewport-coverage-summary.json");
