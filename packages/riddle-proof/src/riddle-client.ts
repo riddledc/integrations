@@ -15,6 +15,25 @@ export interface RiddleClientConfig {
   fetchImpl?: RiddleFetch;
 }
 
+export interface RiddleApiKeySource {
+  source: "option" | "env" | "file";
+  file?: string;
+}
+
+export interface RiddleBalanceResult {
+  available_seconds?: number;
+  reserved_seconds?: number;
+  total_seconds?: number;
+  available_time?: string;
+  total_time?: string;
+  available_dollars?: number;
+  reserved_dollars?: number;
+  total_dollars?: number;
+  currency?: string;
+  holds_count?: number;
+  rate?: Record<string, unknown>;
+}
+
 export interface RiddlePollProgressSnapshot {
   job_id: string;
   status: string | null;
@@ -138,15 +157,24 @@ function fetchFor(config: RiddleClientConfig = {}) {
   return config.fetchImpl || fetch;
 }
 
-export function resolveRiddleApiKey(config: RiddleClientConfig = {}) {
-  if (config.apiKey?.trim()) return config.apiKey.trim();
-  if (process.env.RIDDLE_API_KEY?.trim()) return process.env.RIDDLE_API_KEY.trim();
+function resolveRiddleApiKeyWithSource(config: RiddleClientConfig = {}): RiddleApiKeySource & { apiKey: string } {
+  if (config.apiKey?.trim()) return { apiKey: config.apiKey.trim(), source: "option" };
+  if (process.env.RIDDLE_API_KEY?.trim()) return { apiKey: process.env.RIDDLE_API_KEY.trim(), source: "env" };
   const keyFile = config.apiKeyFile || process.env.RIDDLE_API_KEY_FILE || DEFAULT_RIDDLE_API_KEY_FILE;
   if (existsSync(keyFile)) {
     const key = readFileSync(keyFile, "utf8").trim();
-    if (key) return key;
+    if (key) return { apiKey: key, source: "file", file: keyFile };
   }
   throw new Error(`Riddle API key missing. Set RIDDLE_API_KEY or write ${DEFAULT_RIDDLE_API_KEY_FILE}.`);
+}
+
+export function resolveRiddleApiKeySource(config: RiddleClientConfig = {}): RiddleApiKeySource {
+  const { apiKey: _apiKey, ...source } = resolveRiddleApiKeyWithSource(config);
+  return source;
+}
+
+export function resolveRiddleApiKey(config: RiddleClientConfig = {}) {
+  return resolveRiddleApiKeyWithSource(config).apiKey;
 }
 
 export async function riddleRequestJson<T = unknown>(
@@ -171,6 +199,10 @@ export async function riddleRequestJson<T = unknown>(
   }
   if (!response.ok) throw new RiddleApiError(pathname, response.status, text);
   return (json ?? text) as T;
+}
+
+export async function getRiddleBalance(config: RiddleClientConfig = {}): Promise<RiddleBalanceResult> {
+  return riddleRequestJson<RiddleBalanceResult>(config, "/v1/balance", { method: "GET" });
 }
 
 function previewDeployResultFromRecord(input: {
@@ -591,8 +623,11 @@ export async function pollRiddleJob(
 
 export function createRiddleApiClient(config: RiddleClientConfig = {}) {
   return {
+    apiKeySource: () => resolveRiddleApiKeySource(config),
     requestJson: <T = unknown>(pathname: string, init?: RequestInit) =>
       riddleRequestJson<T>(config, pathname, init),
+    getBalance: () =>
+      getRiddleBalance(config),
     deployPreview: (directory: string, label: string, framework: RiddlePreviewFramework = "static") =>
       deployRiddlePreview(config, directory, label, framework),
     deployStaticPreview: (directory: string, label: string) =>

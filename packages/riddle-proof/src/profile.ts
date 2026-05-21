@@ -4823,11 +4823,12 @@ export function createRiddleProofProfileEnvironmentBlockedResult(input: {
   profile: RiddleProofProfile;
   runner?: RiddleProofProfileRunner;
   error?: unknown;
+  environmentBlocker?: Record<string, JsonValue>;
   riddle?: RiddleProofProfileResult["riddle"];
   artifacts?: RiddleProofProfileArtifactRef[];
 }): RiddleProofProfileResult {
   const message = input.error instanceof Error ? input.error.message : input.error ? String(input.error) : "Riddle runner did not complete successfully.";
-  const environmentBlocker = extractRiddleRunnerBlocker(message);
+  const environmentBlocker = input.environmentBlocker || extractRiddleRunnerBlocker(message);
   const warnings = collectRiddleProofProfileEnvironmentBlockedWarnings(input.profile, environmentBlocker);
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
