@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.111
+
+### Patch Changes
+
+- 6b08f9f: Refresh bundled Riddle Proof dependency to include runtime metric proof receipt recognition.
+
 ## 0.4.110
 
 ### Patch Changes
