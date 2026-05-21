@@ -1056,6 +1056,7 @@ function profileHasRecoveredStateReceipt(receipts: Record<string, unknown>[]): b
     const labelsRecovery = haystack.includes("recover")
       || haystack.includes("repaired")
       || haystack.includes("repair")
+      || haystack.includes("retry")
       || haystack.includes("restart")
       || haystack.includes("play again")
       || haystack.includes("playagain")
@@ -1067,13 +1068,15 @@ function profileHasRecoveredStateReceipt(receipts: Record<string, unknown>[]): b
     if (!labelsRecovery) return false;
 
     const status = profileLowerSummaryValue(receipt, ["status", "state", "phase"]);
-    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "result"]);
+    const outcome = profileLowerSummaryValue(receipt, ["lastOutcome", "outcome", "result", "retryOutcome", "retry_outcome"]);
     const hasRecoveredState = ["valid", "success", "recovered", "fixed", "ready"].includes(status)
-      || ["valid", "success", "recovered", "fixed", "ready"].includes(outcome);
+      || ["valid", "success", "recovered", "fixed", "ready", "running_after_retry", "ready_after_retry"].includes(outcome);
     const hasValid = setupReturnSummaryValue(receipt, ["hasValid", "valid", "isValid"]) === true;
     const hasInvalid = setupReturnSummaryValue(receipt, ["hasInvalid", "invalid", "isInvalid"]);
     const success = setupReturnSummaryValue(receipt, ["success", "recovered", "fixed"]) === true;
-    return hasRecoveredState || success || (hasValid && hasInvalid === false);
+    const leftTerminalState = setupReturnSummaryValue(receipt, ["leftTerminalState", "left_terminal_state"]) === true;
+    const retrySurfaceReady = setupReturnSummaryValue(receipt, ["retrySurfaceReady", "retry_surface_ready"]) === true;
+    return hasRecoveredState || success || (hasValid && hasInvalid === false) || (leftTerminalState && retrySurfaceReady);
   });
 }
 

@@ -1254,13 +1254,40 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
   };
 }
 
-function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, restartRecovered = false } = {}) {
-  const path = restartRecovered
+function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, restartRecovered = false, retryRecovered = false } = {}) {
+  const path = retryRecovered
+    ? "/workflow-truth-retry-action-summary"
+    : restartRecovered
     ? "/state-hygiene-restart-recovery-action-summary"
     : missingRecovered
       ? "/state-hygiene-recovery-action-missing-summary"
       : "/state-hygiene-recovery-action-summary";
-  const recoveredReceipt = restartRecovered
+  const recoveredReceipt = retryRecovered
+    ? {
+        ordinal: 2,
+        ok: true,
+        script_length: 20,
+        return_captured: true,
+        return_stored_to: "__hextrisRetry.afterRetryReceipt",
+        returned: {
+          state: "after_visible_retry_action",
+          retryOutcome: "running_after_retry",
+          leftTerminalState: true,
+          retrySurfaceReady: true,
+          forcedStackCleared: true,
+          scoreReset: true,
+        },
+        return_summary: [
+          { label: "state", path: "state", exists: true, value: "after_visible_retry_action" },
+          { label: "retryOutcome", path: "retryOutcome", exists: true, value: "running_after_retry" },
+          { label: "leftTerminalState", path: "leftTerminalState", exists: true, value: true },
+          { label: "retrySurfaceReady", path: "retrySurfaceReady", exists: true, value: true },
+          { label: "forcedStackCleared", path: "forcedStackCleared", exists: true, value: true },
+          { label: "scoreReset", path: "scoreReset", exists: true, value: true },
+        ],
+        reason: null,
+      }
+    : restartRecovered
     ? {
         ordinal: 2,
         ok: true,
@@ -1309,7 +1336,9 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
       };
   return {
     version: "riddle-proof.profile-result.v1",
-    profile_name: restartRecovered
+    profile_name: retryRecovered
+      ? "cli-workflow-truth-retry-action-summary"
+      : restartRecovered
       ? "cli-state-hygiene-restart-recovery-action-summary"
       : missingRecovered
         ? "cli-state-hygiene-recovery-action-missing-summary"
@@ -1341,7 +1370,8 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
               result_count: 3,
               observed_path: "/",
               setup_screenshots: ["state-hygiene-invalid", "state-hygiene-recovered"],
-              clicked_total: 1,
+              clicked_total: retryRecovered ? 0 : 1,
+              tap_total: retryRecovered ? 1 : undefined,
               window_eval_total: 2,
               window_eval_stored_total: 2,
               window_eval_captured_total: 2,
@@ -1365,7 +1395,18 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
                 },
                 recoveredReceipt,
               ],
-              clicked: [
+              tap: retryRecovered
+                ? [
+                    {
+                      ordinal: 1,
+                      ok: true,
+                      selector: "#restart",
+                      pointer_type: "mouse",
+                      input_dispatch: "playwright_mouse",
+                    },
+                  ]
+                : undefined,
+              clicked: retryRecovered ? [] : [
                 { ordinal: 1, selector: restartRecovered ? "canvas#game" : "button", text: restartRecovered ? "Play Again" : "Try Fix" },
               ],
               failed: [],
@@ -1374,7 +1415,9 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
         },
       },
     ],
-    summary: restartRecovered
+    summary: retryRecovered
+      ? "cli-workflow-truth-retry-action-summary passed."
+      : restartRecovered
       ? "cli-state-hygiene-restart-recovery-action-summary passed."
       : missingRecovered
         ? "cli-state-hygiene-recovery-action-missing-summary passed."
@@ -1382,7 +1425,9 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
     captured_at: "2026-05-20T17:45:00.000Z",
     evidence: {
       version: "riddle-proof.profile-evidence.v1",
-      profile_name: restartRecovered
+      profile_name: retryRecovered
+        ? "cli-workflow-truth-retry-action-summary"
+        : restartRecovered
         ? "cli-state-hygiene-restart-recovery-action-summary"
         : missingRecovered
           ? "cli-state-hygiene-recovery-action-missing-summary"
@@ -1516,6 +1561,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-restart-recovery-action-summary")) {
         sendJson(cliStateHygieneRecoveryActionSummaryResult({ restartRecovered: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/workflow-truth-retry-action-summary")) {
+        sendJson(cliStateHygieneRecoveryActionSummaryResult({ retryRecovered: true }));
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-recovery-action-summary")) {
@@ -5023,6 +5072,48 @@ try {
   assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /## Proof Pack/);
   assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(stateHygieneRestartRecoveryActionSummaryMarkdown, /present: recovery action receipt for Play Again restart to active state \(visible recovery-action receipt present\)/);
+
+  const workflowTruthRetryActionProfileFile = path.join(riddlePreviewDir, "cli-workflow-truth-retry-action-summary.json");
+  const workflowTruthRetryActionOutputDir = path.join(riddlePreviewDir, "cli-workflow-truth-retry-action-summary-output");
+  writeFileSync(workflowTruthRetryActionProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-workflow-truth-retry-action-summary",
+    target: {
+      route: "/workflow-truth-retry-action-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "workflow_truth",
+      pack_public_name: "Workflow Truth Pack",
+      required_receipts: [
+        "visible restart or retry action receipt through visible UI",
+      ],
+    },
+  }));
+  const workflowTruthRetryActionResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    workflowTruthRetryActionProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    workflowTruthRetryActionOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(workflowTruthRetryActionResult.stdout).status, "passed");
+  const workflowTruthRetryActionSummaryMarkdown = readFileSync(path.join(workflowTruthRetryActionOutputDir, "summary.md"), "utf8");
+  assert.match(workflowTruthRetryActionSummaryMarkdown, /## Proof Pack/);
+  assert.match(workflowTruthRetryActionSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(workflowTruthRetryActionSummaryMarkdown, /present: visible restart or retry action receipt through visible UI \(visible recovery-action receipt present\)/);
 
   const stateHygieneMissingRecoveryActionProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary.json");
   const stateHygieneMissingRecoveryActionOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-recovery-action-missing-summary-output");
