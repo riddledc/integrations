@@ -1400,6 +1400,106 @@ function cliStateHygienePlayabilityInputSummaryResult() {
   };
 }
 
+function cliStateHygieneRuntimeMetricSummaryResult() {
+  const path = "/state-hygiene-runtime-metric-summary";
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: "cli-state-hygiene-runtime-metric-summary",
+    runner: "riddle",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: {
+      requested: `https://example.com${path}`,
+      observed: "/",
+      expected_path: "/",
+      matched: true,
+      http_status: 200,
+    },
+    artifacts: { screenshots: ["runtime-active", "runtime-cleanup"], proof_json: "proof.json" },
+    checks: [
+      {
+        type: "setup_actions_succeeded",
+        label: "setup actions succeeded",
+        status: "passed",
+        evidence: {
+          action_count: 2,
+          setup_summary: {
+            viewport_count: 1,
+            action_count: 2,
+            viewports: [{
+              name: "desktop",
+              ok: true,
+              result_count: 2,
+              observed_path: "/",
+              setup_screenshots: ["runtime-active", "runtime-cleanup"],
+              window_eval_total: 1,
+              window_eval_stored_total: 1,
+              window_eval_captured_total: 1,
+              window_eval_truncated: false,
+              window_eval: [
+                {
+                  ordinal: 1,
+                  ok: true,
+                  return_captured: true,
+                  return_stored_to: "__v698.beforeRouteExit",
+                  returned: {
+                    route: "/games/slalom-3d?autopilot=1&spriteMetrics=1",
+                    autopilot: true,
+                    metricsPresent: true,
+                    frameMetricsPresent: true,
+                    heightPx: 208,
+                    centerPx: 640,
+                    targetHeight: 220,
+                  },
+                  return_summary: [
+                    { label: "route", path: "route", exists: true, value: "/games/slalom-3d?autopilot=1&spriteMetrics=1" },
+                    { label: "autopilot", path: "autopilot", exists: true, value: true },
+                    { label: "metricsPresent", path: "metricsPresent", exists: true, value: true },
+                    { label: "frameMetricsPresent", path: "frameMetricsPresent", exists: true, value: true },
+                    { label: "heightPx", path: "heightPx", exists: true, value: 208 },
+                    { label: "centerPx", path: "centerPx", exists: true, value: 640 },
+                    { label: "targetHeight", path: "targetHeight", exists: true, value: 220 },
+                  ],
+                },
+              ],
+              failed: [],
+            }],
+          },
+        },
+      },
+    ],
+    summary: "cli-state-hygiene-runtime-metric-summary passed.",
+    captured_at: "2026-05-21T04:55:00.000Z",
+    evidence: {
+      version: "riddle-proof.profile-evidence.v1",
+      profile_name: "cli-state-hygiene-runtime-metric-summary",
+      target_url: `https://example.com${path}`,
+      baseline_policy: "invariant_only",
+      captured_at: "2026-05-21T04:55:00.000Z",
+      viewports: [{
+        name: "desktop",
+        width: 1280,
+        height: 900,
+        route: {
+          requested: `https://example.com${path}`,
+          observed: "/",
+          expected_path: "/",
+          matched: true,
+          http_status: 200,
+        },
+        overflow_px: 0,
+        bounds_overflow_px: 0,
+        selectors: {},
+        text_matches: {},
+        screenshot_label: "runtime-cleanup",
+      }],
+      console: { events: [], fatal_count: 0 },
+      page_errors: [],
+      dom_summary: { viewport_count: 1 },
+    },
+  };
+}
+
 function cliStateHygieneOutcomeTruncatedNavigationSummaryResult() {
   const result = cliStateHygieneOutcomeSummaryResult();
   result.profile_name = "cli-state-hygiene-outcome-truncated-navigation-summary";
@@ -1726,6 +1826,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-playability-input-summary")) {
         sendJson(cliStateHygienePlayabilityInputSummaryResult());
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-runtime-metric-summary")) {
+        sendJson(cliStateHygieneRuntimeMetricSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
@@ -5870,6 +5974,48 @@ try {
   assert.match(stateHygienePlayabilityInputSummaryMarkdown, /pack completeness: complete \(2 present\)/);
   assert.match(stateHygienePlayabilityInputSummaryMarkdown, /present: active route-local New Luge proof globals and playability state receipt \(active route-local proof receipt present\)/);
   assert.match(stateHygienePlayabilityInputSummaryMarkdown, /present: real start and steering input with moving playability state receipt \(accepted playability input receipt present\)/);
+
+  const stateHygieneRuntimeMetricProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-runtime-metric-summary.json");
+  const stateHygieneRuntimeMetricOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-runtime-metric-summary-output");
+  writeFileSync(stateHygieneRuntimeMetricProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-runtime-metric-summary",
+    target: {
+      route: "/state-hygiene-runtime-metric-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "active route-local Slalom 3D runtime metric receipt before route exit",
+      ],
+    },
+  }));
+  const stateHygieneRuntimeMetricResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneRuntimeMetricProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneRuntimeMetricOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneRuntimeMetricResult.stdout).status, "passed");
+  const stateHygieneRuntimeMetricSummaryMarkdown = readFileSync(path.join(stateHygieneRuntimeMetricOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(stateHygieneRuntimeMetricSummaryMarkdown, /present: active route-local Slalom 3D runtime metric receipt before route exit \(active route-local proof receipt present\)/);
 
   const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
   const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");

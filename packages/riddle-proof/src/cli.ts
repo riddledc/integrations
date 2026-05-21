@@ -1023,11 +1023,31 @@ function profileHasActiveRouteLocalProofReceipt(receipts: Record<string, unknown
     const enabled = setupReturnSummaryValue(receipt, ["enabled", "proofEnabled", "proof_enabled"]) === true;
     const ready = setupReturnSummaryValue(receipt, ["ready", "proofReady", "proof_ready"]) === true;
     const supportsProofFeature = setupReturnSummaryValue(receipt, ["supportsOfflineAudio", "supportsProof", "proofSupported"]) === true;
+    const autopilotActive = setupReturnSummaryValue(receipt, ["autopilot", "autopilotEnabled", "autopilot_enabled"]) === true;
+    const runtimeMetricPresent = [
+      "metricsPresent",
+      "frameMetricsPresent",
+      "runtimeMetricsPresent",
+      "routeMetricsPresent",
+    ].some((name) => setupReturnSummaryValue(receipt, [name]) === true);
+    const runtimeMetricMeasured = [
+      "heightPx",
+      "centerPx",
+      "targetHeight",
+      "frameCount",
+      "elapsedMs",
+      "distance",
+      "speed",
+      "velocity",
+    ].some((name) => cliFiniteNumber(setupReturnSummaryValue(receipt, [name])) !== undefined);
     return Boolean(
       proofVersion
       || enabled
       || ready
       || supportsProofFeature
+      || autopilotActive
+      || runtimeMetricPresent
+      || runtimeMetricMeasured
       || (globalCount !== undefined && globalCount > 0)
       || (Array.isArray(globalNames) && globalNames.length > 0),
     );
@@ -1496,6 +1516,10 @@ function profilePackReceiptStatus(
       || text.includes("proof state")
       || text.includes("proof globals")
       || text.includes("playability state")
+      || text.includes("runtime metric")
+      || text.includes("runtime metrics")
+      || text.includes("route metric")
+      || text.includes("route metrics")
     )
   ) {
     return profileReceiptSignalStatus(
