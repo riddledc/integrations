@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.219
+
+### Patch Changes
+
+- 1f69c54: Reject unknown CLI options before running jobs and accept `--base-url` as a `run-profile` alias for `--url`.
+
 ## 0.7.218
 
 ### Patch Changes
