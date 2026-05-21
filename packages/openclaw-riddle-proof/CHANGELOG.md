@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.106
+
+### Patch Changes
+
+- f6745f8: Refresh the OpenClaw wrapper release so new installs resolve the current `@riddledc/riddle-proof` full setup-action receipt classifier.
+
 ## 0.4.105
 
 ### Patch Changes
