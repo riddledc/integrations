@@ -934,13 +934,57 @@ function cliBalancedSetupSummaryResult() {
   };
 }
 
-function cliOfflineAudioMetricsSummaryResult({ silent = false } = {}) {
-  const path = silent ? "/silent-offline-audio-metrics-summary" : "/offline-audio-metrics-summary";
+function cliOfflineAudioMetricsSummaryResult({ nested = false, silent = false } = {}) {
+  const path = silent
+    ? "/silent-offline-audio-metrics-summary"
+    : nested
+      ? "/nested-offline-audio-metrics-summary"
+      : "/offline-audio-metrics-summary";
   const mixPeak = silent ? 0 : 0.7242;
   const mixRms = silent ? 0 : 0.0621;
+  const returned = nested
+    ? {
+      offlineOk: true,
+      windows: [{
+        name: "introBed",
+        mixHealth: { peak: mixPeak, rms: mixRms },
+        instrumentMetrics: {
+          bass: { rms: 0.031, peak: 0.17 },
+        },
+      }],
+      scoreTotal: 163.8063,
+      drumActiveCells: 1,
+    }
+    : {
+      offlineOk: true,
+      mixRms,
+      mixPeak,
+      scoreTotal: silent ? 0 : 163.8063,
+      drumActiveCells: 1,
+    };
+  const returnSummary = nested
+    ? [
+      { label: "offlineOk", path: "offlineOk", exists: true, value: true },
+      { label: "windows.0.mixHealth.peak", path: "windows.0.mixHealth.peak", exists: true, value: mixPeak },
+      { label: "windows.0.mixHealth.rms", path: "windows.0.mixHealth.rms", exists: true, value: mixRms },
+      { label: "windows.0.instrumentMetrics.bass.rms", path: "windows.0.instrumentMetrics.bass.rms", exists: true, value: 0.031 },
+      { label: "scoreTotal", path: "scoreTotal", exists: true, value: 163.8063 },
+      { label: "drumActiveCells", path: "drumActiveCells", exists: true, value: 1 },
+    ]
+    : [
+      { label: "offlineOk", path: "offlineOk", exists: true, value: true },
+      { label: "mixRms", path: "mixRms", exists: true, value: mixRms },
+      { label: "mixPeak", path: "mixPeak", exists: true, value: mixPeak },
+      { label: "scoreTotal", path: "scoreTotal", exists: true, value: silent ? 0 : 163.8063 },
+      { label: "drumActiveCells", path: "drumActiveCells", exists: true, value: 1 },
+    ];
   return {
     version: "riddle-proof.profile-result.v1",
-    profile_name: silent ? "cli-silent-offline-audio-metrics-summary" : "cli-offline-audio-metrics-summary",
+    profile_name: silent
+      ? "cli-silent-offline-audio-metrics-summary"
+      : nested
+        ? "cli-nested-offline-audio-metrics-summary"
+        : "cli-offline-audio-metrics-summary",
     runner: "riddle",
     status: "passed",
     baseline_policy: "invariant_only",
@@ -979,20 +1023,8 @@ function cliOfflineAudioMetricsSummaryResult({ silent = false } = {}) {
                 function_name: "__sequencerProof.renderOfflineMetrics",
                 return_captured: true,
                 return_stored_to: "__proof.offlineAudioMetrics",
-                returned: {
-                  offlineOk: true,
-                  mixRms,
-                  mixPeak,
-                  scoreTotal: silent ? 0 : 163.8063,
-                  drumActiveCells: 1,
-                },
-                return_summary: [
-                  { label: "offlineOk", path: "offlineOk", exists: true, value: true },
-                  { label: "mixRms", path: "mixRms", exists: true, value: mixRms },
-                  { label: "mixPeak", path: "mixPeak", exists: true, value: mixPeak },
-                  { label: "scoreTotal", path: "scoreTotal", exists: true, value: silent ? 0 : 163.8063 },
-                  { label: "drumActiveCells", path: "drumActiveCells", exists: true, value: 1 },
-                ],
+                returned,
+                return_summary: returnSummary,
                 reason: null,
               }],
               clicked: [{ ordinal: 0, selector: "button.step.track-kick", text: "STEP" }],
@@ -1002,11 +1034,19 @@ function cliOfflineAudioMetricsSummaryResult({ silent = false } = {}) {
         },
       },
     ],
-    summary: silent ? "cli-silent-offline-audio-metrics-summary passed." : "cli-offline-audio-metrics-summary passed.",
+    summary: silent
+      ? "cli-silent-offline-audio-metrics-summary passed."
+      : nested
+        ? "cli-nested-offline-audio-metrics-summary passed."
+        : "cli-offline-audio-metrics-summary passed.",
     captured_at: "2026-05-20T17:30:00.000Z",
     evidence: {
       version: "riddle-proof.profile-evidence.v1",
-      profile_name: silent ? "cli-silent-offline-audio-metrics-summary" : "cli-offline-audio-metrics-summary",
+      profile_name: silent
+        ? "cli-silent-offline-audio-metrics-summary"
+        : nested
+          ? "cli-nested-offline-audio-metrics-summary"
+          : "cli-offline-audio-metrics-summary",
       target_url: `https://example.com${path}`,
       baseline_policy: "invariant_only",
       captured_at: "2026-05-20T17:30:00.000Z",
@@ -1948,6 +1988,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/silent-offline-audio-metrics-summary")) {
         sendJson(cliOfflineAudioMetricsSummaryResult({ silent: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/nested-offline-audio-metrics-summary")) {
+        sendJson(cliOfflineAudioMetricsSummaryResult({ nested: true }));
         return;
       }
       if (String(body.url || "").includes("/offline-audio-metrics-summary")) {
@@ -5988,6 +6032,48 @@ try {
   assert.match(offlineAudioMetricsSummaryMarkdown, /## Proof Pack/);
   assert.match(offlineAudioMetricsSummaryMarkdown, /pack completeness: complete \(1 present\)/);
   assert.match(offlineAudioMetricsSummaryMarkdown, /present: offline audio metrics proof receipt \(offline audio metric receipt present\)/);
+
+  const nestedOfflineAudioMetricsProfileFile = path.join(riddlePreviewDir, "cli-nested-offline-audio-metrics-summary.json");
+  const nestedOfflineAudioMetricsOutputDir = path.join(riddlePreviewDir, "cli-nested-offline-audio-metrics-summary-output");
+  writeFileSync(nestedOfflineAudioMetricsProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-nested-offline-audio-metrics-summary",
+    target: {
+      route: "/nested-offline-audio-metrics-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/nested-offline-audio-metrics-summary" },
+    ],
+    metadata: {
+      pack_id: "offline_audio_metrics",
+      pack_public_name: "Offline Audio Metrics Pack",
+      required_receipts: [
+        "offline audio metrics proof receipt",
+      ],
+    },
+  }));
+  const nestedOfflineAudioMetricsResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    nestedOfflineAudioMetricsProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    nestedOfflineAudioMetricsOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(nestedOfflineAudioMetricsResult.stdout).status, "passed");
+  const nestedOfflineAudioMetricsSummaryMarkdown = readFileSync(path.join(nestedOfflineAudioMetricsOutputDir, "summary.md"), "utf8");
+  assert.match(nestedOfflineAudioMetricsSummaryMarkdown, /## Proof Pack/);
+  assert.match(nestedOfflineAudioMetricsSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(nestedOfflineAudioMetricsSummaryMarkdown, /present: offline audio metrics proof receipt \(offline audio metric receipt present\)/);
 
   const silentOfflineAudioMetricsProfileFile = path.join(riddlePreviewDir, "cli-silent-offline-audio-metrics-summary.json");
   const silentOfflineAudioMetricsOutputDir = path.join(riddlePreviewDir, "cli-silent-offline-audio-metrics-summary-output");
