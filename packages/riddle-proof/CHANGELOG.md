@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.202
+
+### Patch Changes
+
+- a96d9c6: Add `run-profile --viewport-name` for named viewport selection, write immediate `riddle-job.json` receipts for hosted profile runs, and add `run-profile recover --job` to rebuild local profile artifacts from hosted Riddle job artifacts.
+
 ## 0.7.201
 
 ### Patch Changes
