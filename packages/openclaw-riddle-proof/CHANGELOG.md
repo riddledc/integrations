@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.103
+
+### Patch Changes
+
+- e4af1cc: Refresh the OpenClaw wrapper release so new installs resolve the current `@riddledc/riddle-proof` profile runner and recovery CLI improvements.
+
 ## 0.4.102
 
 ### Patch Changes
