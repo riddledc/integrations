@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -79,6 +79,7 @@ export interface RiddlePreviewDeployResult {
   expires_at?: string;
   publish_recovered?: boolean;
   publish_error?: string;
+  warnings?: string[];
   raw?: Record<string, unknown>;
 }
 
@@ -213,6 +214,7 @@ function previewDeployResultFromRecord(input: {
   expiresAt?: string;
   publishRecovered?: boolean;
   publishError?: string;
+  warnings?: string[];
 }): RiddlePreviewDeployResult {
   const { record, id, label, framework, expiresAt, publishRecovered, publishError } = input;
   return {
@@ -226,6 +228,7 @@ function previewDeployResultFromRecord(input: {
     expires_at: expiresAt,
     publish_recovered: publishRecovered || undefined,
     publish_error: publishError,
+    warnings: input.warnings?.length ? input.warnings : undefined,
     raw: record,
   };
 }
@@ -242,6 +245,7 @@ async function waitForPublishedPreview(
     framework: RiddlePreviewFramework;
     expiresAt?: string;
     publishError: RiddleApiError;
+    warnings?: string[];
   },
 ) {
   for (let attempt = 1; attempt <= PREVIEW_PUBLISH_RECOVERY_ATTEMPTS; attempt += 1) {
@@ -255,6 +259,7 @@ async function waitForPublishedPreview(
         expiresAt: input.expiresAt,
         publishRecovered: true,
         publishError: input.publishError.message,
+        warnings: input.warnings,
       });
     }
     if (attempt < PREVIEW_PUBLISH_RECOVERY_ATTEMPTS) {
@@ -273,6 +278,7 @@ export async function deployRiddlePreview(
   if (!directory?.trim()) throw new Error("directory is required");
   if (!label?.trim()) throw new Error("label is required");
   if (framework !== "spa" && framework !== "static") throw new Error("framework must be spa or static");
+  const warnings = collectRiddlePreviewDeployWarnings(directory, framework);
 
   const created = await riddleRequestJson<Record<string, unknown>>(config, "/v1/preview", {
     method: "POST",
@@ -303,7 +309,7 @@ export async function deployRiddlePreview(
     const published = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${id}/publish`, {
       method: "POST",
     });
-    return previewDeployResultFromRecord({ record: published, id, label, framework, expiresAt });
+    return previewDeployResultFromRecord({ record: published, id, label, framework, expiresAt, warnings });
   } catch (error) {
     if (!canRecoverPreviewPublish(error)) throw error;
     return waitForPublishedPreview(config, {
@@ -312,7 +318,68 @@ export async function deployRiddlePreview(
       framework,
       expiresAt,
       publishError: error,
+      warnings,
     });
+  }
+}
+
+function latestMatchingMtimeMs(directory: string, predicate: (filePath: string) => boolean) {
+  let latest = 0;
+  const stack = [directory];
+  let visited = 0;
+  while (stack.length) {
+    const current = stack.pop()!;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !predicate(fullPath)) continue;
+      const stat = statSync(fullPath);
+      latest = Math.max(latest, stat.mtimeMs);
+      visited += 1;
+      if (visited >= 10000) return latest;
+    }
+  }
+  return latest;
+}
+
+export function collectRiddlePreviewDeployWarnings(
+  directory: string,
+  framework: RiddlePreviewFramework = "static",
+): string[] {
+  try {
+    if (framework !== "static") return [];
+    const resolvedDirectory = path.resolve(directory);
+    if (path.basename(resolvedDirectory) !== "out") return [];
+
+    const repoRoot = path.dirname(resolvedDirectory);
+    const nextAppDir = path.join(repoRoot, ".next", "server", "app");
+    if (!existsSync(nextAppDir)) return [];
+
+    const nextRenderedMtimeMs = latestMatchingMtimeMs(nextAppDir, (filePath) => /\.(?:html|rsc)$/i.test(filePath));
+    if (!nextRenderedMtimeMs) return [];
+
+    const outRenderedMtimeMs = existsSync(resolvedDirectory)
+      ? latestMatchingMtimeMs(resolvedDirectory, (filePath) => /\.(?:html|txt|rsc)$/i.test(filePath))
+      : 0;
+
+    if (!outRenderedMtimeMs) {
+      return [
+        "Riddle Preview static deploy target is an out/ directory with newer Next render output in .next/server/app, but no rendered HTML/RSC files were found in out/. Run the project static bundle/export step before deploying.",
+      ];
+    }
+
+    if (nextRenderedMtimeMs > outRenderedMtimeMs + 1000) {
+      return [
+        "Riddle Preview static deploy target out/ appears older than the Next render output in .next/server/app. Run the project static bundle/export step, such as npm run build:static-deploy or next export, before deploying to avoid a stale Preview.",
+      ];
+    }
+
+    return [];
+  } catch {
+    return [];
   }
 }
 
