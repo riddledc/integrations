@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.104
+
+### Patch Changes
+
+- f943ee4: Refresh the OpenClaw wrapper release so new installs resolve the current `@riddledc/riddle-proof` profile aggregate CLI.
+
 ## 0.4.103
 
 ### Patch Changes
