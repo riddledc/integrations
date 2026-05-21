@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.112
+
+### Patch Changes
+
+- cd8d357: Refresh bundled Riddle Proof dependency to include solved-board state-change receipt recognition.
+
 ## 0.4.111
 
 ### Patch Changes
