@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.109
+
+### Patch Changes
+
+- aa4f466: Refresh the OpenClaw wrapper package against @riddledc/riddle-proof 0.7.208.
+
 ## 0.4.108
 
 ### Patch Changes
