@@ -53,6 +53,92 @@ type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
 
 const RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB = 30;
+const KNOWN_CLI_OPTIONS = new Set([
+  "agent",
+  "apiBaseUrl",
+  "apiKey",
+  "apiKeyFile",
+  "artifact",
+  "attempts",
+  "balancePreflight",
+  "baseUrl",
+  "candidateJson",
+  "candidatesJson",
+  "checkpointMode",
+  "checkpointVisibility",
+  "codexCommand",
+  "codexFullAuto",
+  "codexHome",
+  "codexModel",
+  "codexSandbox",
+  "codexTimeoutMs",
+  "command",
+  "continueWithStage",
+  "createdAt",
+  "decision",
+  "defaultReviewer",
+  "defaultShipMode",
+  "exclude",
+  "format",
+  "framework",
+  "help",
+  "image",
+  "input",
+  "inputDir",
+  "inputFile",
+  "inputFiles",
+  "inputs",
+  "intervalMs",
+  "job",
+  "jobId",
+  "maxIterations",
+  "navigationTimeout",
+  "output",
+  "outputDir",
+  "path",
+  "payloadJson",
+  "pollAttempts",
+  "pollIntervalMs",
+  "port",
+  "profile",
+  "progressEveryMs",
+  "quiet",
+  "readinessPath",
+  "readinessTimeout",
+  "reasonsJson",
+  "requestJson",
+  "requiredJson",
+  "responseJson",
+  "resultFormat",
+  "resultsDir",
+  "riddleEngineModuleUrl",
+  "riddleProofDir",
+  "route",
+  "runDir",
+  "runner",
+  "scriptFile",
+  "sourceKind",
+  "splitViewports",
+  "stateDir",
+  "statePath",
+  "strict",
+  "submitRetries",
+  "submitTimeoutMs",
+  "summary",
+  "sync",
+  "timeout",
+  "url",
+  "unsubmittedJobRetries",
+  "unsubmittedJobTimeoutMs",
+  "unsubmittedRetries",
+  "unsubmittedTimeoutMs",
+  "viewport",
+  "viewportName",
+  "viewportNames",
+  "viewports",
+  "wait",
+  "waitForSelector",
+]);
 
 function usage() {
   return [
@@ -62,9 +148,9 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
-    "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
-    "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
+    "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -104,6 +190,17 @@ function parseArgs(argv: string[]) {
     index += 1;
   }
   return { positional, options };
+}
+
+function optionKeyToFlagName(key: string) {
+  return key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+}
+
+function validateCliOptions(options: CliOptions) {
+  const unknown = Object.keys(options).filter((key) => !KNOWN_CLI_OPTIONS.has(key));
+  if (!unknown.length) return;
+  const flags = unknown.map((key) => `--${optionKeyToFlagName(key)}`).join(", ");
+  throw new Error(`Unknown option${unknown.length === 1 ? "" : "s"}: ${flags}. Run riddle-proof-loop help for usage.`);
 }
 
 function optionString(options: CliOptions, key: string) {
@@ -477,7 +574,7 @@ function parseProfileViewports(value: string | undefined): RiddleProofProfileVie
 function normalizeProfileForCli(options: CliOptions): RiddleProofProfile {
   const rawProfile = readJsonValue(optionString(options, "profile"), "--profile");
   return normalizeRiddleProofProfile(rawProfile, {
-    url: optionString(options, "url"),
+    url: optionString(options, "url") ?? optionString(options, "baseUrl"),
     route: optionString(options, "route"),
     viewports: parseProfileViewports(optionString(options, "viewports") || optionString(options, "viewport")),
   });
@@ -4572,6 +4669,7 @@ async function main() {
     process.stdout.write(`${usage()}\n`);
     return;
   }
+  validateCliOptions(options);
 
   if (command === "doctor") {
     const subject = positional[1];

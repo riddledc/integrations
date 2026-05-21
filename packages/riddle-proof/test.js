@@ -181,6 +181,18 @@ assert.equal(artifactAssertionCliJson.ok, true);
 assert.deepEqual(artifactAssertionCliJson.body_contains, ["product_regression", "partial results available"]);
 assert.deepEqual(artifactAssertionCliJson.missing_candidates, ["completed_timeout"]);
 
+const unknownOptionCli = await runCli([
+  "profile-body-assertions",
+  "--artifact",
+  artifactAssertionFile,
+  "--candidates-json",
+  artifactCandidatesFile,
+  "--definitely-unknown",
+  "1",
+], { expectFailure: true });
+assert.equal(unknownOptionCli.code, 1);
+assert.match(unknownOptionCli.stderr, /Unknown option: --definitely-unknown/);
+
 const artifactAssertionBodyOnly = await runCli([
   "profile-body-assertions",
   "--artifact",
@@ -4923,6 +4935,33 @@ try {
   assert.equal(cliRunProfileRequests[0].body.strict, false);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running attempt=1\/4/);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed attempt=2\/4/);
+  const baseUrlAliasRequestStart = cliRunProfileRequests.length;
+  const baseUrlAliasOutputDir = path.join(riddlePreviewDir, "cli-profile-base-url-alias-output");
+  const cliProfileBaseUrlAliasResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    profileFile,
+    "--base-url",
+    "https://preview.example.test/s/ps_alias/",
+    "--runner",
+    "riddle",
+    "--output",
+    baseUrlAliasOutputDir,
+    "--pollAttempts",
+    "2",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(cliProfileBaseUrlAliasResult.stdout).status, "passed");
+  assert.equal(cliRunProfileRequests.length, baseUrlAliasRequestStart + 1);
+  assert.equal(cliRunProfileRequests[baseUrlAliasRequestStart].body.url, "https://preview.example.test/s/ps_alias/profile");
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
   assert.match(profileSummaryMarkdown, /passed: route_loaded \(`\/profile`\)/);
