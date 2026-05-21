@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.216
+
+### Patch Changes
+
+- a0259e1: Recognize deterministic sequence input, restart-ready, and score-like state-growth receipts from captured profile setup summaries.
+
 ## 0.7.215
 
 ### Patch Changes
