@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.107
+
+### Patch Changes
+
+- 532d848: Refresh bundled Riddle Proof dependency to 0.7.206.
+
 ## 0.4.106
 
 ### Patch Changes
