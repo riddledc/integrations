@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.220
+
+### Patch Changes
+
+- 8eace74: Classify successful semantic `window_eval` setup returns as Proof Pack evidence for invalid unchanged-state, winner, and terminal-lock receipts.
+
 ## 0.7.219
 
 ### Patch Changes
