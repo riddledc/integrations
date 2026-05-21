@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.217
+
+### Patch Changes
+
+- 4f6c913: Prefer screenshot evidence classification before restart/sequence wording matches in Proof Pack receipts.
+
 ## 0.7.216
 
 ### Patch Changes
