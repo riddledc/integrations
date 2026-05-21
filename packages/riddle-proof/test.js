@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -52,6 +52,7 @@ import {
   setRunStatus,
   summarizeCaptureArtifacts,
   createRiddleApiClient,
+  collectRiddlePreviewDeployWarnings,
   deployRiddlePreview,
   deployRiddleStaticPreview,
   parseRiddleViewport,
@@ -100,6 +101,7 @@ assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
+assert.equal(typeof cjs.collectRiddlePreviewDeployWarnings, "function");
 assert.equal(typeof cjs.deployRiddlePreview, "function");
 assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
 
@@ -432,6 +434,48 @@ assert.deepEqual(
 );
 assert.equal(typeof deployRiddlePreview, "function");
 assert.equal(typeof deployRiddleStaticPreview, "function");
+const staleNextRoot = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-next-freshness-"));
+const staleNextAppDir = path.join(staleNextRoot, ".next", "server", "app", "proof");
+const staleOutDir = path.join(staleNextRoot, "out", "proof");
+mkdirSync(staleNextAppDir, { recursive: true });
+mkdirSync(staleOutDir, { recursive: true });
+const staleOutFile = path.join(staleOutDir, "index.html");
+const staleNextFile = path.join(staleNextAppDir, "page.rsc");
+writeFileSync(staleOutFile, "<!doctype html><title>Old static output</title>");
+writeFileSync(staleNextFile, "new render output");
+utimesSync(staleOutFile, new Date("2026-05-01T00:00:00Z"), new Date("2026-05-01T00:00:00Z"));
+utimesSync(staleNextFile, new Date("2026-05-01T00:01:05Z"), new Date("2026-05-01T00:01:05Z"));
+assert.match(
+  collectRiddlePreviewDeployWarnings(path.join(staleNextRoot, "out"), "static")[0],
+  /out\/ appears older than the Next render output/,
+);
+const stalePreviewClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.stale-preview.test",
+  fetchImpl: async (url) => {
+    if (String(url) === "https://api.stale-preview.test/v1/preview") {
+      return new Response(JSON.stringify({
+        id: "ps_stale",
+        upload_url: "https://upload.test/ps_stale",
+      }), { status: 200 });
+    }
+    if (String(url) === "https://upload.test/ps_stale") {
+      return new Response("", { status: 200 });
+    }
+    if (String(url) === "https://api.stale-preview.test/v1/preview/ps_stale/publish") {
+      return new Response(JSON.stringify({
+        id: "ps_stale",
+        preview_url: "https://preview.riddledc.com/s/ps_stale/",
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const stalePreview = await stalePreviewClient.deployStaticPreview(path.join(staleNextRoot, "out"), "unit-stale-preview");
+assert.match(stalePreview.warnings?.[0] || "", /out\/ appears older than the Next render output/);
+utimesSync(staleOutFile, new Date("2026-05-01T00:02:00Z"), new Date("2026-05-01T00:02:00Z"));
+assert.deepEqual(collectRiddlePreviewDeployWarnings(path.join(staleNextRoot, "out"), "static"), []);
+assert.deepEqual(collectRiddlePreviewDeployWarnings(path.join(staleNextRoot, "out"), "spa"), []);
 assert.deepEqual(parseRiddleViewport("390x844"), { width: 390, height: 844 });
 const scriptRun = await riddleClient.runScript({
   url: deployedPreview.preview_url,

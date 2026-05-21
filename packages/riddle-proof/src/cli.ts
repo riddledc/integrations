@@ -4651,6 +4651,9 @@ async function main() {
     const buildDir = positional[1];
     const label = positional[2];
     const result = await createRiddleApiClient(riddleClientConfig(options)).deployPreview(buildDir, label, previewFrameworkOption(options));
+    for (const warning of result.warnings ?? []) {
+      process.stderr.write(`Warning: ${warning}\n`);
+    }
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
