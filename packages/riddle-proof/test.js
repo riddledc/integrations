@@ -7206,6 +7206,16 @@ const clickCountAliasProfile = normalizeRiddleProofProfile({
   checks: [{ type: "route_loaded", expected_path: "/checkout" }],
 }, { url: "https://example.com" });
 assert.equal(clickCountAliasProfile.target.setup_actions[0].click_count, 3);
+const clickTargetIndexAliasProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-target-index-alias-profile",
+  target: {
+    route: "/toolbar",
+    setup_actions: [{ type: "click", selector: ".toolbar-button", target_index: 2 }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/toolbar" }],
+}, { url: "https://example.com" });
+assert.equal(clickTargetIndexAliasProfile.target.setup_actions[0].index, 2);
 const clickCoordinateProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-click-coordinate-profile",
