@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.212
+
+### Patch Changes
+
+- a4c327d: Accept `target_index` and `targetIndex` as setup action aliases for selecting nonzero click/tap/fill targets.
+
 ## 0.7.211
 
 ### Patch Changes
