@@ -1039,6 +1039,10 @@ function profileHasActiveRouteLocalProofReceipt(receipts: Record<string, unknown
       "distance",
       "speed",
       "velocity",
+      "planLength",
+      "stepDelta",
+      "afterSteps",
+      "beforeSteps",
     ].some((name) => cliFiniteNumber(setupReturnSummaryValue(receipt, [name])) !== undefined);
     return Boolean(
       proofVersion
@@ -1394,6 +1398,10 @@ function profilePackReceiptStatus(
     "energyRecovered",
     "progressDelta",
     "progressGain",
+    "stepDelta",
+    "deliveryDelta",
+    "deliveriesDelta",
+    "remainingDelta",
   ];
   const hasMeasuredStateMetric = valueReceipts.some((item) => measuredStateMetricNames.some((name) => {
     const value = cliFiniteNumber(setupReturnSummaryValue(item, [name]));
