@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.203
+
+### Patch Changes
+
+- 4bdfff1: Add `run-profile aggregate` to combine saved named-viewport profile results into one matrix-level profile result and summary.
+
 ## 0.7.202
 
 ### Patch Changes
