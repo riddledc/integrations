@@ -1014,10 +1014,28 @@ function profileHasOfflineAudioMetricsReceipt(receipts: Record<string, unknown>[
     "peak",
     "rms",
   ];
-  return receipts.some((receipt) => metricFields.some((name) => {
-    const value = cliFiniteNumber(setupReturnSummaryValue(receipt, [name]));
-    return value !== undefined && value > 0;
-  }));
+  const metricFieldNames = new Set(metricFields.map((name) => name.toLowerCase()));
+  const positiveMetricValue = (value: unknown) => {
+    const number = cliFiniteNumber(value);
+    return number !== undefined && number > 0;
+  };
+  const metricSummaryItem = (item: Record<string, unknown>) => {
+    const label = (cliString(item.label) || "").toLowerCase();
+    const path = (cliString(item.path) || "").toLowerCase();
+    const tail = (path.split(".").filter(Boolean).pop() || label).toLowerCase();
+    const normalizedLabel = label.replace(/[^a-z0-9]+/g, "");
+    const normalizedTail = tail.replace(/[^a-z0-9]+/g, "");
+    return metricFieldNames.has(normalizedLabel)
+      || metricFieldNames.has(normalizedTail)
+      || /(^|\.)(mixhealth|monitormetrics|instrumentmetrics)\.(peak|rms)$/.test(path);
+  };
+  return receipts.some((receipt) => {
+    if (metricFields.some((name) => positiveMetricValue(setupReturnSummaryValue(receipt, [name])))) return true;
+    const summaries = Array.isArray(receipt.return_summary)
+      ? receipt.return_summary.map(cliRecord).filter((item): item is Record<string, unknown> => Boolean(item))
+      : [];
+    return summaries.some((item) => metricSummaryItem(item) && positiveMetricValue(item.value));
+  });
 }
 
 function profileHasActiveRouteLocalProofReceipt(receipts: Record<string, unknown>[]): boolean {
