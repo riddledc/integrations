@@ -1232,6 +1232,105 @@ function profileHasRecoveredStateReceipt(receipts: Record<string, unknown>[]): b
   });
 }
 
+function profileHasSequenceInputReceipt(receipts: Record<string, unknown>[]): boolean {
+  let hasSequenceContract = false;
+  let hasInputReadyState = false;
+  let hasSequenceOutcome = false;
+
+  for (const receipt of receipts) {
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const slot = profileLowerSummaryValue(receipt, ["slot", "phase", "state"]);
+    const statusText = profileLowerSummaryValue(receipt, ["statusText", "status", "message"]);
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${slot} ${statusText} ${summary}`.toLowerCase();
+    const sequenceText = [
+      "expectedSequence",
+      "expectedLevel2Sequence",
+      "inputSequence",
+      "targetSequence",
+      "sequence",
+      "pattern",
+    ].map((name) => cliString(setupReturnSummaryValue(receipt, [name]))?.toLowerCase()).find(Boolean) || "";
+    const sequenceArray = [
+      setupReturnSummaryValue(receipt, ["expectedSequence"]),
+      setupReturnSummaryValue(receipt, ["expectedLevel2Sequence"]),
+      setupReturnSummaryValue(receipt, ["inputSequence"]),
+      setupReturnSummaryValue(receipt, ["targetSequence"]),
+      setupReturnSummaryValue(receipt, ["sequence"]),
+    ].some((value) => Array.isArray(value) && value.length > 0);
+    const mentionsSequence = Boolean(sequenceArray || sequenceText)
+      || haystack.includes("sequence")
+      || haystack.includes("short-long")
+      || haystack.includes("short,long")
+      || haystack.includes("short long")
+      || haystack.includes("long-short")
+      || haystack.includes("long,short")
+      || haystack.includes("long short");
+    if (mentionsSequence) hasSequenceContract = true;
+
+    const level = cliFiniteNumber(setupReturnSummaryValue(receipt, ["level"]));
+    const expectedSteps = cliFiniteNumber(setupReturnSummaryValue(receipt, ["expectedSteps", "stepCount", "sequenceLength"]));
+    const controlsEnabled = setupReturnSummaryValue(receipt, ["controlsEnabled", "inputControlsEnabled", "inputEnabled", "canInput"]) === true
+      || setupReturnSummaryValue(receipt, ["shortDisabled"]) === false
+      || setupReturnSummaryValue(receipt, ["longDisabled"]) === false;
+    const inputReady = haystack.includes("input")
+      || statusText.includes("your turn")
+      || statusText.includes("ready");
+    if (inputReady && (controlsEnabled || level !== undefined || expectedSteps !== undefined)) {
+      hasInputReadyState = true;
+    }
+
+    const success = setupReturnSummaryValue(receipt, ["success", "passed"]) === true
+      || statusText.includes("perfect")
+      || statusText.includes("success");
+    const failure = statusText.includes("miss")
+      || statusText.includes("failure")
+      || setupReturnSummaryValue(receipt, ["failed"]) === true;
+    const streak = cliFiniteNumber(setupReturnSummaryValue(receipt, ["streak"]));
+    const best = cliFiniteNumber(setupReturnSummaryValue(receipt, ["best"]));
+    if (mentionsSequence && (success || failure || streak !== undefined || best !== undefined)) {
+      hasSequenceOutcome = true;
+    }
+  }
+
+  return hasSequenceContract && (hasInputReadyState || hasSequenceOutcome);
+}
+
+function profileHasRestartReadyReceipt(receipts: Record<string, unknown>[]): boolean {
+  return receipts.some((receipt) => {
+    const storedTo = cliString(receipt.return_stored_to) || "";
+    const label = cliString(receipt.label) || "";
+    const path = cliString(receipt.path) || cliString(receipt.function_name) || "";
+    const slot = profileLowerSummaryValue(receipt, ["slot", "phase", "state"]);
+    const statusText = profileLowerSummaryValue(receipt, ["statusText", "status", "message"]);
+    const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
+    const haystack = `${storedTo} ${label} ${path} ${slot} ${statusText} ${summary}`.toLowerCase();
+    const labelsRestart = haystack.includes("restart")
+      || haystack.includes("play again")
+      || haystack.includes("play-again")
+      || haystack.includes("playagain")
+      || haystack.includes("retry");
+    if (!labelsRestart) return false;
+
+    const ok = receipt.ok !== false && setupReturnSummaryValue(receipt, ["ok"]) !== false;
+    const controlsEnabled = setupReturnSummaryValue(receipt, ["controlsEnabled", "inputControlsEnabled", "inputEnabled", "canInput"]) === true
+      || (
+        setupReturnSummaryValue(receipt, ["shortDisabled"]) === false
+        && setupReturnSummaryValue(receipt, ["longDisabled"]) === false
+      );
+    const level = cliFiniteNumber(setupReturnSummaryValue(receipt, ["level"]));
+    const streak = cliFiniteNumber(setupReturnSummaryValue(receipt, ["streak"]));
+    const best = cliFiniteNumber(setupReturnSummaryValue(receipt, ["best"]));
+    const readyState = statusText.includes("your turn")
+      || statusText.includes("ready")
+      || setupReturnSummaryValue(receipt, ["ready", "restartReady", "restart_ready"]) === true;
+
+    return ok && controlsEnabled && (readyState || level !== undefined || streak !== undefined || best !== undefined);
+  });
+}
+
 function profileMetadataHasGeneratedOutputContract(metadata: Record<string, unknown>): boolean {
   const contract = cliRecord(metadata.declared_state_contract);
   if (!contract) return false;
@@ -1308,6 +1407,7 @@ function profilePackReceiptStatus(
   const valueReceipts = [
     ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_eval")),
     ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_call")),
+    ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_call_until")),
     ...setupActionValueReceipts,
   ].filter((item) => item.ok !== false);
   const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
@@ -1387,6 +1487,41 @@ function profilePackReceiptStatus(
     const after = cliFiniteNumber(setupReturnSummaryValue(item, ["after", "afterCount", "itemCount", "count"]));
     return before !== undefined && after !== undefined && after > before;
   });
+  const stateGrowthMetricNames = [
+    "best",
+    "streak",
+    "score",
+    "level",
+    "progress",
+    "coins",
+    "totalCoins",
+    "totalEarned",
+    "saveTotalCoins",
+    "saveTotalClicks",
+    "perClick",
+    "perSecond",
+    "clickPowerLevel",
+    "autoClickerLevel",
+  ];
+  const hasPositiveStateGrowthMetric = valueReceipts.some((item) => stateGrowthMetricNames.some((name) => {
+    const storedTo = cliString(item.return_stored_to) || "";
+    const label = cliString(item.label) || "";
+    const path = cliString(item.path) || cliString(item.function_name) || "";
+    const slot = profileLowerSummaryValue(item, ["slot", "phase", "state"]);
+    const statusText = profileLowerSummaryValue(item, ["statusText", "status", "message"]);
+    const haystack = `${storedTo} ${label} ${path} ${slot} ${statusText}`.toLowerCase();
+    const stateGrowthOutcome = haystack.includes("growth")
+      || haystack.includes("success")
+      || haystack.includes("after")
+      || haystack.includes("add")
+      || haystack.includes("upgrade")
+      || haystack.includes("bought")
+      || haystack.includes("perfect")
+      || setupReturnSummaryValue(item, ["success", "passed"]) === true;
+    if (!stateGrowthOutcome) return false;
+    const value = cliFiniteNumber(setupReturnSummaryValue(item, [name]));
+    return value !== undefined && value > 0;
+  }));
   const hasReachability = profileReachabilitySummaryMarkdown(result).length > 0
     || result.checks.some((check) => check.type === "selector_visible" && Boolean(cliRecord(check.evidence)?.selector));
   const hasOverflowEvidence = result.checks.some((check) => (
@@ -1500,6 +1635,9 @@ function profilePackReceiptStatus(
   const hasControlledSuccessLaunchReceipt = profileHasControlledLaunchReceipt(valueReceipts, "success");
   const hasRouteContinuationReceipt = profileHasRouteContinuationReceipt(valueReceipts);
   const hasRecoveredStateReceipt = profileHasRecoveredStateReceipt(valueReceipts);
+  const hasSequenceInputReceipt = profileHasSequenceInputReceipt(valueReceipts)
+    && (inputDispatchCount > 0 || hasNaturalInput);
+  const hasRestartReadyReceipt = profileHasRestartReadyReceipt(valueReceipts);
   const hasGeneratedOutputContract = profileMetadataHasGeneratedOutputContract(metadata);
   const hasGeneratedOutputReceipt = profileHasGeneratedOutputReceipt(valueReceipts);
   const failedCleanupInventoryReason = profileFailedCleanupInventoryReason(setupViewports);
@@ -1747,6 +1885,38 @@ function profilePackReceiptStatus(
       "visible cleanup affordance receipt missing",
     );
   }
+  if (
+    text.includes("input")
+    && (
+      text.includes("sequence")
+      || text.includes("short-long")
+      || text.includes("short long")
+      || text.includes("long-short")
+      || text.includes("long long")
+      || text.includes("long short")
+    )
+  ) {
+    return profileReceiptSignalStatus(
+      hasSequenceInputReceipt,
+      "sequence input receipt present",
+      "sequence input receipt missing",
+    );
+  }
+  if (
+    text.includes("restart")
+    && (
+      text.includes("receipt")
+      || text.includes("ready")
+      || text.includes("re-enabled")
+      || text.includes("controls")
+    )
+  ) {
+    return profileReceiptSignalStatus(
+      hasRestartReadyReceipt,
+      "restart-ready receipt present",
+      "restart-ready receipt missing",
+    );
+  }
   if (text.includes("retry") || text.includes("repair") || text.includes("reset") || text.includes("affordance")) {
     return profileReceiptSignalStatus(hasStateContract || clickCount > 0, "affordance or transition receipt present", "affordance receipt missing");
   }
@@ -1757,7 +1927,7 @@ function profilePackReceiptStatus(
     return profileReceiptSignalStatus(hasTextVisibility || screenshotCount > 0, "initial visible-state evidence present", "initial state evidence missing");
   }
   if (text.includes("state-growth") || text.includes("state growth") || text.includes("growth receipt") || text.includes("grid grows") || (text.includes("state") && text.includes("after the click"))) {
-    return profileReceiptSignalStatus(hasStateGrowthReceipt, "state-growth receipt present", "state-growth receipt missing");
+    return profileReceiptSignalStatus(hasStateGrowthReceipt || hasPositiveStateGrowthMetric, "state-growth receipt present", "state-growth receipt missing");
   }
   if (text.includes("visible grid") || text.includes("control evidence") || (text.includes("grid") && text.includes("control"))) {
     return profileReceiptSignalStatus(
