@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.218
+
+### Patch Changes
+
+- 9623582: Warn when `riddle-preview-deploy` is asked to deploy a stale Next `out/` directory whose rendered HTML/RSC files are older than `.next/server/app`.
+
 ## 0.7.217
 
 ### Patch Changes
