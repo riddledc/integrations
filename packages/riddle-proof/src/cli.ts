@@ -1264,6 +1264,7 @@ function profilePackReceiptStatus(
   const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
     + profileSetupReceiptTotal(setupViewports, "click")
     + profileSetupReceiptTotal(setupViewports, "click_count");
+  const clickSequenceCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.click_sequence_total) || 0), 0);
   const clickFallbackTapKeys = new Set<string>();
   [
     ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "clicked")),
@@ -1301,6 +1302,8 @@ function profilePackReceiptStatus(
   const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
     + profileSetupReceiptTotal(setupViewports, "tap")
     + tapUntilCount
+    + clickCount
+    + clickSequenceCount
     + profileSetupReceiptTotal(setupViewports, "press")
     + profileSetupReceiptTotal(setupViewports, "keyboard_sequence")
     + keyboardDispatchCount;
@@ -1376,10 +1379,49 @@ function profilePackReceiptStatus(
     const value = cliFiniteNumber(setupReturnSummaryValue(item, [name]));
     return value !== undefined && Math.abs(value) > 0;
   }));
+  const measuredAbsoluteStateMetricNames = [
+    "coins",
+    "totalCoins",
+    "totalEarned",
+    "totalClicks",
+    "saveCoins",
+    "saveTotalCoins",
+    "saveTotalClicks",
+    "perClick",
+    "perSecond",
+    "measuredCps",
+    "clickPowerLevel",
+    "autoClickerLevel",
+    "level",
+    "score",
+    "count",
+    "itemCount",
+    "progress",
+  ];
+  const hasMeasuredAbsoluteStateChange = measuredAbsoluteStateMetricNames.some((name) => {
+    const values = valueReceipts
+      .map((item) => cliFiniteNumber(setupReturnSummaryValue(item, [name])))
+      .filter((value): value is number => value !== undefined && Number.isFinite(value));
+    if (values.length < 2) return false;
+    return Math.max(...values) > Math.min(...values);
+  });
   const hasMeasuredStateChange = hasNaturalInput || hasCanvasChange || valueReceipts.some((item) => (
     setupReturnSummaryValue(item, ["changed"]) === true
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
-  )) || hasMeasuredStateMetric;
+  )) || hasMeasuredStateMetric || hasMeasuredAbsoluteStateChange;
+  const hasStorageStabilityReceipt = valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["storageStable", "storage_stable", "saveStable", "save_stable", "persistenceStable", "persistence_stable"]) === true
+  ));
+  const hasPersistedReturnStateReceipt = valueReceipts.some((item) => (
+    setupReturnSummaryValue(item, ["persistedFromHome", "persisted_from_home", "persistenceRestored", "persistence_restored", "restoredFromStorage", "restored_from_storage"]) === true
+    || (
+      setupReturnSummaryValue(item, ["persisted", "restored", "reloaded"]) === true
+      && (
+        setupReturnSummaryValue(item, ["saveCoins", "saveTotalCoins", "saveTotalClicks", "saveTotal", "level", "coins"]) !== undefined
+        || cliString(item.return_stored_to)?.toLowerCase().includes("return")
+      )
+    )
+  ));
   const hasMovingPlayabilityReceipt = valueReceipts.some((item) => {
     const started = setupReturnSummaryValue(item, ["started", "runStarted", "playStarted"]) === true;
     const distance = cliFiniteNumber(setupReturnSummaryValue(item, ["distance", "distanceMeters", "travelDistance"]));
@@ -1567,6 +1609,33 @@ function profilePackReceiptStatus(
       hasRouteContinuationReceipt,
       "route continuation receipt present",
       "route continuation receipt missing",
+    );
+  }
+  if (
+    text.includes("storage-stability")
+    || text.includes("storage stability")
+    || text.includes("storage-stable")
+    || text.includes("storage stable")
+    || ((text.includes("storage") || text.includes("save data")) && text.includes("stable"))
+    || (text.includes("passive income") && text.includes("unmounted"))
+  ) {
+    return profileReceiptSignalStatus(
+      hasStorageStabilityReceipt,
+      "storage-stability receipt present",
+      "storage-stability receipt missing",
+    );
+  }
+  if (
+    text.includes("persisted return-state")
+    || text.includes("persisted return state")
+    || text.includes("return-state")
+    || text.includes("return state")
+    || ((text.includes("persisted") || text.includes("persistence")) && (text.includes("return") || text.includes("reload") || text.includes("restored")))
+  ) {
+    return profileReceiptSignalStatus(
+      hasPersistedReturnStateReceipt,
+      "persisted return-state receipt present",
+      "persisted return-state receipt missing",
     );
   }
   if (
