@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.113
+
+### Patch Changes
+
+- ced6ad3: Refresh wrapper package to consume `@riddledc/riddle-proof@0.7.212`.
+
 ## 0.4.112
 
 ### Patch Changes
