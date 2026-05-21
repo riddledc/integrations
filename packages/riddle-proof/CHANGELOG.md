@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.213
+
+### Patch Changes
+
+- caa532f: Add a hosted `run-profile` Riddle balance preflight so low-balance profile and split-viewport matrix runs block locally before starting partial Riddle jobs.
+
 ## 0.7.212
 
 ### Patch Changes
