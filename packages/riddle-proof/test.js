@@ -1254,6 +1254,29 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
   };
 }
 
+function cliStateHygieneOutcomeTruncatedNavigationSummaryResult() {
+  const result = cliStateHygieneOutcomeSummaryResult();
+  result.profile_name = "cli-state-hygiene-outcome-truncated-navigation-summary";
+  result.route.requested = "https://example.com/state-hygiene-outcome-truncated-navigation-summary";
+  result.summary = "cli-state-hygiene-outcome-truncated-navigation-summary passed.";
+  result.evidence.profile_name = result.profile_name;
+  result.evidence.target_url = result.route.requested;
+
+  const fullActionResults = [];
+  for (const viewport of result.checks[0].evidence.setup_summary.viewports) {
+    const fullWindowEval = Array.isArray(viewport.window_eval) ? viewport.window_eval : [];
+    fullActionResults.push(...fullWindowEval.map((receipt) => ({
+      ...receipt,
+      action: "window_eval",
+    })));
+    viewport.window_eval = fullWindowEval.filter((receipt) => receipt.ordinal !== 6);
+    viewport.window_eval_truncated = true;
+  }
+  result.evidence.viewports[0].setup_action_results = fullActionResults;
+
+  return result;
+}
+
 function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, restartRecovered = false, retryRecovered = false } = {}) {
   const path = retryRecovered
     ? "/workflow-truth-retry-action-summary"
@@ -1549,6 +1572,10 @@ const cliRunProfileServer = createServer((request, response) => {
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-missing-summary")) {
         sendJson(cliStateHygieneOutcomeSummaryResult({ missingLoss: true }));
+        return;
+      }
+      if (String(body.url || "").includes("/state-hygiene-outcome-truncated-navigation-summary")) {
+        sendJson(cliStateHygieneOutcomeTruncatedNavigationSummaryResult());
         return;
       }
       if (String(body.url || "").includes("/state-hygiene-outcome-summary")) {
@@ -5148,6 +5175,48 @@ try {
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled recovery success launch receipt \(controlled success launch receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible success terminal state receipt \(terminal success receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: home-to-Projectile route continuation receipt \(route continuation receipt present\)/);
+
+  const stateHygieneTruncatedNavigationProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-truncated-navigation-summary.json");
+  const stateHygieneTruncatedNavigationOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-truncated-navigation-summary-output");
+  writeFileSync(stateHygieneTruncatedNavigationProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-state-hygiene-outcome-truncated-navigation-summary",
+    target: {
+      route: "/state-hygiene-outcome-truncated-navigation-summary",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+    ],
+    metadata: {
+      pack_id: "state_hygiene",
+      pack_public_name: "State Hygiene Pack",
+      required_receipts: [
+        "home-to-Projectile route continuation receipt",
+      ],
+    },
+  }));
+  const stateHygieneTruncatedNavigationResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    stateHygieneTruncatedNavigationProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    stateHygieneTruncatedNavigationOutputDir,
+    "--quiet",
+  ]);
+  assert.equal(JSON.parse(stateHygieneTruncatedNavigationResult.stdout).status, "passed");
+  const stateHygieneTruncatedNavigationSummaryMarkdown = readFileSync(path.join(stateHygieneTruncatedNavigationOutputDir, "summary.md"), "utf8");
+  assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /## Proof Pack/);
+  assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /pack completeness: complete \(1 present\)/);
+  assert.match(stateHygieneTruncatedNavigationSummaryMarkdown, /present: home-to-Projectile route continuation receipt \(route continuation receipt present\)/);
 
   const stateHygieneMissingOutcomeProfileFile = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary.json");
   const stateHygieneMissingOutcomeOutputDir = path.join(riddlePreviewDir, "cli-state-hygiene-outcome-missing-summary-output");
