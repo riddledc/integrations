@@ -1058,20 +1058,20 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
         label: "setup actions succeeded",
         status: "passed",
         evidence: {
-          action_count: 7,
+          action_count: 8,
           setup_summary: {
             viewport_count: 1,
-            action_count: 7,
+            action_count: 8,
             viewports: [{
               name: "desktop",
               ok: true,
-              result_count: 7,
+              result_count: 8,
               observed_path: "/",
               setup_screenshots: ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"],
               clicked_total: 3,
-              window_eval_total: 7,
-              window_eval_stored_total: 7,
-              window_eval_captured_total: 7,
+              window_eval_total: 8,
+              window_eval_stored_total: 8,
+              window_eval_captured_total: 8,
               window_eval_truncated: false,
               window_eval: [
                 {
@@ -1144,6 +1144,32 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
                   ok: true,
                   script_length: 20,
                   return_captured: true,
+                  return_stored_to: "__proof.caughtReceipt",
+                  returned: {
+                    ok: true,
+                    slot: "caught",
+                    route: "/games/orbit-relay?proof=1",
+                    gameOver: true,
+                    forceCatchRequested: true,
+                    globalCount: 1,
+                    navVisible: true,
+                  },
+                  return_summary: [
+                    { label: "ok", path: "ok", exists: true, value: true },
+                    { label: "slot", path: "slot", exists: true, value: "caught" },
+                    { label: "route", path: "route", exists: true, value: "/games/orbit-relay?proof=1" },
+                    { label: "gameOver", path: "gameOver", exists: true, value: true },
+                    { label: "forceCatchRequested", path: "forceCatchRequested", exists: true, value: true },
+                    { label: "globalCount", path: "globalCount", exists: true, value: 1 },
+                    { label: "navVisible", path: "navVisible", exists: true, value: true },
+                  ],
+                  reason: null,
+                },
+                {
+                  ordinal: 5,
+                  ok: true,
+                  script_length: 20,
+                  return_captured: true,
                   return_stored_to: "__proof.successShot",
                   returned: { ok: true, lastShotKind: "success", lastShotStatus: "success", status: "over", lastOutcome: "lost" },
                   return_summary: [
@@ -1156,7 +1182,7 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
                   reason: null,
                 },
                 {
-                  ordinal: 5,
+                  ordinal: 6,
                   ok: true,
                   script_length: 20,
                   return_captured: true,
@@ -1173,7 +1199,7 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
                   reason: null,
                 },
                 {
-                  ordinal: 6,
+                  ordinal: 7,
                   ok: true,
                   script_length: 20,
                   return_captured: true,
@@ -1195,7 +1221,7 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
                   reason: null,
                 },
                 {
-                  ordinal: 7,
+                  ordinal: 8,
                   ok: true,
                   script_length: 20,
                   return_captured: true,
@@ -5253,6 +5279,7 @@ try {
     "active route-local Orbit Relay proof helper and state receipt",
     "controlled failure launch receipt",
     "visible loss terminal state receipt",
+    "forced catch and terminal game-over proof receipt",
     "controlled recovery success launch receipt",
     "visible success terminal state receipt",
     "home-to-Projectile route continuation receipt",
@@ -5292,10 +5319,11 @@ try {
   assert.equal(JSON.parse(stateHygieneOutcomeResult.stdout).status, "passed");
   const stateHygieneOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneOutcomeOutputDir, "summary.md"), "utf8");
   assert.match(stateHygieneOutcomeSummaryMarkdown, /## Proof Pack/);
-  assert.match(stateHygieneOutcomeSummaryMarkdown, /pack completeness: complete \(6 present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /pack completeness: complete \(7 present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: active route-local Orbit Relay proof helper and state receipt \(active route-local proof receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled failure launch receipt \(controlled failure launch receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible loss terminal state receipt \(terminal loss receipt present\)/);
+  assert.match(stateHygieneOutcomeSummaryMarkdown, /present: forced catch and terminal game-over proof receipt \(terminal game-over receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: controlled recovery success launch receipt \(controlled success launch receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: visible success terminal state receipt \(terminal success receipt present\)/);
   assert.match(stateHygieneOutcomeSummaryMarkdown, /present: home-to-Projectile route continuation receipt \(route continuation receipt present\)/);
@@ -5423,7 +5451,7 @@ try {
   assert.equal(JSON.parse(stateHygieneMissingOutcomeResult.stdout).status, "passed");
   const stateHygieneMissingOutcomeSummaryMarkdown = readFileSync(path.join(stateHygieneMissingOutcomeOutputDir, "summary.md"), "utf8");
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /## Proof Pack/);
-  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(5 present, 1 missing\)/);
+  assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /pack completeness: incomplete \(6 present, 1 missing\)/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing required receipts: `visible loss terminal state receipt`/);
   assert.match(stateHygieneMissingOutcomeSummaryMarkdown, /missing: visible loss terminal state receipt \(terminal loss receipt missing\)/);
 
