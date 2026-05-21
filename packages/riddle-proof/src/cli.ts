@@ -1211,9 +1211,21 @@ function profilePackReceiptStatus(
     + evidenceViewports.filter((viewport) => cliString(viewport.screenshot_label)).length
     + setupScreenshotCount;
   const windowEvalCount = profileSetupReceiptTotal(setupViewports, "window_eval");
+  const setupActionValueReceipts = setupViewports
+    .flatMap((viewport) => setupReceiptArray(viewport, "setup_action_results"))
+    .concat(evidenceViewports.flatMap((viewport) => setupReceiptArray(cliRecord(viewport) || {}, "setup_action_results")))
+    .filter((item) => {
+      const action = cliString(item.action);
+      return action === "window_eval"
+        || action === "window_call"
+        || action === "window_call_until"
+        || action === "assert_window_value"
+        || action === "assert_window_number";
+    });
   const valueReceipts = [
     ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_eval")),
     ...setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "window_call")),
+    ...setupActionValueReceipts,
   ].filter((item) => item.ok !== false);
   const clickCount = setupViewports.reduce((sum, viewport) => sum + (cliFiniteNumber(viewport.clicked_total) || 0), 0)
     + profileSetupReceiptTotal(setupViewports, "click")
