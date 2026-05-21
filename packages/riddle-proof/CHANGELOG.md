@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.207
+
+### Patch Changes
+
+- b695b5d: Classify terminal game-over proof-pack receipts from structured `gameOver`/caught setup evidence.
+
 ## 0.7.206
 
 ### Patch Changes
