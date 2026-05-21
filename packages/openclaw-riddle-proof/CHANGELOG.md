@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.119
+
+### Patch Changes
+
+- 6bda14b: Refresh the OpenClaw wrapper release so its bundled Riddle Proof dependency picks up `@riddledc/riddle-proof@0.7.218`.
+
 ## 0.4.118
 
 ### Patch Changes
