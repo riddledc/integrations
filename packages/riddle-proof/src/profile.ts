@@ -2076,7 +2076,7 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     prompt_text: stringFromOwn(input, "prompt_text", "promptText", "prompt_value", "promptValue"),
     message_text: stringFromOwn(input, "message_text", "messageText", "dialog_text", "dialogText"),
     message_pattern: stringFromOwn(input, "message_pattern", "messagePattern", "dialog_pattern", "dialogPattern"),
-    index: numberValue(input.index),
+    index: numberValue(valueFromOwn(input, "index", "target_index", "targetIndex")),
     expected_count: expectedCount,
     ms: numberValue(input.ms) ?? numberValue(input.wait_ms) ?? numberValue(input.waitMs),
     timeout_ms: numberValue(input.timeout_ms) ?? numberValue(input.timeoutMs),
