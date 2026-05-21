@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.206
+
+### Patch Changes
+
+- bc4d7dc: Classify active proof-global playability receipts and accepted input/playability receipts in Proof Pack summaries.
+
 ## 0.7.205
 
 ### Patch Changes
