@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.7.204
+
+### Patch Changes
+
+- 6c1b15a: Classify non-throwing failed cleanup returns as failed Proof Pack cleanup inventory receipts instead of accepting earlier clean initial-state receipts.
+- 8409bb3: Clarify aggregate profile summaries by labeling summed child poll timing and showing max child latency.
+
 ## 0.7.203
 
 ### Patch Changes
