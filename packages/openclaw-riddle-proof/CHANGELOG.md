@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.117
+
+### Patch Changes
+
+- f6e7888: Refresh the OpenClaw wrapper release so deployed OC environments consume @riddledc/riddle-proof 0.7.216.
+
 ## 0.4.116
 
 ### Patch Changes
