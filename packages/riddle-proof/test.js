@@ -4183,6 +4183,75 @@ try {
   assert.match(splitProfileSummary, /desktop\/proof\.json/);
   assert.match(splitProfileSummary, /phone\/proof\.json/);
 
+  const namedViewportOutputDir = path.join(riddlePreviewDir, "cli-profile-named-viewport-output");
+  const namedViewportRequestStart = cliRunProfileRequests.length;
+  const cliNamedViewportResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--output",
+    namedViewportOutputDir,
+    "--pollAttempts",
+    "1",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--viewport-name",
+    "phone",
+    "--quiet",
+  ]);
+  const parsedNamedViewportResult = JSON.parse(cliNamedViewportResult.stdout);
+  assert.equal(parsedNamedViewportResult.status, "passed");
+  assert.equal(parsedNamedViewportResult.profile_name, "cli-profile-split-phone");
+  assert.deepEqual(parsedNamedViewportResult.evidence.viewports.map((viewport) => viewport.name), ["phone"]);
+  assert.equal(parsedNamedViewportResult.riddle.job_id, "job_cli_profile_split_phone");
+  const namedViewportRequests = cliRunProfileRequests.slice(namedViewportRequestStart);
+  assert.equal(namedViewportRequests.length, 1);
+  assert.deepEqual(namedViewportRequests[0].body.viewport, { name: "phone", width: 390, height: 844 });
+  assert.doesNotMatch(String(namedViewportRequests[0].body.script), /desktop-only-status/);
+  const namedViewportReceipt = JSON.parse(readFileSync(path.join(namedViewportOutputDir, "riddle-job.json"), "utf8"));
+  assert.equal(namedViewportReceipt.version, "riddle-proof.riddle-job-receipt.v1");
+  assert.equal(namedViewportReceipt.job_id, "job_cli_profile_split_phone");
+  assert.equal(namedViewportReceipt.viewport.name, "phone");
+
+  const recoveredProfileOutputDir = path.join(riddlePreviewDir, "cli-profile-recovered-job-output");
+  const recoverRequestStart = cliRunProfileRequests.length;
+  const recoveredProfileResult = await runCli([
+    "run-profile",
+    "recover",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    splitProfileFile,
+    "--url",
+    "https://example.com",
+    "--job",
+    "job_cli_profile_split_phone",
+    "--viewport-name",
+    "phone",
+    "--output",
+    recoveredProfileOutputDir,
+  ]);
+  const parsedRecoveredProfileResult = JSON.parse(recoveredProfileResult.stdout);
+  assert.equal(parsedRecoveredProfileResult.status, "passed");
+  assert.equal(parsedRecoveredProfileResult.profile_name, "cli-profile-split-phone");
+  assert.equal(parsedRecoveredProfileResult.riddle.job_id, "job_cli_profile_split_phone");
+  assert.equal(parsedRecoveredProfileResult.riddle.artifact_recovery, true);
+  assert.equal(cliRunProfileRequests.length, recoverRequestStart);
+  assert.equal(JSON.parse(readFileSync(path.join(recoveredProfileOutputDir, "profile-result.json"), "utf8")).status, "passed");
+  assert.match(readFileSync(path.join(recoveredProfileOutputDir, "summary.md"), "utf8"), /artifact recovery/);
+
   const splitChildFailProfileFile = path.join(riddlePreviewDir, "cli-profile-split-child-fail.json");
   const splitChildFailOutputDir = path.join(riddlePreviewDir, "cli-profile-split-child-fail-output");
   writeFileSync(splitChildFailProfileFile, JSON.stringify({
