@@ -698,6 +698,13 @@ function profileSetupReceiptTotal(viewports: Record<string, unknown>[], key: str
   return viewports.reduce((sum, viewport) => sum + setupReceiptArray(viewport, key).filter((receipt) => receipt.ok !== false).length, 0);
 }
 
+function profileSetupActionCount(viewports: Record<string, unknown>[], action: string): number {
+  return viewports.reduce((sum, viewport) => {
+    const actionCounts = cliRecord(viewport.action_counts);
+    return sum + (cliFiniteNumber(actionCounts?.[action]) || 0);
+  }, 0);
+}
+
 function profileSetupFailureCount(viewports: Record<string, unknown>[]): number {
   return viewports.reduce((sum, viewport) => {
     const failed = Array.isArray(viewport.failed) ? viewport.failed : [];
@@ -1276,11 +1283,27 @@ function profilePackReceiptStatus(
   const visibleCleanupActionCount = profileVisibleCleanupActionCount(setupViewports);
   const setupFailureCount = profileSetupFailureCount(setupViewports);
   const setupObstructionCount = profileSetupObstructionCount(setupViewports);
+  const keyboardReceipts = setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "keyboard")).filter((item) => item.ok !== false);
+  const keyboardReceiptDispatchCount = keyboardReceipts.length;
+  const keyboardActionDispatchCount = ["press", "key_down", "key_up", "keyboard_sequence"]
+    .reduce((sum, action) => sum + profileSetupActionCount(setupViewports, action), 0);
+  const keyboardDispatchCount = keyboardReceiptDispatchCount > 0 ? keyboardReceiptDispatchCount : keyboardActionDispatchCount;
+  const keyboardKeyMatches = (item: Record<string, unknown>, expected: string) => {
+    const key = (cliString(item.key) || cliString(item.code) || "").toLowerCase();
+    return key === expected || key.includes(expected);
+  };
+  const hasKeyboardKeyDownReceipt = keyboardReceipts.some((item) => cliString(item.action) === "key_down")
+    || profileSetupActionCount(setupViewports, "key_down") > 0;
+  const hasKeyboardKeyUpReceipt = keyboardReceipts.some((item) => cliString(item.action) === "key_up")
+    || profileSetupActionCount(setupViewports, "key_up") > 0;
+  const hasShiftKeyDownReceipt = keyboardReceipts.some((item) => cliString(item.action) === "key_down" && keyboardKeyMatches(item, "shift"));
+  const hasShiftKeyUpReceipt = keyboardReceipts.some((item) => cliString(item.action) === "key_up" && keyboardKeyMatches(item, "shift"));
   const inputDispatchCount = profileSetupReceiptTotal(setupViewports, "drag")
     + profileSetupReceiptTotal(setupViewports, "tap")
     + tapUntilCount
     + profileSetupReceiptTotal(setupViewports, "press")
-    + profileSetupReceiptTotal(setupViewports, "keyboard_sequence");
+    + profileSetupReceiptTotal(setupViewports, "keyboard_sequence")
+    + keyboardDispatchCount;
   const canvasReceipts = setupViewports.flatMap((viewport) => setupReceiptArray(viewport, "canvas_signature"));
   const hasCanvasChange = canvasReceipts.some((item) => item.ok !== false && item.changed === true);
   const canvasSignatureHashes = canvasReceipts
@@ -1332,10 +1355,31 @@ function profilePackReceiptStatus(
   const hasSetupReceipts = setupResultCount > 0 || Boolean(setupSummary);
   const hasTextVisibility = profileHasPassedCheck(result, ["text_visible", "selector_text_visible", "selector_visible"]);
   const hasTextAbsence = profileHasPassedCheck(result, ["text_absent", "selector_text_absent"]);
+  const measuredStateMetricNames = [
+    "delta",
+    "stateDelta",
+    "positionDelta",
+    "movementDelta",
+    "speedDelta",
+    "velocityDelta",
+    "distanceDelta",
+    "distanceGain",
+    "scoreDelta",
+    "scoreGain",
+    "energyDelta",
+    "energyDrop",
+    "energyRecovered",
+    "progressDelta",
+    "progressGain",
+  ];
+  const hasMeasuredStateMetric = valueReceipts.some((item) => measuredStateMetricNames.some((name) => {
+    const value = cliFiniteNumber(setupReturnSummaryValue(item, [name]));
+    return value !== undefined && Math.abs(value) > 0;
+  }));
   const hasMeasuredStateChange = hasNaturalInput || hasCanvasChange || valueReceipts.some((item) => (
     setupReturnSummaryValue(item, ["changed"]) === true
     || setupReturnSummaryValue(item, ["nonWhiteDelta", "darkDelta", "pixelDelta", "movementDelta"]) !== undefined
-  ));
+  )) || hasMeasuredStateMetric;
   const hasMovingPlayabilityReceipt = valueReceipts.some((item) => {
     const started = setupReturnSummaryValue(item, ["started", "runStarted", "playStarted"]) === true;
     const distance = cliFiniteNumber(setupReturnSummaryValue(item, ["distance", "distanceMeters", "travelDistance"]));
@@ -1657,6 +1701,16 @@ function profilePackReceiptStatus(
     );
   }
   if (text.includes("input dispatch") || text.includes("pointer") || text.includes("touch") || text.includes("key event") || text.includes("trusted-event")) {
+    if (text.includes("key_down") || text.includes("key down") || text.includes("key-up") || text.includes("key_up")) {
+      const hasSpecificKeyboardDispatch = text.includes("shift")
+        ? hasShiftKeyDownReceipt && hasShiftKeyUpReceipt
+        : hasKeyboardKeyDownReceipt && hasKeyboardKeyUpReceipt;
+      return profileReceiptSignalStatus(
+        hasSpecificKeyboardDispatch,
+        "keyboard key_down/key_up dispatch evidence present",
+        "keyboard key_down/key_up dispatch evidence missing",
+      );
+    }
     return profileReceiptSignalStatus(inputDispatchCount > 0 || hasNaturalInput, "input dispatch evidence present", "input dispatch evidence missing");
   }
   if (text.includes("offline audio") || (text.includes("audio") && text.includes("metric"))) {
