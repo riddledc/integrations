@@ -594,6 +594,9 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   const staleJobIds = Array.isArray(riddle.stale_job_ids)
     ? riddle.stale_job_ids.map((value) => cliString(value)).filter((value): value is string => Boolean(value))
     : [];
+  const splitJobs = Array.isArray(riddle.split_jobs)
+    ? riddle.split_jobs.map(cliRecord).filter((job): job is Record<string, unknown> => Boolean(job))
+    : [];
   const parts = [
     mode ? `mode ${markdownInlineCode(mode)}` : "",
     jobCount === undefined ? "" : `jobs ${jobCount}`,
@@ -603,9 +606,18 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   ].filter(Boolean);
   const lines = parts.length ? [`- ${parts.join(", ")}`] : [];
   if (queueElapsedMs !== undefined || elapsedMs !== undefined || attempt !== undefined || attempts !== undefined) {
-    lines.push(
-      `- poll: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${preSubmissionElapsedMs === undefined || preSubmissionElapsedMs < 1000 ? "" : `, pre-submit ${formatPollDuration(preSubmissionElapsedMs)}`}${attempt === undefined ? "" : `, attempt ${attempt}${attempts === undefined ? "" : `/${attempts}`}`}`,
-    );
+    if (splitJobs.length) {
+      const maxChildQueueElapsedMs = maxDefinedNumbers(splitJobs.map((job) => cliFiniteNumber(job.queue_elapsed_ms)));
+      const maxChildElapsedMs = maxDefinedNumbers(splitJobs.map((job) => cliFiniteNumber(job.elapsed_ms)));
+      const maxChildPreSubmissionElapsedMs = maxDefinedNumbers(splitJobs.map((job) => cliFiniteNumber(job.pre_submission_elapsed_ms)));
+      lines.push(
+        `- child poll totals: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${preSubmissionElapsedMs === undefined || preSubmissionElapsedMs < 1000 ? "" : `, pre-submit ${formatPollDuration(preSubmissionElapsedMs)}`}; max child queue ${formatPollDuration(maxChildQueueElapsedMs)}, max child elapsed ${formatPollDuration(maxChildElapsedMs)}${maxChildPreSubmissionElapsedMs === undefined || maxChildPreSubmissionElapsedMs < 1000 ? "" : `, max child pre-submit ${formatPollDuration(maxChildPreSubmissionElapsedMs)}`}`,
+      );
+    } else {
+      lines.push(
+        `- poll: queue ${formatPollDuration(queueElapsedMs)}, elapsed ${formatPollDuration(elapsedMs)}${preSubmissionElapsedMs === undefined || preSubmissionElapsedMs < 1000 ? "" : `, pre-submit ${formatPollDuration(preSubmissionElapsedMs)}`}${attempt === undefined ? "" : `, attempt ${attempt}${attempts === undefined ? "" : `/${attempts}`}`}`,
+      );
+    }
   }
   if (submittedAt || completedAt) {
     lines.push(`- timing:${submittedAt ? ` submitted ${markdownInlineCode(submittedAt)}` : ""}${completedAt ? ` completed ${markdownInlineCode(completedAt)}` : ""}`);
@@ -616,9 +628,6 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   if (retryCount !== undefined && retryCount > 0) {
     lines.push(`- retry recovery: replaced ${retryCount} unsubmitted job${retryCount === 1 ? "" : "s"}${staleJobIds.length ? ` (${staleJobIds.map((value) => markdownInlineCode(value)).join(", ")})` : ""}`);
   }
-  const splitJobs = Array.isArray(riddle.split_jobs)
-    ? riddle.split_jobs.map(cliRecord).filter((job): job is Record<string, unknown> => Boolean(job))
-    : [];
   for (const job of splitJobs.slice(0, 12)) {
     const viewport = cliString(job.viewport) || "viewport";
     const splitJobId = cliString(job.job_id);
@@ -642,6 +651,11 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
   }
   if (splitJobs.length > 12) lines.push(`- ${splitJobs.length - 12} additional split job(s) omitted.`);
   return lines;
+}
+
+function maxDefinedNumbers(values: Array<number | undefined>) {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  return numbers.length ? Math.max(...numbers) : undefined;
 }
 
 function profileMetadataStringArray(value: unknown): string[] {

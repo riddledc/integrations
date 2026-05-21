@@ -4467,6 +4467,7 @@ try {
   assert.deepEqual(aggregateProfileResultJson.evidence.viewports.map((viewport) => viewport.name), ["desktop", "phone"]);
   const aggregateProfileSummary = readFileSync(path.join(aggregateProfileOutputDir, "summary.md"), "utf8");
   assert.match(aggregateProfileSummary, /mode `named-viewport-aggregate`, jobs 2, status `named-viewport-aggregate`, terminal true/);
+  assert.match(aggregateProfileSummary, /child poll totals: queue \d+s, elapsed \d+s; max child queue \d+s, max child elapsed \d+s/);
   assert.match(aggregateProfileSummary, /desktop: job `job_cli_profile_split_desktop`, status `completed`, terminal true/);
   assert.match(aggregateProfileSummary, /phone: job `job_cli_profile_split_phone`, status `completed`, terminal true/);
 

@@ -242,7 +242,9 @@ riddle-proof-loop run-profile aggregate \
 `desktop/profile-result.json` and `ipad-mini/profile-result.json`, then writes
 the combined `profile-result.json` and `summary.md`. Use `--inputs` with a
 comma-separated list of files or directories when the child outputs do not
-share one parent directory.
+share one parent directory. Aggregate summaries label summed hosted timing as
+child poll totals and also show the maximum child latency, so a matrix report
+does not make sequential child wait time look like a single job duration.
 
 When promoting proof artifacts into a durable public profile, avoid guessing
 which backend or runner tokens are preserved inside `proof.json`. Derive the
