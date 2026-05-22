@@ -17,7 +17,7 @@ args:
     default: ""
   capture_script:
     default: ""
-    description: "Optional during setup. Add it before recon/verify once the proof target is clear."
+    description: "Optional Playwright JavaScript for proof capture. Add it before recon/verify once the proof target is clear; put natural-language instructions in change_request, context, success_criteria, or proof_plan."
   success_criteria:
     default: ""
     description: "Plain-English definition of what counts as fixed"
