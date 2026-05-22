@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddledc
 
+## 0.9.10
+
+### Patch Changes
+
+- 148ccd6: Harden preview packaging against temp roots and volatile files so Riddle Proof failures return clear tool errors instead of tar crashes.
+
 ## 0.9.9
 
 ### Patch Changes
