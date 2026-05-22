@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.221
+
+### Patch Changes
+
+- f34310d: Classify reset-ready Proof Pack receipts from captured state such as hidden board counts, zero moves, no winner, and controls re-enabled after Play Again.
+
 ## 0.7.220
 
 ### Patch Changes
