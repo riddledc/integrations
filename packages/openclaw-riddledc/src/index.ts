@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { writeFile, mkdir, readFile, stat, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -39,6 +40,21 @@ const PREVIEW_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 const PREVIEW_ARTIFACT_TIMEOUT_MS = 60_000;
 const PREVIEW_RETRY_ATTEMPTS = 3;
 const PREVIEW_RETRY_BASE_DELAY_MS = 750;
+const VOLATILE_ARCHIVE_EXCLUDES = [
+  "tmux-*",
+  "systemd-private-*",
+  ".X11-unix",
+  ".ICE-unix",
+  ".Test-unix",
+  ".font-unix",
+  "riddle-*.tar.gz",
+  "riddle-preview-*.tar.gz",
+  "riddle-sp-*.tar.gz",
+  "riddle-bp-*.tar.gz",
+  ".riddle-proof-*",
+  "riddle-proof-*",
+  "node-compile-cache",
+];
 
 function getCfg(api: PluginApi) {
   const cfg = api?.config ?? {};
@@ -113,6 +129,36 @@ function describeError(err: unknown): string {
   }
 
   return parts.join("; ");
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+function unsafeArchiveDirectoryError(dir: string): string | null {
+  const archiveRoot = resolve(dir);
+  const blockedRoots = new Set(["/", "/tmp", "/var/tmp", resolve(tmpdir())].map((item) => resolve(item)));
+  if (!blockedRoots.has(archiveRoot)) return null;
+  return `Refusing to archive ${archiveRoot}. Pass a concrete project or build subdirectory, not a temp/system root.`;
+}
+
+async function packageDirectory(dir: string, prefix: string, id: string, excludes: string[], timeout: number): Promise<{ tarball: string; data: Buffer }> {
+  const unsafeError = unsafeArchiveDirectoryError(dir);
+  if (unsafeError) throw new Error(unsafeError);
+  const tarball = join(tmpdir(), `${prefix}-${id}.tar.gz`);
+  const excludeArgs = uniqueStrings([...excludes, ...VOLATILE_ARCHIVE_EXCLUDES])
+    .flatMap((p: string) => ["--exclude", p]);
+  await execFile(
+    "tar",
+    ["czf", tarball, "--warning=no-file-changed", "--ignore-failed-read", ...excludeArgs, "-C", dir, "."],
+    { timeout },
+  );
+  return { tarball, data: await readFile(tarball) };
 }
 
 async function fetchWithTimeout(
@@ -1207,19 +1253,24 @@ export default function register(api: PluginApi) {
         const created = await createRes.json() as any;
 
         // Step 3: Tar the directory and upload
-        const tarball = `/tmp/riddle-sp-${created.job_id}.tar.gz`;
+        let tarball = "";
         try {
           const excludes = params.exclude || [".git", "*.log"];
-          const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
-          await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
-          const tarData = await readFile(tarball);
+          let tarData: Buffer;
+          try {
+            const packaged = await packageDirectory(dir, "riddle-sp", created.job_id, excludes, 120000);
+            tarball = packaged.tarball;
+            tarData = packaged.data;
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Package failed: ${describeError(e)}` }, null, 2) }] };
+          }
 
           let uploadRes: Response;
           try {
             uploadRes = await fetchWithRetry(created.upload_url, {
               method: "PUT",
               headers: { "Content-Type": "application/gzip" },
-              body: tarData
+              body: tarData as any
             }, PREVIEW_UPLOAD_TIMEOUT_MS, "server preview upload");
           } catch (e: any) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
@@ -1448,19 +1499,24 @@ export default function register(api: PluginApi) {
         const created = await createRes.json() as any;
 
         // Step 3: Tar the directory and upload
-        const tarball = `/tmp/riddle-bp-${created.job_id}.tar.gz`;
+        let tarball = "";
         try {
           const excludes = params.exclude || [".git", "*.log"];
-          const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
-          await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout: 120000 });
-          const tarData = await readFile(tarball);
+          let tarData: Buffer;
+          try {
+            const packaged = await packageDirectory(dir, "riddle-bp", created.job_id, excludes, 120000);
+            tarball = packaged.tarball;
+            tarData = packaged.data;
+          } catch (e: any) {
+            return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Package failed: ${describeError(e)}` }, null, 2) }] };
+          }
 
           let uploadRes: Response;
           try {
             uploadRes = await fetchWithRetry(created.upload_url, {
               method: "PUT",
               headers: { "Content-Type": "application/gzip" },
-              body: tarData
+              body: tarData as any
             }, PREVIEW_UPLOAD_TIMEOUT_MS, "build preview upload");
           } catch (e: any) {
             return { content: [{ type: "text", text: JSON.stringify({ ok: false, job_id: created.job_id, error: `Upload failed: ${describeError(e)}` }, null, 2) }] };
