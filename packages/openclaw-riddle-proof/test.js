@@ -464,7 +464,7 @@ assert.deepEqual(wrapperAgentCalls, [engineWorkdir]);
 assert.equal(engineCalls.length, 2);
 const engineModeState = JSON.parse(readFileSync(path.join(engineFixture, "wrapper-state.json"), "utf-8"));
 const engineModeStarted = engineModeState.events.find((event) => event.kind === "engine_harness.started");
-assert.equal(engineModeStarted.details.max_iterations, 12);
+assert.equal(engineModeStarted.details.max_iterations, 3);
 
 const legacyMaxFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-legacy-max-"));
 const legacyMaxStatePath = path.join(legacyMaxFixture, "riddle-state.json");
@@ -1590,6 +1590,165 @@ const continueCheckpointResult = await submitOpenClawRiddleProofReview(
 );
 assert.equal(continueCheckpointResult.status, "ready_to_ship");
 assert.equal(continueCheckpointEngineCalls.length, 1);
+
+const staticAuditReviewEngineStatePath = path.join(reviewFixture, "riddle-state-static-audit-ready.json");
+const staticAuditReviewWrapperStatePath = path.join(reviewFixture, "wrapper-state-static-audit-ready.json");
+const staticAuditProofEvidence = {
+  version: "riddle-proof.static-smoke.v4",
+  proofReady: true,
+  staticAuditReady: true,
+  interactionExpected: false,
+  interactionNotRequired: true,
+  zeroInteractiveElementsExpected: true,
+  routeMatches: true,
+  titleMatches: true,
+  headingMatches: true,
+  markerMatches: true,
+  normalizedCopyVisible: true,
+  noConsoleErrors: true,
+  noPageErrors: true,
+};
+writeFileSync(staticAuditReviewEngineStatePath, JSON.stringify({
+  branch: "agent/static-audit-ready",
+  verification_mode: "visual",
+  implementation_mode: "none",
+  require_diff: false,
+  allow_code_changes: false,
+  after_cdn: "https://example.com/static-after.png",
+  evidence_bundle: {
+    expected_path: "/s/ps_b7b5f0dc/",
+    proof_evidence: staticAuditProofEvidence,
+    artifact_contract: {
+      verification_mode: "visual",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: true,
+        visual_delta: false,
+      },
+    },
+    artifact_production: {
+      image_output_count: 1,
+      proof_evidence_present: true,
+      has_structured_payload: true,
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+      supervisor_review_signals: ["after-capture", "semantic-context", "proof-evidence"],
+    },
+    after: {
+      screenshot_url: "https://example.com/static-after.png",
+      proof_evidence: staticAuditProofEvidence,
+      visual_delta: {
+        status: "not_applicable",
+        reason: "audit/no-diff proof does not require a before/after implementation delta",
+      },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/s/ps_b7b5f0dc/",
+    artifact_contract: {
+      verification_mode: "visual",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: true,
+        visual_delta: false,
+      },
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+      supervisor_review_signals: ["after-capture", "semantic-context", "proof-evidence"],
+    },
+    visual_delta: {
+      status: "not_applicable",
+      reason: "audit/no-diff proof does not require a before/after implementation delta",
+    },
+    semantic_context: {
+      route: {
+        expected_path: "/s/ps_b7b5f0dc/",
+        after_observed_path: "/s/ps_b7b5f0dc/",
+      },
+      after: {
+        valid: true,
+        headings: ["Riddle static preview smoke"],
+        buttons: [],
+        links: [],
+        visible_text_sample: "Riddle static preview smoke Static preview marker is visible.",
+      },
+    },
+  },
+}, null, 2));
+const staticAuditReviewBlocked = await runOpenClawRiddleProof(
+  {
+    ...params,
+    run_mode: "blocking",
+    checkpoint_mode: "manual",
+    harness_state_path: staticAuditReviewWrapperStatePath,
+    state_path: staticAuditReviewEngineStatePath,
+    ship_mode: "none",
+    dry_run: false,
+    mode: "audit",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    change_request: "Audit the current static preview without changing code.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute() {
+        return {
+          ok: false,
+          state_path: staticAuditReviewEngineStatePath,
+          checkpoint: "verify_capture_retry",
+          summary: "Static audit capture requested proof packet revision.",
+          checkpointContract: {
+            resume: { continue_with_stage: "author" },
+          },
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(staticAuditReviewBlocked.status, "awaiting_checkpoint");
+assert.equal(staticAuditReviewBlocked.checkpoint_packet?.kind, "author_proof");
+assert.equal(staticAuditReviewBlocked.checkpoint_packet?.allowed_decisions?.includes("ready_to_ship"), false);
+const staticAuditReviewEngineCalls = [];
+const staticAuditReviewResumed = await submitOpenClawRiddleProofReview(
+  {
+    state_path: staticAuditReviewWrapperStatePath,
+    decision: "ready_to_ship",
+    summary: "The static audit evidence proves the current preview.",
+    reasons: ["route, screenshot, and structured static proof evidence are ready"],
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute(engineParams) {
+        staticAuditReviewEngineCalls.push(engineParams);
+        assert.ok(engineParams.proof_assessment_json);
+        const proofAssessment = JSON.parse(engineParams.proof_assessment_json);
+        assert.equal(proofAssessment.decision, "ready_to_ship");
+        return {
+          ok: true,
+          state_path: staticAuditReviewEngineStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Static audit proof accepted after main-agent review.",
+          shipGate: { ok: true },
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(staticAuditReviewResumed.status, "ready_to_ship");
+assert.equal(staticAuditReviewEngineCalls.length, 1);
 
 const backgroundResumeEngineStatePath = path.join(reviewFixture, "riddle-state-author-checkpoint-background-resume.json");
 const backgroundResumeWrapperStatePath = path.join(reviewFixture, "wrapper-state-author-checkpoint-background-resume.json");

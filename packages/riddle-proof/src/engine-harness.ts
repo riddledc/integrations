@@ -369,6 +369,20 @@ function baseContinuation(result: RiddleProofEngineResult): RiddleProofWorkflowP
   };
 }
 
+function carryRequestControlFlags(
+  params: RiddleProofWorkflowParams,
+  request: RiddleProofRunParams,
+): RiddleProofWorkflowParams {
+  if (!noImplementationModeFor(request)) return params;
+  return compactRecord({
+    ...params,
+    mode: request.mode,
+    implementation_mode: request.implementation_mode || "none",
+    require_diff: request.require_diff ?? false,
+    allow_code_changes: request.allow_code_changes ?? false,
+  }) as RiddleProofWorkflowParams;
+}
+
 function initialRunParams(
   request: RiddleProofRunParams,
   input: RunRiddleProofEngineHarnessInput,
@@ -1734,7 +1748,10 @@ export async function runRiddleProofEngineHarness(
     });
   }
 
-  let nextParams = input.resume_params || checkpointContinuation.next || initialRunParams(request, input, state);
+  let nextParams = carryRequestControlFlags(
+    input.resume_params || checkpointContinuation.next || initialRunParams(request, input, state),
+    request,
+  );
   let lastResult: RiddleProofEngineResult | null = null;
   const stageIterations: Partial<Record<RiddleProofStage, number>> = {};
 
@@ -1853,7 +1870,7 @@ export async function runRiddleProofEngineHarness(
         message: "The harness route returned no next step.",
       });
     }
-    nextParams = routed.next;
+    nextParams = carryRequestControlFlags(routed.next, request);
   }
 
   return blockerResult(state, lastResult, {

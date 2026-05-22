@@ -557,6 +557,50 @@ def extract_proof_evidence(payload):
     return evidence
 
 
+def proof_evidence_records(value):
+    if isinstance(value, dict):
+        return [value]
+    if isinstance(value, list):
+        records = []
+        for item in value:
+            records.extend(proof_evidence_records(item))
+        return records
+    return []
+
+
+def static_audit_evidence_support(value):
+    for record in proof_evidence_records(value):
+        explicit_static = (
+            record.get('interactionNotRequired') is True
+            or record.get('interactionExpected') is False
+            or record.get('zeroInteractiveElementsExpected') is True
+            or record.get('staticPageExpected') is True
+        )
+        ready = record.get('proofReady') is True or record.get('staticAuditReady') is True
+        failed = any(record.get(key) is False for key in (
+            'proofReady',
+            'staticAuditReady',
+            'routeMatches',
+            'titleMatches',
+            'headingMatches',
+            'markerMatches',
+            'normalizedCopyVisible',
+            'noConsoleErrors',
+            'noPageErrors',
+        ))
+        if explicit_static and ready and not failed:
+            return {
+                'ready': True,
+                'interaction_not_required': True,
+                'source': str(record.get('version') or record.get('mode') or 'proof_evidence'),
+            }
+    return {
+        'ready': False,
+        'interaction_not_required': False,
+        'source': '',
+    }
+
+
 PLAYABILITY_EVIDENCE_VERSION = 'riddle-proof.playability.v1'
 PLAYABILITY_ASSESSMENT_VERSION = 'riddle-proof.playability.assessment.v1'
 PLAYABILITY_CONTAINER_KEYS = (
@@ -2012,6 +2056,8 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     payload = enrich_capture_payload(payload)
     mode = normalized_verification_mode(verification_mode)
     supporting = collect_supporting_artifacts(payload)
+    proof_evidence = extract_proof_evidence(payload)
+    static_audit_support = static_audit_evidence_support(proof_evidence)
     structured_ready = bool(supporting.get('has_structured_payload'))
     playability_ready = mode in PLAYABILITY_MODES and bool(supporting.get('playability_ready'))
     screenshot_required = screenshot_required_for_mode(mode)
@@ -2023,6 +2069,8 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
         'structured_evidence_present': structured_ready,
         'proof_evidence_present': bool(supporting.get('proof_evidence_present')),
         'playability_ready': playability_ready,
+        'static_audit_ready': bool(static_audit_support.get('ready')),
+        'static_audit_support_source': static_audit_support.get('source', ''),
         'canvas_capture_ready': False,
         'large_canvas_area': 0,
         'min_canvas_area': MIN_CANVAS_AREA,
@@ -2110,13 +2158,15 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
 
     should_enforce_visual_readiness = screenshot_required or (details['has_screenshot'] and not structured_ready)
     canvas_ready = bool(details.get('canvas_capture_ready'))
-    body_text_ready = details['body_text_length'] >= MIN_BODY_TEXT_LENGTH or canvas_ready or playability_ready
-    interactive_ready = details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS or canvas_ready or playability_ready
-    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1 or canvas_ready or playability_ready
+    static_audit_ready = bool(static_audit_support.get('ready'))
+    body_text_ready = details['body_text_length'] >= MIN_BODY_TEXT_LENGTH or canvas_ready or playability_ready or static_audit_ready
+    interactive_ready = details['interactive_elements'] >= MIN_INTERACTIVE_ELEMENTS or canvas_ready or playability_ready or static_audit_ready
+    semantic_ready = (not has_enriched_page_state(page_state)) or details['semantic_anchor_count'] >= 1 or canvas_ready or playability_ready or static_audit_ready
     details['body_text_ready'] = body_text_ready
     details['interactive_ready'] = interactive_ready
     details['semantic_ready'] = semantic_ready
     details['canvas_or_playability_override'] = bool(should_enforce_visual_readiness and (canvas_ready or playability_ready))
+    details['static_audit_readiness_override'] = bool(should_enforce_visual_readiness and static_audit_ready)
 
     if should_enforce_visual_readiness and not body_text_ready:
         reasons.append(f'blank/near-blank page (text length: {details["body_text_length"]})')

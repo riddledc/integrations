@@ -12635,12 +12635,37 @@ assert.ok(spaRouteExitStateHygieneProfile.metadata.purpose.includes("route-exit 
 const verifyRuntimePath = new URL("./runtime/lib/verify.py", import.meta.url);
 const verifyRuntimeSource = readFileSync(verifyRuntimePath, "utf8");
 const verifyPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-verify.lobster", import.meta.url), "utf8");
+const setupPipelineSource = readFileSync(new URL("./runtime/pipelines/riddle-proof-setup.lobster", import.meta.url), "utf8");
 execFileSync("python3", ["-m", "py_compile", verifyRuntimePath.pathname]);
 assert.match(verifyRuntimeSource, /def audit_no_diff_mode/);
 assert.match(verifyRuntimeSource, /Audit\/no-diff mode skips after-worktree build/);
 assert.match(verifyRuntimeSource, /capture_current_target/);
 assert.match(verifyRuntimeSource, /visual_delta_required_for_state/);
 assert.match(verifyPipelineSource, /After worktree: not required for audit\/no-diff verify/);
+
+function setupPreflightScriptWithArgs(args = {}) {
+  const match = setupPipelineSource.match(/python3 << 'PYEOF'\n([\s\S]*?)\n\s*PYEOF/);
+  assert.ok(match);
+  return match[1]
+    .replace(/^      /gm, "")
+    .replace(/\$\{([A-Za-z0-9_]+)\}/g, (_match, key) => args[key] ?? "");
+}
+
+const quotedSuccessCriteriaSetupScript = setupPreflightScriptWithArgs({
+  success_criteria: 'The marker text ends with "Static preview marker is visible."',
+  change_request: "Audit the static smoke page.",
+  verification_mode: "visual",
+  prod_url: "https://preview.riddledc.com/s/ps_b7b5f0dc/",
+  mode: "audit",
+  implementation_mode: "none",
+  require_diff: "false",
+  allow_code_changes: "false",
+});
+execFileSync("python3", [
+  "-c",
+  `compile(${JSON.stringify(quotedSuccessCriteriaSetupScript)}, "riddle-proof-setup-preflight", "exec")`,
+]);
+assert.doesNotMatch(setupPipelineSource, /"""\$\{success_criteria\}"""/);
 
 function withMeasuredVisualEvidence(state = {}) {
   return {
@@ -13756,6 +13781,75 @@ assert.equal(auditVisualCheckpointPacket.kind, "assess_proof");
 assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_required, false);
 assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_ready, true);
 assert.equal(auditVisualCheckpointPacket.evidence_excerpt.evidence_issue_code, undefined);
+
+const auditRetryFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-audit-retry-"));
+const auditRetryStatePath = path.join(auditRetryFixture, "riddle-state.json");
+writeFileSync(auditRetryStatePath, JSON.stringify({
+  verification_mode: "visual",
+  verify_status: "capture_incomplete",
+}, null, 2));
+const auditRetryEngineCalls = [];
+let auditRetryAuthorPackets = 0;
+const auditRetryResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Audit a current visual target without implementation.",
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    ship_mode: "none",
+    harness_state_path: path.join(auditRetryFixture, "harness-state.json"),
+    engine_state_path: auditRetryStatePath,
+  },
+  max_iterations: 3,
+  engine: {
+    async execute(params) {
+      auditRetryEngineCalls.push(params);
+      if (params.author_packet_json) {
+        return {
+          ok: true,
+          state_path: auditRetryStatePath,
+          checkpoint: "verify_ship_ready",
+          summary: "Static audit proof accepted.",
+          shipGate: { ok: true },
+        };
+      }
+      return {
+        ok: false,
+        state_path: auditRetryStatePath,
+        checkpoint: "verify_capture_retry",
+        summary: "Static audit capture needs a proof packet.",
+        checkpointContract: {
+          resume: { continue_with_stage: "author" },
+        },
+      };
+    },
+  },
+  agent: {
+    async assessRecon() { throw new Error("recon should not run"); },
+    async implementChange() { throw new Error("implement should not run for audit/no-diff retries"); },
+    async assessProof() { throw new Error("proof assessment should not run"); },
+    async authorProofPacket() {
+      auditRetryAuthorPackets += 1;
+      return {
+        ok: true,
+        summary: "Static audit proof packet ready.",
+        payload: {
+          proof_plan: "Capture the current static target and emit static audit evidence.",
+          capture_script: "console.log('RIDDLE_PROOF_EVIDENCE:' + JSON.stringify({ proofReady: true }))",
+        },
+      };
+    },
+  },
+});
+assert.equal(auditRetryResult.status, "ready_to_ship");
+assert.equal(auditRetryAuthorPackets, 1);
+const auditRetryAuthorCall = auditRetryEngineCalls.find((call) => call.author_packet_json);
+assert.ok(auditRetryAuthorCall);
+assert.equal(auditRetryAuthorCall.implementation_mode, "none");
+assert.equal(auditRetryAuthorCall.require_diff, false);
+assert.equal(auditRetryAuthorCall.allow_code_changes, false);
 
 const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
 const noiseWorkdir = path.join(noiseFixture, "after");

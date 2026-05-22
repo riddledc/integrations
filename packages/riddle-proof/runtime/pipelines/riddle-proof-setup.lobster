@@ -101,48 +101,52 @@ steps:
     command: |
       python3 << 'PYEOF'
       import json, os
-      raw_server_path = """${server_path}""".strip()
-      args = {
-          'mode': """${mode}""".strip() or 'server',
-          'reference': """${reference}""".strip() or 'both',
-          'repo': """${repo}""".strip(),
-          'branch': """${branch}""".strip(),
-          'change_request': """${change_request}""".strip(),
-          'commit_message': """${commit_message}""".strip(),
-          'prod_url': """${prod_url}""".strip(),
-          'capture_script': """${capture_script}""".strip(),
-          'success_criteria': """${success_criteria}""".strip(),
-          'assertions_json': """${assertions_json}""".strip(),
-          'verification_mode': """${verification_mode}""".strip() or 'proof',
-          'context': """${context}""".strip(),
-          'reviewer': """${reviewer}""".strip() or 'davisdiehl',
-          'base_branch': """${base_branch}""".strip() or 'main',
-          'before_ref': """${before_ref}""".strip(),
-          'allow_static_preview_fallback': """${allow_static_preview_fallback}""".strip(),
-          'implementation_mode': """${implementation_mode}""".strip(),
-          'require_diff': """${require_diff}""".strip(),
-          'allow_code_changes': """${allow_code_changes}""".strip(),
-          'build_command': """${build_command}""".strip() or 'npm run build',
-          'build_output': """${build_output}""".strip() or 'build',
-          'server_image': """${server_image}""".strip() or 'node:20-slim',
-          'server_command': """${server_command}""".strip() or 'npm start',
-          'server_port': """${server_port}""".strip() or '3000',
-          'server_path': raw_server_path,
-          'server_path_source': 'user' if raw_server_path else '',
-          'use_auth': """${use_auth}""".strip(),
-          'auth_localStorage_json': """${auth_localStorage_json}""".strip(),
-          'auth_cookies_json': """${auth_cookies_json}""".strip(),
-          'auth_headers_json': """${auth_headers_json}""".strip(),
-          'color_scheme': """${color_scheme}""".strip(),
-          'wait_for_selector': """${wait_for_selector}""".strip(),
-          'discord_channel': """${discord_channel}""".strip(),
-          'discord_thread_id': """${discord_thread_id}""".strip(),
-          'discord_message_id': """${discord_message_id}""".strip(),
-          'discord_source_url': """${discord_source_url}""".strip(),
-      }
       args_file = os.environ.get('RIDDLE_PROOF_ARGS_FILE', '/tmp/riddle-proof-args.json')
-      with open(args_file, 'w') as f:
-          json.dump(args, f, indent=2)
+      if os.environ.get('RIDDLE_PROOF_ARGS_FILE') and os.path.exists(args_file):
+          with open(args_file) as f:
+              json.load(f)
+      else:
+          raw_server_path = '''${server_path}'''.strip()
+          args = {
+              'mode': '''${mode}'''.strip() or 'server',
+              'reference': '''${reference}'''.strip() or 'both',
+              'repo': '''${repo}'''.strip(),
+              'branch': '''${branch}'''.strip(),
+              'change_request': '''${change_request}'''.strip(),
+              'commit_message': '''${commit_message}'''.strip(),
+              'prod_url': '''${prod_url}'''.strip(),
+              'capture_script': '''${capture_script}'''.strip(),
+              'success_criteria': '''${success_criteria}'''.strip(),
+              'assertions_json': '''${assertions_json}'''.strip(),
+              'verification_mode': '''${verification_mode}'''.strip() or 'proof',
+              'context': '''${context}'''.strip(),
+              'reviewer': '''${reviewer}'''.strip() or 'davisdiehl',
+              'base_branch': '''${base_branch}'''.strip() or 'main',
+              'before_ref': '''${before_ref}'''.strip(),
+              'allow_static_preview_fallback': '''${allow_static_preview_fallback}'''.strip(),
+              'implementation_mode': '''${implementation_mode}'''.strip(),
+              'require_diff': '''${require_diff}'''.strip(),
+              'allow_code_changes': '''${allow_code_changes}'''.strip(),
+              'build_command': '''${build_command}'''.strip() or 'npm run build',
+              'build_output': '''${build_output}'''.strip() or 'build',
+              'server_image': '''${server_image}'''.strip() or 'node:20-slim',
+              'server_command': '''${server_command}'''.strip() or 'npm start',
+              'server_port': '''${server_port}'''.strip() or '3000',
+              'server_path': raw_server_path,
+              'server_path_source': 'user' if raw_server_path else '',
+              'use_auth': '''${use_auth}'''.strip(),
+              'auth_localStorage_json': '''${auth_localStorage_json}'''.strip(),
+              'auth_cookies_json': '''${auth_cookies_json}'''.strip(),
+              'auth_headers_json': '''${auth_headers_json}'''.strip(),
+              'color_scheme': '''${color_scheme}'''.strip(),
+              'wait_for_selector': '''${wait_for_selector}'''.strip(),
+              'discord_channel': '''${discord_channel}'''.strip(),
+              'discord_thread_id': '''${discord_thread_id}'''.strip(),
+              'discord_message_id': '''${discord_message_id}'''.strip(),
+              'discord_source_url': '''${discord_source_url}'''.strip(),
+          }
+          with open(args_file, 'w') as f:
+              json.dump(args, f, indent=2)
       PYEOF
       RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof/runtime}"
       python3 "${RP}/lib/preflight.py"
