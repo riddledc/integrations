@@ -1405,6 +1405,9 @@ function profileHasRestartReadyReceipt(receipts: Record<string, unknown>[]): boo
     const summary = cliReturnSummaryLabel(receipt.return_summary) || "";
     const haystack = `${storedTo} ${label} ${path} ${slot} ${statusText} ${summary}`.toLowerCase();
     const labelsRestart = haystack.includes("restart")
+      || haystack.includes("reset")
+      || haystack.includes("reset-ready")
+      || haystack.includes("reset ready")
       || haystack.includes("play again")
       || haystack.includes("play-again")
       || haystack.includes("playagain")
@@ -1422,9 +1425,13 @@ function profileHasRestartReadyReceipt(receipts: Record<string, unknown>[]): boo
     const best = cliFiniteNumber(setupReturnSummaryValue(receipt, ["best"]));
     const readyState = statusText.includes("your turn")
       || statusText.includes("ready")
-      || setupReturnSummaryValue(receipt, ["ready", "restartReady", "restart_ready"]) === true;
+      || setupReturnSummaryValue(receipt, ["ready", "restartReady", "restart_ready", "resetReady", "reset_ready"]) === true;
+    const hiddenCount = cliFiniteNumber(setupReturnSummaryValue(receipt, ["hiddenCount", "hidden_count"]));
+    const moves = cliFiniteNumber(setupReturnSummaryValue(receipt, ["moves", "moveCount", "move_count"]));
+    const winner = setupReturnSummaryValue(receipt, ["hasWinner", "winner", "won", "gameWon"]);
+    const resetBoardReady = hiddenCount !== undefined && hiddenCount > 0 && moves === 0 && winner === false;
 
-    return ok && controlsEnabled && (readyState || level !== undefined || streak !== undefined || best !== undefined);
+    return ok && controlsEnabled && (readyState || resetBoardReady || level !== undefined || streak !== undefined || best !== undefined);
   });
 }
 
