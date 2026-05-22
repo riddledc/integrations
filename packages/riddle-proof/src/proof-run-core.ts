@@ -105,6 +105,10 @@ export function noImplementationModeFor(params?: unknown, state?: unknown) {
   );
 }
 
+function canRunSetupWithoutRepo(params: WorkflowParams) {
+  return noImplementationModeFor(params) && Boolean((params.prod_url || "").trim());
+}
+
 export interface PluginConfig {
   riddleProofDir?: string;
   statePath?: string;
@@ -222,7 +226,7 @@ function asJsonString(value: unknown) {
 }
 
 export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof resolveConfig>) {
-  if (!params.repo) throw new Error("repo is required for setup/run");
+  if (!params.repo && !canRunSetupWithoutRepo(params)) throw new Error("repo is required for setup/run");
   if (!params.change_request) throw new Error("change_request is required for setup/run");
   const commitMessage = (params.commit_message || params.change_request || "").trim();
   const captureScript = (params.capture_script || "").trim();

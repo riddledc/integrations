@@ -2553,9 +2553,10 @@ if s.get('use_auth', '').lower() in ('true', '1', 'yes'):
 
 existing_before = (s.get('before_cdn') or '').strip()
 existing_prod = (s.get('prod_cdn') or '').strip()
-if reference in ('before', 'both') and not existing_before:
+remote_audit = bool(s.get('remote_audit')) and no_implementation_mode
+if reference in ('before', 'both') and not existing_before and not remote_audit:
     raise SystemExit('Recon baseline missing: before_cdn is empty. Run recon again and confirm the before baseline succeeds before verify.')
-if reference in ('prod', 'both') and prod_url and not existing_prod:
+if reference in ('prod', 'both') and prod_url and not existing_prod and not remote_audit:
     raise SystemExit('Recon baseline missing: prod_cdn is empty. Run recon again and confirm the prod baseline succeeds before verify.')
 if reference == 'prod' and not prod_url:
     raise SystemExit('reference is "prod" but no prod_url provided.')
@@ -2796,6 +2797,8 @@ if reference in ('before', 'both'):
     required_baseline_present = required_baseline_present and bool(existing_before)
 if reference in ('prod', 'both') and prod_url:
     required_baseline_present = required_baseline_present and bool(existing_prod)
+if remote_audit:
+    required_baseline_present = True
 
 evidence_bundle = build_evidence_bundle(s, results, after_payload, after_observation, required_baseline_present, expected_path)
 s['evidence_bundle'] = evidence_bundle

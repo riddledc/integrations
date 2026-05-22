@@ -14310,6 +14310,25 @@ assert.equal(dryRunFailureResult.blocker.details.error, "workspace core timed ou
 const workspaceCoreFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-workspace-core-"));
 writeFileSync(path.join(workspaceCoreFixture, "package.json"), JSON.stringify({ name: "fixture", version: "1.0.0" }));
 const workspaceCorePath = path.join(path.dirname(new URL(import.meta.url).pathname), "lib", "workspace-core.mjs");
+const localRepoFixture = path.join(workspaceCoreFixture, "local-path-repo");
+mkdirSync(localRepoFixture, { recursive: true });
+execFileSync("git", ["init"], { cwd: localRepoFixture, stdio: "ignore" });
+execFileSync("git", ["checkout", "-b", "main"], { cwd: localRepoFixture, stdio: "ignore" });
+execFileSync("git", ["config", "user.email", "riddle-proof@example.com"], { cwd: localRepoFixture, stdio: "ignore" });
+execFileSync("git", ["config", "user.name", "Riddle Proof"], { cwd: localRepoFixture, stdio: "ignore" });
+writeFileSync(path.join(localRepoFixture, "README.md"), "local repo\n");
+execFileSync("git", ["add", "README.md"], { cwd: localRepoFixture, stdio: "ignore" });
+execFileSync("git", ["commit", "-m", "init"], { cwd: localRepoFixture, stdio: "ignore" });
+const localPrepareResult = JSON.parse(execFileSync("node", [
+  workspaceCorePath,
+  "prepare-repo",
+  JSON.stringify({ repo: localRepoFixture, branch: "agent/local-path-fixture", baseBranch: "main" }),
+], { encoding: "utf-8" }));
+assert.equal(localPrepareResult.ok, true);
+assert.equal(localPrepareResult.repoDir, localRepoFixture);
+assert.equal(localPrepareResult.repoName, "local-path-repo");
+assert.equal(localPrepareResult.localRepo, true);
+assert.equal(localPrepareResult.source, "existing_local_repo");
 const fingerprintResult = JSON.parse(execFileSync("node", [
   workspaceCorePath,
   "dependency-fingerprint",

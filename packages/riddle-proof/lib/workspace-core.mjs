@@ -96,6 +96,25 @@ export function workspaceRoots({ workspaceRoot = "", currentRepoDir = "" } = {})
   return roots;
 }
 
+function expandHome(candidate) {
+  const text = String(candidate || "").trim();
+  if (!text.startsWith("~")) return text;
+  const home = process.env.HOME || "/root";
+  return path.join(home, text.slice(1));
+}
+
+function looksLikeLocalRepoRef(repo) {
+  const text = String(repo || "").trim();
+  if (!text) return false;
+  if (path.isAbsolute(text) || text.startsWith("./") || text.startsWith("../") || text.startsWith("~/")) return true;
+  return existsSync(expandHome(text));
+}
+
+function localRepoDirFromRef(repo) {
+  if (!looksLikeLocalRepoRef(repo)) return "";
+  return path.resolve(expandHome(repo));
+}
+
 export function resolveRepoDir({ repoName, repoDir = "", workspaceRoot = "", currentRepoDir = "" }) {
   const candidates = [];
   if (repoDir) candidates.push(repoDir);
@@ -136,22 +155,27 @@ export function prepareRepo({
   if (!repo) throw new Error("repo is required");
   if (!branch) throw new Error("branch is required");
 
-  const repoName = repo.split("/").pop() || repo;
-  const resolvedRepoDir = resolveRepoDir({ repoName, repoDir, workspaceRoot });
+  const localRepoDir = localRepoDirFromRef(repo);
+  const repoName = localRepoDir ? path.basename(localRepoDir) : repo.split("/").pop() || repo;
+  const resolvedRepoDir = localRepoDir || resolveRepoDir({ repoName, repoDir, workspaceRoot });
+  const localRepo = Boolean(localRepoDir);
   const hadExistingRepo = existsSync(path.join(resolvedRepoDir, ".git"));
   mkdirSync(path.dirname(resolvedRepoDir), { recursive: true });
 
   if (hadExistingRepo) {
-    if (ensureHttpsRemote) {
+    if (ensureHttpsRemote && !localRepo) {
       runSafe(`git remote set-url origin https://github.com/${repo}.git`, resolvedRepoDir);
     }
-    if (fetch) {
+    if (fetch && !localRepo) {
       const fetchResult = runSafe("git fetch --prune origin", resolvedRepoDir, 60000);
       if (!fetchResult.ok) {
         throw new Error(`git fetch failed for ${resolvedRepoDir}: ${fetchResult.output.slice(0, 300)}`);
       }
     }
   } else {
+    if (localRepo) {
+      throw new Error(`local repo path does not contain a .git directory: ${resolvedRepoDir}`);
+    }
     run(`git clone https://github.com/${repo}.git ${shellQuote(resolvedRepoDir)}`, undefined, 120000);
   }
 
@@ -165,9 +189,14 @@ export function prepareRepo({
       branchResult = runSafe(`git branch ${shellQuote(branch)} ${shellQuote(`origin/${branch}`)}`, resolvedRepoDir);
     } else {
       const remoteBase = `origin/${baseBranch}`;
-      branchResult = runSafe(`git branch ${shellQuote(branch)} ${shellQuote(remoteBase)}`, resolvedRepoDir);
-      if (!branchResult.ok) {
+      branchResult = localRepo
+        ? runSafe(`git branch ${shellQuote(branch)} ${shellQuote(baseBranch)}`, resolvedRepoDir)
+        : runSafe(`git branch ${shellQuote(branch)} ${shellQuote(remoteBase)}`, resolvedRepoDir);
+      if (!branchResult.ok && !localRepo) {
         branchResult = runSafe(`git branch ${shellQuote(branch)} ${shellQuote(baseBranch)}`, resolvedRepoDir);
+      }
+      if (!branchResult.ok && localRepo) {
+        branchResult = runSafe(`git branch ${shellQuote(branch)} HEAD`, resolvedRepoDir);
       }
     }
     if (!branchResult.ok) {
@@ -180,7 +209,8 @@ export function prepareRepo({
     repoName,
     repoDir: resolvedRepoDir,
     branch,
-    source: hadExistingRepo ? "existing_repo" : "cloned_repo",
+    localRepo,
+    source: hadExistingRepo ? (localRepo ? "existing_local_repo" : "existing_repo") : "cloned_repo",
   };
 }
 

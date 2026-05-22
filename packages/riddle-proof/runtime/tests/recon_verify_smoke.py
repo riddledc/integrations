@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LIB = ROOT / 'lib'
 UTIL_PATH = LIB / 'util.py'
 PREFLIGHT_PATH = LIB / 'preflight.py'
+SETUP_PATH = LIB / 'setup.py'
 RECON_PATH = LIB / 'recon.py'
 VERIFY_PATH = LIB / 'verify.py'
 AUTHOR_PATH = LIB / 'author.py'
@@ -989,6 +990,54 @@ def run_preflight_records_prod_reference_skip_reason():
             'reference_resolution': after_preflight['reference_resolution'],
         }
     finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def run_remote_audit_setup_without_repo():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-remote-audit-'))
+    args_path = tempdir / 'args.json'
+    state_path = tempdir / 'state.json'
+    try:
+        args_path.write_text(json.dumps({
+            'repo': '',
+            'mode': 'server',
+            'reference': 'both',
+            'prod_url': 'https://prod.example.com/pricing?plan=pro',
+            'change_request': 'Audit the current pricing page without a repo checkout.',
+            'commit_message': '',
+            'success_criteria': 'Current target is captured.',
+            'verification_mode': 'visual',
+            'implementation_mode': 'none',
+            'require_diff': False,
+            'allow_code_changes': False,
+            'server_image': 'node:20-slim',
+            'server_command': 'npm start',
+            'server_port': '3000',
+        }, indent=2))
+        with temporary_env(
+            RIDDLE_PROOF_ARGS_FILE=str(args_path),
+            RIDDLE_PROOF_STATE_FILE=str(state_path),
+        ):
+            sys.modules.pop('util', None)
+            load_module('util_remote_audit_preflight', UTIL_PATH)
+            load_module('preflight_remote_audit', PREFLIGHT_PATH)
+            sys.modules.pop('util', None)
+            try:
+                load_module('setup_remote_audit', SETUP_PATH)
+            except SystemExit as exc:
+                assert exc.code in (0, None), exc
+        state = json.loads(state_path.read_text())
+        assert state['remote_audit'] is True
+        assert state['workspace_ready'] is True
+        assert state['reference'] == 'prod'
+        assert state['implementation_status'] == 'not_required'
+        assert state['dependency_install']['after'] == 'skipped:remote_audit'
+        assert state['server_path'] == '/pricing?plan=pro'
+        assert state['recon_status'] == 'ready_for_proof_plan'
+        assert state['proof_plan_status'] == 'ready'
+        return {'ok': True, 'server_path': state['server_path']}
+    finally:
+        sys.modules.pop('util', None)
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
@@ -2388,6 +2437,7 @@ def run_ship_resolves_real_pr_branch():
 if __name__ == '__main__':
     payload = {
         'preflight_reference_skip_reason': run_preflight_records_prod_reference_skip_reason(),
+        'remote_audit_setup_without_repo': run_remote_audit_setup_without_repo(),
         'preflight_resume_visual_proof_session': run_preflight_resumes_visual_proof_session(),
         'capture_artifact_enrichment': run_capture_artifact_enrichment(),
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),

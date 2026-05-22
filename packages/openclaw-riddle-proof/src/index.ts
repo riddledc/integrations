@@ -88,6 +88,9 @@ export const RIDDLE_PROOF_WAIT_TOOL_NAME = "riddle_proof_wait";
 export const RIDDLE_PROOF_REVIEW_TOOL_NAME = "riddle_proof_review";
 export const RIDDLE_PROOF_SYNC_TOOL_NAME = "riddle_proof_sync";
 const MIN_DEFAULT_MAX_ITERATIONS = 12;
+const RIDDLE_PROOF_WAIT_DEFAULT_MS = 25_000;
+const RIDDLE_PROOF_WAIT_MAX_MS = 25_000;
+const RIDDLE_PROOF_WAIT_MAX_SLEEP_MS = 5_000;
 export const RIDDLE_PROOF_INSPECT_TOOL_NAME = "riddle_proof_inspect";
 const STRUCTURED_FIRST_VERIFICATION_MODES = new Set([
   "api",
@@ -3513,7 +3516,14 @@ function recoverOpenClawRiddleProofWakeMonitors(
 }
 
 export async function waitOpenClawRiddleProof(params: RiddleProofWaitParams) {
-  const timeoutMs = Math.max(1_000, Math.min(15 * 60 * 1000, Math.trunc(params.timeout_ms ?? 5 * 60 * 1000)));
+  const requestedTimeoutMs = Math.trunc(params.timeout_ms ?? RIDDLE_PROOF_WAIT_DEFAULT_MS);
+  const timeoutMs = Math.max(
+    1_000,
+    Math.min(
+      RIDDLE_PROOF_WAIT_MAX_MS,
+      Number.isFinite(requestedTimeoutMs) ? requestedTimeoutMs : RIDDLE_PROOF_WAIT_DEFAULT_MS,
+    ),
+  );
   const startedAt = Date.now();
   let snapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
   if (!snapshot) {
@@ -3540,7 +3550,15 @@ export async function waitOpenClawRiddleProof(params: RiddleProofWaitParams) {
   let pollCount = 0;
   let lastKey = initialKey;
   while (Date.now() - startedAt < timeoutMs) {
-    const sleepMs = Math.max(1_000, Math.min(60_000, Math.trunc(numericValue(snapshotRecord.recommended_poll_after_ms) ?? 10_000)));
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    const sleepMs = Math.max(
+      250,
+      Math.min(
+        RIDDLE_PROOF_WAIT_MAX_SLEEP_MS,
+        remainingMs,
+        Math.trunc(numericValue(snapshotRecord.recommended_poll_after_ms) ?? RIDDLE_PROOF_WAIT_MAX_SLEEP_MS),
+      ),
+    );
     await delay(sleepMs);
     pollCount += 1;
     const nextSnapshot = readOpenClawRiddleProofStatus(params.state_path, { debug: params.debug === true });
@@ -4099,7 +4117,7 @@ export const riddleProofStatusParameters = Type.Object({
 
 export const riddleProofWaitParameters = Type.Object({
   state_path: Type.String({ description: "Riddle Proof wrapper run state path returned by riddle_proof_change." }),
-  timeout_ms: Type.Optional(Type.Number({ description: "Maximum wait time before returning the latest snapshot. Defaults to 300000." })),
+  timeout_ms: Type.Optional(Type.Number({ description: "Maximum wait time before returning the latest snapshot. Defaults to 25000 and is capped at 25000 for chat tool hosts." })),
   debug: optionalBoolean("When true, include recent wrapper/runtime events and diagnostics in the returned snapshot."),
 });
 

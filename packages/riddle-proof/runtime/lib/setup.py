@@ -7,14 +7,15 @@ scratch storage by default:
 """
 
 import json, subprocess as sp, os, sys, shutil, time, tempfile
+from urllib.parse import urlparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
 from util import apply_capture_hint
 
 s = load_state()
-repo = s['repo']
+repo = (s.get('repo') or '').strip()
 branch = (s.get('target_branch') or s['branch']).strip()
-repo_dir = s['repo_dir']
+repo_dir = s.get('repo_dir', '')
 base_branch = s.get('base_branch', 'main')
 before_ref_arg = (s.get('before_ref') or s.get('base_ref') or '').strip()
 mode = s.get('mode', 'server')
@@ -197,6 +198,36 @@ def env_int(name, default):
     except Exception:
         return default
     return value if value > 0 else default
+
+
+def explicitly_false(value):
+    return value is False or str(value or '').strip().lower() in ('false', '0', 'no', 'off')
+
+
+def audit_no_diff_mode():
+    implementation_mode = str(s.get('implementation_mode') or '').strip().lower()
+    return (
+        implementation_mode in ('none', 'audit', 'no_implementation', 'no-implementation')
+        or explicitly_false(s.get('require_diff'))
+        or explicitly_false(s.get('allow_code_changes'))
+    )
+
+
+def remote_audit_mode():
+    return bool(s.get('remote_audit')) or (
+        not repo
+        and bool((s.get('prod_url') or '').strip())
+        and audit_no_diff_mode()
+    )
+
+
+def remote_audit_target_path():
+    explicit = (s.get('server_path') or '').strip()
+    if explicit:
+        return explicit
+    parsed = urlparse((s.get('prod_url') or '').strip())
+    path = parsed.path or '/'
+    return path + (('?' + parsed.query) if parsed.query else '')
 
 
 def disk_free_bytes(path):
@@ -489,6 +520,61 @@ def apply_repo_profile(project_dir):
         }
         print('Applied Riddle Proof repo profile: ' + ', '.join(s['proof_profile']['applied_fields']))
 
+if remote_audit_mode():
+    target_path = remote_audit_target_path()
+    s['remote_audit'] = True
+    s['workspace_kind'] = 'remote_audit'
+    s['repo_dir'] = ''
+    s['worktree_root'] = ''
+    s['scratch_root'] = DEFAULT_SCRATCH_ROOT
+    s['before_worktree'] = ''
+    s['after_worktree'] = ''
+    s['after_worktree_branch'] = ''
+    s['before_ref'] = ''
+    s['before_ref_source'] = ''
+    s['workspace_ready'] = True
+    s['stage'] = 'author'
+    s['implementation_status'] = 'not_required'
+    s['implementation_mode'] = s.get('implementation_mode') or 'none'
+    s['require_diff'] = False
+    s['allow_code_changes'] = False
+    s['server_path'] = s.get('server_path') or target_path
+    s['server_path_source'] = s.get('server_path_source') or 'prod_url'
+    s['recon_status'] = 'ready_for_proof_plan'
+    s['recon_summary'] = 'Remote audit/no-diff run uses prod_url as the current target and skips repo worktrees.'
+    s['recon_hypothesis'] = {
+        'target_path': target_path,
+        'path_source': 'prod_url',
+        'reference': s.get('reference') or 'prod',
+        'mode': s.get('mode') or 'server',
+        'wait_for_selector': (s.get('wait_for_selector') or '').strip(),
+        'notes': ['Remote audit/no-diff setup skipped repository checkout and dependency staging.'],
+    }
+    s['recon_results'] = {
+        'status': 'ready_for_proof_plan',
+        'mode': 'remote_audit',
+        'hypothesis': s['recon_hypothesis'],
+        'baselines': {},
+        'attempt_history': [],
+        'route_hints': [],
+        'keyword_hits': [],
+        'max_attempts': 0,
+    }
+    s['author_status'] = 'ready'
+    s['proof_plan_status'] = 'ready'
+    s['proof_plan'] = (s.get('proof_plan') or 'Audit the current prod_url target and capture current evidence without requiring a repo diff.').strip()
+    s['dependency_install'] = {
+        'shared': 'skipped:remote_audit',
+        'before': 'skipped:remote_audit',
+        'after': 'skipped:remote_audit',
+    }
+    s['scratch_disk_after_setup'] = disk_snapshot(DEFAULT_SCRATCH_ROOT)
+    save_state(s)
+    print('Remote audit/no-diff setup: repo worktrees and dependency staging skipped.')
+    print('Current target: ' + (s.get('prod_url') or ''))
+    print(json.dumps({'ok': True, 'remote_audit': True}))
+    sys.exit(0)
+
 # Ensure the repo is cloned and up to date via the shared workspace core.
 setup = workspace_core('prepare-repo', {
     'repo': repo,
@@ -561,7 +647,7 @@ if reference in ('before', 'both'):
         'ref': before_ref,
         'detach': True,
         'cleanupPaths': worktree_cleanup_dirs,
-        'verifyPackageJson': True,
+        'verifyPackageJson': False,
     }, timeout=300)
     print('Before worktree: ' + BEFORE_DIR + ' (' + before_ref + ', source=' + before_ref_source + ')')
 
@@ -587,7 +673,7 @@ workspace_core('ensure-worktree', {
     'resetBranch': True,
     'cleanupPaths': after_cleanup_dirs,
     'cleanupBranches': cleanup_branches,
-    'verifyPackageJson': True,
+    'verifyPackageJson': False,
 }, timeout=300)
 print('After worktree: ' + AFTER_DIR + ' (' + AFTER_WORKTREE_BRANCH + ' -> ' + branch + ')')
 apply_repo_profile(AFTER_DIR)
@@ -597,20 +683,20 @@ target_dependency_dirs = [AFTER_DIR]
 if reference in ('before', 'both'):
     target_dependency_dirs.append(BEFORE_DIR)
 
-reuse_source = repo_dir if os.path.exists(os.path.join(repo_dir, 'package.json')) else ''
+reuse_source = repo_dir if env_flag('RIDDLE_PROOF_USE_ACTIVE_WORKSPACE_DEPS', False) and os.path.exists(os.path.join(repo_dir, 'package.json')) else ''
 shared_reuse_source = compatible_reuse_source(reuse_source, target_dependency_dirs)
 shared_status = ''
 if shared_reuse_source:
     shared_status = ensure_deps_phase('shared_deps', shared_reuse_source, summary='Ensuring shared repository dependencies.')
     if shared_status:
         print('Shared deps status: ' + shared_status)
-elif reuse_source:
+elif os.path.exists(os.path.join(repo_dir, 'package.json')):
     record_setup_phase(
         'shared_deps',
         'completed',
-        'skipped: active workspace dependencies differ from proof worktrees',
+        'skipped: active workspace dependency reuse disabled; proof worktrees use scratch cache',
     )
-    print('Shared deps skipped: active workspace dependencies differ from proof worktrees')
+    print('Shared deps skipped: active workspace dependency reuse disabled; proof worktrees use scratch cache')
 
 before_dep_status = ''
 if reference in ('before', 'both'):

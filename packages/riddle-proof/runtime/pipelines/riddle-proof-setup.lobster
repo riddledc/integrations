@@ -46,6 +46,15 @@ args:
   mode:
     default: "server"
     description: "static or server"
+  implementation_mode:
+    default: ""
+    description: "change or none/audit"
+  require_diff:
+    default: ""
+    description: "Set false for audit/no-diff proof runs"
+  allow_code_changes:
+    default: ""
+    description: "Set false for audit/no-diff proof runs"
   build_command:
     default: "npm run build"
   build_output:
@@ -110,6 +119,9 @@ steps:
           'base_branch': """${base_branch}""".strip() or 'main',
           'before_ref': """${before_ref}""".strip(),
           'allow_static_preview_fallback': """${allow_static_preview_fallback}""".strip(),
+          'implementation_mode': """${implementation_mode}""".strip(),
+          'require_diff': """${require_diff}""".strip(),
+          'allow_code_changes': """${allow_code_changes}""".strip(),
           'build_command': """${build_command}""".strip() or 'npm run build',
           'build_output': """${build_output}""".strip() or 'build',
           'server_image': """${server_image}""".strip() or 'node:20-slim',
