@@ -1,6 +1,7 @@
 import { execFile as execFileCb } from "node:child_process";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFile = promisify(execFileCb);
@@ -37,6 +38,21 @@ const PREVIEW_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 const PREVIEW_ARTIFACT_TIMEOUT_MS = 60_000;
 const PREVIEW_RETRY_ATTEMPTS = 3;
 const PREVIEW_RETRY_BASE_DELAY_MS = 750;
+const VOLATILE_ARCHIVE_EXCLUDES = [
+  "tmux-*",
+  "systemd-private-*",
+  ".X11-unix",
+  ".ICE-unix",
+  ".Test-unix",
+  ".font-unix",
+  "riddle-*.tar.gz",
+  "riddle-preview-*.tar.gz",
+  "riddle-sp-*.tar.gz",
+  "riddle-bp-*.tar.gz",
+  ".riddle-proof-*",
+  "riddle-proof-*",
+  "node-compile-cache",
+];
 
 export function configFromOpenClawApi(api: any): RiddleCoreConfig {
   const cfg = api?.config ?? {};
@@ -646,12 +662,42 @@ async function assertDirectory(dir: string): Promise<PreviewResult | null> {
   } catch (e: any) {
     return { ok: false, error: `Cannot access directory: ${e.message}` };
   }
+  const archiveRootError = assertSafeArchiveDirectory(dir);
+  if (archiveRootError) return archiveRootError;
   return null;
 }
 
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
+function assertSafeArchiveDirectory(dir: string): PreviewResult | null {
+  const archiveRoot = resolve(dir);
+  const blockedRoots = new Set(["/", "/tmp", "/var/tmp", resolve(tmpdir())].map((item) => resolve(item)));
+  if (!blockedRoots.has(archiveRoot)) return null;
+  return {
+    ok: false,
+    error: `Refusing to archive ${archiveRoot}. Pass a concrete project or build subdirectory, not a temp/system root.`,
+  };
+}
+
+function previewTarballPath(prefix: string, id: string): string {
+  return join(tmpdir(), `${prefix}-${id}.tar.gz`);
+}
+
 async function tarDirectory(dir: string, tarball: string, excludes: string[], timeout: number): Promise<Buffer> {
-  const excludeArgs = excludes.flatMap((p: string) => ["--exclude", p]);
-  await execFile("tar", ["czf", tarball, ...excludeArgs, "-C", dir, "."], { timeout });
+  const excludeArgs = uniqueStrings([...excludes, ...VOLATILE_ARCHIVE_EXCLUDES])
+    .flatMap((p: string) => ["--exclude", p]);
+  await execFile(
+    "tar",
+    ["czf", tarball, "--warning=no-file-changed", "--ignore-failed-read", ...excludeArgs, "-C", dir, "."],
+    { timeout },
+  );
   return readFile(tarball);
 }
 
@@ -816,9 +862,14 @@ export async function createStaticPreview(
   }
   const created = await createRes.json() as any;
 
-  const tarball = `/tmp/riddle-preview-${created.id}.tar.gz`;
+  const tarball = previewTarballPath("riddle-preview", created.id);
   try {
-    const tarData = await tarDirectory(params.directory, tarball, [], 60_000);
+    let tarData: Buffer;
+    try {
+      tarData = await tarDirectory(params.directory, tarball, [], 60_000);
+    } catch (e: any) {
+      return { ok: false, id: created.id, error: `Package failed: ${describeError(e)}` };
+    }
     let uploadRes: Response;
     try {
       uploadRes = await fetchWithRetry(created.upload_url, {
@@ -977,9 +1028,14 @@ export async function createServerPreview(
   }
   const created = await createRes.json() as any;
 
-  const tarball = `/tmp/riddle-sp-${created.job_id}.tar.gz`;
+  const tarball = previewTarballPath("riddle-sp", created.job_id);
   try {
-    const tarData = await tarDirectory(params.directory, tarball, params.exclude || [".git", "*.log"], 120_000);
+    let tarData: Buffer;
+    try {
+      tarData = await tarDirectory(params.directory, tarball, params.exclude || [".git", "*.log"], 120_000);
+    } catch (e: any) {
+      return { ok: false, job_id: created.job_id, error: `Package failed: ${describeError(e)}` };
+    }
     let uploadRes: Response;
     try {
       uploadRes = await fetchWithRetry(created.upload_url, {
@@ -1090,9 +1146,14 @@ export async function createBuildPreview(
   }
   const created = await createRes.json() as any;
 
-  const tarball = `/tmp/riddle-bp-${created.job_id}.tar.gz`;
+  const tarball = previewTarballPath("riddle-bp", created.job_id);
   try {
-    const tarData = await tarDirectory(params.directory, tarball, params.exclude || [".git", "*.log"], 120_000);
+    let tarData: Buffer;
+    try {
+      tarData = await tarDirectory(params.directory, tarball, params.exclude || [".git", "*.log"], 120_000);
+    } catch (e: any) {
+      return { ok: false, job_id: created.job_id, error: `Package failed: ${describeError(e)}` };
+    }
     let uploadRes: Response;
     try {
       uploadRes = await fetchWithRetry(created.upload_url, {
