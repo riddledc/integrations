@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.223
+
+### Patch Changes
+
+- 193268a: Treat screenshot-specific required receipts as screenshot evidence before generated-output heuristics so result/final boundary screenshot packs are marked complete when screenshots are present.
+
 ## 0.7.222
 
 ### Patch Changes
