@@ -1168,6 +1168,42 @@ function artifactContractRequiresScreenshot(
   return verificationModeRequiresScreenshot(verificationMode);
 }
 
+function noImplementationProofModeForInspection(
+  request: RiddleProofRunParams | Record<string, unknown> | null | undefined,
+  fullState: Record<string, unknown> | null | undefined,
+) {
+  const requestRecord = recordValue(request) || {};
+  const stateRecord = fullState || {};
+  const mode = (
+    stringValue(requestRecord.mode) ||
+    stringValue(requestRecord.workflow_mode) ||
+    stringValue(stateRecord.mode) ||
+    stringValue(stateRecord.workflow_mode)
+  ).toLowerCase();
+  const implementationMode = (
+    stringValue(requestRecord.implementation_mode) ||
+    stringValue(stateRecord.implementation_mode)
+  ).toLowerCase();
+  const requireDiff = requestRecord.require_diff ?? stateRecord.require_diff;
+  const allowCodeChanges = requestRecord.allow_code_changes ?? stateRecord.allow_code_changes;
+  return (
+    mode === "audit" ||
+    mode === "profile" ||
+    implementationMode === "none" ||
+    requireDiff === false ||
+    allowCodeChanges === false
+  );
+}
+
+function visualDeltaNotApplicableForNoImplementation(visualDelta: Record<string, unknown> | null) {
+  if (stringValue(visualDelta?.status) !== "not_applicable") return false;
+  const reason = stringValue(visualDelta?.reason).toLowerCase();
+  return (
+    reason.includes("audit/no-diff") ||
+    reason.includes("does not require a before/after implementation delta")
+  );
+}
+
 function compactRecordValue<T extends Record<string, unknown>>(value: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ""),
@@ -2344,7 +2380,12 @@ function buildProofInspection(
   const visibleChange = buildVisibleChangeSummary(semanticContext);
   const verificationMode = fullState.verification_mode || wrapperState.request.verification_mode;
   const screenshotRequired = artifactContractRequiresScreenshot(artifactContract, verificationMode);
-  const visualDeltaRequired = requiredSignals?.visual_delta === true || screenshotRequired;
+  const noImplementationProofMode = noImplementationProofModeForInspection(wrapperState.request, fullState);
+  const noImplementationVisualDelta = visualDeltaNotApplicableForNoImplementation(visualDelta);
+  const visualDeltaRequired =
+    !noImplementationProofMode &&
+    !noImplementationVisualDelta &&
+    (requiredSignals?.visual_delta === true || screenshotRequired);
   const visualDeltaReady = !visualDeltaRequired || (visualDelta?.status === "measured" && visualDelta?.passed === true);
   const hardBlockers = visualDeltaReady
     ? []
@@ -2504,6 +2545,7 @@ function buildProofInspection(
 function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAdapter["assessProof"]>[0]) {
   const fullState = recordValue(context.fullRiddleState) || {};
   const inspection = buildProofInspection(context.state, fullState, context.checkpoint);
+  const visualDeltaRequiredForReview = inspection.visual_delta_required === true;
   const assessmentRequest =
     recordValue(fullState.proof_assessment_request) ||
     recordValue(recordValue(fullState.verify_decision_request)?.assessment_request) ||
@@ -2564,9 +2606,16 @@ function buildMainAgentProofReviewPacket(context: Parameters<RiddleProofAgentAda
           "If ready_to_ship_candidate is false or structured_evidence.proof_evidence_has_concerns is true, do not choose ready_to_ship unless your reasons explicitly reconcile why the inspection gate is too conservative.",
           "For playable/gameplay modes, do not choose ready_to_ship unless structured_evidence.playability_ready is true; a static screenshot or generated plate alone is not proof of playability.",
           "For visual/UI polish, do not use ready_to_ship based on CSS, code diff, or intent alone. The screenshots must prove the visible result at normal PR-review scale.",
-          "If required visual_delta is unmeasured, missing, or not_applicable, choose revise_capture with recommended_stage=verify and continue_with_stage=verify so the same run stays in evidence/comparison recovery.",
-          "If visual_delta is measured with passed=false, choose needs_implementation when the visual result is wrong, or needs_richer_proof only when non-visual proof artifacts are insufficient.",
-          `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing and required visual_delta metrics are measured/passing.`,
+          ...(visualDeltaRequiredForReview
+            ? [
+                "If required visual_delta is unmeasured, missing, or not_applicable, choose revise_capture with recommended_stage=verify and continue_with_stage=verify so the same run stays in evidence/comparison recovery.",
+                "If visual_delta is measured with passed=false, choose needs_implementation when the visual result is wrong, or needs_richer_proof only when non-visual proof artifacts are insufficient.",
+                `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the visible result is convincing and required visual_delta metrics are measured/passing.`,
+              ]
+            : [
+                "If visual_delta.status is not_applicable because this is an audit/no-diff proof, judge the current target evidence directly without requiring a measured before/after implementation delta.",
+                `Resume with ${RIDDLE_PROOF_REVIEW_TOOL_NAME} using decision=ready_to_ship only if the current target evidence is convincing.`,
+              ]),
         ]
       : [
           "Review artifact_contract, artifact_usage, proof_evidence, semantic_context, and any image artifacts if present.",
@@ -2621,6 +2670,7 @@ function inspectionMissingRequiredSignals(inspection: Record<string, unknown>) {
 }
 
 function inspectionRequiresMeasuredVisualDelta(inspection: Record<string, unknown>) {
+  if (inspection.visual_delta_required === false) return false;
   const required = recordValue(recordValue(inspection.artifact_contract)?.required);
   return required?.visual_delta === true || inspectionRequiresScreenshot(inspection);
 }
@@ -4024,7 +4074,7 @@ export const riddleProofChangeParameters = Type.Object({
   change_request: Type.String({ description: "Plain-language change request for the coding agent." }),
   commit_message: optionalString("Preferred commit message for the agent-authored change."),
   prod_url: optionalString("Production URL or baseline URL for proof capture."),
-  capture_script: optionalString("Capture script or instructions for gathering proof evidence."),
+  capture_script: optionalString("Playwright JavaScript to execute during proof capture. Do not pass natural-language instructions here; put instructions in change_request, context, success_criteria, or proof_plan."),
   success_criteria: optionalString("Criteria the proof evidence must satisfy."),
   assertions_json: optionalString("Optional JSON assertions string. Non-JSON text is preserved as a string assertion."),
   verification_mode: optionalString("Proof type, such as visual, interaction, data, json, audio, logs, or metrics."),

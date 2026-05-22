@@ -17,6 +17,7 @@ import register, {
   createOpenClawRiddleProofResult,
   classifyOpenClawRiddleProofWake,
   formatOpenClawRiddleProofWakeEvent,
+  riddleProofChangeParameters,
   processOpenClawRiddleProofWakeMonitorOnce,
   runOpenClawRiddleProof,
   inspectOpenClawRiddleProof,
@@ -35,6 +36,8 @@ assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.de
 assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
 assert.equal(openclawPluginManifest.configSchema.properties.defaultWorkflowMode.default, "background_pr");
 assert.equal(typeof createRiddleApiClient, "function");
+assert.match(riddleProofChangeParameters.properties.capture_script.description, /Playwright JavaScript/);
+assert.doesNotMatch(riddleProofChangeParameters.properties.capture_script.description, /or instructions/);
 
 const params = {
   repo: "riddledc/example",
@@ -2268,6 +2271,92 @@ assert.equal(referenceSkipInspectResult.request_metadata.requested_reference, "b
 assert.equal(referenceSkipInspectResult.request_metadata.effective_reference, "before");
 assert.equal(referenceSkipInspectResult.request_metadata.prod_reference_skipped, true);
 assert.equal(referenceSkipInspectResult.request_metadata.prod_reference_skip_reason, "prod_url_not_provided");
+
+const auditNoDiffInspectFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-audit-no-diff-"));
+const auditNoDiffInspectStatePath = path.join(auditNoDiffInspectFixture, "riddle-state.json");
+const auditNoDiffInspectWrapperStatePath = path.join(auditNoDiffInspectFixture, "wrapper-state.json");
+writeFileSync(auditNoDiffInspectStatePath, JSON.stringify({
+  branch: "agent/audit-no-diff-fixture",
+  implementation_mode: "none",
+  require_diff: false,
+  allow_code_changes: false,
+  verification_mode: "visual",
+  after_cdn: "https://example.com/audit-after.png",
+  evidence_bundle: {
+    expected_path: "/",
+    verification_mode: "visual",
+    artifact_contract: {
+      required: {
+        baseline_context: false,
+        route_semantics: true,
+        screenshot: true,
+        proof_evidence: false,
+        visual_delta: true,
+      },
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+    },
+    after: {
+      screenshot_url: "https://example.com/audit-after.png",
+      observation: {
+        valid: true,
+        details: {
+          observed_path: "/",
+          headings: ["Home"],
+          buttons: ["Start"],
+          visible_text_sample: "Home Start",
+        },
+      },
+      visual_delta: {
+        status: "not_applicable",
+        passed: null,
+        reason: "Audit/no-diff verification judges current target evidence directly and does not require a before/after implementation delta.",
+      },
+    },
+    semantic_context: {
+      route: {
+        expected_path: "/",
+        after_observed_path: "/",
+      },
+      after: {
+        valid: true,
+        headings: ["Home"],
+        buttons: ["Start"],
+        visible_text_sample: "Home Start",
+      },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/",
+  },
+}, null, 2));
+writeFileSync(auditNoDiffInspectWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_audit_no_diff_visual",
+  status: "blocked",
+  created_at: "2026-04-23T00:00:00.000Z",
+  updated_at: "2026-04-23T00:00:00.000Z",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  request: {
+    repo: "example/site",
+    change_request: "Audit the live site without code changes",
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    engine_state_path: auditNoDiffInspectStatePath,
+  },
+  iterations: 2,
+  events: [],
+}, null, 2));
+const auditNoDiffInspectResult = inspectOpenClawRiddleProof({ state_path: auditNoDiffInspectWrapperStatePath });
+assert.equal(auditNoDiffInspectResult.route_matched, true);
+assert.equal(auditNoDiffInspectResult.visual_delta_required, false);
+assert.equal(auditNoDiffInspectResult.visual_delta_ready, true);
+assert.equal(auditNoDiffInspectResult.ready_to_ship_candidate, true);
+assert.equal(auditNoDiffInspectResult.hard_blockers.some((item) => item.includes("visual_delta")), false);
 
 const autoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-auto-review-"));
 const autoReviewStatePath = path.join(autoReviewFixture, "riddle-state.json");

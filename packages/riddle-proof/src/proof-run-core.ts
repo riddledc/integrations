@@ -572,6 +572,7 @@ function normalizedVerificationMode(state: any = {}) {
 }
 
 export function visualDeltaRequiredForState(state: any = {}) {
+  if (noImplementationModeFor(state) || visualDeltaNotApplicableForNoImplementation(state)) return false;
   const bundle = objectValue(state?.evidence_bundle);
   const contract = objectValue(bundle.artifact_contract);
   const required = objectValue(contract.required);
@@ -586,6 +587,16 @@ export function visualDeltaForState(state: any = {}) {
   if (Object.keys(afterDelta).length) return afterDelta;
   const request = objectValue(state?.proof_assessment_request);
   return objectValue(request.visual_delta);
+}
+
+function visualDeltaNotApplicableForNoImplementation(state: any = {}) {
+  const visualDelta = visualDeltaForState(state);
+  if (String(visualDelta.status || "").trim() !== "not_applicable") return false;
+  const reason = String(visualDelta.reason || "").toLowerCase();
+  return (
+    reason.includes("audit/no-diff") ||
+    reason.includes("does not require a before/after implementation delta")
+  );
 }
 
 export function visualDeltaShipGateReason(state: any = {}) {

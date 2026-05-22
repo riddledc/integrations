@@ -496,6 +496,42 @@ function visualDeltaFromState(fullState: Record<string, unknown>) {
   return recordValue(proofAssessmentRequest?.visual_delta) || null;
 }
 
+function normalizedText(value: unknown) {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function noImplementationModeForCheckpoint(
+  request: RiddleProofRunParams | Record<string, unknown> | null | undefined,
+  fullState: Record<string, unknown>,
+) {
+  const requestRecord = recordValue(request) || {};
+  const mode = normalizedText(
+    requestRecord.mode ||
+    requestRecord.workflow_mode ||
+    fullState.mode ||
+    fullState.workflow_mode,
+  );
+  const implementationMode = normalizedText(requestRecord.implementation_mode || fullState.implementation_mode);
+  const requireDiff = requestRecord.require_diff ?? fullState.require_diff;
+  const allowCodeChanges = requestRecord.allow_code_changes ?? fullState.allow_code_changes;
+  return (
+    mode === "audit" ||
+    mode === "profile" ||
+    implementationMode === "none" ||
+    requireDiff === false ||
+    allowCodeChanges === false
+  );
+}
+
+function visualDeltaNotApplicableForNoImplementation(visualDelta: Record<string, unknown> | null) {
+  if (String(visualDelta?.status || "").trim() !== "not_applicable") return false;
+  const reason = String(visualDelta?.reason || "").toLowerCase();
+  return (
+    reason.includes("audit/no-diff") ||
+    reason.includes("does not require a before/after implementation delta")
+  );
+}
+
 function verificationModeRequiresVisualDelta(value: unknown) {
   const mode = String(value || "proof").trim().toLowerCase();
   return [
@@ -562,7 +598,11 @@ export function buildProofAssessmentCheckpointPacket(input: {
     nonEmptyString(fullState.verification_mode) ||
     nonEmptyString(input.request.verification_mode) ||
     "proof";
+  const noImplementationMode = noImplementationModeForCheckpoint(input.request, fullState);
+  const noImplementationVisualDelta = visualDeltaNotApplicableForNoImplementation(visualDelta);
   const visualDeltaRequired =
+    !noImplementationMode &&
+    !noImplementationVisualDelta &&
     requiredSignals?.visual_delta !== false && (
       requiredSignals?.visual_delta === true ||
       verificationModeRequiresVisualDelta(verificationMode)
@@ -606,7 +646,7 @@ export function buildProofAssessmentCheckpointPacket(input: {
       prod_cdn: fullState.prod_cdn || null,
       after_cdn: fullState.after_cdn || null,
       visual_delta_required: visualDeltaRequired,
-      visual_delta_ready: visualDelta?.status === "measured" && visualDelta?.passed === true,
+      visual_delta_ready: !visualDeltaRequired || (visualDelta?.status === "measured" && visualDelta?.passed === true),
       visual_delta: jsonCloneRecord(visualDelta),
       evidence_issue_code: evidenceIssueCode,
       proof_assessment_request: jsonCloneRecord(proofAssessmentRequest),

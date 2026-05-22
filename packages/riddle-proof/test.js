@@ -18,6 +18,7 @@ import {
   BASIC_GAMEPLAY_ACTION_TYPES,
   BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES,
   compactBasicGameplayText,
+  buildProofAssessmentCheckpointPacket,
   createBasicGameplayCatchRecords,
   createBasicGameplayCatchSummary,
   createDisabledRiddleProofAgentAdapter,
@@ -12700,6 +12701,39 @@ function withSemanticMetricEvidence(state = {}) {
   };
 }
 
+function withAuditNoDiffVisualEvidence(state = {}) {
+  return {
+    ...state,
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    verify_status: "evidence_captured",
+    after_cdn: state.after_cdn || "https://cdn.example.com/audit-after.png",
+    evidence_bundle: {
+      ...(state.evidence_bundle || {}),
+      verification_mode: "visual",
+      artifact_contract: {
+        ...((state.evidence_bundle || {}).artifact_contract || {}),
+        required: {
+          ...(((state.evidence_bundle || {}).artifact_contract || {}).required || {}),
+          screenshot: true,
+          visual_delta: true,
+        },
+      },
+      after: {
+        ...((state.evidence_bundle || {}).after || {}),
+        screenshot_url: state.after_cdn || "https://cdn.example.com/audit-after.png",
+        visual_delta: {
+          status: "not_applicable",
+          passed: null,
+          reason: "Audit/no-diff verification judges current target evidence directly and does not require a before/after implementation delta.",
+        },
+      },
+    },
+  };
+}
+
 function baseState() {
   return {
     version: "riddle-proof.run-state.v1",
@@ -13637,6 +13671,91 @@ assert.equal(metricProofResult.status, "ready_to_ship");
 assert.equal(metricProofResult.raw.ship_held, true);
 const metricProofHarnessState = JSON.parse(readFileSync(metricProofResult.state_path, "utf-8"));
 assert.equal(metricProofHarnessState.events.some((event) => event.kind === "agent.proof_assessment.evidence_recovery_required"), false);
+
+const auditVisualFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-audit-visual-"));
+const auditVisualStatePath = path.join(auditVisualFixture, "riddle-state.json");
+const auditVisualState = withAuditNoDiffVisualEvidence();
+writeFileSync(auditVisualStatePath, JSON.stringify(auditVisualState, null, 2));
+const auditVisualEngineCalls = [];
+const auditVisualResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Audit a current visual target without implementation.",
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    ship_mode: "none",
+    harness_state_path: path.join(auditVisualFixture, "harness-state.json"),
+    engine_state_path: auditVisualStatePath,
+  },
+  max_iterations: 2,
+  engine: {
+    async execute(params) {
+      auditVisualEngineCalls.push(params);
+      if (params.proof_assessment_json) {
+        throw new Error("audit/no-diff visual proof should not be forced through visual delta recovery");
+      }
+      return {
+        ok: false,
+        state_path: auditVisualStatePath,
+        checkpoint: "verify_supervisor_judgment",
+        summary: "Audit proof assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() { throw new Error("recon should not run"); },
+    async authorProofPacket() { throw new Error("author should not run"); },
+    async implementChange() { throw new Error("implement should not run"); },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Audit evidence is ready.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["current target evidence satisfies the audit"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+assert.equal(auditVisualResult.status, "ready_to_ship");
+assert.equal(auditVisualResult.raw.ship_held, true);
+assert.equal(auditVisualEngineCalls.some((call) => call.proof_assessment_json), false);
+const auditVisualHarnessState = JSON.parse(readFileSync(auditVisualResult.state_path, "utf-8"));
+assert.equal(auditVisualHarnessState.events.some((event) => event.kind === "agent.proof_assessment.evidence_recovery_required"), false);
+const auditVisualRunState = createRunState({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Audit a current visual target without implementation.",
+    verification_mode: "visual",
+    implementation_mode: "none",
+    require_diff: false,
+    allow_code_changes: false,
+    harness_state_path: path.join(auditVisualFixture, "checkpoint-harness-state.json"),
+    engine_state_path: auditVisualStatePath,
+  },
+  state_path: path.join(auditVisualFixture, "checkpoint-harness-state.json"),
+});
+const auditVisualCheckpointPacket = buildProofAssessmentCheckpointPacket({
+  request: auditVisualRunState.request,
+  runState: auditVisualRunState,
+  engineResult: {
+    state_path: auditVisualStatePath,
+    checkpoint: "verify_supervisor_judgment",
+    summary: "Audit visual proof needs judgment.",
+  },
+  fullRiddleState: auditVisualState,
+});
+assert.equal(auditVisualCheckpointPacket.kind, "assess_proof");
+assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_required, false);
+assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_ready, true);
+assert.equal(auditVisualCheckpointPacket.evidence_excerpt.evidence_issue_code, undefined);
 
 const noiseFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-engine-noise-"));
 const noiseWorkdir = path.join(noiseFixture, "after");
