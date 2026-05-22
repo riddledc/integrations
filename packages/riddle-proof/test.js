@@ -2316,21 +2316,21 @@ const cliRunProfileServer = createServer((request, response) => {
               label: "setup actions succeeded",
               status: "passed",
               evidence: {
-                action_count: 6,
+                action_count: 7,
                 setup_summary: {
                   viewport_count: 1,
-                  action_count: 6,
+                  action_count: 7,
                   viewports: [{
                     name: "desktop",
                     ok: true,
-                    result_count: 6,
+                    result_count: 7,
                     observed_path: "/semantic-window-eval-receipt-summary",
                     setup_screenshots: ["semantic-state-winning-board"],
-                    action_counts: { click: 4, window_eval: 3 },
+                    action_counts: { click: 4, window_eval: 4 },
                     clicked_total: 4,
-                    window_eval_total: 3,
-                    window_eval_stored_total: 3,
-                    window_eval_captured_total: 3,
+                    window_eval_total: 4,
+                    window_eval_stored_total: 4,
+                    window_eval_captured_total: 4,
                     window_eval_truncated: false,
                     window_eval: [
                       {
@@ -2393,6 +2393,29 @@ const cliRunProfileServer = createServer((request, response) => {
                         ok: true,
                         script_length: 120,
                         return_captured: true,
+                        return_stored_to: "__semantic.newGameWin",
+                        returned: {
+                          ok: true,
+                          slot: "newGameWin",
+                          board: ["X", "X", "X", "", "O", "", "", "", "O"],
+                          hasWinner: true,
+                          winnerText: "WIN X",
+                          newGameVisible: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "newGameWin" },
+                          { label: "hasWinner", path: "hasWinner", exists: true, value: true },
+                          { label: "winnerText", path: "winnerText", exists: true, value: "WIN X" },
+                          { label: "newGameVisible", path: "newGameVisible", exists: true, value: true },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 7,
+                        ok: true,
+                        script_length: 120,
+                        return_captured: true,
                         return_stored_to: "__semantic.winLock",
                         returned: {
                           ok: true,
@@ -2416,7 +2439,7 @@ const cliRunProfileServer = createServer((request, response) => {
                       { ordinal: 1, selector: ".cell", text: "" },
                       { ordinal: 3, selector: ".cell", text: "" },
                       { ordinal: 5, selector: ".cell", text: "" },
-                      { ordinal: 7, selector: ".cell", text: "" },
+                      { ordinal: 8, selector: ".cell", text: "" },
                     ],
                     failed: [],
                   }],
@@ -6246,6 +6269,7 @@ try {
       required_receipts: [
         "invalid move receipt showing the same board and O turn after a repeated occupied-cell click",
         "winner receipt with X count 3, O count 2, top-row win-cell inventory, and Play Again visibility",
+        "winner receipt with New Game visibility",
         "post-winner lock receipt showing an empty cell click cannot mutate the winning board",
         "narrative-only semantic receipt still requiring audit review",
       ],
@@ -6270,7 +6294,7 @@ try {
   assert.equal(JSON.parse(semanticWindowEvalReceiptResult.stdout).status, "passed");
   const semanticWindowEvalReceiptSummaryMarkdown = readFileSync(path.join(semanticWindowEvalReceiptOutputDir, "summary.md"), "utf8");
   assert.match(semanticWindowEvalReceiptSummaryMarkdown, /## Proof Pack/);
-  assert.match(semanticWindowEvalReceiptSummaryMarkdown, /pack completeness: complete \(3 present, 1 manual\)/);
+  assert.match(semanticWindowEvalReceiptSummaryMarkdown, /pack completeness: complete \(4 present, 1 manual\)/);
   assert.match(
     semanticWindowEvalReceiptSummaryMarkdown,
     /present: invalid move receipt showing the same board and O turn after a repeated occupied-cell click \(semantic invalid-state receipt present: unchanged=true, turn evidence present\)/,
@@ -6278,6 +6302,10 @@ try {
   assert.match(
     semanticWindowEvalReceiptSummaryMarkdown,
     /present: winner receipt with X count 3, O count 2, top-row win-cell inventory, and Play Again visibility \(semantic winner receipt present: counts present, win cells present, play-again visible\)/,
+  );
+  assert.match(
+    semanticWindowEvalReceiptSummaryMarkdown,
+    /present: winner receipt with New Game visibility \(semantic winner receipt present: restart\/reset visible\)/,
   );
   assert.match(
     semanticWindowEvalReceiptSummaryMarkdown,

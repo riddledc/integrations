@@ -1604,6 +1604,10 @@ function profileSemanticWinnerReason(receipts: Record<string, unknown>[], text: 
   const asksCounts = text.includes("count");
   const asksWinCells = text.includes("win-cell") || text.includes("winning") || text.includes("inventory") || text.includes("top-row");
   const asksPlayAgain = text.includes("play again") || text.includes("play-again") || text.includes("playagain");
+  const asksNewGame = text.includes("new game") || text.includes("new-game") || text.includes("newgame");
+  const asksNewRound = text.includes("new round") || text.includes("new-round") || text.includes("newround");
+  const asksNewRoute = text.includes("new route") || text.includes("new-route") || text.includes("newroute");
+  const asksRestartReset = text.includes("restart") || text.includes("reset");
   for (const receipt of receipts) {
     if (!profileSemanticReceiptPassed(receipt)) continue;
     const winnerText = (cliString(setupReturnSummaryValue(receipt, ["winnerText", "terminalText", "statusText"])) || "").toLowerCase();
@@ -1625,16 +1629,51 @@ function profileSemanticWinnerReason(receipts: Record<string, unknown>[], text: 
     const hasPlayAgain = profileSemanticTruthyField(receipt, [
       "playAgainVisible",
       "play_again_visible",
+    ]);
+    const hasNewGame = profileSemanticTruthyField(receipt, [
+      "hasNewGame",
+      "newGameVisible",
+      "new_game_visible",
+    ]);
+    const hasNewRound = profileSemanticTruthyField(receipt, [
+      "hasNewRound",
+      "newRoundVisible",
+      "new_round_visible",
+    ]);
+    const hasNewRoute = profileSemanticTruthyField(receipt, [
+      "hasNewRoute",
+      "newRouteVisible",
+      "new_route_visible",
+    ]);
+    const hasRestartReset = profileSemanticTruthyField(receipt, [
       "restartVisible",
+      "restart_visible",
       "resetVisible",
+      "reset_visible",
     ]);
     if (asksCounts && !hasCounts) continue;
     if (asksWinCells && !hasWinCells) continue;
     if (asksPlayAgain && !hasPlayAgain) continue;
+    if (asksNewGame && !hasNewGame) continue;
+    if (asksNewRound && !hasNewRound) continue;
+    if (asksNewRoute && !hasNewRoute) continue;
+    if (asksRestartReset && !(hasPlayAgain || hasNewGame || hasNewRound || hasNewRoute || hasRestartReset)) continue;
+    const hasResetStyleRecovery = hasNewGame || hasNewRound || hasNewRoute || hasRestartReset;
+    const matchedRequestedResetStyle = !asksPlayAgain && (
+      (asksNewGame && hasNewGame)
+      || (asksNewRound && hasNewRound)
+      || (asksNewRoute && hasNewRoute)
+      || (asksRestartReset && hasResetStyleRecovery)
+    );
+    const recoveryControlReason = (matchedRequestedResetStyle || (!hasPlayAgain && hasResetStyleRecovery))
+      ? "restart/reset visible"
+      : hasPlayAgain
+        ? "play-again visible"
+        : "";
     const parts = [
       hasCounts ? "counts present" : "",
       hasWinCells ? "win cells present" : "",
-      hasPlayAgain ? "play-again visible" : "",
+      recoveryControlReason,
     ].filter(Boolean);
     return `semantic winner receipt present${parts.length ? `: ${parts.join(", ")}` : ""}`;
   }
