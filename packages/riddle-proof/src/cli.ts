@@ -2024,6 +2024,17 @@ function profilePackReceiptStatus(
     }
     return profileReceiptSignalStatus(hasTextAbsence, "absence check passed", "absence check missing");
   }
+  if (text.includes("screenshot")) {
+    const needsBoundaryScreenshots = text.includes("each")
+      || text.includes("before and after")
+      || text.includes("state boundary")
+      || text.includes("boundaries");
+    return profileReceiptSignalStatus(
+      needsBoundaryScreenshots ? screenshotCount >= 2 : screenshotCount > 0,
+      needsBoundaryScreenshots ? "multiple screenshots present" : "screenshot evidence present",
+      needsBoundaryScreenshots ? "multiple screenshots missing" : "screenshot evidence missing",
+    );
+  }
   if (
     text.includes("generated-output")
     || text.includes("generated output")
@@ -2191,14 +2202,6 @@ function profilePackReceiptStatus(
       hasCleanupBoundaryAffordanceReceipt,
       "visible cleanup affordance receipt present",
       "visible cleanup affordance receipt missing",
-    );
-  }
-  if (text.includes("screenshot")) {
-    const needsBoundaryScreenshots = text.includes("each") || text.includes("before and after") || text.includes("state boundary");
-    return profileReceiptSignalStatus(
-      needsBoundaryScreenshots ? screenshotCount >= 2 : screenshotCount > 0,
-      needsBoundaryScreenshots ? "multiple screenshots present" : "screenshot evidence present",
-      needsBoundaryScreenshots ? "multiple screenshots missing" : "screenshot evidence missing",
     );
   }
   if (
