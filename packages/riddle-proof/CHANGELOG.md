@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.226
+
+### Patch Changes
+
+- 3a9dad9: Harden audit/no-diff setup arg handling, static visual audit readiness, explicit max iteration limits, and no-diff checkpoint continuations.
+
 ## 0.7.225
 
 ### Patch Changes
