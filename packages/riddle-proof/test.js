@@ -6248,7 +6248,7 @@ try {
   );
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
-    /present: screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries \(screenshot evidence present\)/,
+    /present: screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries \(multiple screenshots present\)/,
   );
 
   const semanticWindowEvalReceiptProfileFile = path.join(riddlePreviewDir, "cli-semantic-window-eval-receipt-summary.json");
@@ -7273,6 +7273,7 @@ try {
       required_receipts: [
         "declared state contract",
         "generated-output mutation/final-state receipt",
+        "screenshots at generated output result and final boundaries",
       ],
     },
   }));
@@ -7295,8 +7296,9 @@ try {
   assert.equal(JSON.parse(workflowGeneratedOutputResult.stdout).status, "passed");
   const workflowGeneratedOutputSummaryMarkdown = readFileSync(path.join(workflowGeneratedOutputOutputDir, "summary.md"), "utf8");
   assert.match(workflowGeneratedOutputSummaryMarkdown, /## Proof Pack/);
-  assert.match(workflowGeneratedOutputSummaryMarkdown, /pack completeness: complete \(2 present\)/);
+  assert.match(workflowGeneratedOutputSummaryMarkdown, /pack completeness: complete \(3 present\)/);
   assert.match(workflowGeneratedOutputSummaryMarkdown, /present: generated-output mutation\/final-state receipt \(generated-output mutation receipt present\)/);
+  assert.match(workflowGeneratedOutputSummaryMarkdown, /present: screenshots at generated output result and final boundaries \(multiple screenshots present\)/);
 
   const workflowGeneratedOutputStaleProfileFile = path.join(riddlePreviewDir, "cli-workflow-generated-output-stale-summary.json");
   const workflowGeneratedOutputStaleOutputDir = path.join(riddlePreviewDir, "cli-workflow-generated-output-stale-summary-output");
