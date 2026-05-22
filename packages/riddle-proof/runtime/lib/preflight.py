@@ -24,6 +24,10 @@ def truthy(value):
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
 
 
+def explicitly_false(value):
+    return value is False or str(value or '').strip().lower() in ('false', '0', 'no', 'off')
+
+
 def parse_json_arg(key, expected, default):
     raw = s.get(key)
     if raw in (None, ''):
@@ -70,6 +74,12 @@ reference_note = ''
 verification_mode = (s.get('verification_mode') or 'proof').strip() or 'proof'
 s['verification_mode'] = verification_mode
 s['success_criteria'] = (s.get('success_criteria') or '').strip()
+implementation_mode = (s.get('implementation_mode') or '').strip().lower()
+s['implementation_mode'] = implementation_mode or s.get('implementation_mode') or ''
+if explicitly_false(s.get('require_diff')):
+    s['require_diff'] = False
+if explicitly_false(s.get('allow_code_changes')):
+    s['allow_code_changes'] = False
 raw_assertions = (s.get('assertions_json') or '').strip()
 allow_static_preview_fallback = str(s.get('allow_static_preview_fallback') or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
 s['allow_static_preview_fallback'] = allow_static_preview_fallback
@@ -101,6 +111,28 @@ s['reference_resolution'] = {
     'prod_reference_skipped': False,
     'prod_reference_skip_reason': '',
 }
+no_implementation_mode = (
+    implementation_mode in ('none', 'audit', 'no_implementation', 'no-implementation')
+    or explicitly_false(s.get('require_diff'))
+    or explicitly_false(s.get('allow_code_changes'))
+)
+remote_audit = (not (s.get('repo') or '').strip()) and prod_url_present and no_implementation_mode
+if remote_audit:
+    s['remote_audit'] = True
+    s['implementation_mode'] = s.get('implementation_mode') or 'none'
+    s['require_diff'] = False
+    s['allow_code_changes'] = False
+    if reference != 'prod':
+        s['reference_input_ignored'] = reference
+        reference = 'prod'
+        s['reference'] = reference
+        s['reference_resolution'].update({
+            'effective_reference': reference,
+            'prod_reference_requested': True,
+            'prod_reference_skipped': False,
+            'prod_reference_skip_reason': '',
+            'note': 'repo not provided for audit/no-diff prod_url run; using reference=prod and skipping repo worktrees.',
+        })
 
 # Infer a reasonable commit title during setup instead of forcing the caller to
 # fill boilerplate that can be derived from the requested change.
@@ -159,9 +191,11 @@ if s['target_branch'].startswith('riddle-proof/'):
 
 # Validate required fields (common)
 missing = []
-for k in ('repo', 'change_request', 'commit_message'):
+for k in ('change_request', 'commit_message'):
     if not s.get(k):
         missing.append(k)
+if not s.get('repo') and not remote_audit:
+    missing.append('repo')
 
 # prod_url required only once prod is actively part of the comparison
 if reference in ('prod', 'both') and not s.get('prod_url', '').strip():
@@ -175,6 +209,8 @@ if mode == 'server':
 
 # Derived fields
 repo_short = s['repo'].split('/')[-1] if s.get('repo') else ''
+if repo_short and (repo_short == s.get('repo') or s.get('repo', '').startswith(('/', './', '../', '~'))):
+    repo_short = os.path.basename(os.path.abspath(os.path.expanduser(s.get('repo', ''))))
 s['repo_short'] = repo_short
 base_branch = (s.get('base_branch') or 'main').strip() or 'main'
 s['base_branch'] = base_branch

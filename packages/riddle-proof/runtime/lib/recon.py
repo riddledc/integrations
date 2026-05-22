@@ -46,6 +46,23 @@ s = load_state()
 after_dir = (s.get('after_worktree') or '').strip()
 before_dir = (s.get('before_worktree') or '').strip()
 if not after_dir or not os.path.exists(after_dir):
+    if s.get('remote_audit'):
+        s['workspace_ready'] = True
+        s['recon_status'] = 'ready_for_proof_plan'
+        s['recon_summary'] = s.get('recon_summary') or 'Remote audit/no-diff run skips repo-backed recon.'
+        s['recon_results'] = s.get('recon_results') or {
+            'status': 'ready_for_proof_plan',
+            'mode': 'remote_audit',
+            'hypothesis': s.get('recon_hypothesis') or {},
+            'baselines': {},
+            'attempt_history': [],
+            'route_hints': [],
+            'keyword_hits': [],
+            'max_attempts': 0,
+        }
+        save_state(s)
+        print('Remote audit/no-diff recon: repo worktree not required.')
+        sys.exit(0)
     raise SystemExit('after_worktree not found. Run setup first.')
 
 
