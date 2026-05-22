@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.126
+
+### Patch Changes
+
+- 58742ac: Treat audit/no-diff visual proof runs as current-target reviews instead of requiring measured before/after visual delta, and clarify that capture_script must be Playwright JavaScript.
+- Updated dependencies [58742ac]
+  - @riddledc/riddle-proof@0.7.225
+
 ## 0.4.125
 
 ### Patch Changes

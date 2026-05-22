@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.225
+
+### Patch Changes
+
+- 58742ac: Treat audit/no-diff visual proof runs as current-target reviews instead of requiring measured before/after visual delta, and clarify that capture_script must be Playwright JavaScript.
+
 ## 0.7.224
 
 ### Patch Changes
