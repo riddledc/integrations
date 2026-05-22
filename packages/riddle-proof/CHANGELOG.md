@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.7.224
+
+### Patch Changes
+
+- 2bfc258: Improve Riddle Proof runtime handling for audit/no-diff proof runs, local repo paths, dependency staging, and bounded wait polling.
+
 ## 0.7.223
 
 ### Patch Changes
