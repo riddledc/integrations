@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.125
+
+### Patch Changes
+
+- 2bfc258: Improve Riddle Proof runtime handling for audit/no-diff proof runs, local repo paths, dependency staging, and bounded wait polling.
+- Updated dependencies [2bfc258]
+  - @riddledc/riddle-proof@0.7.224
+
 ## 0.4.124
 
 ### Patch Changes
