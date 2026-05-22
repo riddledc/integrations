@@ -2106,14 +2106,14 @@ const cliRunProfileServer = createServer((request, response) => {
               label: "setup actions succeeded",
               status: "passed",
               evidence: {
-                action_count: 8,
+                action_count: 9,
                 setup_summary: {
                   viewport_count: 1,
-                  action_count: 8,
+                  action_count: 9,
                   viewports: [{
                     name: "desktop",
                     ok: true,
-                    result_count: 8,
+                    result_count: 9,
                     observed_path: "/sequence-memory-receipt-summary",
                     setup_screenshots: [
                       "sequence-ready",
@@ -2121,11 +2121,11 @@ const cliRunProfileServer = createServer((request, response) => {
                       "sequence-success",
                       "sequence-restart-ready",
                     ],
-                    action_counts: { click: 5, window_eval: 3 },
+                    action_counts: { click: 5, window_eval: 4 },
                     clicked_total: 5,
-                    window_eval_total: 3,
-                    window_eval_stored_total: 3,
-                    window_eval_captured_total: 3,
+                    window_eval_total: 4,
+                    window_eval_stored_total: 4,
+                    window_eval_captured_total: 4,
                     window_eval_truncated: false,
                     window_eval: [
                       {
@@ -2209,6 +2209,32 @@ const cliRunProfileServer = createServer((request, response) => {
                           { label: "best", path: "best", exists: true, value: 1 },
                           { label: "shortDisabled", path: "shortDisabled", exists: true, value: false },
                           { label: "longDisabled", path: "longDisabled", exists: true, value: false },
+                        ],
+                        reason: null,
+                      },
+                      {
+                        ordinal: 9,
+                        ok: true,
+                        script_length: 220,
+                        return_captured: true,
+                        return_stored_to: "__sequence.reset",
+                        returned: {
+                          ok: true,
+                          slot: "reset",
+                          status: "ready",
+                          hiddenCount: 16,
+                          moves: 0,
+                          hasWinner: false,
+                          controlsEnabled: true,
+                        },
+                        return_summary: [
+                          { label: "ok", path: "ok", exists: true, value: true },
+                          { label: "slot", path: "slot", exists: true, value: "reset" },
+                          { label: "status", path: "status", exists: true, value: "ready" },
+                          { label: "hiddenCount", path: "hiddenCount", exists: true, value: 16 },
+                          { label: "moves", path: "moves", exists: true, value: 0 },
+                          { label: "hasWinner", path: "hasWinner", exists: true, value: false },
+                          { label: "controlsEnabled", path: "controlsEnabled", exists: true, value: true },
                         ],
                         reason: null,
                       },
@@ -6156,6 +6182,7 @@ try {
         "visible UI input receipt for the known short-long-short level-one sequence",
         "state-growth receipt with streak=1 and best=1 after the correct sequence",
         "restart receipt with level=1, streak=0, best=1, and input controls re-enabled",
+        "restart receipt with hiddenCount=16, moves=0, no winner, and controls enabled after Play Again",
         "screenshots at ready, input-ready, success, controlled-failure, restart-ready, and home-after-exit boundaries",
       ],
     },
@@ -6179,7 +6206,7 @@ try {
   assert.equal(JSON.parse(sequenceMemoryReceiptResult.stdout).status, "passed");
   const sequenceMemoryReceiptSummaryMarkdown = readFileSync(path.join(sequenceMemoryReceiptOutputDir, "summary.md"), "utf8");
   assert.match(sequenceMemoryReceiptSummaryMarkdown, /## Proof Pack/);
-  assert.match(sequenceMemoryReceiptSummaryMarkdown, /pack completeness: complete \(4 present\)/);
+  assert.match(sequenceMemoryReceiptSummaryMarkdown, /pack completeness: complete \(5 present\)/);
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
     /present: visible UI input receipt for the known short-long-short level-one sequence \(sequence input receipt present\)/,
@@ -6191,6 +6218,10 @@ try {
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
     /present: restart receipt with level=1, streak=0, best=1, and input controls re-enabled \(restart-ready receipt present\)/,
+  );
+  assert.match(
+    sequenceMemoryReceiptSummaryMarkdown,
+    /present: restart receipt with hiddenCount=16, moves=0, no winner, and controls enabled after Play Again \(restart-ready receipt present\)/,
   );
   assert.match(
     sequenceMemoryReceiptSummaryMarkdown,
