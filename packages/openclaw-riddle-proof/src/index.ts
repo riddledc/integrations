@@ -422,8 +422,13 @@ function normalizeDefaultMaxIterations(value: unknown) {
   return Math.max(MIN_DEFAULT_MAX_ITERATIONS, Math.trunc(value));
 }
 
+function normalizeRequestedMaxIterations(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return Math.max(1, Math.trunc(value));
+}
+
 function effectiveMaxIterations(request: RiddleProofRunParams, config: OpenClawRiddleProofRuntimeConfig) {
-  return normalizeDefaultMaxIterations(request.max_iterations ?? config.defaultMaxIterations);
+  return normalizeRequestedMaxIterations(request.max_iterations) ?? normalizeDefaultMaxIterations(config.defaultMaxIterations);
 }
 
 function effectiveHarnessConfig(config: OpenClawRiddleProofRuntimeConfig) {
@@ -3714,6 +3719,10 @@ function checkpointResponseFromReviewParams(
 ): RiddleProofCheckpointResponse | null {
   const packet = state.checkpoint_packet;
   if (!packet || params.decision === "continue_checkpoint") return null;
+  const allowedDecisions = Array.isArray(packet.allowed_decisions)
+    ? packet.allowed_decisions.filter((item): item is string => typeof item === "string")
+    : [];
+  if (allowedDecisions.length && !allowedDecisions.includes(params.decision)) return null;
   const stage = params.continue_with_stage || params.recommended_stage || stageForReviewDecision(params.decision) || undefined;
   return {
     version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
@@ -3922,6 +3931,11 @@ export async function submitOpenClawRiddleProofReview(
 
   const currentCheckpoint = state.last_checkpoint || state.blocker?.checkpoint || null;
   const currentBlockerCode = state.blocker?.code || null;
+  const engineState = readJsonRecord(engineStatePath) || {};
+  const inspection = buildProofInspection(state, engineState, currentCheckpoint);
+  const reviewReadyCandidate =
+    params.decision === "ready_to_ship" &&
+    inspection.ready_to_ship_candidate === true;
   const explicitStage = params.continue_with_stage || params.recommended_stage || null;
   const inferredStage = stageForReviewDecision(params.decision);
   const stage = explicitStage || inferredStage || null;
@@ -3936,7 +3950,7 @@ export async function submitOpenClawRiddleProofReview(
   });
   const forwardProofAssessment =
     params.decision !== "continue_checkpoint" &&
-    proofAssessmentAppliesToCheckpoint(currentCheckpoint, currentBlockerCode);
+    (proofAssessmentAppliesToCheckpoint(currentCheckpoint, currentBlockerCode) || reviewReadyCandidate);
   const resumeParams: RiddleProofWorkflowParams = {
     action: "run",
     state_path: engineStatePath,

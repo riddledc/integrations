@@ -562,6 +562,47 @@ def run_verify_quality_ignores_proof_telemetry_console_text():
     assert missing_query_quality['valid'] is False
     assert 'wrong route' in missing_query_quality['reason']
 
+    static_audit_payload = {
+        'bodyTextLength': 61,
+        'visibleTextSample': 'Riddle static preview smoke Static preview marker is visible.',
+        'interactiveElements': 0,
+        'visibleInteractiveElements': 0,
+        'pathname': '/s/ps_b7b5f0dc/',
+        'title': 'Riddle Preview Smoke',
+        'headings': ['Riddle static preview smoke'],
+        'buttons': [],
+        'links': [],
+        'canvasCount': 0,
+        'largeVisibleElements': [{'tag': 'h1', 'text': 'Riddle static preview smoke', 'area': 17208}],
+    }
+    static_audit_evidence = {
+        'version': 'riddle-proof.static-smoke.v4',
+        'proofReady': True,
+        'staticAuditReady': True,
+        'interactionExpected': False,
+        'interactionNotRequired': True,
+        'zeroInteractiveElementsExpected': True,
+        'routeMatches': True,
+        'titleMatches': True,
+        'headingMatches': True,
+        'markerMatches': True,
+        'normalizedCopyVisible': True,
+        'noConsoleErrors': True,
+        'noPageErrors': True,
+    }
+    static_audit_quality = namespace['evaluate_capture_quality']({
+        'ok': True,
+        'screenshots': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/static-after.png'}],
+        'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/static-after.png'}],
+        'console': [
+            'RIDDLE_PROOF_STATE:' + json.dumps(static_audit_payload),
+            'RIDDLE_PROOF_EVIDENCE:' + json.dumps(static_audit_evidence),
+        ],
+    }, '/s/ps_b7b5f0dc/', 'visual')
+    assert static_audit_quality['valid'] is True, static_audit_quality
+    assert static_audit_quality['details']['interactive_ready'] is True
+    assert static_audit_quality['details']['static_audit_readiness_override'] is True
+
     strong_delta = namespace['extract_visual_delta']({
         'ok': True,
         'result': {

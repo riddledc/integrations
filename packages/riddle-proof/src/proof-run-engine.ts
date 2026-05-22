@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   WORKFLOW_STAGE_ORDER,
@@ -773,6 +773,10 @@ export async function executeWorkflow(
     const timer = beginRuntimeStep(config.statePath, action, step, stepWorkflowFile);
     let output: any;
     try {
+      if (step === "setup") {
+        mkdirSync(path.dirname(config.argsPath), { recursive: true });
+        writeFileSync(config.argsPath, JSON.stringify(args, null, 2));
+      }
       output = JSON.parse(
         execFileSync(lobsterCommand, [...lobsterPrefix, "run", "--file", stepWorkflowFile, "--args-json", JSON.stringify(args)], {
           encoding: "utf-8",
