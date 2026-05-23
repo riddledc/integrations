@@ -1,0 +1,47 @@
+{
+  "name": "@riddledc/riddle-proof-packs",
+  "version": "0.1.2",
+  "description": "Reusable proof pack profiles and metadata helpers for the Riddle proof framework.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/riddle-proof-packs"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "packs",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts --out-dir dist --clean",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js"
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}

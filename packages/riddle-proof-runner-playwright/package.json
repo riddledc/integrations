@@ -1,0 +1,58 @@
+{
+  "name": "@riddledc/riddle-proof-runner-playwright",
+  "version": "0.3.0",
+  "description": "Local Playwright runner for Riddle Proof profiles.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/riddle-proof-runner-playwright"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "bin"
+  ],
+  "bin": {
+    "riddle-proof-playwright": "./bin/riddle-proof-playwright"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "playwright": "^1.50.0"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/cli.ts src/runProfileLocal.ts src/browser.ts src/executeSetupActions.ts src/evaluateChecks.ts src/artifacts/localArtifactStore.ts src/artifacts/artifactManifest.ts --format cjs,esm --dts --out-dir dist --clean",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js"
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "terminal-result-partial-evidence",
+  "target": {
+    "route": "/playground",
+    "viewports": [
+      { "name": "mobile", "width": 390, "height": 844 },
+      { "name": "tablet", "width": 820, "height": 1180 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "timeout_sec": 300,
+    "wait_ms": 800,
+    "network_mocks": [
+      {
+        "label": "api-console-sync-terminal-error-with-partial-evidence",
+        "url": "**/v1/run",
+        "method": "POST",
+        "status": 200,
+        "content_type": "application/json",
+        "required_hit_count": 3,
+        "max_hit_count": 3,
+        "capture_request_body": true,
+        "request_body_contains": [
+          "\"sync\":true",
+          "\"include\":[\"screenshots\",\"console\",\"har\"]",
+          "terminal-result-template-screenshot"
+        ],
+        "json": {
+          "status": "completed_error",
+          "success": false,
+          "job_id": "job_terminal_result_template",
+          "error": {
+            "message": "Synthetic terminal result template failed after collecting partial evidence"
+          },
+          "screenshots": [
+            {
+              "name": "terminal-result-template-screenshot",
+              "url": "https://cdn.example.invalid/terminal-result-template-screenshot.png"
+            }
+          ],
+          "console": [
+            {
+              "type": "log",
+              "text": "terminal result template collected console evidence"
+            }
+          ],
+          "har": {
+            "log": {
+              "entries": [
+                {
+                  "request": {
+                    "method": "GET",
+                    "url": "https://example.com/terminal-result-template-resource"
+                  },
+                  "response": {
+                    "status": 500
+                  }
+                }
+              ]
+            }
+          },
+          "billing": {
+            "actual_seconds": 30,
+            "cost_usd": 0.004
+          }
+        }
+      }
+    ],
+    "setup_actions": [
+      { "type": "clear_storage", "storage": "both", "reload": true },
+      { "type": "wait_for_selector", "selector": "[data-testid='api-console-page']", "timeout_ms": 30000 },
+      { "type": "fill", "selector": "[data-testid='api-console-json']", "value": "{ \"steps\": [{ \"screenshot\": \"terminal-result-template-screenshot\" }], \"sync\": true, \"include\": [\"screenshots\", \"console\", \"har\"] }" },
+      { "type": "clear_console" },
+      { "type": "screenshot", "label": "terminal-result-before-submit" },
+      { "type": "click", "selector": "[data-testid='run-api-console']", "text": "Run" },
+      { "type": "wait_for_text", "selector": "body", "text": "Synthetic terminal result template failed after collecting partial evidence", "timeout_ms": 30000 },
+      { "type": "wait_for_text", "selector": "body", "text": "partial results available", "timeout_ms": 30000 },
+      { "type": "assert_text_visible", "selector": "body", "text": "terminal-result-template-screenshot", "timeout_ms": 5000 },
+      { "type": "assert_text_visible", "selector": "body", "text": "terminal result template collected console evidence", "timeout_ms": 5000 },
+      { "type": "assert_text_visible", "selector": "body", "text": "terminal-result-template-resource", "timeout_ms": 5000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "Success", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "No screenshots captured", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "No console output captured", "timeout_ms": 1000 },
+      { "type": "assert_text_absent", "selector": "body", "text": "No network requests captured", "timeout_ms": 1000 },
+      { "type": "screenshot", "label": "terminal-result-partial-evidence-expanded" }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/playground" },
+    { "type": "selector_visible", "selector": "[data-testid='api-console-page']" },
+    { "type": "text_visible", "text": "Error" },
+    { "type": "text_visible", "text": "Synthetic terminal result template failed after collecting partial evidence" },
+    { "type": "text_visible", "text": "partial results available" },
+    { "type": "selector_text_visible", "selector": "[data-testid='api-console-screenshots']", "text": "terminal-result-template-screenshot" },
+    { "type": "selector_text_visible", "selector": "[data-testid='api-console-output']", "text": "terminal result template collected console evidence" },
+    { "type": "selector_text_visible", "selector": "[data-testid='api-console-har']", "text": "terminal-result-template-resource" },
+    { "type": "text_absent", "text": "Success" },
+    { "type": "text_absent", "text": "No screenshots captured" },
+    { "type": "text_absent", "text": "No console output captured" },
+    { "type": "text_absent", "text": "No network requests captured" },
+    { "type": "text_absent", "text": "Application error" },
+    { "type": "selector_count_equals", "selector": "[data-testid='api-console-error-indicator']", "expected_count": 1 },
+    { "type": "selector_count_equals", "selector": "[data-testid='api-console-timeout-indicator']", "expected_count": 0 },
+    { "type": "selector_count_equals", "selector": "[data-testid='api-console-success-indicator']", "expected_count": 0 },
+    { "type": "selector_count_equals", "selector": "[data-testid='api-console-screenshot-item']", "expected_count": 1 },
+    { "type": "selector_count_at_least", "selector": "[data-testid='api-console-output']", "min_count": 1 },
+    { "type": "selector_count_at_least", "selector": "[data-testid='api-console-har']", "min_count": 1 },
+    { "type": "no_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_fatal_console_errors" },
+    { "type": "no_console_warnings" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "purpose": "Template for API-console terminal result honesty: return a terminal error or timeout JSON response with partial screenshot, console, and HAR evidence; require visible status honesty, partial-results copy, each artifact class, correct success/error/timeout selector polarity, no contradictory empty-evidence copy, and clean browser evidence. For timeout variants, change the mocked status and visible status checks to the product's timeout indicator while preserving the same partial-evidence contract."
+  }
+}
