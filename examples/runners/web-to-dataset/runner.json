@@ -1,0 +1,28 @@
+{
+  "name": "web-to-dataset-runner",
+  "version": "1.0.0",
+  "entry": "bin/index.mjs",
+  "task_types": ["web_to_dataset"],
+  "env": {
+    "S3_BUCKET": "riddle-job-artifacts",
+    "ROBOTS_CACHE_DIR": "/tmp/robots-cache"
+  },
+  "capabilities": {
+    "web_to_dataset": {
+      "actions": ["crawl", "scrape", "map"],
+      "formats": ["jsonl", "json", "csv", "zip"],
+      "max_pages": 1000,
+      "js_rendering": true,
+      "timeout_sec": 600
+    }
+  },
+  "resource_requirements": {
+    "cpu_cores": 2,
+    "mem_gb": 4,
+    "timeout_sec": 600
+  },
+  "platform": {
+    "os": "linux",
+    "arch": "x64"
+  }
+}

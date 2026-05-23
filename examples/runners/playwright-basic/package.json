@@ -1,0 +1,16 @@
+{
+  "name": "playwright-basic-runner",
+  "version": "1.0.0",
+  "description": "Reference Playwright runner example for Riddle execution jobs.",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/smoke.js",
+    "start": "node bin/index.mjs"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.40.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
