@@ -28,7 +28,7 @@ async function main() {
   await test(
     "scrape httpbin.org/html",
     {
-      type: "web-to-dataset",
+      type: "web_to_dataset",
       action: "scrape",
       io: { url: "https://httpbin.org/html" },
     },
@@ -43,7 +43,7 @@ async function main() {
   await test(
     "map httpbin.org (max 5 pages)",
     {
-      type: "web-to-dataset",
+      type: "web_to_dataset",
       action: "map",
       io: { url: "https://httpbin.org", max_pages: 5 },
     },
@@ -57,7 +57,7 @@ async function main() {
   await test(
     "bad URL returns error",
     {
-      type: "web-to-dataset",
+      type: "web_to_dataset",
       action: "scrape",
       io: { url: "not-a-url" },
     },
@@ -71,7 +71,7 @@ async function main() {
   await test(
     "unknown action returns error",
     {
-      type: "web-to-dataset",
+      type: "web_to_dataset",
       action: "nonexistent",
       io: { url: "https://example.com" },
     },
@@ -80,7 +80,22 @@ async function main() {
     }
   );
 
-  // Test 5: wrong task type
+  // Test 5: legacy dashed task type is still accepted as an alias
+  await test(
+    "legacy web-to-dataset type is accepted for compatibility",
+    {
+      type: "web-to-dataset",
+      action: "scrape",
+      io: { url: "https://httpbin.org/html" },
+    },
+    (r) => {
+      assert(r.success, `Expected success, got error: ${r.error}`);
+      assert(r.data.content_text.length > 0, "Expected non-empty content");
+      assert(r.data.title, "Expected a title");
+    }
+  );
+
+  // Test 6: wrong task type
   await test(
     "wrong task type returns error",
     {

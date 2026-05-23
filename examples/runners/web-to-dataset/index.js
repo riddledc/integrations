@@ -10,6 +10,8 @@ const HANDLERS = {
 };
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const CANONICAL_TASK_TYPE = "web_to_dataset";
+const LEGACY_TASK_TYPES = new Set(["web-to-dataset"]);
 
 /**
  * Main task handler. Receives a task object from SQS and returns a result.
@@ -21,7 +23,7 @@ async function handleTask(task) {
   if (!task || typeof task !== "object") {
     return { success: false, data: null, error: "Invalid task: expected an object" };
   }
-  if (task.type !== "web-to-dataset") {
+  if (task.type !== CANONICAL_TASK_TYPE && !LEGACY_TASK_TYPES.has(task.type)) {
     return { success: false, data: null, error: `Unknown task type: ${task.type}` };
   }
   if (!task.action || !HANDLERS[task.action]) {
