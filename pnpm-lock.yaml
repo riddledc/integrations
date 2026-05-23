@@ -70,6 +70,22 @@ importers:
         version: 5.9.3
 
   packages/riddle-proof:
+    dependencies:
+      '@riddledc/riddle-proof-app-contract':
+        specifier: workspace:^
+        version: link:../riddle-proof-app-contract
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.7
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(typescript@5.9.3)
+      typescript:
+        specifier: ^5.4.5
+        version: 5.9.3
+
+  packages/riddle-proof-app-contract:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -97,7 +113,7 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
-  packages/riddle-proof-app-contract:
+  packages/riddle-proof-riddle-client:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -117,18 +133,6 @@ importers:
       playwright:
         specifier: ^1.50.0
         version: 1.60.0
-    devDependencies:
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.7
-      tsup:
-        specifier: ^8.0.1
-        version: 8.5.1(typescript@5.9.3)
-      typescript:
-        specifier: ^5.4.5
-        version: 5.9.3
-
-  packages/riddle-proof-riddle-client:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

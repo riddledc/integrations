@@ -1,5 +1,3 @@
-export const RIDDLE_PROOF_APP_CONTRACT_VERSION = "riddle-proof.app-contract.v1" as const;
-
 export type RiddleProofContractValue =
   | string
   | number
@@ -10,6 +8,12 @@ export type RiddleProofContractValue =
   | unknown[];
 
 export type RiddleProofAppContractState = Record<string, unknown>;
+
+export interface RiddleProofCaptureDiagnostic {
+  version: "riddle-proof.capture-diagnostic.v1";
+  route?: string;
+  state?: RiddleProofAppContractState;
+}
 
 export interface RiddleProofAppContractPayload {
   version: string;
@@ -23,6 +27,7 @@ export interface RiddleProofAppContractInstallOptions {
   globalName?: string;
   force?: boolean;
   redactedPaths?: readonly string[];
+  includeDefaultSensitivePaths?: boolean;
 }
 
 export interface InstallRiddleProofContractInput {
@@ -34,17 +39,22 @@ export interface InstallRiddleProofContractInput {
   globalName?: string;
   force?: boolean;
   redactedPaths?: readonly string[];
+  includeDefaultSensitivePaths?: boolean;
 }
+
+export interface RiddleProofContractCaptureDiagnostic extends RiddleProofCaptureDiagnostic {}
 
 export interface RiddleProofContractDefinition {
   version: string;
   route?: string;
   user?: string;
-  state?: RiddleProofAppContractState;
   metadata?: Record<string, unknown>;
+  getState: () => RiddleProofAppContractState | undefined;
+  captureDiagnostic: () => RiddleProofCaptureDiagnostic;
 }
 
 export interface RiddleProofRedactionOptions {
   sensitivePaths?: readonly string[];
   maxStringLength?: number;
+  includeDefaultSensitivePaths?: boolean;
 }

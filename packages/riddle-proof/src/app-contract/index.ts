@@ -1,2 +1,1 @@
-export * from "./types";
-export * from "./contract";
+export * from "@riddledc/riddle-proof-app-contract";

@@ -1,4 +1,6 @@
 {
+  "schema": "riddle.runner.manifest@1",
+  "key": "web-to-dataset-runner@1",
   "name": "web-to-dataset-runner",
   "version": "1.0.0",
   "entry": "bin/index.mjs",

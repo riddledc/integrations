@@ -54,11 +54,11 @@
   "metadata": {
     "pack_id": "auth_smoke",
     "pack_public_name": "Auth Smoke Pack",
-    "purpose": "Template for authenticated smoke verification and session boundary sanity checks.",
+    "purpose": "Template for baseline page smoke checks where the entry route is publicly reachable.",
     "required_receipts": [
-      "authenticated entry page route or gate loads",
-      "post-auth route assertion",
-      "redirect and session cookie hygiene",
+      "entry/home route is reachable",
+      "visible route baseline content",
+      "overflow and console noise are clean",
       "no-console-error baseline"
     ]
   }

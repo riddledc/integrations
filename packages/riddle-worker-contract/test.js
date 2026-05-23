@@ -1,7 +1,6 @@
 import fs from "node:fs";
-import {
-  isRiddleWorkerJobV2,
-} from "./dist/job-v2.js";
+import path from "node:path";
+import { isRiddleRunnerManifest, isRiddleWorkerJobV2 } from "./dist/index.js";
 
 const sampleJob = {
   job_id: "job_abc123",
@@ -37,5 +36,32 @@ if (isRiddleWorkerJobV2(invalid)) {
   throw new Error("invalid task type passed contract validation");
 }
 
+const examplesBase = path.resolve(process.cwd(), "../../examples/runners");
+const runnerPaths = ["web-to-dataset/runner.json", "playwright-basic/runner.json"].map((relative) => path.join(examplesBase, relative));
+
+const exampleTaskTypes = new Set();
+
+for (const runnerPath of runnerPaths) {
+  const payload = JSON.parse(fs.readFileSync(runnerPath, "utf8"));
+  if (!isRiddleRunnerManifest(payload)) {
+    throw new Error(`invalid runner manifest: ${runnerPath}`);
+  }
+  for (const taskType of payload.task_types ?? []) {
+    exampleTaskTypes.add(taskType);
+  }
+}
+
+for (const taskType of exampleTaskTypes) {
+  const runnerBackedJob = {
+    ...sampleJob,
+    task: {
+      ...sampleJob.task,
+      type: taskType,
+    },
+  };
+  if (!isRiddleWorkerJobV2(runnerBackedJob)) {
+    throw new Error(`task type ${taskType} is not accepted by riddle worker contract`);
+  }
+}
+
 console.log("riddle-worker-contract smoke tests passed");
-fs.writeFileSync("/tmp/riddle-worker-contract-test.json", JSON.stringify(sampleJob, null, 2));

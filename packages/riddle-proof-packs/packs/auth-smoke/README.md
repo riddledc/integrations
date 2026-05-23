@@ -6,7 +6,7 @@ Auth Smoke proof pack profile. Include this profile JSON directly in any profile
 
 - evidence_role: `current_target`
 - atomic claim
-  - claim: The auth entry/home route is reachable and stable under a basic smoke configuration.
+- claim: The entry/home route is reachable and stable under a basic smoke configuration.
   - target: `/` on the configured target URL.
   - setup/actions: minimal route wait and baseline setup to capture DOM and viewport evidence.
   - evidence: route/text assertions plus `body`, overflow, and no-fatal console checks.

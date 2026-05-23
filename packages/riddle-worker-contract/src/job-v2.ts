@@ -11,7 +11,7 @@ export interface RiddleWorkerJobV2 {
 }
 
 export interface RiddleWorkerTask {
-  type: "wasm_component" | "playwright" | "container" | "tfjs";
+  type: RiddleWorkerTaskType;
   artifact_cid: RiddleCid;
   entry?: string;
   runtime_requirements: RiddleTaskRuntimeRequirements;
@@ -22,6 +22,8 @@ export interface RiddleWorkerTask {
   action?: string;
   options?: Record<string, unknown>;
 }
+
+export type RiddleWorkerTaskType = "wasm_component" | "playwright" | "container" | "tfjs" | "web_to_dataset" | "playwright_basic";
 
 export interface RiddleTaskRuntimeRequirements {
   cpu_cores: number;
@@ -145,7 +147,7 @@ function isTaskPrivacy(value: unknown): value is RiddleTaskPrivacy {
 
 function isTask(value: unknown): value is RiddleWorkerTask {
   return isRecordLike(value)
-    && ["wasm_component", "playwright", "container", "tfjs"].includes(String(value.type))
+    && ["wasm_component", "playwright", "container", "tfjs", "web_to_dataset", "playwright_basic"].includes(String(value.type))
     && isRiddleCid(value.artifact_cid)
     && (typeof value.entry === "undefined" || typeof value.entry === "string")
     && isRuntimeRequirements(value.runtime_requirements)

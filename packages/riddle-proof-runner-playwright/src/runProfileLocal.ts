@@ -197,10 +197,21 @@ function writeOutputFiles(
       dom_summary: result.artifacts.dom_summary || "dom-summary.json",
     },
   };
-  const evidence = safeResult.evidence || {};
+  const evidence = safeResult.evidence ?? null;
+  const safeEvidence: {
+    console?: unknown;
+    dom_summary?: unknown;
+  } = evidence && typeof evidence === "object" ? evidence : {};
+  const consoleEvidence = typeof safeEvidence.console === "object" && safeEvidence.console !== null
+    ? safeEvidence.console
+    : { events: [], page_errors: [], dialogs: [] };
+  const domSummaryEvidence = typeof safeEvidence.dom_summary === "object" && safeEvidence.dom_summary !== null
+    ? safeEvidence.dom_summary
+    : {};
+
   ensureFile("proof.json", safeResult, store);
-  ensureFile("console.json", evidence.console || { events: [], page_errors: [], dialogs: [] }, store);
-  ensureFile("dom-summary.json", evidence.dom_summary || {}, store);
+  ensureFile("console.json", consoleEvidence, store);
+  ensureFile("dom-summary.json", domSummaryEvidence, store);
 
   store.writeJson("proof.json", safeResult);
   store.writeJson("profile-result.json", safeResult);

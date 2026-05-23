@@ -17,32 +17,38 @@ Object.defineProperty(globalThis, "location", {
 });
 
 try {
+  let state = {
+    user: {
+      token: "abc-123",
+      displayName: "Ada",
+    },
+    nested: { secret: "s", nested: { api_key: "key" } },
+  };
   const payload = installRiddleProofContract({
     getState() {
-      return {
-        route: "/dashboard",
-        user: {
-          token: "abc-123",
-          displayName: "Ada",
-        },
-        nested: { secret: "s", nested: { api_key: "key" } },
-      };
+      return state;
     },
   });
 
   assert.equal(payload.version, "riddle-proof.app-contract.v1");
   assert.equal(payload.route, "/dashboard");
-
-  const redacted = payload.state;
-  if (!redacted || typeof redacted !== "object") {
-    throw new Error("Expected contract state payload to exist.");
-  }
-  assert.ok(redacted && typeof redacted === "object");
-  assert.equal(redacted.user && typeof redacted.user === "object" ? redacted.user.token : undefined, "[redacted]");
-  assert.equal(redacted.nested && typeof redacted.nested === "object" ? redacted.nested.secret : undefined, "[redacted]");
+  assert.equal(typeof payload.getState, "function");
 
   const readBack = readRiddleProofContract();
   assert.equal(readBack?.route, "/dashboard");
+  const readState = readBack?.getState?.();
+  if (!readState || typeof readState !== "object") {
+    throw new Error("Expected contract state getter to exist.");
+  }
+  assert.equal(readState.user && typeof readState.user === "object" ? readState.user.token : undefined, "[redacted]");
+  assert.equal(readState.nested && typeof readState.nested === "object" ? readState.nested.secret : undefined, "[redacted]");
+  const capture = readBack?.captureDiagnostic?.();
+  assert.equal(capture?.version, "riddle-proof.capture-diagnostic.v1");
+  assert.equal(capture?.route, "/dashboard");
+
+  state = { ...state, route: "/new" };
+  const secondRead = readRiddleProofContract();
+  assert.equal(secondRead?.getState?.()?.route, "/new");
 
   uninstallRiddleProofContract();
   assert.equal(readRiddleProofContract(), null);
@@ -57,10 +63,10 @@ try {
     },
     { sensitivePaths: ["nested.auth_token"] },
   );
-  assert.equal(scrubbed.token, "abcdef");
+  assert.equal(scrubbed.token, "[redacted]");
   assert.equal(scrubbed.nested?.auth_token ?? null, "[redacted]");
   assert.equal(scrubbed.nestedSafe, "value");
-  assert.equal(scrubbed.nested?.profile?.api_key, "x");
+  assert.equal(scrubbed.nested?.profile?.api_key ?? null, "[redacted]");
 } finally {
   if (previousDefinition === undefined) {
     delete globalThis.__riddleProofContract;

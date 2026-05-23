@@ -14,6 +14,14 @@ function pathSegments(path: string): string[] {
 export function createDefaultSensitivePaths(): readonly string[] {
   return [
     "token",
+    "auth_token",
+    "idToken",
+    "accessToken",
+    "refreshToken",
+    "bearerToken",
+    "sessionToken",
+    "clientSecret",
+    "jwtToken",
     "access_token",
     "refresh_token",
     "api_key",
@@ -59,7 +67,11 @@ function maxTruncate(value: string, maxLength: number): string {
 }
 
 export function redactObject<T extends object>(value: T, options: RiddleProofRedactionOptions = {}): T {
-  const sensitive = new Set([...(options.sensitivePaths ?? createDefaultSensitivePaths()).map((path) => path.toLowerCase())]);
+  const includeDefaults = options.includeDefaultSensitivePaths !== false;
+  const sensitive = new Set([
+    ...(includeDefaults ? createDefaultSensitivePaths() : []),
+    ...(options.sensitivePaths ?? []),
+  ].map((path) => path.toLowerCase()));
   const maxStringLength = options.maxStringLength ?? 2048;
 
   const seen = new WeakMap<object, object>();
@@ -101,4 +113,3 @@ export function redactObject<T extends object>(value: T, options: RiddleProofRed
 
   return walk(value) as T;
 }
-

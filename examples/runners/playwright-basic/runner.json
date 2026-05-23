@@ -1,4 +1,6 @@
 {
+  "schema": "riddle.runner.manifest@1",
+  "key": "playwright-basic-runner@1",
   "name": "playwright-basic-runner",
   "version": "1.0.0",
   "entry": "bin/index.mjs",

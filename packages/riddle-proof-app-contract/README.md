@@ -21,15 +21,20 @@ import { installRiddleProofContract } from "@riddledc/riddle-proof-app-contract/
 installRiddleProofContract({
   version: "my-app.proof.v1",
   getState: () => ({
-    route: location.pathname,
+    // state is read every time captureDiagnostic/getState is called.
     currentMode: "play",
     visiblePanel: "hud",
     itemCount: 5,
   }),
+  route: location.pathname,
 });
 ```
 
-The helper keeps payloads compact by redacting common secrets by default.
+The helper keeps state compact by redacting common secrets by default and returns
+callable contract helpers:
+
+- `getState()` for the latest redacted state at read time.
+- `captureDiagnostic()` for a compact `riddle-proof.capture-diagnostic.v1` snapshot.
 
 ## Redaction
 
@@ -62,4 +67,3 @@ const state = redactObject({
 
 Apps with this contract can avoid brittle DOM scraping by exposing stable state
 under a single, reviewable contract.
-

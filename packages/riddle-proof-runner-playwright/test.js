@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -63,6 +64,13 @@ try {
   assert.equal(parsedManifest.version, "riddle-proof-local-runner-manifest.v1");
   const parsedResult = JSON.parse(readFileSync(path.join(outputDir, "profile-result.json"), "utf8"));
   assert.equal(parsedResult.version, "riddle-proof.profile-result.v1");
+
+  const helpResult = spawnSync(process.execPath, ["./bin/riddle-proof-playwright", "--help"], {
+    encoding: "utf8",
+  });
+  assert.equal(helpResult.status, 0);
+  assert.equal(helpResult.stderr, "");
+  assert.equal(helpResult.stdout.includes("riddle-proof-playwright"), true);
 } finally {
   rmSync(workspace, { recursive: true, force: true });
 }

@@ -1,5 +1,10 @@
 import { redactObject } from "./redaction";
-import type { InstallRiddleProofContractInput, RiddleProofAppContractInstallOptions, RiddleProofContractDefinition } from "./types";
+import type {
+  InstallRiddleProofContractInput,
+  RiddleProofAppContractInstallOptions,
+  RiddleProofCaptureDiagnostic,
+  RiddleProofContractDefinition,
+} from "./types";
 
 const DEFAULT_GLOBAL_NAME = "__riddleProofContract";
 
@@ -12,19 +17,6 @@ function globalTarget(): Record<string, unknown> | null {
   return globalThis as unknown as Record<string, unknown>;
 }
 
-function createPayload(input: InstallRiddleProofContractInput): RiddleProofContractDefinition {
-  const version = input.version ?? "riddle-proof.app-contract.v1";
-  const route = normalizeRoute(input.route) ?? normalizeRoute((globalThis as { location?: { pathname?: string } })?.location?.pathname);
-
-  return {
-    version,
-    route,
-    user: input.user,
-    state: redactObject(input.getState?.() ?? {}, { sensitivePaths: input.redactedPaths }) as Record<string, unknown> | undefined,
-    metadata: input.metadata,
-  };
-}
-
 function normalizeRoute(route?: string): string | undefined {
   if (!route || typeof route !== "string") return undefined;
   const trimmed = route.trim();
@@ -32,9 +24,58 @@ function normalizeRoute(route?: string): string | undefined {
   return trimmed;
 }
 
+function normalizeInputRoute(inputRoute?: string): string | undefined {
+  return normalizeRoute(inputRoute)
+    || normalizeRoute((globalThis as { location?: { pathname?: string } })?.location?.pathname);
+}
+
+function createCaptureDiagnostic(
+  version: string,
+  route: () => string | undefined,
+  getState: () => ReturnType<RiddleProofContractDefinition["getState"]>,
+): RiddleProofCaptureDiagnostic {
+  return {
+    version: "riddle-proof.capture-diagnostic.v1",
+    route: route(),
+    state: getState(),
+  };
+}
+
+function createContractDefinition(input: InstallRiddleProofContractInput): RiddleProofContractDefinition {
+  const version = input.version ?? "riddle-proof.app-contract.v1";
+  const options: RiddleProofAppContractInstallOptions = {
+    globalName: input.globalName,
+    force: input.force,
+    redactedPaths: input.redactedPaths,
+    includeDefaultSensitivePaths: input.includeDefaultSensitivePaths,
+  };
+
+  const readRoute = () => normalizeInputRoute(input.route);
+  const readState = () => redactObject(input.getState?.() ?? {}, {
+    sensitivePaths: options.redactedPaths,
+    includeDefaultSensitivePaths: options.includeDefaultSensitivePaths,
+  });
+
+  return {
+    get version() {
+      return version;
+    },
+    get route() {
+      return readRoute();
+    },
+    get user() {
+      return input.user;
+    },
+    get metadata() {
+      return input.metadata;
+    },
+    getState: () => readState(),
+    captureDiagnostic: () => createCaptureDiagnostic(version, readRoute, readState),
+  };
+}
+
 export function installRiddleProofContract(input: InstallRiddleProofContractInput = {}): RiddleProofContractDefinition {
-  const isBrowser = typeof globalThis === "object" && "window" in globalThis;
-  if (!isBrowser) {
+  if (!isBrowserLike()) {
     throw new Error("installRiddleProofContract must run in a browser context.");
   }
 
@@ -49,7 +90,7 @@ export function installRiddleProofContract(input: InstallRiddleProofContractInpu
   };
 
   const globalName = options.globalName || DEFAULT_GLOBAL_NAME;
-  const definition = createPayload(input);
+  const definition = createContractDefinition(input);
 
   if (!options.force && typeof target[globalName] !== "undefined") {
     const error = new Error(
@@ -68,13 +109,69 @@ export function installRiddleProofContract(input: InstallRiddleProofContractInpu
   return definition;
 }
 
+function resolveCandidate(candidate: Record<string, unknown>): RiddleProofContractDefinition | null {
+  const version = typeof candidate.version === "string" ? candidate.version : "";
+  if (!version) return null;
+
+  const getState = () => {
+    if (typeof candidate.getState === "function") {
+      const state = candidate.getState();
+      return state && typeof state === "object" ? state as Record<string, unknown> : undefined;
+    }
+    if (candidate.state && typeof candidate.state === "object" && !Array.isArray(candidate.state)) {
+      return candidate.state as Record<string, unknown>;
+    }
+    return undefined;
+  };
+
+  const routeValue = typeof candidate.route === "function"
+    ? candidate.route()
+    : candidate.route;
+  const route = normalizeRoute(String(routeValue ?? ""));
+  const captureDiagnostic = () => {
+    const fallback = typeof candidate.captureDiagnostic === "function"
+      ? candidate.captureDiagnostic()
+      : ({
+          version: "riddle-proof.capture-diagnostic.v1",
+          route,
+          state: getState(),
+        });
+    return fallback as RiddleProofCaptureDiagnostic;
+  };
+
+  return {
+    get version() {
+      return version;
+    },
+    get route() {
+      return normalizeRoute(typeof candidate.route === "function" ? candidate.route() : candidate.route as string | undefined) ?? route;
+    },
+    get user() {
+      return typeof candidate.user === "string" ? candidate.user : undefined;
+    },
+    get metadata() {
+      return typeof candidate.metadata === "object" && candidate.metadata !== null
+        ? candidate.metadata as Record<string, unknown>
+        : undefined;
+    },
+    getState,
+    captureDiagnostic,
+  };
+}
+
 export function readRiddleProofContract(globalName?: string): RiddleProofContractDefinition | null {
   const target = globalTarget();
   if (!target) return null;
 
   const resolved = target[globalName || DEFAULT_GLOBAL_NAME];
   if (!resolved || typeof resolved !== "object") return null;
-  return resolved as RiddleProofContractDefinition;
+
+  const candidate = resolved as Record<string, unknown>;
+  if (typeof candidate.getState === "function" || typeof candidate.captureDiagnostic === "function" || "state" in candidate) {
+    return resolveCandidate(candidate);
+  }
+
+  return null;
 }
 
 export function uninstallRiddleProofContract(globalName?: string): void {
@@ -89,3 +186,5 @@ export function uninstallRiddleProofContract(globalName?: string): void {
 }
 
 export { normalizeRoute };
+export const RIDDLE_PROOF_APP_CONTRACT_VERSION = "riddle-proof.app-contract.v1" as const;
+export const READABLE_CAPTURE_DIAGNOSTIC_VERSION = "riddle-proof.capture-diagnostic.v1" as const;

@@ -24,7 +24,7 @@ assert.equal(RIDDLE_PROOF_PACK_PROFILES["page-content-basic"]?.name, "page-conte
 
 const allProfiles = listRiddleProofPackProfiles();
 assert.equal(typeof allProfiles.length, "number");
-assert.equal(allProfiles.length >= 10 ? allProfiles.length : 10, 10);
+assert.ok(allProfiles.length >= 10);
 
 const hygienePackProfiles = getRiddleProofProfilesByPackId("state_hygiene");
 assert.equal(hygienePackProfiles.length, 1);

@@ -45,7 +45,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   if (argv.length && !argv[0].startsWith("--")) {
     command = argv[0];
   }
-  const raw = argv.slice(command && argv[0] !== "--" ? 1 : 0);
+  const raw = argv.slice(command && argv[0] && argv[0].startsWith("--") ? 0 : 1);
   const parsed: ParsedArgs = {
     command,
     profile: undefined,
