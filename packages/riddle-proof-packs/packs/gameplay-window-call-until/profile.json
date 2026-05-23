@@ -1,0 +1,101 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "gameplay-window-call-until",
+  "target": {
+    "route": "/games/example",
+    "viewports": [
+      { "name": "mobile", "width": 390, "height": 844 },
+      { "name": "tablet", "width": 820, "height": 1180 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "timeout_sec": 300,
+    "wait_for_selector": "#game-root canvas",
+    "screenshot_mode": "viewport",
+    "setup_actions": [
+      { "type": "clear_storage", "storage": "both", "reload": true },
+      { "type": "wait_for_selector", "selector": "#game-root", "timeout_ms": 20000 },
+      { "type": "wait_for_selector", "selector": "#game-root canvas", "timeout_ms": 20000 },
+      {
+        "type": "window_eval",
+        "label": "install-gameplay-proof-reader",
+        "timeout_ms": 10000,
+        "store_return_to": "__gameplayProof.ready",
+        "script": "window.__riddleGameplayStep=()=>{const api=window.__exampleGameProof;const state=api?.step?.()||api?.read?.()||{};const out={ready:state.ready===true,inputAccepted:state.inputAccepted===true,gameOver:state.gameOver===true,distance:Number(state.distance||0),score:Number(state.score||0),level:Number(state.level||0)};out.ok=out.ready&&out.inputAccepted&&out.gameOver===false&&out.distance>=2&&out.score>=10;window.__gameplayProof={...(window.__gameplayProof||{}),running:out};return out;};const api=window.__exampleGameProof;const initial=api?.read?.()||{};const out={ready:initial.ready===true,inputAccepted:initial.inputAccepted===true,gameOver:initial.gameOver===true,distance:Number(initial.distance||0),score:Number(initial.score||0),level:Number(initial.level||0)};window.__gameplayProof={...(window.__gameplayProof||{}),ready:out};return out;",
+        "return_summary_fields": [
+          { "path": "ready" },
+          { "path": "inputAccepted" },
+          { "path": "distance" },
+          { "path": "score" },
+          { "path": "gameOver" }
+        ]
+      },
+      { "type": "assert_window_value", "path": "__gameplayProof.ready.ready", "expected": true, "timeout_ms": 10000 },
+      {
+        "type": "canvas_signature",
+        "selector": "#game-root canvas",
+        "label": "ready",
+        "store_signature_to": "__gameplayProof.readyCanvas",
+        "timeout_ms": 10000
+      },
+      { "type": "screenshot", "label": "ready", "mode": "viewport" },
+      { "type": "press", "key": "Space", "after_ms": 120 },
+      { "type": "press", "key": "ArrowRight", "after_ms": 120 },
+      {
+        "type": "window_call_until",
+        "path": "__riddleGameplayStep",
+        "until_path": "__gameplayProof.running.ok",
+        "until_expected_value": true,
+        "max_calls": 36,
+        "interval_ms": 250,
+        "timeout_ms": 15000
+      },
+      {
+        "type": "window_eval",
+        "label": "capture-running-proof",
+        "timeout_ms": 10000,
+        "store_return_to": "__gameplayProof.running",
+        "script": "return window.__riddleGameplayStep?.()||{};",
+        "return_summary_fields": [
+          { "path": "ok" },
+          { "path": "distance" },
+          { "path": "score" },
+          { "path": "inputAccepted" },
+          { "path": "gameOver" }
+        ]
+      },
+      { "type": "assert_window_value", "path": "__gameplayProof.running.ok", "expected": true, "timeout_ms": 10000 },
+      { "type": "assert_window_value", "path": "__gameplayProof.running.gameOver", "expected": false, "timeout_ms": 10000 },
+      { "type": "assert_window_number", "path": "__gameplayProof.running.distance", "min_value": 2, "timeout_ms": 10000 },
+      { "type": "assert_window_number", "path": "__gameplayProof.running.score", "min_value": 10, "timeout_ms": 10000 },
+      {
+        "type": "canvas_signature",
+        "selector": "#game-root canvas",
+        "label": "running",
+        "store_signature_to": "__gameplayProof.runningCanvas",
+        "timeout_ms": 10000
+      },
+      { "type": "screenshot", "label": "running", "mode": "viewport" }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/games/example" },
+    { "type": "selector_visible", "selector": "#game-root" },
+    { "type": "selector_visible", "selector": "#game-root canvas" },
+    { "type": "selector_count_equals", "selector": "#game-root canvas", "expected_count": 1 },
+    { "type": "text_absent", "pattern": "\\bNaN\\b" },
+    { "type": "text_absent", "pattern": "undefined", "flags": "i" },
+    { "type": "no_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_fatal_console_errors" },
+    { "type": "no_console_warnings" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "purpose": "Template for gameplay profiles where a route exposes window.__exampleGameProof.read() and optionally step(). Use window_call_until to wait for runtime state such as accepted input, distance, score, or level completion instead of relying on fixed sleeps that vary across hosted browser frame cadence."
+  }
+}
