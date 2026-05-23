@@ -54,6 +54,41 @@
       "import": "./dist/engine-harness.js",
       "require": "./dist/engine-harness.cjs"
     },
+    "./spec": {
+      "types": "./dist/spec/index.d.ts",
+      "import": "./dist/spec/index.js",
+      "require": "./dist/spec/index.cjs"
+    },
+    "./spec/types": {
+      "types": "./dist/spec/types.d.ts",
+      "import": "./dist/spec/types.js",
+      "require": "./dist/spec/types.cjs"
+    },
+    "./spec/result": {
+      "types": "./dist/spec/result.d.ts",
+      "import": "./dist/spec/result.js",
+      "require": "./dist/spec/result.cjs"
+    },
+    "./spec/state": {
+      "types": "./dist/spec/state.d.ts",
+      "import": "./dist/spec/state.js",
+      "require": "./dist/spec/state.cjs"
+    },
+    "./spec/checkpoint": {
+      "types": "./dist/spec/checkpoint.d.ts",
+      "import": "./dist/spec/checkpoint.js",
+      "require": "./dist/spec/checkpoint.cjs"
+    },
+    "./spec/run-card": {
+      "types": "./dist/spec/run-card.d.ts",
+      "import": "./dist/spec/run-card.js",
+      "require": "./dist/spec/run-card.cjs"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js",
+      "require": "./dist/cli.cjs"
+    },
     "./codex-exec-agent": {
       "types": "./dist/codex-exec-agent.d.ts",
       "import": "./dist/codex-exec-agent.js",
@@ -108,6 +143,66 @@
       "types": "./dist/riddle-client.d.ts",
       "import": "./dist/riddle-client.js",
       "require": "./dist/riddle-client.cjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js",
+      "require": "./dist/runtime/index.cjs"
+    },
+    "./runtime/riddle-client": {
+      "types": "./dist/runtime/riddle-client.d.ts",
+      "import": "./dist/runtime/riddle-client.js",
+      "require": "./dist/runtime/riddle-client.cjs"
+    },
+    "./advanced": {
+      "types": "./dist/advanced/index.d.ts",
+      "import": "./dist/advanced/index.js",
+      "require": "./dist/advanced/index.cjs"
+    },
+    "./advanced/runner": {
+      "types": "./dist/advanced/runner.d.ts",
+      "import": "./dist/advanced/runner.js",
+      "require": "./dist/advanced/runner.cjs"
+    },
+    "./advanced/engine-harness": {
+      "types": "./dist/advanced/engine-harness.d.ts",
+      "import": "./dist/advanced/engine-harness.js",
+      "require": "./dist/advanced/engine-harness.cjs"
+    },
+    "./advanced/proof-run-core": {
+      "types": "./dist/advanced/proof-run-core.d.ts",
+      "import": "./dist/advanced/proof-run-core.js",
+      "require": "./dist/advanced/proof-run-core.cjs"
+    },
+    "./advanced/proof-run-engine": {
+      "types": "./dist/advanced/proof-run-engine.d.ts",
+      "import": "./dist/advanced/proof-run-engine.js",
+      "require": "./dist/advanced/proof-run-engine.cjs"
+    },
+    "./adapters/openclaw": {
+      "types": "./dist/adapters/openclaw.d.ts",
+      "import": "./dist/adapters/openclaw.js",
+      "require": "./dist/adapters/openclaw.cjs"
+    },
+    "./adapters/codex": {
+      "types": "./dist/adapters/codex.d.ts",
+      "import": "./dist/adapters/codex.js",
+      "require": "./dist/adapters/codex.cjs"
+    },
+    "./adapters/local-agent": {
+      "types": "./dist/adapters/local-agent.d.ts",
+      "import": "./dist/adapters/local-agent.js",
+      "require": "./dist/adapters/local-agent.cjs"
+    },
+    "./adapters/codex-exec-agent": {
+      "types": "./dist/adapters/codex-exec-agent.d.ts",
+      "import": "./dist/adapters/codex-exec-agent.js",
+      "require": "./dist/adapters/codex-exec-agent.cjs"
+    },
+    "./app-contract": {
+      "types": "./dist/app-contract/index.d.ts",
+      "import": "./dist/app-contract/index.js",
+      "require": "./dist/app-contract/index.cjs"
     }
   },
   "bin": {
@@ -126,7 +221,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/run-card.ts src/runner.ts src/engine-harness.ts src/codex-exec-agent.ts src/local-agent.ts src/cli.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/basic-gameplay.ts src/profile.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts src/riddle-client.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/types.ts src/result.ts src/state.ts src/checkpoint.ts src/run-card.ts src/runner.ts src/engine-harness.ts src/codex-exec-agent.ts src/local-agent.ts src/cli.ts src/cli/index.ts src/diagnostics.ts src/proof-session.ts src/playability.ts src/basic-gameplay.ts src/profile.ts src/profile/index.ts src/openclaw.ts src/proof-run-core.ts src/proof-run-engine.ts src/riddle-client.ts src/runtime/riddle-client.ts src/spec/index.ts src/spec/types.ts src/spec/result.ts src/spec/state.ts src/spec/checkpoint.ts src/spec/run-card.ts src/runtime/index.ts src/app-contract/index.ts src/app-contract/types.ts src/app-contract/contract.ts src/advanced/index.ts src/advanced/runner.ts src/advanced/engine-harness.ts src/advanced/proof-run-core.ts src/advanced/proof-run-engine.ts src/adapters/openclaw.ts src/adapters/local-agent.ts src/adapters/codex-exec-agent.ts src/adapters/codex.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js && node proof-run.test.js"
