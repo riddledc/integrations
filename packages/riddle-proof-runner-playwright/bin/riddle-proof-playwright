@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+
+import { pathToFileURL } from "node:url";
+
+const cliPath = new URL("../dist/cli.js", import.meta.url);
+await import(pathToFileURL(cliPath.href).href);
