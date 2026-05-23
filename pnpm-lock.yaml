@@ -86,6 +86,7 @@ importers:
       '@riddledc/riddle-proof':
         specifier: workspace:^
         version: link:../riddle-proof
+  packages/riddle-proof-app-contract:
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
