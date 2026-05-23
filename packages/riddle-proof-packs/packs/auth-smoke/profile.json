@@ -1,0 +1,65 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "auth-smoke",
+  "target": {
+    "route": "/",
+    "viewports": [
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000
+      }
+    ],
+    "auth": "none",
+    "wait_for_selector": "body",
+    "setup_actions": [
+      {
+        "type": "wait",
+        "ms": 250
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "selector_visible",
+      "selector": "body"
+    },
+    {
+      "type": "text_visible",
+      "text": "Example"
+    },
+    {
+      "type": "no_mobile_horizontal_overflow"
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "review",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "pack_id": "auth_smoke",
+    "pack_public_name": "Auth Smoke Pack",
+    "purpose": "Template for authenticated smoke verification and session boundary sanity checks.",
+    "required_receipts": [
+      "authenticated entry page route or gate loads",
+      "post-auth route assertion",
+      "redirect and session cookie hygiene",
+      "no-console-error baseline"
+    ]
+  }
+}

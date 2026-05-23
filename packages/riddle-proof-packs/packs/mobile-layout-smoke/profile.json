@@ -1,0 +1,64 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "mobile-layout-smoke",
+  "target": {
+    "route": "/",
+    "viewports": [
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "auth": "none",
+    "wait_for_selector": "body",
+    "setup_actions": [
+      {
+        "type": "wait",
+        "ms": 250
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "route_loaded",
+      "expected_path": "/"
+    },
+    {
+      "type": "selector_visible",
+      "selector": "body"
+    },
+    {
+      "type": "text_visible",
+      "text": "Example"
+    },
+    {
+      "type": "no_mobile_horizontal_overflow"
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "pack_id": "layout_mobile",
+    "pack_public_name": "Mobile Layout Pack",
+    "purpose": "Template for high-signal mobile layout smoke checks.",
+    "required_receipts": [
+      "primary visible root on mobile viewport",
+      "no horizontal overflow",
+      "critical copy presence",
+      "clean browser console"
+    ]
+  }
+}

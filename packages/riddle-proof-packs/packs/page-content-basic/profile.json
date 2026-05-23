@@ -1,0 +1,29 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "page-content-basic",
+  "target": {
+    "route": "/",
+    "viewports": [
+      { "name": "mobile", "width": 390, "height": 844 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "auth": "none",
+    "wait_for_selector": "body",
+    "setup_actions": [
+      { "type": "wait", "ms": 250 }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/" },
+    { "type": "selector_visible", "selector": "body" },
+    { "type": "text_visible", "text": "Example" },
+    { "type": "no_mobile_horizontal_overflow" },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  }
+}

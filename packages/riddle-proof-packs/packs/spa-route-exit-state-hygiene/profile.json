@@ -1,0 +1,87 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "spa-route-exit-state-hygiene",
+  "target": {
+    "route": "/games/example?proof=1",
+    "viewports": [
+      { "name": "phone", "width": 390, "height": 844 },
+      { "name": "ipad-mini", "width": 768, "height": 1024 },
+      { "name": "ipad", "width": 820, "height": 1180 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "timeout_sec": 300,
+    "wait_for_selector": "#game-root",
+    "screenshot_mode": "viewport",
+    "setup_actions": [
+      { "type": "clear_storage", "storage": "both", "reload": true },
+      { "type": "wait_for_selector", "selector": "#game-root", "timeout_ms": 20000 },
+      { "type": "wait_for_selector", "selector": "#game-root canvas, #game-root [data-proof-ready='true']", "timeout_ms": 20000 },
+      {
+        "type": "window_eval",
+        "label": "capture-route-active-state",
+        "timeout_ms": 10000,
+        "store_return_to": "__rpRouteExit.active",
+        "script": "const proof=window.__exampleRouteProof?.read?.()||{};const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const activeGlobals=watched.filter((name)=>window[name]!==undefined);const out={ready:proof.ready===true,route:location.pathname,activeGlobals,activeGlobalCount:activeGlobals.length,receiptId:String(proof.receiptId||''),mode:String(proof.mode||'')};out.ok=out.ready===true&&out.activeGlobalCount>0;window.__rpRouteExit={...(window.__rpRouteExit||{}),active:out};return out;",
+        "return_summary_fields": [
+          { "path": "ok" },
+          { "path": "ready" },
+          { "path": "route" },
+          { "path": "activeGlobalCount" },
+          { "path": "activeGlobals" }
+        ]
+      },
+      { "type": "assert_window_value", "path": "__rpRouteExit.active.ok", "expected_value": true, "timeout_ms": 10000 },
+      { "type": "screenshot", "label": "route-active-state", "mode": "viewport" },
+      { "type": "click", "selector": "[data-testid='nav-home'], .nav-logo, a[href='/']", "timeout_ms": 10000 },
+      { "type": "wait_for_selector", "selector": "[data-testid='home-page'], main, [data-route='home']", "timeout_ms": 20000 },
+      {
+        "type": "window_eval",
+        "label": "capture-route-exit-cleanup",
+        "timeout_ms": 10000,
+        "store_return_to": "__rpRouteExit.cleanup",
+        "script": "const watched=['__exampleRouteProof','__exampleProofLastReceipt','exampleTouchState'];const staleNames=watched.filter((name)=>window[name]!==undefined);const out={ok:location.pathname==='/'&&staleNames.length===0,route:location.pathname,staleNames,staleCount:staleNames.length};window.__rpRouteExit={...(window.__rpRouteExit||{}),cleanup:out};return out;",
+        "return_summary_fields": [
+          { "path": "ok" },
+          { "path": "route" },
+          { "path": "staleCount" },
+          { "path": "staleNames" }
+        ]
+      },
+      { "type": "assert_window_value", "path": "__rpRouteExit.cleanup.ok", "expected_value": true, "timeout_ms": 10000 },
+      { "type": "assert_window_number", "path": "__rpRouteExit.cleanup.staleCount", "expected_value": 0, "timeout_ms": 10000 },
+      { "type": "screenshot", "label": "home-after-route-exit-cleanup", "mode": "viewport" }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/" },
+    { "type": "selector_visible", "selector": "[data-testid='home-page'], main, [data-route='home']" },
+    { "type": "text_absent", "pattern": "\\bNaN\\b" },
+    { "type": "text_absent", "pattern": "undefined", "flags": "i" },
+    { "type": "text_absent", "pattern": "\\[object Object\\]" },
+    { "type": "no_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_mobile_horizontal_overflow", "max_overflow_px": 1 },
+    { "type": "no_fatal_console_errors" },
+    { "type": "no_console_warnings" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "pack_id": "state_hygiene",
+    "pack_public_name": "State Hygiene Pack",
+    "required_receipts": [
+      "active route-local proof helpers and route state receipt",
+      "route-exit affordance inventory before cleanup",
+      "route or mode exit action receipt through visible UI",
+      "post-cleanup stale-state inventory after route cleanup",
+      "screenshots at active and post-cleanup boundaries",
+      "console and warning accounting",
+      "proof JSON and artifact links"
+    ],
+    "purpose": "Template for SPA route-exit hygiene profiles. Replace the example route, selectors, and watched globals with route-local proof helpers, receipts, timers, input state, or touch state that must exist while the feature route is active and must be removed after visible UI navigation returns home."
+  }
+}
