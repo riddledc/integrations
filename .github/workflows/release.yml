@@ -87,3 +87,5 @@ jobs:
       - name: Publish to npm with provenance
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: pnpm release --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}
