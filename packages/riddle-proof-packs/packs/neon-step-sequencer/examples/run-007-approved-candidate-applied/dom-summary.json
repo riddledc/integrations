@@ -1,0 +1,40 @@
+{
+  "expected_viewport_count": 1,
+  "viewport_count": 1,
+  "partial": false,
+  "routes": [
+    {
+      "requested": "http://127.0.0.1:5177/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+      "observed": "/games/drum-sequencer",
+      "expected_path": "/games/drum-sequencer",
+      "matched": true,
+      "http_status": 200
+    }
+  ],
+  "titles": [
+    "LilArcade"
+  ],
+  "overflow_px": [
+    0
+  ],
+  "bounds_overflow_px": [
+    0
+  ],
+  "overflow_offender_counts": [
+    0
+  ],
+  "frames": [
+    {
+      "viewport": "desktop",
+      "selectors": []
+    }
+  ],
+  "http_status": [],
+  "link_status": [],
+  "route_inventory": [],
+  "network_mock_count": 0,
+  "network_mock_hit_count": 0,
+  "dialog_count": 0,
+  "dialog_accept_count": 0,
+  "dialog_dismiss_count": 0
+}

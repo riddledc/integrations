@@ -55,11 +55,15 @@ assert.ok(packEnabledProfiles.length >= 1);
 assert.ok(RIDDLE_PROOF_PACK_MANIFEST.length >= allProfiles.length);
 
 const neonProfiles = getRiddleProofProfilesByPackId("neon_step_sequencer");
-assert.equal(neonProfiles.length, 8);
+assert.equal(neonProfiles.length, 9);
 assert.ok(neonProfiles.every((entry) => entry.packPublicName === "Neon Step Sequencer Pack"));
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-mix-level-search"),
   "Neon ratchet-loop profile should be present",
+);
+assert.ok(
+  neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-approved-candidate"),
+  "Neon approved-candidate profile should be present",
 );
 
 const authManifest = getRiddleProofPackProfileManifest("auth-smoke");
@@ -90,6 +94,20 @@ assert.equal(neonRatchetLoopProfile.target.setup_actions?.[4]?.path, "__neonMixP
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[5]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.ranking.role");
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[6]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.request.candidateActionsAreTransient");
 
+const neonApprovedCandidateProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-ratchet-loop-approved-candidate",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonApprovedCandidateProfile.metadata?.evidence_role_pattern, "interaction_snapshots");
+assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[2]?.type, "window_call");
+const neonApprovedCandidateArgs = neonApprovedCandidateProfile.target.setup_actions?.[2]?.args?.[0];
+assert.ok(neonApprovedCandidateArgs && typeof neonApprovedCandidateArgs === "object");
+assert.equal(neonApprovedCandidateArgs.applyBest, true);
+assert.equal(neonApprovedCandidateArgs.approval?.mode, "mixing_canon_surrogate");
+assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[4]?.path, "__neonMixProof.approvedCandidateLoop.appliedCandidateReceipt.ok");
+assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[5]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.status");
+assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[7]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.guardrails.approvedCandidateApplied");
+
 const neonExplorationProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-explore-songs-and-mixes",
   { url: "http://127.0.0.1:5173" },
@@ -109,6 +127,7 @@ const neonExampleRuns = [
   ["run-004-ratchet-loop-mix-level-search", "lilarcade-neon-ratchet-loop-mix-level-search"],
   ["run-005-explore-songs-and-mixes-final", "neon-step-sequencer-explore-songs-and-mixes"],
   ["run-006-ratchet-loop-human-review-packet", "lilarcade-neon-ratchet-loop-mix-level-search"],
+  ["run-007-approved-candidate-applied", "lilarcade-neon-ratchet-loop-approved-candidate"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
@@ -146,6 +165,24 @@ assert.equal(reviewPacketReturn?.humanReviewPacket?.guardrails?.noPermanentEditU
 assert.ok(reviewPacketReturn?.humanReviewPacket?.caveats?.some((caveat) => caveat.includes("does not prove subjective mix quality")));
 assert.ok(existsSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/screenshots/lilarcade-neon-ratchet-loop-mix-level-search-desktop.png"));
 
+const neonApprovedCandidateRun = JSON.parse(
+  readFileSync("packs/neon-step-sequencer/examples/run-007-approved-candidate-applied/proof.json", "utf8"),
+);
+const approvedCandidateSetupCheck = neonApprovedCandidateRun.checks.find((check) => check.type === "setup_actions_succeeded");
+const approvedCandidateReturn = approvedCandidateSetupCheck?.evidence?.setup_summary?.viewports?.[0]?.window_call?.[0]?.returned;
+assert.equal(approvedCandidateReturn?.status, "claim_candidate_supported");
+assert.equal(approvedCandidateReturn?.applyBest, true);
+assert.equal(approvedCandidateReturn?.appliedCandidateReceipt?.ok, true);
+assert.equal(approvedCandidateReturn?.appliedCandidateReceipt?.candidate?.action?.track, "chord");
+assert.equal(approvedCandidateReturn?.appliedCandidateReceipt?.observedLevel, 0.28);
+assert.equal(approvedCandidateReturn?.humanReviewPacket?.status, "candidate_applied_for_listening_review");
+assert.equal(approvedCandidateReturn?.humanReviewPacket?.request?.approval?.mode, "mixing_canon_surrogate");
+assert.equal(approvedCandidateReturn?.humanReviewPacket?.request?.candidateActionsAreTransient, false);
+assert.equal(approvedCandidateReturn?.humanReviewPacket?.guardrails?.approvedCandidateApplied, true);
+assert.equal(approvedCandidateReturn?.humanReviewPacket?.ranking?.role, "review_order_only");
+assert.ok(approvedCandidateReturn?.humanReviewPacket?.caveats?.some((caveat) => caveat.includes("does not prove subjective mix quality")));
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-007-approved-candidate-applied/screenshots/lilarcade-neon-ratchet-loop-approved-candidate-desktop.png"));
+
 const extractedReviewPacket = findHumanReviewPacket(neonReviewPacketRun);
 assert.equal(extractedReviewPacket?.kind, "human_review_packet");
 assert.equal(extractedReviewPacket?.recommendation?.candidate?.label, "chord -0.10");
@@ -173,6 +210,23 @@ const bundledReviewPacketMarkdown = readFileSync(
   "utf8",
 );
 assert.equal(bundledReviewPacketMarkdown, reviewPacketMarkdown);
+
+const extractedAppliedPacket = findHumanReviewPacket(neonApprovedCandidateRun);
+assert.equal(extractedAppliedPacket?.kind, "human_review_packet");
+assert.equal(extractedAppliedPacket?.status, "candidate_applied_for_listening_review");
+const appliedPacketMarkdown = formatHumanReviewPacketMarkdown(extractedAppliedPacket, {
+  title: "Neon Human Review Packet",
+});
+assert.match(appliedPacketMarkdown, /candidate_applied_for_listening_review/u);
+assert.match(appliedPacketMarkdown, /approved_candidate_applied: `true`/u);
+assert.match(appliedPacketMarkdown, /approval_mode: `mixing_canon_surrogate`/u);
+assert.match(appliedPacketMarkdown, /musical taste still requires listening review/u);
+assert.doesNotMatch(appliedPacketMarkdown, /automatically better/u);
+const bundledAppliedPacketMarkdown = readFileSync(
+  "packs/neon-step-sequencer/examples/run-007-approved-candidate-applied/human-review-packet.md",
+  "utf8",
+);
+assert.equal(bundledAppliedPacketMarkdown, appliedPacketMarkdown);
 
 const reviewPacketCliHelp = spawnSync(process.execPath, ["bin/riddle-proof-review-packet", "--help"], {
   encoding: "utf8",

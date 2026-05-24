@@ -337,6 +337,61 @@ Next sharper question:
 
 Can one-off commands and background runs use this packet as their common output surface while strategy-specific code remains behind the app contract?
 
+## Run 007 - Approved candidate applied
+
+Claim:
+
+Neon can use an explicit approval mode to apply a supported change-claim candidate for listening review while keeping objective proof receipts and subjective taste separate.
+
+Profile:
+
+`profiles/ratchet-loop-approved-candidate.json`
+
+Evidence to capture:
+
+- supported claim candidate
+- explicit approval mode
+- state restoration before the final apply
+- applied-candidate receipt
+- compact human-review packet
+- listening-review caveat
+
+Possible outcomes:
+
+- `candidate_applied_for_listening_review`: a supported candidate was applied after explicit approval and the final app state reflects the candidate.
+- `candidate_ready_for_listening_review`: a supported candidate exists, but the profile did not request final application.
+- `needs_human_review`: no candidate satisfied every objective receipt.
+- `product_regression`: the selected candidate could not be applied or the final mixer state did not reflect it.
+
+Observed status:
+
+Passed on May 24, 2026 with `local-playwright`.
+
+Observed evidence:
+
+- loop status `claim_candidate_supported`
+- packet status `candidate_applied_for_listening_review`
+- approval mode `mixing_canon_surrogate`
+- recommended candidate `chord -0.10`
+- final applied level `0.28`
+- applied-candidate receipt `ok`
+- supported candidates `6`
+- rejected candidates `0`
+- state restored before apply `true`
+- ranking role `review_order_only`
+
+Failure classification:
+
+None. This was a passing `interaction_snapshots` proof. The approval mode is intentionally labeled as a surrogate so the packet does not imply a real listener has judged the mix.
+
+Smallest layer changed:
+
+App proof contract and proof-pack profile. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can the reusable pack expose this approved-candidate shape without making approval automatic, and can follow-on agents use the packet to prepare a code/config patch only when the operator explicitly asks for one?
+
 ## Project note
 
 The ratchet is not a pass. The ratchet is the next sharper question.
