@@ -33,3 +33,7 @@ Most ratchet steps should change profile JSON, pack docs, app proof contracts, o
 ## Loops are generic
 
 A ratchet loop should be domain-neutral: propose a claim candidate, apply its action, collect evidence, classify receipt-level support, restore or keep state, and repeat within a budget. Neon `mix-level-search` is a strategy plugged into that loop, not the loop's identity.
+
+## Use two speeds before deploy
+
+Keep the default proof loop small enough to run often, then use a deeper local sweep when a round is otherwise clean. The fast profile protects iteration speed; the deep profile batches deterministic findings such as proof-window overclaims, missing active lanes, clipping/headroom failures, source readiness gaps, stale state, and restoration failures before deployment.

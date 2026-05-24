@@ -1,0 +1,32 @@
+{
+  "version": "riddle-proof-local-runner-manifest.v1",
+  "runner": "local-playwright",
+  "profile_name": "neon-step-sequencer-deep-explore-songs-and-mixes",
+  "captured_at": "2026-05-24T20:05:48.462Z",
+  "artifacts": [
+    {
+      "name": "proof.json",
+      "path": "proof.json",
+      "kind": "text",
+      "bytes": 395494
+    },
+    {
+      "name": "console.json",
+      "path": "console.json",
+      "kind": "text",
+      "bytes": 38
+    },
+    {
+      "name": "dom-summary.json",
+      "path": "dom-summary.json",
+      "kind": "text",
+      "bytes": 815
+    },
+    {
+      "name": "profile-result.json",
+      "path": "profile-result.json",
+      "kind": "text",
+      "bytes": 395494
+    }
+  ]
+}

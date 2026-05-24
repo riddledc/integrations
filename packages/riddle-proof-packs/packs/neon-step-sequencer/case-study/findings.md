@@ -145,6 +145,17 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026 with local Playwright and deployed in LilArcade PR #490.
 - next sharper question: can this durable handoff become the default follow-on step for proof-backed creative edits across more strategies than `mix-level-search`?
 
+### Run 009 turned deep exploration into the pre-deploy batch gate
+
+- run: `run-009-deep-exploration-production`
+- claim: a slower current-target exploration sweep can sample the deployed current Neon song catalog bounds, catch deterministic proof-window/audio guardrail failures before release, and restore app state.
+- observed evidence: the deployed sweep passed with `6` available songs, `6` proof-capable songs, `0` skipped songs, `6` sampled songs, `19` sampled parts, `22` sampled windows, `0` findings, and restoration ok.
+- classification: none in the final production run; the preceding local ratchet resolved one `profile_calibration` overclaim and five `product_regression` clipping findings.
+- smallest layer changed: app proof-window selection, song fixture levels, and reusable proof-pack profile/docs.
+- change made: added a deep exploration profile that widens the fast sweep bounds, asserts restoration, and documents the two-speed local ratchet pattern.
+- rerun: passed on May 24, 2026 against `https://lilarcade.com`.
+- next sharper question: can the same two-speed pattern be exposed for non-audio rich apps without embedding Neon-specific assumptions in the core framework?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`

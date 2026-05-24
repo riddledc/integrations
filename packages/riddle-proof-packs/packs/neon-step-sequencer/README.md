@@ -27,8 +27,18 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 - `profiles/mobile-trainer-layout.json`: current-target audit for phone/tablet trainer reachability.
 - `profiles/full-mix-health-matrix.json`: current-target matrix across desktop, phone, iPad Mini, and iPad.
 - `profiles/explore-songs-and-mixes.json`: exploration sweep for proof-window health.
+- `profiles/deep-explore-songs-and-mixes.json`: slower pre-deploy exploration sweep for batching deterministic catalog, proof-window, clipping/headroom, and restoration findings before release.
 - `profiles/ratchet-loop-mix-level-search.json`: bounded ratchet loop using the Neon `mix-level-search` strategy.
 - `profiles/ratchet-loop-approved-candidate.json`: bounded ratchet loop that uses an explicit operator-approval surrogate, applies the supported candidate, and keeps the listening-review caveat visible.
+
+## Two-speed exploration
+
+The exploration profiles are a two-speed ratchet:
+
+- `explore-songs-and-mixes` keeps iteration fast by sampling a smaller bounded set.
+- `deep-explore-songs-and-mixes` widens the same claim before deploy, asserts state restoration, and is intended for batching deterministic findings after the fast loop is clean.
+
+Both profiles are `current_target` audits. They can find proof-window calibration overclaims, missing active lanes, source-prep gaps, clipping/headroom problems, browser failures, and stale state. Neither profile proves that a mix is artistically better.
 
 ## Ratchet loop strategy
 
@@ -52,6 +62,7 @@ The `examples/` directory contains local Playwright proof results captured again
 - `run-006-ratchet-loop-human-review-packet`: passing `interaction_snapshots` proof where the same bounded loop returned a compact `humanReviewPacket` with the recommended `chord -0.10` candidate, objective guardrails, `review_order_only` ranking, state restoration, and explicit listening caveats.
 - `run-007-approved-candidate-applied`: passing `interaction_snapshots` proof where an explicit `mixing_canon_surrogate` approval mode applied the supported `chord -0.10` candidate for listening review and recorded `approvedCandidateApplied`.
 - `run-008-durable-mix-patch-handoff`: passing durable handoff example where the applied packet became a scoped source/config plan for `chord: 0.28`, followed by a `current_target` proof showing the running app saw the durable level without clipping or low-level windows.
+- `run-009-deep-exploration-production`: passing `current_target` deep exploration proof against deployed LilArcade after the local ratchet fixed proof-window overclaim and hot preset clipping findings.
 
 ## Naming note
 

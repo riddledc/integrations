@@ -104,6 +104,7 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 - `neon-step-sequencer-mobile-trainer-layout`
 - `neon-step-sequencer-full-mix-health-matrix`
 - `neon-step-sequencer-explore-songs-and-mixes`
+- `neon-step-sequencer-deep-explore-songs-and-mixes`
 - `neon-step-sequencer-ratchet-loop-mix-level-search`
 - `neon-step-sequencer-ratchet-loop-approved-candidate`
 
@@ -112,6 +113,15 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 The `audio-mix` directory contains reusable audio-proof authoring guidance, a profile template, a metrics schema, a ratchet method, and a human-review rubric.
 
 The `neon-step-sequencer` directory contains the first app-specific ratchet lab under the new architecture. Its profiles declare `current_target` or `interaction_snapshots` evidence-role patterns and explicitly state what they do not prove. The ratchet-loop profiles now expect a compact `humanReviewPacket` for listening handoff: supported/rejected candidates, objective guardrails, state restoration, review-order ranking, taste caveats, and, when explicitly requested, an applied-candidate receipt. The case-study files record the claim, evidence, failure classification, smallest layer changed, and next sharper question for each run.
+
+### Two-speed local ratchet
+
+Neon uses two exploration speeds:
+
+- `neon-step-sequencer-explore-songs-and-mixes` is the fast bounded current-target sweep for normal iteration.
+- `neon-step-sequencer-deep-explore-songs-and-mixes` is the slower pre-deploy sweep for batching deterministic app/audio guardrail failures before release.
+
+The deep profile still proves only objective receipts: catalog coverage within bounds, active-lane/proof-window agreement, clipping/headroom, browser health, and state restoration. It does not prove subjective mix taste or that a candidate sounds better.
 
 ### Human-review packet handoff
 

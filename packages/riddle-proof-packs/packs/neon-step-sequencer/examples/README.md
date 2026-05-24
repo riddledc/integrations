@@ -16,15 +16,17 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 | `run-006-ratchet-loop-human-review-packet` | `interaction_snapshots` | passed | A bounded ratchet loop returns a compact `humanReviewPacket` for handoff: supported candidates, objective guardrails, state restoration, review-order ranking, and listening caveats. |
 | `run-007-approved-candidate-applied` | `interaction_snapshots` | passed | A bounded ratchet loop uses an explicit operator-approval surrogate, applies the supported `chord -0.10` candidate, and keeps the listening-review caveat in the packet. |
 | `run-008-durable-mix-patch-handoff` | `current_target` | passed | An applied packet becomes a durable candidate patch plan for `chord: 0.28`, then a current-target proof verifies the running app sees that durable level without clipping. |
+| `run-009-deep-exploration-production` | `current_target` | passed | A deployed deep exploration sweep samples the current six-song Neon catalog bounds, finds no deterministic guardrail failures, and restores app state. |
 
 ## What these examples do not prove
 
 - They do not prove subjective mix taste.
-- They do not prove every song, section, or mix preset. Run 005 is bounded to the configured song, part, and proof-window limits.
-- They do not prove production CDN asset availability; these were local dev-server runs.
+- They do not prove every song, section, or mix preset. Runs 005 and 009 are bounded to the configured song, part, and proof-window limits.
+- Runs 001-008 do not prove production CDN asset availability; they were local dev-server runs. Run 009 is the production current-target check.
 - They do not prove a reference/candidate release delta. The mix-change run uses pre-action/post-action snapshots inside one proof run, not a separate baseline deployment.
 - The ratchet-loop run does not prove that the loop primitive is mix-specific; `mix-level-search` is only this pack's first concrete strategy.
 - The ratchet-loop run does not prove that the supported candidate should be kept. Its ranking metric is a review-order hint, not a taste verdict.
 - The human-review packet does not replace listening judgment. It compresses objective receipts and caveats so a person or follow-on agent can decide what to review next.
 - The approved-candidate run does not prove that the surrogate approval is a real listener preference; it proves that the apply step was explicit, guarded by supported receipts, and recorded for review.
 - The durable handoff run does not prove the mix is better. It proves the approved candidate was eligible for scoped source/config application and that the app saw the durable result afterward.
+- The deep exploration run does not prove taste or exhaustive catalog coverage. It proves deterministic guardrails inside its current configured bounds and records state restoration.
