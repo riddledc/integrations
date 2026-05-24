@@ -1,0 +1,207 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+  "target": {
+    "route": "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000
+      }
+    ],
+    "auth": "none",
+    "timeout_sec": 240,
+    "wait_for_selector": ".drum-sequencer h1",
+    "setup_actions": [
+      {
+        "type": "wait_for_selector",
+        "selector": ".drum-sequencer h1",
+        "timeout_ms": 20000
+      },
+      {
+        "type": "window_eval",
+        "label": "verify-durable-current-target",
+        "script": "const expected={\"id\":\"monkberry-moon-delight-tab-chord-minus-01-approved-candidate\",\"target\":{\"song\":\"Monkberry Moon Delight (Tab)\",\"mixProfileId\":\"monkberry-moon-delight-eq-lane-mix-v7\"},\"mixerLevels\":{\"chord\":0.18}}; const approx=(a,b)=>Number.isFinite(Number(a))&&Number.isFinite(Number(b))&&Math.abs(Number(a)-Number(b))<=0.0005; const visible=(value)=>Number(value).toFixed(2).toUpperCase()+'X'; const api=window.__NEON_MIX_PROOF__||window.__RIDDLE_SEQUENCER_PROOF__; const diagnostic=api?.captureDiagnostic?.(); const state=api?.getState?.()||api?.getSummary?.()||diagnostic?.state||{}; const mixer=api?.getMixerState?.()||{}; const body=document.body?.innerText||''; const mixProfile=state?.profile?.mixProfile||mixer?.mixProfile||{}; const levels=state?.profile?.mixerLevels||mixer?.levels||{}; const observations=Object.entries(expected.mixerLevels||{}).map(([track, expectedLevel])=>{const actualLevel=levels?.[track]; const profileLevel=mixProfile?.mixerLevels?.[track]; const visibleToken=visible(expectedLevel); return {track, expectedLevel, actualLevel, profileLevel, visibleToken, contractMatches:approx(actualLevel, expectedLevel), profileMatches:approx(profileLevel, expectedLevel), visibleMatches:body.includes(visibleToken)};}); const out={ok:Boolean(api)&&state?.selectedSong===expected.target.song&&mixProfile?.id===expected.target.mixProfileId&&observations.length>0&&observations.every((entry)=>entry.contractMatches&&entry.profileMatches&&entry.visibleMatches), available:Boolean(api), selectedSong:state?.selectedSong||null, expectedSong:expected.target.song, selectedSongMatches:state?.selectedSong===expected.target.song, mixProfileId:mixProfile?.id||null, expectedMixProfileId:expected.target.mixProfileId, mixProfileMatches:mixProfile?.id===expected.target.mixProfileId, observations, levelsMatch:observations.every((entry)=>entry.contractMatches&&entry.profileMatches), visibleLevelMatches:observations.every((entry)=>entry.visibleMatches), boundary:'current-target durable override audit only; this does not prove subjective mix taste'}; window.__neonDurableCurrentTarget={...(window.__neonDurableCurrentTarget||{}),check:out}; return out;",
+        "store_return_to": "__neonDurableCurrentTarget.check",
+        "return_summary_fields": [
+          {
+            "path": "ok"
+          },
+          {
+            "path": "selectedSong"
+          },
+          {
+            "path": "mixProfileId"
+          },
+          {
+            "path": "levelsMatch"
+          },
+          {
+            "path": "visibleLevelMatches"
+          }
+        ],
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.check.ok",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.check.selectedSongMatches",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.check.mixProfileMatches",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.check.levelsMatch",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.check.visibleLevelMatches",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "window_call",
+        "label": "prepare-audio-proof",
+        "path": "__NEON_MIX_PROOF__.prepareForAudioProof",
+        "args": [
+          {
+            "loadAll": false
+          }
+        ],
+        "store_return_to": "__neonDurableCurrentTarget.sources",
+        "return_summary_fields": [
+          {
+            "path": "ok"
+          },
+          {
+            "path": "sources.drums"
+          },
+          {
+            "path": "sources.bass"
+          }
+        ],
+        "timeout_ms": 90000
+      },
+      {
+        "type": "window_call",
+        "label": "render-current-target-metrics",
+        "path": "__NEON_MIX_PROOF__.renderOfflineMetrics",
+        "args": [
+          {
+            "bars": 1,
+            "seed": "neon-durable-current-target-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+            "monitorProfile": "smallSpeaker"
+          }
+        ],
+        "store_return_to": "__neonDurableCurrentTarget.metrics",
+        "return_summary_fields": [
+          {
+            "path": "ok"
+          },
+          {
+            "path": "mixHealth.peak"
+          },
+          {
+            "path": "mixHealth.rms"
+          },
+          {
+            "path": "mixHealth.clipping"
+          }
+        ],
+        "timeout_ms": 120000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonDurableCurrentTarget.metrics.ok",
+        "until_expected_value": true,
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_number",
+        "path": "__neonDurableCurrentTarget.metrics.mixHealth.peak",
+        "max_value": 0.98,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_number",
+        "path": "__neonDurableCurrentTarget.metrics.mixHealth.rms",
+        "min_value": 0.005,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "screenshot",
+        "label": "neon-durable-current-target",
+        "full_page": false
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "route_loaded",
+      "expected_path": "/games/drum-sequencer"
+    },
+    {
+      "type": "selector_visible",
+      "selector": ".drum-sequencer h1"
+    },
+    {
+      "type": "no_horizontal_overflow",
+      "max_overflow_px": 1
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "product_regression": "fail",
+    "proof_insufficient": "review",
+    "environment_blocked": "neutral",
+    "configuration_error": "fail",
+    "needs_human_review": "fail"
+  },
+  "metadata": {
+    "pack_id": "neon_step_sequencer",
+    "evidence_role_pattern": "current_target",
+    "purpose": "Current-target proof that an approved durable mix override is live in the app contract, visible UI, and basic offline render guardrails.",
+    "override_id": "monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+    "required_receipts": [
+      "selected song matches durable override target",
+      "mix profile id matches durable override target",
+      "contract mixer levels match durable override levels",
+      "visible mixer level text reflects durable override levels",
+      "current target render passes basic headroom and non-silence guardrails"
+    ],
+    "does_not_prove": [
+      "subjective mix quality",
+      "that the approval surrogate is a real listener preference",
+      "all possible mix edits"
+    ]
+  }
+}

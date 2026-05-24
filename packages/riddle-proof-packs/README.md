@@ -38,6 +38,12 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Formats the durable handoff without treating approval, ranking, or source application as proof of subjective taste.
 - `createDurableCandidatePatchPlanArtifacts(proofOrPacket, options)`:
   - Returns `{ plan, json, markdown }` for storing a durable source/config handoff next to a proof run.
+- `buildNeonDurableCurrentTargetProfile(override, options)`:
+  - Builds a Neon current-target profile that checks a durable mix override against app contract state, visible mixer text, and basic render guardrails.
+- `readActiveNeonDurableMixOverrides(document)`:
+  - Reads active durable mix override entries from an app/config document and normalizes bounded mixer levels.
+- `createNeonDurableCurrentTargetArtifacts({ override, profileResult }, options)`:
+  - Returns `{ summary, json, markdown }` for the final durable current-target proof receipt.
 
 ## Proof claims and evidence roles
 
@@ -107,6 +113,7 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 - `neon-step-sequencer-deep-explore-songs-and-mixes`
 - `neon-step-sequencer-ratchet-loop-mix-level-search`
 - `neon-step-sequencer-ratchet-loop-approved-candidate`
+- `neon-step-sequencer-durable-current-target`
 
 ## Audio and Neon ratchet packs
 
@@ -204,6 +211,40 @@ if (!artifacts.plan.ok) {
 await fs.promises.writeFile("durable-candidate-patch-plan.json", artifacts.json);
 await fs.promises.writeFile("durable-candidate-patch-plan.md", artifacts.markdown);
 ```
+
+### Durable current-target proof
+
+After a durable source/config patch lands, run a separate `current_target` proof. This is not another taste claim. It proves that the deployed or preview app sees the approved durable state through three objective surfaces:
+
+- app contract mixer levels
+- app contract mix-profile source levels
+- visible mixer text plus basic offline render guardrails
+
+The reusable helper builds the profile from an active durable override:
+
+```ts
+import {
+  buildNeonDurableCurrentTargetProfile,
+  createNeonDurableCurrentTargetArtifacts,
+  readActiveNeonDurableMixOverrides,
+} from "@riddledc/riddle-proof-packs";
+
+const document = JSON.parse(await fs.promises.readFile("src/Games/songs/neon-approved-mix-overrides.json", "utf8"));
+const [override] = readActiveNeonDurableMixOverrides(document);
+const profile = buildNeonDurableCurrentTargetProfile(override, {
+  url: "https://lilarcade.com",
+});
+
+await fs.promises.writeFile("generated-profile.json", `${JSON.stringify(profile, null, 2)}\n`);
+
+// After running the profile with a local or hosted runner:
+const profileResult = JSON.parse(await fs.promises.readFile("profile-result.json", "utf8"));
+const artifacts = createNeonDurableCurrentTargetArtifacts({ override, profileResult });
+await fs.promises.writeFile("durable-current-target-summary.json", artifacts.json);
+await fs.promises.writeFile("durable-current-target-summary.md", artifacts.markdown);
+```
+
+This proof can catch contract/source disagreements, stale durable overrides, visible-control drift, clipping, and silence/low-level windows. It does not prove subjective mix quality.
 
 ## Usage
 

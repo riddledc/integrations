@@ -17,6 +17,7 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 | `run-007-approved-candidate-applied` | `interaction_snapshots` | passed | A bounded ratchet loop uses an explicit operator-approval surrogate, applies the supported `chord -0.10` candidate, and keeps the listening-review caveat in the packet. |
 | `run-008-durable-mix-patch-handoff` | `current_target` | passed | An applied packet becomes a durable candidate patch plan for `chord: 0.28`, then a current-target proof verifies the running app sees that durable level without clipping. |
 | `run-009-deep-exploration-production` | `current_target` | passed | A deployed deep exploration sweep samples the current six-song Neon catalog bounds, finds no deterministic guardrail failures, and restores app state. |
+| `run-010-durable-current-target-production` | `current_target` | passed | A deployed durable current-target proof verifies `chord: 0.18` across contract levels, mix-profile source levels, visible mixer text, and bounded render guardrails. |
 
 ## What these examples do not prove
 
@@ -30,3 +31,4 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 - The approved-candidate run does not prove that the surrogate approval is a real listener preference; it proves that the apply step was explicit, guarded by supported receipts, and recorded for review.
 - The durable handoff run does not prove the mix is better. It proves the approved candidate was eligible for scoped source/config application and that the app saw the durable result afterward.
 - The deep exploration run does not prove taste or exhaustive catalog coverage. It proves deterministic guardrails inside its current configured bounds and records state restoration.
+- The durable current-target production run does not prove taste or approval correctness. It proves the running app agrees with the durable override receipts after promotion.

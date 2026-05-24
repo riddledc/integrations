@@ -1,0 +1,32 @@
+{
+  "version": "riddle-proof-local-runner-manifest.v1",
+  "runner": "local-playwright",
+  "profile_name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+  "captured_at": "2026-05-24T21:44:41.293Z",
+  "artifacts": [
+    {
+      "name": "proof.json",
+      "path": "proof.json",
+      "kind": "text",
+      "bytes": 101578
+    },
+    {
+      "name": "console.json",
+      "path": "console.json",
+      "kind": "text",
+      "bytes": 38
+    },
+    {
+      "name": "dom-summary.json",
+      "path": "dom-summary.json",
+      "kind": "text",
+      "bytes": 816
+    },
+    {
+      "name": "profile-result.json",
+      "path": "profile-result.json",
+      "kind": "text",
+      "bytes": 101578
+    }
+  ]
+}
