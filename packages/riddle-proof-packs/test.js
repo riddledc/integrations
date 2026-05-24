@@ -10,6 +10,9 @@ import {
   getRiddleProofProfilesByPackId,
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
+  buildNeonApprovedCandidateProfileFromReviewPacket,
+  createNeonApprovedCandidateProfileArtifacts,
+  getNeonApprovedCandidateFromReviewPacket,
   createDurableCandidatePatchPlan,
   createDurableCandidatePatchPlanArtifacts,
   buildNeonDurableCurrentTargetProfile,
@@ -33,6 +36,9 @@ assert.equal(typeof getRiddleProofProfilesByPackId, "function");
 assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
+assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
+assert.equal(typeof createNeonApprovedCandidateProfileArtifacts, "function");
+assert.equal(typeof getNeonApprovedCandidateFromReviewPacket, "function");
 assert.equal(typeof createDurableCandidatePatchPlan, "function");
 assert.equal(typeof createDurableCandidatePatchPlanArtifacts, "function");
 assert.equal(typeof buildNeonDurableCurrentTargetProfile, "function");
@@ -129,6 +135,57 @@ assert.equal(neonApprovedCandidateArgs.approval?.mode, "mixing_canon_surrogate")
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[4]?.path, "__neonMixProof.approvedCandidateLoop.appliedCandidateReceipt.ok");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[5]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.status");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[7]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.guardrails.approvedCandidateApplied");
+
+const neonReviewPacketFixture = {
+  kind: "human_review_packet",
+  status: "candidate_ready_for_listening_review",
+  recommendation: {
+    action: "review_before_applying_candidate",
+    candidate: {
+      label: "chord -0.10",
+      action: {
+        type: "set_mixer_level",
+        track: "chord",
+        from: 0.18,
+        to: 0.08,
+        delta: -0.1,
+      },
+    },
+  },
+  request: {
+    candidateActionsAreTransient: true,
+  },
+  proofBoundary: "Objective receipts support or reject candidate change claims; musical taste still requires listening review.",
+};
+const reviewedCandidate = getNeonApprovedCandidateFromReviewPacket(neonReviewPacketFixture);
+assert.equal(reviewedCandidate?.track, "chord");
+assert.equal(reviewedCandidate?.from, 0.18);
+assert.equal(reviewedCandidate?.value, 0.08);
+assert.equal(reviewedCandidate?.label, "chord -0.10");
+const generatedApprovedCandidateProfile = buildNeonApprovedCandidateProfileFromReviewPacket(
+  neonReviewPacketFixture,
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(generatedApprovedCandidateProfile.target.url, "http://127.0.0.1:5173");
+assert.equal(generatedApprovedCandidateProfile.metadata?.candidate_source, "human_review_packet_recommendation");
+assert.equal(generatedApprovedCandidateProfile.metadata?.candidate_source_status, "candidate_ready_for_listening_review");
+const generatedApprovedAction = generatedApprovedCandidateProfile.target.setup_actions?.find((action) => (
+  action.type === "window_call" && action.label === "apply-approved-claim-candidate"
+));
+const generatedApprovedArgs = generatedApprovedAction?.args?.[0];
+assert.deepEqual(generatedApprovedArgs?.focusTracks, ["chord"]);
+assert.equal(generatedApprovedArgs?.maxIterations, 1);
+assert.equal(generatedApprovedArgs?.candidates?.length, 1);
+assert.equal(generatedApprovedArgs?.candidates?.[0]?.track, "chord");
+assert.equal(generatedApprovedArgs?.candidates?.[0]?.value, 0.08);
+assert.equal(generatedApprovedArgs?.applyBest, true);
+const generatedApprovedArtifacts = createNeonApprovedCandidateProfileArtifacts(neonReviewPacketFixture);
+assert.equal(generatedApprovedArtifacts.candidate.track, "chord");
+assert.match(generatedApprovedArtifacts.json, /human_review_packet_recommendation/u);
+assert.throws(
+  () => buildNeonApprovedCandidateProfileFromReviewPacket({ kind: "human_review_packet", recommendation: {} }),
+  /No Neon set_mixer_level recommendation/u,
+);
 
 const durableOverrides = readActiveNeonDurableMixOverrides({
   overrides: [
