@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof-packs
 
+## 0.2.2
+
+### Patch Changes
+
+- Refresh package metadata for the Riddle Proof 0.8.1 framework level-set.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.1
+
 ## 0.2.1
 
 ### Patch Changes
