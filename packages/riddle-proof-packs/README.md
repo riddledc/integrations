@@ -32,6 +32,12 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Formats a compact Markdown handoff with recommendation, objective receipts, ranking role, proof boundary, listening prompts, and caveats.
 - `createHumanReviewPacketArtifacts(proofOrPacket, options)`:
   - Returns `{ packet, json, markdown }` for storing a standalone review packet next to a proof run.
+- `buildNeonApprovedCandidateProfileFromReviewPacket(proofOrPacket, options)`:
+  - Builds a Neon approved-candidate profile from a prior human-review packet recommendation, narrowing the approval proof to the already-selected `set_mixer_level` candidate instead of rerunning the full candidate search.
+- `createNeonApprovedCandidateProfileArtifacts(proofOrPacket, options)`:
+  - Returns `{ packet, candidate, profile, json }` for writing the generated one-candidate approval profile next to a proof run.
+- `getNeonApprovedCandidateFromReviewPacket(proofOrPacket)`:
+  - Extracts the recommended Neon mixer-level candidate from a human-review packet.
 - `createDurableCandidatePatchPlan(proofOrPacket, options)`:
   - Validates an explicitly applied `human_review_packet` and returns a durable patch handoff plan.
 - `formatDurableCandidatePatchPlanMarkdown(plan, options)`:
@@ -166,6 +172,30 @@ console.log(markdown);
 await fs.promises.writeFile("human-review-packet.json", artifacts.json);
 await fs.promises.writeFile("human-review-packet.md", artifacts.markdown);
 ```
+
+### Approved-candidate profile handoff
+
+Once a bounded ratchet loop has already produced a human-review packet, follow-on proof does not need to rerun the whole candidate search just to apply the selected candidate. Build a one-candidate approved profile from the packet recommendation instead:
+
+```ts
+import {
+  buildNeonApprovedCandidateProfileFromReviewPacket,
+  createHumanReviewPacketArtifacts,
+} from "@riddledc/riddle-proof-packs";
+
+const proof = JSON.parse(await fs.promises.readFile("proof.json", "utf8"));
+const { packet } = createHumanReviewPacketArtifacts(proof, {
+  title: "Neon Human Review Packet",
+});
+
+const approvedProfile = buildNeonApprovedCandidateProfileFromReviewPacket(packet, {
+  url: "http://127.0.0.1:5173",
+});
+
+await fs.promises.writeFile("approved-candidate-profile.json", `${JSON.stringify(approvedProfile, null, 2)}\n`);
+```
+
+This still proves the applied candidate and preserves the listening-review caveat. It only narrows the candidate generator to the packet recommendation so local ratchet batches do not pay for a duplicate broad search.
 
 ### Durable candidate patch handoff
 

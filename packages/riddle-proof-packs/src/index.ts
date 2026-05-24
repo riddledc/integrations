@@ -32,6 +32,15 @@ export {
   type DurableCandidatePatchPlanOptions,
 } from "./durableCandidatePlan";
 export {
+  buildNeonApprovedCandidateProfileFromReviewPacket,
+  createNeonApprovedCandidateProfileArtifacts,
+  getNeonApprovedCandidateFromReviewPacket,
+  type NeonApprovedCandidateAction,
+  type NeonApprovedCandidateProfileArtifacts,
+  type NeonApprovedCandidateProfileCandidate,
+  type NeonApprovedCandidateProfileOptions,
+} from "./neonApprovedCandidateProfile";
+export {
   buildNeonDurableCurrentTargetProfile,
   createNeonDurableCurrentTargetArtifacts,
   findNeonSetupActionReturn,
