@@ -1,0 +1,109 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "neon-step-sequencer-mobile-trainer-layout",
+  "target": {
+    "route": "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    "viewports": [
+      {
+        "name": "phone",
+        "width": 390,
+        "height": 844
+      },
+      {
+        "name": "ipad-mini",
+        "width": 768,
+        "height": 1024
+      }
+    ],
+    "timeout_sec": 180,
+    "wait_for_selector": ".drum-sequencer h1",
+    "setup_actions": [
+      {
+        "type": "window_eval",
+        "label": "capture-mobile-trainer-state",
+        "timeout_ms": 10000,
+        "store_return_to": "__neonProof.mobile",
+        "script": "const api=window.__NEON_MIX_PROOF__||window.__RIDDLE_SEQUENCER_PROOF__; const state=api?.getState?.()||api?.getSummary?.()||{}; const trainer=document.querySelector('.instrument-trainer')||document.querySelector('[class*=trainer]'); const mix=document.querySelector('.mix-board')||document.querySelector('[class*=mix]'); const out={available:Boolean(api),route:state.route||location.pathname,selectedSong:state.selectedSong||null,trainerVisible:Boolean(trainer),mixVisible:Boolean(mix),scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth}; window.__neonProof={...(window.__neonProof||{}),mobile:out}; return out;",
+        "return_summary_fields": [
+          {
+            "path": "available"
+          },
+          {
+            "path": "trainerVisible"
+          },
+          {
+            "path": "mixVisible"
+          },
+          {
+            "path": "scrollWidth"
+          },
+          {
+            "path": "clientWidth"
+          }
+        ]
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonProof.mobile.available",
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonProof.mobile.trainerVisible",
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "screenshot",
+        "label": "neon-mobile-trainer-layout",
+        "mode": "viewport"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "route_loaded",
+      "expected_path": "/games/drum-sequencer"
+    },
+    {
+      "type": "selector_visible",
+      "selector": ".drum-sequencer h1"
+    },
+    {
+      "type": "no_mobile_horizontal_overflow"
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "review",
+    "product_regression": "fail"
+  },
+  "metadata": {
+    "pack_id": "neon_step_sequencer",
+    "pack_public_name": "Neon Step Sequencer Pack",
+    "evidence_role_pattern": "current_target",
+    "purpose": "Phone/tablet current-target audit for trainer reachability and overflow.",
+    "required_receipts": [
+      "mobile trainer state is readable",
+      "trainer surface is visible",
+      "viewport screenshot is captured",
+      "mobile overflow is clean"
+    ],
+    "does_not_prove": [
+      "all mixer controls are comfortable to use",
+      "audio output quality",
+      "desktop layout"
+    ]
+  }
+}

@@ -6,6 +6,13 @@ import gameplayWindowCallUntilProfile from "../packs/gameplay-window-call-until/
 import handledRecoveryActionMalformedSuccessProfile from "../packs/handled-recovery-action-malformed-success/profile.json";
 import handledRecoveryListLoadProfile from "../packs/handled-recovery-list-load/profile.json";
 import mobileLayoutSmokeProfile from "../packs/mobile-layout-smoke/profile.json";
+import neonExploreSongsAndMixesProfile from "../packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json";
+import neonFastMixHealthProfile from "../packs/neon-step-sequencer/profiles/fast-mix-health.json";
+import neonFullMixHealthMatrixProfile from "../packs/neon-step-sequencer/profiles/full-mix-health-matrix.json";
+import neonMixChangeBeforeAfterProfile from "../packs/neon-step-sequencer/profiles/mix-change-before-after.json";
+import neonMobileTrainerLayoutProfile from "../packs/neon-step-sequencer/profiles/mobile-trainer-layout.json";
+import neonPlaybackSyncProfile from "../packs/neon-step-sequencer/profiles/playback-sync.json";
+import neonSourceReadinessProfile from "../packs/neon-step-sequencer/profiles/source-readiness.json";
 import pageContentBasicProfile from "../packs/page-content-basic/profile.json";
 import routeInventoryBasicProfile from "../packs/route-inventory-basic/profile.json";
 import spaRouteExitStateHygieneProfile from "../packs/spa-route-exit-state-hygiene/profile.json";
@@ -66,7 +73,24 @@ const rawProfiles = {
   "gameplay-window-call-until": gameplayWindowCallUntilProfile,
   "canvas-gameplay": canvasGameplayProfile,
   "auth-smoke": authSmokeProfile,
+  "neon-step-sequencer-fast-mix-health": neonFastMixHealthProfile,
+  "neon-step-sequencer-source-readiness": neonSourceReadinessProfile,
+  "neon-step-sequencer-playback-sync": neonPlaybackSyncProfile,
+  "neon-step-sequencer-mix-change-before-after": neonMixChangeBeforeAfterProfile,
+  "neon-step-sequencer-mobile-trainer-layout": neonMobileTrainerLayoutProfile,
+  "neon-step-sequencer-full-mix-health-matrix": neonFullMixHealthMatrixProfile,
+  "neon-step-sequencer-explore-songs-and-mixes": neonExploreSongsAndMixesProfile,
 };
+
+const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
+  "neon-step-sequencer-fast-mix-health": "packs/neon-step-sequencer/profiles/fast-mix-health.json",
+  "neon-step-sequencer-source-readiness": "packs/neon-step-sequencer/profiles/source-readiness.json",
+  "neon-step-sequencer-playback-sync": "packs/neon-step-sequencer/profiles/playback-sync.json",
+  "neon-step-sequencer-mix-change-before-after": "packs/neon-step-sequencer/profiles/mix-change-before-after.json",
+  "neon-step-sequencer-mobile-trainer-layout": "packs/neon-step-sequencer/profiles/mobile-trainer-layout.json",
+  "neon-step-sequencer-full-mix-health-matrix": "packs/neon-step-sequencer/profiles/full-mix-health-matrix.json",
+  "neon-step-sequencer-explore-songs-and-mixes": "packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json",
+});
 
 export const RIDDLE_PROOF_PACK_PROFILES: Readonly<Record<string, RiddleProofProfile>> = Object.freeze(
   Object.fromEntries(
@@ -86,7 +110,7 @@ export const RIDDLE_PROOF_PACK_MANIFEST: ReadonlyArray<RiddleProofPackProfileMan
       name: profile.name,
       profile,
       slug,
-      sourcePath: `packs/${slug}/profile.json`,
+      sourcePath: sourcePathOverrides[slug] || `packs/${slug}/profile.json`,
       ...metadata,
     });
   }),
