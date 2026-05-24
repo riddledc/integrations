@@ -83,6 +83,19 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 - `canvas-gameplay`
 - `mobile-layout-smoke`
 - `auth-smoke`
+- `neon-step-sequencer-fast-mix-health`
+- `neon-step-sequencer-source-readiness`
+- `neon-step-sequencer-playback-sync`
+- `neon-step-sequencer-mix-change-before-after`
+- `neon-step-sequencer-mobile-trainer-layout`
+- `neon-step-sequencer-full-mix-health-matrix`
+- `neon-step-sequencer-explore-songs-and-mixes`
+
+## Audio and Neon ratchet packs
+
+The `audio-mix` directory contains reusable audio-proof authoring guidance, a profile template, a metrics schema, a ratchet method, and a human-review rubric.
+
+The `neon-step-sequencer` directory contains the first app-specific ratchet lab under the new architecture. Its profiles declare `current_target` or `interaction_snapshots` evidence-role patterns and explicitly state what they do not prove. The case-study files record the claim, evidence, failure classification, smallest layer changed, and next sharper question for each run.
 
 ## Usage
 

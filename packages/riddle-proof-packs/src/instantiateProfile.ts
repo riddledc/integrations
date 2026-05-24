@@ -19,16 +19,17 @@ export function instantiateRiddleProofProfile(
 ): RiddleProofProfile {
   const manifest = getRiddleProofPackProfileManifest(profileName);
   if (!manifest) throw new Error(`Unknown proof pack profile: ${profileName}`);
+  const profile = JSON.parse(JSON.stringify(manifest.profile)) as RiddleProofProfile;
 
   const targetOverride = {
-    ...manifest.profile.target,
+    ...profile.target,
     ...(options.target || {}),
-    url: options.url ?? manifest.profile.target.url,
-    route: options.route ?? manifest.profile.target.route,
+    url: options.url ?? profile.target.url,
+    route: options.route ?? profile.target.route,
   };
 
   return normalizeRiddleProofProfile(
-    { ...manifest.profile, target: targetOverride },
+    { ...profile, target: targetOverride },
     {
       url: targetOverride.url,
       route: targetOverride.route,

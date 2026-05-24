@@ -1,0 +1,30 @@
+{
+  "schema": "riddle-proof.audio-mix-metrics.v1",
+  "description": "Compact metrics expected from an audio-mix proof contract.",
+  "required": [
+    "ok",
+    "proofKind",
+    "mixHealth"
+  ],
+  "fields": {
+    "ok": "Boolean verdict for the render operation itself.",
+    "proofKind": "Stable receipt kind, usually offline-audio-metrics or offline-audio-window-set.",
+    "summary.total": "Optional mix score summary when the app has a scoring model.",
+    "mixHealth.rms": "Rendered mix root-mean-square level for the proof window.",
+    "mixHealth.peak": "Rendered mix peak amplitude; values >= 0.98 are treated as clipping risk by default.",
+    "mixHealth.clipping": "Boolean clipping guardrail.",
+    "mixHealth.headroomDb": "Headroom estimate derived from peak.",
+    "mixHealth.lowLevel": "Boolean low-level/silence guardrail.",
+    "instrumentMetrics.*.rms": "Per-instrument energy receipt when available.",
+    "instrumentMetrics.*.peak": "Per-instrument peak receipt when available.",
+    "monitorMetrics": "Optional translated-listening monitor, such as smallSpeaker."
+  },
+  "classification": {
+    "product_regression": "The app rendered objective audio evidence that violates the stated claim.",
+    "proof_insufficient": "The proof could not support the claim because a receipt was missing or too coarse.",
+    "profile_calibration": "The profile chose the wrong window, threshold, fixture, or viewport.",
+    "app_contract_gap": "The app needs a smaller or more stable proof contract surface.",
+    "runtime_environment_blocked": "The browser or preview runtime could not produce valid evidence.",
+    "needs_human_review": "The metrics are real, but the remaining question is subjective listening judgment."
+  }
+}

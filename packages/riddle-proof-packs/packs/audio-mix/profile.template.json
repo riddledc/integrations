@@ -1,0 +1,130 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "audio-mix-current-target-template",
+  "target": {
+    "route": "/replace-with-audio-route",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000
+      }
+    ],
+    "timeout_sec": 180,
+    "wait_for_selector": "body",
+    "setup_actions": [
+      {
+        "type": "window_eval",
+        "label": "capture-audio-proof-contract",
+        "timeout_ms": 10000,
+        "store_return_to": "__audioProof.contract",
+        "script": "const contract=window.__AUDIO_MIX_PROOF__||window.__RIDDLE_AUDIO_PROOF__||window.__RIDDLE_PROOF_CONTRACT__; const summary=contract?.captureDiagnostic?.()||contract?.getState?.()||null; window.__audioProof={...(window.__audioProof||{}),contract:{available:Boolean(contract),summary}}; return window.__audioProof.contract;",
+        "return_summary_fields": [
+          {
+            "path": "available"
+          },
+          {
+            "path": "summary.route"
+          }
+        ]
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__audioProof.contract.available",
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "window_call",
+        "label": "render-audio-metrics",
+        "path": "__AUDIO_MIX_PROOF__.renderOfflineMetrics",
+        "args": [
+          {
+            "bars": 1,
+            "seed": "audio-mix-proof-template"
+          }
+        ],
+        "store_return_to": "__audioProof.metrics",
+        "capture_return": true,
+        "timeout_ms": 90000,
+        "return_summary_fields": [
+          {
+            "path": "ok"
+          },
+          {
+            "path": "mixHealth.peak"
+          },
+          {
+            "path": "mixHealth.rms"
+          },
+          {
+            "path": "mixHealth.clipping"
+          }
+        ]
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__audioProof.metrics.ok",
+        "expected_value": true,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_number",
+        "path": "__audioProof.metrics.mixHealth.peak",
+        "max_value": 0.98,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "assert_window_number",
+        "path": "__audioProof.metrics.mixHealth.rms",
+        "min_value": 0.005,
+        "timeout_ms": 10000
+      },
+      {
+        "type": "screenshot",
+        "label": "audio-mix-current-target",
+        "mode": "viewport"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "selector_visible",
+      "selector": "body"
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "review",
+    "product_regression": "fail",
+    "needs_human_review": "review"
+  },
+  "metadata": {
+    "pack_id": "audio_mix",
+    "pack_public_name": "Audio Mix Pack",
+    "evidence_role_pattern": "current_target",
+    "purpose": "Template for objective audio mix-health checks against a running browser target.",
+    "required_receipts": [
+      "audio proof contract is available",
+      "offline audio metrics render completed",
+      "mix peak stays below clipping threshold",
+      "mix RMS stays above silence threshold",
+      "screenshot and console health are captured"
+    ],
+    "does_not_prove": [
+      "subjective taste or mastering quality",
+      "full-song coverage",
+      "backend asset correctness unless source readiness checks are added"
+    ]
+  }
+}
