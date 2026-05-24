@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.8
+
+### Patch Changes
+
+- 9b19f72: Harden the Neon playback-sync proof pack so it waits for visible playback, reads the nested playback contract fields, and asserts that playback is running with the trainer playhead advanced after the Play interaction.
+
 ## 0.4.7
 
 ### Patch Changes
