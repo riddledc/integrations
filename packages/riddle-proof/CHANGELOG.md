@@ -1,5 +1,16 @@
 # @riddledc/riddle-proof
 
+## 0.8.1
+
+### Minor Changes
+
+- Level-set Riddle Proof as the open framework package after the public architecture split. The core package now anchors the stable spec/profile/runtime/app-contract/adapters surface for the new proof-packs, app-contract, hosted-client, local-runner, and worker-contract packages.
+
+### Patch Changes
+
+- Updated dependencies
+  - @riddledc/riddle-proof-app-contract@0.4.1
+
 ## 0.7.227
 
 ### Patch Changes
