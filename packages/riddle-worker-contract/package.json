@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-worker-contract",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Public worker/job contracts for Riddle runner interoperability.",
   "license": "MIT",
   "author": "RiddleDC",

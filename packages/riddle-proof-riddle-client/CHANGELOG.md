@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-riddle-client
 
+## 0.4.1
+
+### Patch Changes
+
+- e28d175: Repack the initial public split packages through the trusted publishing release flow so npm consumers receive installable package metadata.
+
 ## 0.4.0
 
 ### Minor Changes
