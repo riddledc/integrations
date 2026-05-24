@@ -98,6 +98,7 @@ export function formatHumanReviewPacketMarkdown(
   const guardrails = asRecord(packet.guardrails) ?? {};
   const ranking = asRecord(packet.ranking) ?? {};
   const request = asRecord(packet.request) ?? {};
+  const approval = asRecord(request.approval) ?? {};
   const supportedCandidates = asArray(packet.supportedCandidates);
   const rejectedCandidates = asArray(packet.rejectedCandidates);
   const selectedSong = (
@@ -128,6 +129,9 @@ export function formatHumanReviewPacketMarkdown(
     `- state_restored_after_loop: ${formatCodeValue(guardrails.stateRestoredAfterLoop)}`,
     `- candidate_actions_are_transient: ${formatCodeValue(request.candidateActionsAreTransient)}`,
     `- no_permanent_edit_unless_apply_best: ${formatCodeValue(guardrails.noPermanentEditUnlessApplyBest)}`,
+    `- approved_candidate_applied: ${formatCodeValue(guardrails.approvedCandidateApplied)}`,
+    `- approval_mode: ${formatCodeValue(approval.mode)}`,
+    `- approval_basis: ${formatValue(approval.basis)}`,
     "",
     "## Ranking",
     "",

@@ -28,12 +28,15 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 - `profiles/full-mix-health-matrix.json`: current-target matrix across desktop, phone, iPad Mini, and iPad.
 - `profiles/explore-songs-and-mixes.json`: exploration sweep for proof-window health.
 - `profiles/ratchet-loop-mix-level-search.json`: bounded ratchet loop using the Neon `mix-level-search` strategy.
+- `profiles/ratchet-loop-approved-candidate.json`: bounded ratchet loop that uses an explicit operator-approval surrogate, applies the supported candidate, and keeps the listening-review caveat visible.
 
 ## Ratchet loop strategy
 
 The loop is not mix-specific as a proof concept. The proof concept is a bounded ratchet loop: propose a candidate, apply it, collect evidence, classify the result, restore or keep state, and repeat until the budget is exhausted.
 
 This pack's first concrete strategy is `mix-level-search`, which turns small level edits into change-claim candidates. Each candidate says what action will be attempted, what receipts must support the claim, and what evidence should be reviewed afterward. The loop may include a ranking metric to order review, but the verdict comes from receipts and invariants, not from a universal mix-quality number. It still does not decide subjective mix taste; the output is a `humanReviewPacket` for listening handoff.
+
+The approved-candidate profile is the next handoff pattern after review-packet generation. It only applies a candidate when the app contract reports that the candidate's objective receipts passed, and the packet records `approvedCandidateApplied` plus the approval mode. The approval mode can keep development moving, but it is still an operator surrogate; it does not prove listener preference.
 
 ## Example evidence
 

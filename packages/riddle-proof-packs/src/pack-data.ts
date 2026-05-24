@@ -12,6 +12,7 @@ import neonFullMixHealthMatrixProfile from "../packs/neon-step-sequencer/profile
 import neonMixChangeBeforeAfterProfile from "../packs/neon-step-sequencer/profiles/mix-change-before-after.json";
 import neonMobileTrainerLayoutProfile from "../packs/neon-step-sequencer/profiles/mobile-trainer-layout.json";
 import neonPlaybackSyncProfile from "../packs/neon-step-sequencer/profiles/playback-sync.json";
+import neonRatchetLoopApprovedCandidateProfile from "../packs/neon-step-sequencer/profiles/ratchet-loop-approved-candidate.json";
 import neonRatchetLoopMixLevelSearchProfile from "../packs/neon-step-sequencer/profiles/ratchet-loop-mix-level-search.json";
 import neonSourceReadinessProfile from "../packs/neon-step-sequencer/profiles/source-readiness.json";
 import pageContentBasicProfile from "../packs/page-content-basic/profile.json";
@@ -82,6 +83,7 @@ const rawProfiles = {
   "neon-step-sequencer-full-mix-health-matrix": neonFullMixHealthMatrixProfile,
   "neon-step-sequencer-explore-songs-and-mixes": neonExploreSongsAndMixesProfile,
   "neon-step-sequencer-ratchet-loop-mix-level-search": neonRatchetLoopMixLevelSearchProfile,
+  "neon-step-sequencer-ratchet-loop-approved-candidate": neonRatchetLoopApprovedCandidateProfile,
 };
 
 const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
@@ -93,6 +95,7 @@ const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
   "neon-step-sequencer-full-mix-health-matrix": "packs/neon-step-sequencer/profiles/full-mix-health-matrix.json",
   "neon-step-sequencer-explore-songs-and-mixes": "packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json",
   "neon-step-sequencer-ratchet-loop-mix-level-search": "packs/neon-step-sequencer/profiles/ratchet-loop-mix-level-search.json",
+  "neon-step-sequencer-ratchet-loop-approved-candidate": "packs/neon-step-sequencer/profiles/ratchet-loop-approved-candidate.json",
 });
 
 export const RIDDLE_PROOF_PACK_PROFILES: Readonly<Record<string, RiddleProofProfile>> = Object.freeze(

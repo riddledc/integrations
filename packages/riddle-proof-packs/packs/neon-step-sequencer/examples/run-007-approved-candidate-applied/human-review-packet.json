@@ -1,0 +1,801 @@
+{
+  "version": "neon-step-sequencer.human-review-packet.v1",
+  "kind": "human_review_packet",
+  "domain": "audio_mix",
+  "status": "candidate_applied_for_listening_review",
+  "evidenceRolePattern": "interaction_snapshots",
+  "proofBoundary": "Objective receipts support or reject candidate change claims; musical taste still requires listening review.",
+  "requestedIntent": "turn the chord part down a little",
+  "target": {
+    "routeState": {
+      "proofKind": "neon-route-state",
+      "route": "/games/drum-sequencer",
+      "mode": "song",
+      "selectedSong": "Monkberry Moon Delight (Tab)",
+      "selectedPartIndex": 0
+    },
+    "selectedSong": {
+      "proofKind": "neon-selected-song",
+      "selectedSong": "Monkberry Moon Delight (Tab)",
+      "partCount": 9,
+      "mixProfile": {
+        "id": "monkberry-moon-delight-eq-lane-mix-v7",
+        "label": "Monkberry humanized EQ mix",
+        "description": "Humanized imported-tab mix with softer vocal formants, fuller bass harmonics, darker pads, and a deeper shared room/plate space.",
+        "proofWindows": [
+          {
+            "name": "introBed",
+            "label": "Intro Bed",
+            "bars": 1,
+            "seed": "riddle-sequencer-bed",
+            "requiredActive": [
+              "bass",
+              "chord",
+              "guitar"
+            ]
+          },
+          {
+            "name": "vocalEntry",
+            "label": "Vocal Entry",
+            "bars": 3,
+            "seed": "riddle-sequencer-vocal-melody",
+            "requiredActive": [
+              "rhythmSynth"
+            ]
+          }
+        ],
+        "eqSettings": {
+          "kick": [
+            2.2,
+            -0.8,
+            -3.2,
+            -4.5,
+            -5.5,
+            -5,
+            0.8,
+            0
+          ],
+          "snare": [
+            -6,
+            -2.5,
+            1.4,
+            -3,
+            -0.6,
+            1.4,
+            0.4,
+            -1.8
+          ],
+          "hat": [
+            -12,
+            -12,
+            -12,
+            -10,
+            -7,
+            -2.5,
+            -2.2,
+            -1.1
+          ],
+          "clap": [
+            -12,
+            -8,
+            -4,
+            -1.5,
+            0.8,
+            0,
+            -1,
+            -2
+          ],
+          "rim": [
+            -12,
+            -8,
+            -3.5,
+            -1.2,
+            0,
+            -0.5,
+            -1.2,
+            -2
+          ],
+          "bass": [
+            -1.2,
+            2.8,
+            -1.4,
+            -4.8,
+            -6,
+            -8,
+            -10,
+            -10
+          ],
+          "chord": [
+            -8,
+            -2.8,
+            -4.8,
+            -0.8,
+            -1,
+            -2.8,
+            -4.8,
+            -6.5
+          ],
+          "guitar": [
+            -8,
+            -4.8,
+            -3.4,
+            -2.2,
+            1.2,
+            1.4,
+            0.2,
+            -1.8
+          ],
+          "rhythmSynth": [
+            -10,
+            -6,
+            -3.8,
+            -1.6,
+            0.8,
+            1.8,
+            0,
+            -2.8
+          ]
+        },
+        "mixLanes": {
+          "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+          "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+          "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+          "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+          "chord": "Darker pad bed with more room depth and less plasticky top.",
+          "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+          "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+        }
+      }
+    }
+  },
+  "request": {
+    "strategy": "mix-level-search",
+    "focusTracks": [
+      "bass",
+      "chord",
+      "guitar",
+      "rhythmSynth"
+    ],
+    "maxIterations": 6,
+    "monitorProfile": "smallSpeaker",
+    "restore": true,
+    "applyBest": true,
+    "candidateActionsAreTransient": false,
+    "approval": {
+      "mode": "mixing_canon_surrogate",
+      "approvedBy": "codex",
+      "basis": "subtle level reduction after objective receipts pass; this keeps development moving while preserving a listening-review caveat"
+    }
+  },
+  "recommendation": {
+    "action": "listen_to_applied_candidate",
+    "candidate": {
+      "index": 6,
+      "label": "chord -0.10",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "chord",
+        "from": 0.38,
+        "to": 0.28,
+        "delta": -0.1
+      },
+      "rankingMetric": 27.0708,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "chord",
+        "moved": true,
+        "deltas": {
+          "rms": -0.0012,
+          "peak": -0.0088,
+          "totalEnergy": -0.000003
+        },
+        "before": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.0062,
+          "peak": 0.0334,
+          "totalEnergy": 0.000007
+        },
+        "after": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.005,
+          "peak": 0.0246,
+          "totalEnergy": 0.000004
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    "reason": "All objective claim receipts passed for this candidate; ranking only orders listening review."
+  },
+  "supportedCandidates": [
+    {
+      "index": 6,
+      "label": "chord -0.10",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "chord",
+        "from": 0.38,
+        "to": 0.28,
+        "delta": -0.1
+      },
+      "rankingMetric": 27.0708,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "chord",
+        "moved": true,
+        "deltas": {
+          "rms": -0.0012,
+          "peak": -0.0088,
+          "totalEnergy": -0.000003
+        },
+        "before": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.0062,
+          "peak": 0.0334,
+          "totalEnergy": 0.000007
+        },
+        "after": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.005,
+          "peak": 0.0246,
+          "totalEnergy": 0.000004
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "label": "bass -0.18",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting bass level from 0.62 to 0.44 changes rendered bass metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "bass",
+        "from": 0.62,
+        "to": 0.44,
+        "delta": -0.18
+      },
+      "rankingMetric": 27.4894,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "bass",
+        "moved": true,
+        "deltas": {
+          "rms": -0.01625,
+          "peak": -0.0535,
+          "totalEnergy": -0.000304
+        },
+        "before": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.058,
+          "peak": 0.18415,
+          "totalEnergy": 0.000621
+        },
+        "after": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.04175,
+          "peak": 0.13065,
+          "totalEnergy": 0.000317
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    {
+      "index": 5,
+      "label": "chord +0.12",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting chord level from 0.38 to 0.50 changes rendered chord metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "chord",
+        "from": 0.38,
+        "to": 0.5,
+        "delta": 0.12
+      },
+      "rankingMetric": 28.5062,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "chord",
+        "moved": true,
+        "deltas": {
+          "rms": 0.002,
+          "peak": 0.0105,
+          "totalEnergy": 0.000005
+        },
+        "before": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.0062,
+          "peak": 0.0334,
+          "totalEnergy": 0.000007
+        },
+        "after": {
+          "track": "chord",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.0082,
+          "peak": 0.0439,
+          "totalEnergy": 0.000012
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    {
+      "index": 2,
+      "label": "bass -0.10",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting bass level from 0.62 to 0.52 changes rendered bass metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "bass",
+        "from": 0.62,
+        "to": 0.52,
+        "delta": -0.1
+      },
+      "rankingMetric": 29.1702,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "bass",
+        "moved": true,
+        "deltas": {
+          "rms": -0.00935,
+          "peak": -0.02975,
+          "totalEnergy": -0.000184
+        },
+        "before": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.058,
+          "peak": 0.18415,
+          "totalEnergy": 0.000621
+        },
+        "after": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.04865,
+          "peak": 0.1544,
+          "totalEnergy": 0.000437
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    {
+      "index": 1,
+      "label": "bass +0.12",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting bass level from 0.62 to 0.74 changes rendered bass metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "bass",
+        "from": 0.62,
+        "to": 0.74,
+        "delta": 0.12
+      },
+      "rankingMetric": 31.7991,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "bass",
+        "moved": true,
+        "deltas": {
+          "rms": 0.01125,
+          "peak": 0.0356,
+          "totalEnergy": 0.000264
+        },
+        "before": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.058,
+          "peak": 0.18415,
+          "totalEnergy": 0.000621
+        },
+        "after": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.06925,
+          "peak": 0.21975,
+          "totalEnergy": 0.000885
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    },
+    {
+      "index": 3,
+      "label": "bass +0.20",
+      "status": "supported",
+      "classification": null,
+      "claim": "Setting bass level from 0.62 to 0.82 changes rendered bass metrics while preserving Neon proof invariants.",
+      "action": {
+        "type": "set_mixer_level",
+        "track": "bass",
+        "from": 0.62,
+        "to": 0.82,
+        "delta": 0.2
+      },
+      "rankingMetric": 35.2559,
+      "receipts": [
+        {
+          "name": "mixer_edit_accepted",
+          "ok": true
+        },
+        {
+          "name": "contract_mixer_level_reflects_action",
+          "ok": true
+        },
+        {
+          "name": "rendered_target_metric_changed",
+          "ok": true
+        },
+        {
+          "name": "required_instruments_preserved",
+          "ok": true
+        },
+        {
+          "name": "no_clipping",
+          "ok": true
+        },
+        {
+          "name": "no_low_level_proof_window",
+          "ok": true
+        }
+      ],
+      "failedReceipts": [],
+      "guardrails": {
+        "mixerEditAccepted": true,
+        "contractLevelReflected": true,
+        "renderedTargetMoved": true,
+        "requiredInstrumentsPreserved": true,
+        "noClipping": true,
+        "noLowLevelProofWindow": true
+      },
+      "targetMovement": {
+        "track": "bass",
+        "moved": true,
+        "deltas": {
+          "rms": 0.0187,
+          "peak": 0.0594,
+          "totalEnergy": 0.000466
+        },
+        "before": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.058,
+          "peak": 0.18415,
+          "totalEnergy": 0.000621
+        },
+        "after": {
+          "track": "bass",
+          "sampleCount": 2,
+          "activeCount": 0,
+          "rms": 0.0767,
+          "peak": 0.24355,
+          "totalEnergy": 0.001087
+        }
+      },
+      "summary": {
+        "status": "passed",
+        "windowCount": 2,
+        "findingCount": 0,
+        "mixProfile": {
+          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+          "label": "Monkberry humanized EQ mix"
+        }
+      }
+    }
+  ],
+  "rejectedCandidates": [],
+  "ranking": {
+    "metric": "objective_mix_health_penalty",
+    "role": "review_order_only",
+    "lowerIsBetter": true,
+    "baselineCandidateRankingMetric": 28.8336,
+    "bestCandidateRankingMetric": 27.0708,
+    "rankingMetricDelta": 1.7628
+  },
+  "baseline": {
+    "status": "passed",
+    "windowCount": 2,
+    "findingCount": 0,
+    "mixProfile": {
+      "id": "monkberry-moon-delight-eq-lane-mix-v7",
+      "label": "Monkberry humanized EQ mix"
+    }
+  },
+  "guardrails": {
+    "supportedClaimCandidateCount": 6,
+    "rejectedCandidateCount": 0,
+    "stateRestoredAfterLoop": true,
+    "noPermanentEditUnlessApplyBest": false,
+    "approvedCandidateApplied": true
+  },
+  "listenerPrompts": [
+    "Does the supported candidate match the requested musical intent?",
+    "Is the changed part better balanced in the proof window?",
+    "Did the proof window contain the musical material being judged?",
+    "Would another section or speaker profile change the listening decision?"
+  ],
+  "caveats": [
+    "This packet does not prove subjective mix quality.",
+    "A supported candidate proves objective receipts and guardrails only.",
+    "Ranking orders review; it is not a taste score.",
+    "Keep or apply the candidate only after listening review."
+  ]
+}

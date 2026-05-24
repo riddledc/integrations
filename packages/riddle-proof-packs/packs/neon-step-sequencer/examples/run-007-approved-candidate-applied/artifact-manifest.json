@@ -1,0 +1,32 @@
+{
+  "version": "riddle-proof-local-runner-manifest.v1",
+  "runner": "local-playwright",
+  "profile_name": "lilarcade-neon-ratchet-loop-approved-candidate",
+  "captured_at": "2026-05-24T13:41:23.987Z",
+  "artifacts": [
+    {
+      "name": "proof.json",
+      "path": "proof.json",
+      "kind": "text",
+      "bytes": 506212
+    },
+    {
+      "name": "console.json",
+      "path": "console.json",
+      "kind": "text",
+      "bytes": 38
+    },
+    {
+      "name": "dom-summary.json",
+      "path": "dom-summary.json",
+      "kind": "text",
+      "bytes": 815
+    },
+    {
+      "name": "profile-result.json",
+      "path": "profile-result.json",
+      "kind": "text",
+      "bytes": 506212
+    }
+  ]
+}

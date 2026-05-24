@@ -123,6 +123,17 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026 with local Playwright.
 - next sharper question: can the packet become the standard output shape for one-off and background candidate operators across more than `mix-level-search`?
 
+### Run 007 made applying a candidate explicit and auditable
+
+- run: `run-007-approved-candidate-applied`
+- claim: a bounded ratchet loop can apply a supported candidate only after an explicit approval mode, then record that final apply step without claiming subjective mix quality.
+- observed evidence: loop status was `claim_candidate_supported`; packet status was `candidate_applied_for_listening_review`; approval mode was `mixing_canon_surrogate`; recommended candidate was `chord -0.10`; applied-candidate receipt passed with observed level `0.28`; supported candidate count was `6`; rejected candidate count was `0`; state was restored before the final apply; ranking role stayed `review_order_only`.
+- classification: none; passing `interaction_snapshots` proof with subjective listening caveat.
+- smallest layer changed: app proof contract and proof-pack profile assertions.
+- change made: made `applyBest` require a supported claim candidate, added an applied-candidate receipt, surfaced approval metadata in the human-review packet, and added an approved-candidate profile.
+- rerun: passed on May 24, 2026 with local Playwright.
+- next sharper question: can follow-on agents use the applied-candidate packet to prepare a code/config patch only when the operator explicitly asks for a durable edit?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`
