@@ -10,6 +10,9 @@ import {
   getRiddleProofProfilesByPackId,
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
+  createDurableCandidatePatchPlan,
+  createDurableCandidatePatchPlanArtifacts,
+  formatDurableCandidatePatchPlanMarkdown,
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
@@ -24,6 +27,9 @@ assert.equal(typeof getRiddleProofProfilesByPackId, "function");
 assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
+assert.equal(typeof createDurableCandidatePatchPlan, "function");
+assert.equal(typeof createDurableCandidatePatchPlanArtifacts, "function");
+assert.equal(typeof formatDurableCandidatePatchPlanMarkdown, "function");
 assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
@@ -228,6 +234,79 @@ const bundledAppliedPacketMarkdown = readFileSync(
 );
 assert.equal(bundledAppliedPacketMarkdown, appliedPacketMarkdown);
 
+const durablePlan = createDurableCandidatePatchPlan(extractedAppliedPacket, {
+  sourceFile: "src/Games/songs/neon-approved-mix-overrides.json",
+  requireMixProfileId: true,
+});
+assert.equal(durablePlan.ok, true);
+assert.equal(durablePlan.status, "ready_for_durable_patch");
+assert.equal(durablePlan.target.label, "Monkberry Moon Delight (Tab)");
+assert.equal(durablePlan.target.mixProfileId, "monkberry-moon-delight-eq-lane-mix-v7");
+assert.equal(durablePlan.durableEdit?.sourceFile, "src/Games/songs/neon-approved-mix-overrides.json");
+assert.deepEqual(durablePlan.durableEdit?.mixerLevels, { chord: 0.28 });
+assert.equal(durablePlan.approval.mode, "mixing_canon_surrogate");
+assert.match(durablePlan.boundary, /does not prove subjective mix quality/u);
+const durablePlanMarkdown = formatDurableCandidatePatchPlanMarkdown(durablePlan, {
+  title: "Neon Durable Candidate Patch Plan",
+});
+assert.match(durablePlanMarkdown, /^# Neon Durable Candidate Patch Plan/u);
+assert.match(durablePlanMarkdown, /ready_for_durable_patch/u);
+assert.match(durablePlanMarkdown, /set_mixer_level chord: 0\.38 -> 0\.28 \(-0\.1\)/u);
+assert.match(durablePlanMarkdown, /mixing_canon_surrogate/u);
+assert.match(durablePlanMarkdown, /does not prove subjective mix quality/u);
+assert.doesNotMatch(durablePlanMarkdown, /automatically better/u);
+const durablePlanArtifacts = createDurableCandidatePatchPlanArtifacts(neonApprovedCandidateRun, {
+  title: "Neon Durable Candidate Patch Plan",
+  sourceFile: "src/Games/songs/neon-approved-mix-overrides.json",
+  requireMixProfileId: true,
+});
+assert.equal(durablePlanArtifacts.plan.ok, true);
+assert.deepEqual(JSON.parse(durablePlanArtifacts.json).durableEdit.mixerLevels, { chord: 0.28 });
+assert.equal(durablePlanArtifacts.markdown, durablePlanMarkdown);
+
+const malformedDurablePacket = JSON.parse(JSON.stringify(extractedAppliedPacket));
+malformedDurablePacket.recommendation.candidate.action.to = null;
+const malformedDurablePlan = createDurableCandidatePatchPlan(malformedDurablePacket, {
+  sourceFile: "src/Games/songs/neon-approved-mix-overrides.json",
+});
+assert.equal(malformedDurablePlan.ok, false);
+assert.equal(malformedDurablePlan.durableEdit, null);
+assert.ok(malformedDurablePlan.errors.some((error) => error.includes("target value is required")));
+
+const transientDurablePlan = createDurableCandidatePatchPlan(extractedReviewPacket, {
+  sourceFile: "src/Games/songs/neon-approved-mix-overrides.json",
+});
+assert.equal(transientDurablePlan.ok, false);
+assert.equal(transientDurablePlan.status, "not_ready_for_durable_patch");
+assert.equal(transientDurablePlan.durableEdit, null);
+assert.ok(transientDurablePlan.errors.some((error) => error.includes("candidate_applied_for_listening_review")));
+assert.ok(transientDurablePlan.errors.some((error) => error.includes("candidateActionsAreTransient")));
+
+const neonDurableHandoffRunDir = "packs/neon-step-sequencer/examples/run-008-durable-mix-patch-handoff";
+assert.ok(existsSync(`${neonDurableHandoffRunDir}/summary.md`));
+assert.ok(existsSync(`${neonDurableHandoffRunDir}/durable-candidate-patch-plan.json`));
+assert.ok(existsSync(`${neonDurableHandoffRunDir}/durable-candidate-patch-plan.md`));
+assert.ok(existsSync(`${neonDurableHandoffRunDir}/human-review-packet.json`));
+const bundledDurablePlan = JSON.parse(readFileSync(`${neonDurableHandoffRunDir}/durable-candidate-patch-plan.json`, "utf8"));
+assert.equal(bundledDurablePlan.kind, "durable_candidate_patch_plan");
+assert.equal(bundledDurablePlan.status, "ready_for_durable_patch");
+assert.deepEqual(bundledDurablePlan.durableEdit?.mixerLevels, { chord: 0.28 });
+assert.match(
+  readFileSync(`${neonDurableHandoffRunDir}/durable-candidate-patch-plan.md`, "utf8"),
+  /musical taste still requires listening review|does not prove subjective mix quality/u,
+);
+const durableCurrentTargetRun = JSON.parse(readFileSync(`${neonDurableHandoffRunDir}/proof.json`, "utf8"));
+assert.equal(durableCurrentTargetRun.profile_name, "lilarcade-neon-fast-mix-health");
+assert.equal(durableCurrentTargetRun.status, "passed");
+const durableSetupCheck = durableCurrentTargetRun.checks.find((check) => check.type === "setup_actions_succeeded");
+const durableViewport = durableSetupCheck?.evidence?.setup_summary?.viewports?.[0];
+const durableDiagnostic = durableViewport?.window_eval?.[0]?.returned?.diagnostic;
+const durableMetrics = durableViewport?.window_call?.find((call) => call.path === "__NEON_MIX_PROOF__.renderOfflineMetrics")?.returned;
+assert.equal(durableDiagnostic?.selectedSong?.selectedSong, "Monkberry Moon Delight (Tab)");
+assert.equal(durableDiagnostic?.mixerState?.levels?.chord, 0.28);
+assert.equal(durableMetrics?.mixHealth?.clipping, false);
+assert.equal(durableMetrics?.mixHealth?.lowLevel, false);
+
 const reviewPacketCliHelp = spawnSync(process.execPath, ["bin/riddle-proof-review-packet", "--help"], {
   encoding: "utf8",
 });
@@ -260,6 +339,42 @@ try {
   );
 } finally {
   rmSync(reviewPacketCliOutputDir, { recursive: true, force: true });
+}
+
+const durableCandidatePlanCliHelp = spawnSync(process.execPath, ["bin/riddle-proof-durable-candidate-plan", "--help"], {
+  encoding: "utf8",
+});
+assert.equal(durableCandidatePlanCliHelp.status, 0, durableCandidatePlanCliHelp.stderr);
+assert.match(durableCandidatePlanCliHelp.stdout, /riddle-proof-durable-candidate-plan --proof/u);
+
+const durableCandidatePlanCliOutputDir = mkdtempSync(path.join(tmpdir(), "riddle-proof-durable-candidate-plan-"));
+try {
+  const durableCandidatePlanCliRun = spawnSync(process.execPath, [
+    "bin/riddle-proof-durable-candidate-plan",
+    "--proof",
+    "packs/neon-step-sequencer/examples/run-007-approved-candidate-applied/proof.json",
+    "--output",
+    durableCandidatePlanCliOutputDir,
+    "--title",
+    "Neon Durable Candidate Patch Plan",
+    "--source-file",
+    "src/Games/songs/neon-approved-mix-overrides.json",
+    "--require-mix-profile",
+  ], { encoding: "utf8" });
+  assert.equal(durableCandidatePlanCliRun.status, 0, durableCandidatePlanCliRun.stderr);
+  const cliSummary = JSON.parse(durableCandidatePlanCliRun.stdout);
+  assert.equal(cliSummary.ok, true);
+  assert.equal(cliSummary.status, "ready_for_durable_patch");
+  assert.equal(
+    JSON.parse(readFileSync(path.join(durableCandidatePlanCliOutputDir, "durable-candidate-patch-plan.json"), "utf8")).durableEdit.mixerLevels.chord,
+    0.28,
+  );
+  assert.match(
+    readFileSync(path.join(durableCandidatePlanCliOutputDir, "durable-candidate-patch-plan.md"), "utf8"),
+    /does not prove subjective mix quality/u,
+  );
+} finally {
+  rmSync(durableCandidatePlanCliOutputDir, { recursive: true, force: true });
 }
 
 const mobileProfile = instantiateRiddleProofProfile("mobile-layout-smoke", {

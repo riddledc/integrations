@@ -1,0 +1,5078 @@
+{
+  "version": "riddle-proof.profile-result.v1",
+  "profile_name": "lilarcade-neon-fast-mix-health",
+  "runner": "local-playwright",
+  "status": "passed",
+  "baseline_policy": "invariant_only",
+  "route": {
+    "requested": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    "observed": "/games/drum-sequencer",
+    "expected_path": "/games/drum-sequencer",
+    "matched": true,
+    "http_status": 200
+  },
+  "artifacts": {
+    "screenshots": [
+      "lilarcade-neon-fast-mix-health-desktop",
+      "lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health",
+      "screenshots/lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health.png",
+      "screenshots/lilarcade-neon-fast-mix-health-desktop.png"
+    ],
+    "console": "console.json",
+    "proof_json": "proof.json",
+    "dom_summary": "dom-summary.json",
+    "riddle_artifacts": [
+      {
+        "name": "proof.json",
+        "path": "proof.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "console.json",
+        "path": "console.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "dom-summary.json",
+        "path": "dom-summary.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health.png",
+        "path": "screenshots/lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      },
+      {
+        "name": "lilarcade-neon-fast-mix-health-desktop.png",
+        "path": "screenshots/lilarcade-neon-fast-mix-health-desktop.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "setup_actions_succeeded",
+      "label": "setup actions succeeded",
+      "status": "passed",
+      "evidence": {
+        "action_count": 8,
+        "viewports": [
+          {
+            "name": "desktop",
+            "expected_action_count": 8,
+            "ok": true,
+            "result_count": 8
+          }
+        ],
+        "setup_summary": {
+          "viewport_count": 1,
+          "action_count": 8,
+          "final_screenshot_count": 1,
+          "final_screenshot_full_page": null,
+          "final_screenshot_mode": null,
+          "viewports": [
+            {
+              "name": "desktop",
+              "expected_action_count": 8,
+              "ok": true,
+              "result_count": 8,
+              "observed_path": "/games/drum-sequencer",
+              "final_url": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+              "action_counts": {
+                "window_eval": 1,
+                "assert_window_value": 2,
+                "window_call": 2,
+                "assert_window_number": 2,
+                "screenshot": 1
+              },
+              "frame_action_count": 0,
+              "frame_urls": [],
+              "final_screenshot": "lilarcade-neon-fast-mix-health-desktop",
+              "final_screenshot_full_page": null,
+              "setup_screenshots": [
+                "lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health"
+              ],
+              "clicked_total": 0,
+              "clicked_truncated": false,
+              "click_sequence_total": 0,
+              "click_sequence_truncated": false,
+              "click_sequences": [],
+              "click_count_action_total": 0,
+              "click_count_value_total": 0,
+              "window_call_until_total": 0,
+              "window_call_until_call_total": 0,
+              "window_call_until_truncated": false,
+              "window_call_until": [],
+              "window_call_total": 2,
+              "window_call_stored_total": 2,
+              "window_call_captured_total": 2,
+              "window_call_truncated": false,
+              "window_call": [
+                {
+                  "ordinal": 2,
+                  "ok": true,
+                  "path": "__NEON_MIX_PROOF__.prepareForAudioProof",
+                  "return_captured": true,
+                  "return_stored_to": "__neonMixProof.sources",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "proofKind": "sample-source-preparation",
+                    "sources": {
+                      "drums": "samples",
+                      "bass": "hybrid",
+                      "chord": "hybrid",
+                      "guitar": "hybrid",
+                      "vocal": "voice_oohs"
+                    },
+                    "loaded": {
+                      "drums": true,
+                      "bass": true,
+                      "guitar": true,
+                      "chord": true,
+                      "vocal": true
+                    },
+                    "states": {
+                      "bass": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 6,
+                        "library": {
+                          "name": "tonejs-instruments bass-electric",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 6
+                        }
+                      },
+                      "chord": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 7,
+                        "library": {
+                          "name": "tonejs-instruments piano",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 7
+                        }
+                      },
+                      "guitar": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 9,
+                        "library": {
+                          "name": "tonejs-instruments guitar-electric",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 9
+                        }
+                      },
+                      "vocal": {
+                        "source": "voice_oohs",
+                        "status": "idle",
+                        "loadedSampleCount": 37,
+                        "library": {
+                          "name": "FluidR3 General MIDI SoundFont",
+                          "license": "CC BY 3.0",
+                          "instruments": [
+                            "voice_oohs",
+                            "choir_aahs",
+                            "lead_6_voice",
+                            "synth_choir"
+                          ]
+                        }
+                      },
+                      "drums": {
+                        "source": "samples",
+                        "status": "idle",
+                        "loadedTrackCount": 5,
+                        "loadedSampleCount": 8,
+                        "loadedSampleNames": [
+                          "snare-m",
+                          "kick-alt",
+                          "kick",
+                          "stick-m",
+                          "clap",
+                          "hhclosed",
+                          "hhclosed-long",
+                          "hhclosed-short"
+                        ],
+                        "library": {
+                          "name": "LM-2 sampled drum machine",
+                          "license": "Public domain sample pack",
+                          "trackCount": 5,
+                          "sampleCount": 8,
+                          "sampleNames": [
+                            "kick",
+                            "kick-alt",
+                            "snare-m",
+                            "hhclosed-short",
+                            "hhclosed",
+                            "hhclosed-long",
+                            "clap",
+                            "stick-m"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    }
+                  ]
+                },
+                {
+                  "ordinal": 3,
+                  "ok": true,
+                  "path": "__NEON_MIX_PROOF__.renderOfflineMetrics",
+                  "return_captured": true,
+                  "return_stored_to": "__neonMixProof.metrics",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "proofKind": "offline-audio-metrics",
+                    "bars": 1,
+                    "seed": "lilarcade-neon-fast-mix-health",
+                    "monitorProfile": "smallSpeaker",
+                    "summary": {
+                      "total": 71.6116,
+                      "mix": {
+                        "slopeDbPerOct": -5.991,
+                        "slopePenalty": 0.5509,
+                        "rolloffPenalty": 2.8443,
+                        "presenceRatio": 0.045,
+                        "presencePenalty": 0.8409,
+                        "presenceFloorPenalty": 1.125,
+                        "mixPenaltyScale": 1
+                      },
+                      "mud": {
+                        "ratio": 0.2171,
+                        "penalty": 0
+                      },
+                      "top": [
+                        {
+                          "instrument": "kick",
+                          "score": 89.342,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "snare",
+                          "score": 58.667,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "hat",
+                          "score": 2.224,
+                          "skipped": false
+                        }
+                      ],
+                      "eqPenalty": 3.3732
+                    },
+                    "mixHealth": {
+                      "rms": 0.1234,
+                      "peak": 0.8303,
+                      "clipping": false,
+                      "headroomDb": 1.62,
+                      "lowLevel": false
+                    },
+                    "score": {
+                      "total": 71.6116,
+                      "perInstrument": {
+                        "kick": {
+                          "score": 89.34198773250658,
+                          "penalties": {
+                            "centroidHz": 0.000008163265306122682,
+                            "rolloffHz": 0.03343673469387755,
+                            "flatness": 0.060024999999999995,
+                            "crestDb": 0,
+                            "lowMidOverLow": 0.14851783454738218,
+                            "highOverMid": 89.10000000000001
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0.003654970760233918,
+                            "midOverLowMid": 0.04,
+                            "highOverMid": 1,
+                            "highOverTotal": 0.000145623998835008,
+                            "low": 0.01368,
+                            "lowMid": 0.000049999999999999996,
+                            "total": 0.013734
+                          }
+                        },
+                        "snare": {
+                          "score": 58.666548999980805,
+                          "penalties": {
+                            "centroidHz": 0.01781011570247934,
+                            "rolloffHz": 0.22374082515625,
+                            "flatness": 0.4728854444444444,
+                            "crestDb": 0,
+                            "midOverLowMid": 0.43505353486729054,
+                            "highOverMid": 57.491238919810336,
+                            "presenceFloor": 0.025820159999999995
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 2.0658244680851063,
+                            "midOverLowMid": 0.010621177985194723,
+                            "highOverMid": 6.06060606060606,
+                            "highOverTotal": 0.041288191577208914,
+                            "low": 0.0015040000000000001,
+                            "lowMid": 0.003107,
+                            "total": 0.004844
+                          }
+                        },
+                        "hat": {
+                          "score": 2.2242299999999995,
+                          "penalties": {
+                            "centroidHz": 0,
+                            "rolloffHz": 0,
+                            "flatness": 1.8906249999999993,
+                            "crestDb": 0.28560500000000016,
+                            "highOverTotal": 0.048000000000000084,
+                            "presenceFloor": 0
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0,
+                            "midOverLowMid": 0,
+                            "highOverMid": 0,
+                            "highOverTotal": 1,
+                            "low": 0,
+                            "lowMid": 0,
+                            "total": 0.000023
+                          }
+                        },
+                        "clap": {
+                          "score": 0,
+                          "skipped": true
+                        },
+                        "rim": {
+                          "score": 0,
+                          "skipped": true
+                        },
+                        "bass": {
+                          "score": 1.2493086627244034,
+                          "penalties": {
+                            "centroidHz": 0.0004840000000000013,
+                            "rolloffHz": 0.13778943999999999,
+                            "flatness": 0.04000000000000001,
+                            "crestDb": 0.7951152,
+                            "lowMidOverLow": 0.27592002272440347,
+                            "highOverMid": 0
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0.0898876404494382,
+                            "midOverLowMid": 0,
+                            "highOverMid": 0,
+                            "highOverTotal": 0,
+                            "low": 0.000089,
+                            "lowMid": 0.000008,
+                            "total": 0.000097
+                          }
+                        },
+                        "chord": {
+                          "score": 1.3176275669444446,
+                          "penalties": {
+                            "centroidHz": 0,
+                            "rolloffHz": 0.2796823225,
+                            "flatness": 0.10934044444444448,
+                            "crestDb": 0.6786048,
+                            "midOverLowMid": 0.25,
+                            "highOverMid": 0
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0,
+                            "midOverLowMid": 0,
+                            "highOverMid": 0,
+                            "highOverTotal": 0,
+                            "low": 0,
+                            "lowMid": 0.000002,
+                            "total": 0.000002
+                          }
+                        },
+                        "guitar": {
+                          "score": 1.4871859136455468,
+                          "penalties": {
+                            "centroidHz": 0,
+                            "rolloffHz": 0.1497408558677686,
+                            "flatness": 0.34433424,
+                            "crestDb": 0.8266800000000001,
+                            "midOverLowMid": 0.12017777777777783,
+                            "highOverMid": 0,
+                            "presenceFloor": 0.04625303999999999
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 30,
+                            "midOverLowMid": 0.9799999999999999,
+                            "highOverMid": 0.06802721088435375,
+                            "highOverTotal": 0.03205128205128205,
+                            "low": 0.000005,
+                            "lowMid": 0.00015000000000000001,
+                            "total": 0.00031200000000000005
+                          }
+                        },
+                        "rhythmSynth": {
+                          "score": 0,
+                          "skipped": true
+                        }
+                      },
+                      "mud": {
+                        "ratio": 0.2171,
+                        "penalty": 0
+                      },
+                      "mix": {
+                        "slopeDbPerOct": -5.991,
+                        "slopePenalty": 0.5509,
+                        "rolloffPenalty": 2.8443,
+                        "presenceRatio": 0.045,
+                        "presencePenalty": 0.8409,
+                        "presenceFloorPenalty": 1.125,
+                        "mixPenaltyScale": 1
+                      },
+                      "eqPenalty": 3.3732
+                    },
+                    "mixMetrics": {
+                      "bands": [
+                        {
+                          "label": "60",
+                          "db": -61.8,
+                          "energy": 0.001184,
+                          "ratio": 0.324
+                        },
+                        {
+                          "label": "120",
+                          "db": -63.8,
+                          "energy": 0.000864,
+                          "ratio": 0.2365
+                        },
+                        {
+                          "label": "250",
+                          "db": -53.7,
+                          "energy": 0.000871,
+                          "ratio": 0.2385
+                        },
+                        {
+                          "label": "500",
+                          "db": -60.2,
+                          "energy": 0.000496,
+                          "ratio": 0.1357
+                        },
+                        {
+                          "label": "1k",
+                          "db": -66.9,
+                          "energy": 0.000557,
+                          "ratio": 0.1523
+                        },
+                        {
+                          "label": "2k",
+                          "db": -73.3,
+                          "energy": 0.000141,
+                          "ratio": 0.0385
+                        },
+                        {
+                          "label": "4k",
+                          "db": -87.1,
+                          "energy": 0.000052,
+                          "ratio": 0.0141
+                        },
+                        {
+                          "label": "8k",
+                          "db": -108.6,
+                          "energy": 0.000021,
+                          "ratio": 0.0057
+                        }
+                      ],
+                      "centroidHz": 457.1,
+                      "rolloffHz": 567.4,
+                      "flatness": 0.1081,
+                      "totalEnergy": 0.003653,
+                      "rms": 0.1234,
+                      "peak": 0.8303,
+                      "crestDb": 16.56
+                    },
+                    "monitorMetrics": {
+                      "bands": [
+                        {
+                          "label": "60",
+                          "db": -89.3,
+                          "energy": 0,
+                          "ratio": 0
+                        },
+                        {
+                          "label": "120",
+                          "db": -74.3,
+                          "energy": 0,
+                          "ratio": 0.0151
+                        },
+                        {
+                          "label": "250",
+                          "db": -56.2,
+                          "energy": 0.000004,
+                          "ratio": 0.2774
+                        },
+                        {
+                          "label": "500",
+                          "db": -51.4,
+                          "energy": 0.000009,
+                          "ratio": 0.6581
+                        },
+                        {
+                          "label": "1k",
+                          "db": -65.2,
+                          "energy": 0,
+                          "ratio": 0.0258
+                        },
+                        {
+                          "label": "2k",
+                          "db": -77.5,
+                          "energy": 0,
+                          "ratio": 0.0022
+                        },
+                        {
+                          "label": "4k",
+                          "db": -83.7,
+                          "energy": 0,
+                          "ratio": 0
+                        },
+                        {
+                          "label": "8k",
+                          "db": -99.1,
+                          "energy": 0,
+                          "ratio": 0
+                        }
+                      ],
+                      "centroidHz": 413.6,
+                      "rolloffHz": 662,
+                      "flatness": 0.0486,
+                      "totalEnergy": 0.000014,
+                      "rms": 0.129,
+                      "peak": 0.8303,
+                      "crestDb": 16.17
+                    },
+                    "instrumentMetrics": {
+                      "kick": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -39.5,
+                            "energy": 0.00943,
+                            "ratio": 0.8028
+                          },
+                          {
+                            "label": "120",
+                            "db": -55.3,
+                            "energy": 0.00425,
+                            "ratio": 0.3618
+                          },
+                          {
+                            "label": "250",
+                            "db": -76.2,
+                            "energy": 0.000047,
+                            "ratio": 0.004
+                          },
+                          {
+                            "label": "500",
+                            "db": -91.6,
+                            "energy": 0.000003,
+                            "ratio": 0.0003
+                          },
+                          {
+                            "label": "1k",
+                            "db": -98.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -97.3,
+                            "energy": 0.000002,
+                            "ratio": 0.0002
+                          },
+                          {
+                            "label": "4k",
+                            "db": -108.1,
+                            "energy": 0.000002,
+                            "ratio": 0.0002
+                          },
+                          {
+                            "label": "8k",
+                            "db": -131.8,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 69.8,
+                        "rolloffHz": 86,
+                        "flatness": 0.001,
+                        "totalEnergy": 0.011746,
+                        "rms": 0.1772,
+                        "peak": 0.8076,
+                        "crestDb": 13.17
+                      },
+                      "snare": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -82.9,
+                            "energy": 0.000002,
+                            "ratio": 0.0004
+                          },
+                          {
+                            "label": "120",
+                            "db": -60.4,
+                            "energy": 0.001502,
+                            "ratio": 0.4103
+                          },
+                          {
+                            "label": "250",
+                            "db": -54.9,
+                            "energy": 0.003079,
+                            "ratio": 0.8408
+                          },
+                          {
+                            "label": "500",
+                            "db": -72.7,
+                            "energy": 0.000028,
+                            "ratio": 0.0076
+                          },
+                          {
+                            "label": "1k",
+                            "db": -79.6,
+                            "energy": 0.000008,
+                            "ratio": 0.002
+                          },
+                          {
+                            "label": "2k",
+                            "db": -75,
+                            "energy": 0.000025,
+                            "ratio": 0.0069
+                          },
+                          {
+                            "label": "4k",
+                            "db": -71.7,
+                            "energy": 0.000089,
+                            "ratio": 0.0242
+                          },
+                          {
+                            "label": "8k",
+                            "db": -73,
+                            "energy": 0.000111,
+                            "ratio": 0.0302
+                          }
+                        ],
+                        "centroidHz": 506.4,
+                        "rolloffHz": 215.9,
+                        "flatness": 0.0937,
+                        "totalEnergy": 0.003661,
+                        "rms": 0.1017,
+                        "peak": 0.5852,
+                        "crestDb": 15.2
+                      },
+                      "hat": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -158.9,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -162.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -151.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -127.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -115.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -97.3,
+                            "energy": 0,
+                            "ratio": 0.0051
+                          },
+                          {
+                            "label": "4k",
+                            "db": -84.5,
+                            "energy": 0.000009,
+                            "ratio": 0.2601
+                          },
+                          {
+                            "label": "8k",
+                            "db": -83.3,
+                            "energy": 0.000014,
+                            "ratio": 0.4217
+                          }
+                        ],
+                        "centroidHz": 8167.3,
+                        "rolloffHz": 12511.5,
+                        "flatness": 0.1875,
+                        "totalEnergy": 0.000033,
+                        "rms": 0.0113,
+                        "peak": 0.124,
+                        "crestDb": 20.78
+                      },
+                      "clap": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      },
+                      "rim": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      },
+                      "bass": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -58.5,
+                            "energy": 0.000067,
+                            "ratio": 0.7714
+                          },
+                          {
+                            "label": "120",
+                            "db": -72.8,
+                            "energy": 0.000022,
+                            "ratio": 0.2511
+                          },
+                          {
+                            "label": "250",
+                            "db": -86.5,
+                            "energy": 0.000008,
+                            "ratio": 0.0893
+                          },
+                          {
+                            "label": "500",
+                            "db": -112.9,
+                            "energy": 0,
+                            "ratio": 0.0029
+                          },
+                          {
+                            "label": "1k",
+                            "db": -143.8,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -176,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -203.7,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -217.4,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 77.8,
+                        "rolloffHz": 114.4,
+                        "flatness": 0,
+                        "totalEnergy": 0.000087,
+                        "rms": 0.0209,
+                        "peak": 0.0838,
+                        "crestDb": 12.07
+                      },
+                      "chord": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -125.7,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -87.6,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -76.8,
+                            "energy": 0.000001,
+                            "ratio": 0.5833
+                          },
+                          {
+                            "label": "500",
+                            "db": -82.6,
+                            "energy": 0.000001,
+                            "ratio": 0.3333
+                          },
+                          {
+                            "label": "1k",
+                            "db": -97.1,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -103.8,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -126.6,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -154.8,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 439.2,
+                        "rolloffHz": 684.6,
+                        "flatness": 0.0012,
+                        "totalEnergy": 0.000002,
+                        "rms": 0.0036,
+                        "peak": 0.0138,
+                        "crestDb": 11.76
+                      },
+                      "guitar": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -117.7,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -79.5,
+                            "energy": 0.000005,
+                            "ratio": 0.0164
+                          },
+                          {
+                            "label": "250",
+                            "db": -63.6,
+                            "energy": 0.000057,
+                            "ratio": 0.1913
+                          },
+                          {
+                            "label": "500",
+                            "db": -68.5,
+                            "energy": 0.000093,
+                            "ratio": 0.3134
+                          },
+                          {
+                            "label": "1k",
+                            "db": -74.8,
+                            "energy": 0.000111,
+                            "ratio": 0.3709
+                          },
+                          {
+                            "label": "2k",
+                            "db": -81.2,
+                            "energy": 0.000036,
+                            "ratio": 0.1207
+                          },
+                          {
+                            "label": "4k",
+                            "db": -99.6,
+                            "energy": 0.00001,
+                            "ratio": 0.0322
+                          },
+                          {
+                            "label": "8k",
+                            "db": -129,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 854.3,
+                        "rolloffHz": 1371.7,
+                        "flatness": 0.0033,
+                        "totalEnergy": 0.000298,
+                        "rms": 0.0407,
+                        "peak": 0.2285,
+                        "crestDb": 14.98
+                      },
+                      "rhythmSynth": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      }
+                    },
+                    "compact": {
+                      "ok": true,
+                      "proofKind": "offline-audio-metrics",
+                      "mixHealth": {
+                        "rms": 0.1234,
+                        "peak": 0.8303,
+                        "clipping": false,
+                        "headroomDb": 1.62,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 71.6116,
+                        "mix": {
+                          "slopeDbPerOct": -5.991,
+                          "slopePenalty": 0.5509,
+                          "rolloffPenalty": 2.8443,
+                          "presenceRatio": 0.045,
+                          "presencePenalty": 0.8409,
+                          "presenceFloorPenalty": 1.125,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2171,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 58.667,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.224,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "score": {
+                        "total": 71.6116,
+                        "mix": {
+                          "slopeDbPerOct": -5.991,
+                          "slopePenalty": 0.5509,
+                          "rolloffPenalty": 2.8443,
+                          "presenceRatio": 0.045,
+                          "presencePenalty": 0.8409,
+                          "presenceFloorPenalty": 1.125,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2171,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 58.667,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.224,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 6,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "rms": 0.1772,
+                          "peak": 0.8076,
+                          "totalEnergy": 0.011746
+                        },
+                        {
+                          "name": "snare",
+                          "rms": 0.1017,
+                          "peak": 0.5852,
+                          "totalEnergy": 0.003661
+                        },
+                        {
+                          "name": "hat",
+                          "rms": 0.0113,
+                          "peak": 0.124,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "rms": 0.0209,
+                          "peak": 0.0838,
+                          "totalEnergy": 0.000087
+                        },
+                        {
+                          "name": "chord",
+                          "rms": 0.0036,
+                          "peak": 0.0138,
+                          "totalEnergy": 0.000002
+                        },
+                        {
+                          "name": "guitar",
+                          "rms": 0.0407,
+                          "peak": 0.2285,
+                          "totalEnergy": 0.000298
+                        }
+                      ]
+                    }
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "mixHealth.peak",
+                      "path": "mixHealth.peak",
+                      "exists": true,
+                      "value": 0.8303
+                    },
+                    {
+                      "label": "mixHealth.rms",
+                      "path": "mixHealth.rms",
+                      "exists": true,
+                      "value": 0.1234
+                    }
+                  ]
+                }
+              ],
+              "window_eval_total": 1,
+              "window_eval_stored_total": 1,
+              "window_eval_captured_total": 1,
+              "window_eval_truncated": false,
+              "window_eval": [
+                {
+                  "ordinal": 0,
+                  "ok": true,
+                  "script_length": 236,
+                  "return_captured": true,
+                  "return_stored_to": "__neonMixProof.contract",
+                  "reason": null,
+                  "returned": {
+                    "available": true,
+                    "diagnostic": {
+                      "version": "neon-step-sequencer.capture-diagnostic.v1",
+                      "target": "neon-step-sequencer",
+                      "capturedAt": "2026-05-24T14:09:56.239Z",
+                      "routeState": {
+                        "proofKind": "neon-route-state",
+                        "route": "/games/drum-sequencer",
+                        "mode": "song",
+                        "selectedSong": "Monkberry Moon Delight (Tab)",
+                        "selectedPartIndex": 0
+                      },
+                      "selectedSong": {
+                        "proofKind": "neon-selected-song",
+                        "selectedSong": "Monkberry Moon Delight (Tab)",
+                        "partCount": 9,
+                        "mixProfile": {
+                          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                          "label": "Monkberry humanized EQ mix",
+                          "description": "Humanized imported-tab mix with softer vocal formants, fuller bass harmonics, darker pads, and a deeper shared room/plate space.",
+                          "proofWindows": [
+                            {
+                              "name": "introBed",
+                              "label": "Intro Bed",
+                              "bars": 1,
+                              "seed": "riddle-sequencer-bed",
+                              "requiredActive": [
+                                "bass",
+                                "chord",
+                                "guitar"
+                              ]
+                            },
+                            {
+                              "name": "vocalEntry",
+                              "label": "Vocal Entry",
+                              "bars": 3,
+                              "seed": "riddle-sequencer-vocal-melody",
+                              "requiredActive": [
+                                "rhythmSynth"
+                              ]
+                            }
+                          ],
+                          "eqSettings": {
+                            "kick": [
+                              2.2,
+                              -0.8,
+                              -3.2,
+                              -4.5,
+                              -5.5,
+                              -5,
+                              0.8,
+                              0
+                            ],
+                            "snare": [
+                              -6,
+                              -2.5,
+                              1.4,
+                              -3,
+                              -0.6,
+                              1.4,
+                              0.4,
+                              -1.8
+                            ],
+                            "hat": [
+                              -12,
+                              -12,
+                              -12,
+                              -10,
+                              -7,
+                              -2.5,
+                              -2.2,
+                              -1.1
+                            ],
+                            "clap": [
+                              -12,
+                              -8,
+                              -4,
+                              -1.5,
+                              0.8,
+                              0,
+                              -1,
+                              -2
+                            ],
+                            "rim": [
+                              -12,
+                              -8,
+                              -3.5,
+                              -1.2,
+                              0,
+                              -0.5,
+                              -1.2,
+                              -2
+                            ],
+                            "bass": [
+                              -1.2,
+                              2.8,
+                              -1.4,
+                              -4.8,
+                              -6,
+                              -8,
+                              -10,
+                              -10
+                            ],
+                            "chord": [
+                              -8,
+                              -2.8,
+                              -4.8,
+                              -0.8,
+                              -1,
+                              -2.8,
+                              -4.8,
+                              -6.5
+                            ],
+                            "guitar": [
+                              -8,
+                              -4.8,
+                              -3.4,
+                              -2.2,
+                              1.2,
+                              1.4,
+                              0.2,
+                              -1.8
+                            ],
+                            "rhythmSynth": [
+                              -10,
+                              -6,
+                              -3.8,
+                              -1.6,
+                              0.8,
+                              1.8,
+                              0,
+                              -2.8
+                            ]
+                          },
+                          "mixLanes": {
+                            "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                            "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                            "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                            "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                            "chord": "Darker pad bed with more room depth and less plasticky top.",
+                            "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                            "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                          }
+                        }
+                      },
+                      "mixerState": {
+                        "proofKind": "neon-mixer-state",
+                        "levels": {
+                          "kick": 0.9,
+                          "snare": 0.67,
+                          "hat": 0.34,
+                          "clap": 0.27,
+                          "rim": 0.29,
+                          "bass": 0.62,
+                          "chord": 0.28,
+                          "guitar": 0.65,
+                          "rhythmSynth": 0.84
+                        },
+                        "eqSettings": {
+                          "kick": [
+                            2.2,
+                            -0.8,
+                            -3.2,
+                            -4.5,
+                            -5.5,
+                            -5,
+                            0.8,
+                            0
+                          ],
+                          "snare": [
+                            -6,
+                            -2.5,
+                            1.4,
+                            -3,
+                            -0.6,
+                            1.4,
+                            0.4,
+                            -1.8
+                          ],
+                          "hat": [
+                            -12,
+                            -12,
+                            -12,
+                            -10,
+                            -7,
+                            -2.5,
+                            -2.2,
+                            -1.1
+                          ],
+                          "clap": [
+                            -12,
+                            -8,
+                            -4,
+                            -1.5,
+                            0.8,
+                            0,
+                            -1,
+                            -2
+                          ],
+                          "rim": [
+                            -12,
+                            -8,
+                            -3.5,
+                            -1.2,
+                            0,
+                            -0.5,
+                            -1.2,
+                            -2
+                          ],
+                          "bass": [
+                            -1.2,
+                            2.8,
+                            -1.4,
+                            -4.8,
+                            -6,
+                            -8,
+                            -10,
+                            -10
+                          ],
+                          "chord": [
+                            -8,
+                            -2.8,
+                            -4.8,
+                            -0.8,
+                            -1,
+                            -2.8,
+                            -4.8,
+                            -6.5
+                          ],
+                          "guitar": [
+                            -8,
+                            -4.8,
+                            -3.4,
+                            -2.2,
+                            1.2,
+                            1.4,
+                            0.2,
+                            -1.8
+                          ],
+                          "rhythmSynth": [
+                            -10,
+                            -6,
+                            -3.8,
+                            -1.6,
+                            0.8,
+                            1.8,
+                            0,
+                            -2.8
+                          ]
+                        },
+                        "panSettings": {
+                          "kick": 0,
+                          "snare": 0.03,
+                          "hat": 0.24,
+                          "clap": -0.18,
+                          "rim": 0.16,
+                          "bass": -0.01,
+                          "chord": -0.22,
+                          "guitar": 0.26,
+                          "rhythmSynth": 0.02
+                        },
+                        "delaySettings": {
+                          "chord": {
+                            "enabled": true,
+                            "time": 0.29,
+                            "feedback": 0.12,
+                            "mix": 0.1
+                          },
+                          "guitar": {
+                            "enabled": true,
+                            "time": 0.19,
+                            "feedback": 0.16,
+                            "mix": 0.11
+                          },
+                          "rhythmSynth": {
+                            "enabled": true,
+                            "time": 0.24,
+                            "feedback": 0.1,
+                            "mix": 0.07
+                          }
+                        },
+                        "synthParams": {
+                          "bass": {
+                            "waveform": "triangle",
+                            "filterCutoff": 220,
+                            "filterQ": 0.92,
+                            "attack": 0.035,
+                            "release": 0.56,
+                            "peakGain": 0.25,
+                            "sustainGain": 0.14,
+                            "secondaryWaveform": "sawtooth",
+                            "secondaryGain": 0.22,
+                            "secondaryDetune": -5,
+                            "filterEnvStart": 640,
+                            "filterEnvDecay": 0.23,
+                            "decay": 0.26,
+                            "subGain": 0.08,
+                            "drive": 0.68
+                          },
+                          "chord": {
+                            "style": "dark",
+                            "oscType": "triangle",
+                            "oscType2": "sine",
+                            "filterCutoff": 500,
+                            "filterSettleRatio": 0.86,
+                            "attack": 0.48,
+                            "release": 1.9,
+                            "gain": 0.22,
+                            "noteAttack": 0.06,
+                            "noteDecay": 0.22,
+                            "noteSustain": 0.42,
+                            "noteRelease": 0.7,
+                            "noteFilterCutoff": 1350,
+                            "noteFilterEndRatio": 0.24,
+                            "noteDetuneRange": 3.6
+                          },
+                          "guitar": {
+                            "oscType": "sawtooth",
+                            "lowpassFreq": 2600,
+                            "wahFreqStart": 560,
+                            "wahFreqPeak": 1180,
+                            "wahFreqEnd": 700,
+                            "peakGain": 0.104,
+                            "release": 0.56,
+                            "detuneRange": 5,
+                            "wahQ": 0.68,
+                            "stringDamping": 0.5,
+                            "attack": 0.015,
+                            "spreadRatio": 0.2,
+                            "pickNoiseGain": 0.045,
+                            "pickFilterFreq": 2500,
+                            "pickDecay": 0.019,
+                            "bodyFreq": 620,
+                            "bodyQ": 1.15,
+                            "bodyGain": 2.8
+                          },
+                          "rhythmSynth": {
+                            "oscType": "triangle",
+                            "filterCutoff": 1860,
+                            "filterQ": 0.72,
+                            "attack": 0.038,
+                            "peakGain": 0.112,
+                            "decay": 0.22,
+                            "sustainGain": 0.064,
+                            "release": 0.66,
+                            "source": "voice_oohs",
+                            "oscType2": "sine",
+                            "osc2Gain": 0.22,
+                            "osc2Detune": 3,
+                            "transpose": 12,
+                            "filterEnvStart": 2650,
+                            "filterEnvDecay": 0.2,
+                            "highpassFreq": 260,
+                            "drive": 0.12,
+                            "vibratoDepth": 8,
+                            "vibratoRate": 4.7,
+                            "vibratoDelay": 0.11,
+                            "formantFreq": 1120,
+                            "formantQ": 0.85,
+                            "formantGain": 0.8
+                          },
+                          "humanize": {
+                            "enabled": true,
+                            "seed": "monkberry-humanized-v1",
+                            "timingMs": 8,
+                            "velocity": 0.075,
+                            "swing": 0.055,
+                            "instrumentDelayMs": {
+                              "kick": 0,
+                              "snare": 7,
+                              "hat": 3,
+                              "clap": 10,
+                              "rim": 6,
+                              "bass": 2,
+                              "chord": 5,
+                              "guitar": 9,
+                              "rhythmSynth": 12
+                            }
+                          },
+                          "drums": {
+                            "kick": {
+                              "freqStart": 118,
+                              "freqEnd": 43,
+                              "pitchDecay": 0.17,
+                              "decay": 0.28,
+                              "gain": 0.96,
+                              "clickGain": 0.018,
+                              "clickDecay": 0.012,
+                              "drive": 0.9
+                            },
+                            "snare": {
+                              "noiseFilterFreq": 520,
+                              "noiseGain": 0.18,
+                              "noiseDecay": 0.22,
+                              "toneFreq": 190,
+                              "toneGain": 0.25,
+                              "toneDecay": 0.22
+                            },
+                            "hat": {
+                              "filterFreq": 6100,
+                              "gain": 0.115,
+                              "decay": 0.105
+                            },
+                            "clap": {
+                              "filterFreq": 1120,
+                              "gain": 0.16,
+                              "burstDecay": 0.095
+                            },
+                            "rim": {
+                              "noiseFilterFreq": 1800,
+                              "noiseGain": 0.09,
+                              "noiseDecay": 0.075,
+                              "toneFreq": 410,
+                              "toneGain": 0.06,
+                              "toneDecay": 0.08
+                            }
+                          },
+                          "ambience": {
+                            "enabled": true,
+                            "room": {
+                              "enabled": true,
+                              "seconds": 0.46,
+                              "decay": 2.25,
+                              "gain": 0.11,
+                              "preDelay": 0.014,
+                              "highpass": 220,
+                              "lowpass": 5400
+                            },
+                            "plate": {
+                              "enabled": true,
+                              "seconds": 1.05,
+                              "decay": 2.85,
+                              "gain": 0.08,
+                              "preDelay": 0.038,
+                              "highpass": 560,
+                              "lowpass": 4600
+                            },
+                            "sends": {
+                              "kick": {
+                                "room": 0.008
+                              },
+                              "snare": {
+                                "room": 0.16,
+                                "plate": 0.055
+                              },
+                              "hat": {
+                                "room": 0.026
+                              },
+                              "clap": {
+                                "room": 0.12,
+                                "plate": 0.045
+                              },
+                              "rim": {
+                                "room": 0.08
+                              },
+                              "bass": {
+                                "room": 0.016
+                              },
+                              "chord": {
+                                "room": 0.11,
+                                "plate": 0.085
+                              },
+                              "guitar": {
+                                "room": 0.115,
+                                "plate": 0.09
+                              },
+                              "rhythmSynth": {
+                                "room": 0.06,
+                                "plate": 0.13
+                              }
+                            }
+                          },
+                          "groupBuses": {
+                            "music": {
+                              "enabled": true,
+                              "gain": 1,
+                              "drive": 1.12,
+                              "highpass": 170,
+                              "lowpass": 6200,
+                              "lowshelfFreq": 240,
+                              "lowshelfGain": -0.4,
+                              "presenceFreq": 2150,
+                              "presenceQ": 0.95,
+                              "presenceGain": -0.7,
+                              "highshelfFreq": 4700,
+                              "highshelfGain": -1.1,
+                              "compressor": {
+                                "threshold": -22,
+                                "ratio": 2.4,
+                                "attack": 0.014,
+                                "release": 0.26,
+                                "knee": 20
+                              }
+                            }
+                          }
+                        },
+                        "mixProfile": {
+                          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                          "label": "Monkberry humanized EQ mix",
+                          "trackLabels": {
+                            "chord": "Pad / Keys",
+                            "rhythmSynth": "Vocal Melody"
+                          },
+                          "trackRoles": {
+                            "kick": "Drum low end",
+                            "snare": "Backbeat",
+                            "hat": "Pulse",
+                            "clap": "Cymbal accents",
+                            "rim": "Toms",
+                            "bass": "With-vocal bass foundation",
+                            "chord": "Reduced harmony bed",
+                            "guitar": "Lead and rhythm guitars",
+                            "rhythmSynth": "With-vocal top line"
+                          },
+                          "mixLanes": {
+                            "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                            "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                            "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                            "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                            "chord": "Darker pad bed with more room depth and less plasticky top.",
+                            "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                            "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                          },
+                          "proofWindows": [
+                            {
+                              "name": "introBed",
+                              "label": "Intro Bed",
+                              "bars": 1,
+                              "seed": "riddle-sequencer-bed",
+                              "requiredActive": [
+                                "bass",
+                                "chord",
+                                "guitar"
+                              ]
+                            },
+                            {
+                              "name": "vocalEntry",
+                              "label": "Vocal Entry",
+                              "bars": 3,
+                              "seed": "riddle-sequencer-vocal-melody",
+                              "requiredActive": [
+                                "rhythmSynth"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "sourceState": {
+                        "proofKind": "neon-source-state",
+                        "drums": {
+                          "source": "samples",
+                          "status": "idle",
+                          "loadedTrackCount": 0,
+                          "loadedSampleCount": 0,
+                          "loadedSampleNames": [],
+                          "library": {
+                            "name": "LM-2 sampled drum machine",
+                            "license": "Public domain sample pack",
+                            "trackCount": 5,
+                            "sampleCount": 8,
+                            "sampleNames": [
+                              "kick",
+                              "kick-alt",
+                              "snare-m",
+                              "hhclosed-short",
+                              "hhclosed",
+                              "hhclosed-long",
+                              "clap",
+                              "stick-m"
+                            ]
+                          }
+                        },
+                        "bass": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 0,
+                          "library": {
+                            "name": "tonejs-instruments bass-electric",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 6
+                          }
+                        },
+                        "chord": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 0,
+                          "library": {
+                            "name": "tonejs-instruments piano",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 7
+                          }
+                        },
+                        "guitar": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 0,
+                          "library": {
+                            "name": "tonejs-instruments guitar-electric",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 9
+                          }
+                        },
+                        "vocal": {
+                          "source": "voice_oohs",
+                          "status": "idle",
+                          "loadedSampleCount": 0,
+                          "library": {
+                            "name": "FluidR3 General MIDI SoundFont",
+                            "license": "CC BY 3.0",
+                            "instruments": [
+                              "voice_oohs",
+                              "choir_aahs",
+                              "lead_6_voice",
+                              "synth_choir"
+                            ]
+                          }
+                        }
+                      },
+                      "playbackState": {
+                        "proofKind": "neon-playback-state",
+                        "isPlaying": false,
+                        "selectedPartIndex": 0,
+                        "arrangement": [
+                          0,
+                          1,
+                          2,
+                          3,
+                          4,
+                          5,
+                          6,
+                          7,
+                          8
+                        ],
+                        "trainer": {
+                          "selectedInstrument": "bass",
+                          "partIndex": 0,
+                          "partLabel": "A",
+                          "sequencePosition": 0,
+                          "playbackPartIndex": null,
+                          "playbackStepCount": 256,
+                          "currentStep": 0,
+                          "eventCount": 68,
+                          "visibleEventCount": 9,
+                          "pianoKeyCount": 10,
+                          "windowBars": 2,
+                          "backingMode": "full"
+                        }
+                      },
+                      "state": {
+                        "route": "/games/drum-sequencer",
+                        "mode": "song",
+                        "isPlaying": false,
+                        "selectedSong": "Monkberry Moon Delight (Tab)",
+                        "selectedPartIndex": 0,
+                        "partCount": 9,
+                        "arrangement": [
+                          0,
+                          1,
+                          2,
+                          3,
+                          4,
+                          5,
+                          6,
+                          7,
+                          8
+                        ],
+                        "trainer": {
+                          "selectedInstrument": "bass",
+                          "partIndex": 0,
+                          "partLabel": "A",
+                          "sequencePosition": 0,
+                          "playbackPartIndex": null,
+                          "playbackStepCount": 256,
+                          "currentStep": 0,
+                          "eventCount": 68,
+                          "visibleEventCount": 9,
+                          "pianoKeyCount": 10,
+                          "windowBars": 2,
+                          "backingMode": "full"
+                        },
+                        "profile": {
+                          "tempo": 98,
+                          "barCount": 16,
+                          "enabled": {
+                            "bass": true,
+                            "chord": true,
+                            "guitar": true,
+                            "rhythmSynth": true
+                          },
+                          "labels": {
+                            "rhythmSynth": "Vocal Melody",
+                            "chord": "Pad / Keys"
+                          },
+                          "mixProfile": {
+                            "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                            "label": "Monkberry humanized EQ mix",
+                            "description": "Humanized imported-tab mix with softer vocal formants, fuller bass harmonics, darker pads, and a deeper shared room/plate space.",
+                            "proofWindows": [
+                              {
+                                "name": "introBed",
+                                "label": "Intro Bed",
+                                "bars": 1,
+                                "seed": "riddle-sequencer-bed",
+                                "requiredActive": [
+                                  "bass",
+                                  "chord",
+                                  "guitar"
+                                ]
+                              },
+                              {
+                                "name": "vocalEntry",
+                                "label": "Vocal Entry",
+                                "bars": 3,
+                                "seed": "riddle-sequencer-vocal-melody",
+                                "requiredActive": [
+                                  "rhythmSynth"
+                                ]
+                              }
+                            ],
+                            "eqSettings": {
+                              "kick": [
+                                2.2,
+                                -0.8,
+                                -3.2,
+                                -4.5,
+                                -5.5,
+                                -5,
+                                0.8,
+                                0
+                              ],
+                              "snare": [
+                                -6,
+                                -2.5,
+                                1.4,
+                                -3,
+                                -0.6,
+                                1.4,
+                                0.4,
+                                -1.8
+                              ],
+                              "hat": [
+                                -12,
+                                -12,
+                                -12,
+                                -10,
+                                -7,
+                                -2.5,
+                                -2.2,
+                                -1.1
+                              ],
+                              "clap": [
+                                -12,
+                                -8,
+                                -4,
+                                -1.5,
+                                0.8,
+                                0,
+                                -1,
+                                -2
+                              ],
+                              "rim": [
+                                -12,
+                                -8,
+                                -3.5,
+                                -1.2,
+                                0,
+                                -0.5,
+                                -1.2,
+                                -2
+                              ],
+                              "bass": [
+                                -1.2,
+                                2.8,
+                                -1.4,
+                                -4.8,
+                                -6,
+                                -8,
+                                -10,
+                                -10
+                              ],
+                              "chord": [
+                                -8,
+                                -2.8,
+                                -4.8,
+                                -0.8,
+                                -1,
+                                -2.8,
+                                -4.8,
+                                -6.5
+                              ],
+                              "guitar": [
+                                -8,
+                                -4.8,
+                                -3.4,
+                                -2.2,
+                                1.2,
+                                1.4,
+                                0.2,
+                                -1.8
+                              ],
+                              "rhythmSynth": [
+                                -10,
+                                -6,
+                                -3.8,
+                                -1.6,
+                                0.8,
+                                1.8,
+                                0,
+                                -2.8
+                              ]
+                            },
+                            "mixLanes": {
+                              "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                              "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                              "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                              "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                              "chord": "Darker pad bed with more room depth and less plasticky top.",
+                              "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                              "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                            }
+                          },
+                          "trackRoles": {
+                            "kick": "Drum low end",
+                            "snare": "Backbeat",
+                            "hat": "Pulse",
+                            "clap": "Cymbal accents",
+                            "rim": "Toms",
+                            "bass": "With-vocal bass foundation",
+                            "chord": "Reduced harmony bed",
+                            "guitar": "Lead and rhythm guitars",
+                            "rhythmSynth": "With-vocal top line"
+                          },
+                          "activeCounts": {
+                            "drums": 208,
+                            "bass": 68,
+                            "chord": 84,
+                            "guitar": 639,
+                            "rhythmSynth": 77
+                          },
+                          "activeRows": {
+                            "drums": 3,
+                            "bass": 6,
+                            "chord": 10,
+                            "guitar": 16
+                          },
+                          "mixerLevels": {
+                            "kick": 0.9,
+                            "snare": 0.67,
+                            "hat": 0.34,
+                            "clap": 0.27,
+                            "rim": 0.29,
+                            "bass": 0.62,
+                            "chord": 0.28,
+                            "guitar": 0.65,
+                            "rhythmSynth": 0.84
+                          },
+                          "eqSettings": {
+                            "kick": [
+                              2.2,
+                              -0.8,
+                              -3.2,
+                              -4.5,
+                              -5.5,
+                              -5,
+                              0.8,
+                              0
+                            ],
+                            "snare": [
+                              -6,
+                              -2.5,
+                              1.4,
+                              -3,
+                              -0.6,
+                              1.4,
+                              0.4,
+                              -1.8
+                            ],
+                            "hat": [
+                              -12,
+                              -12,
+                              -12,
+                              -10,
+                              -7,
+                              -2.5,
+                              -2.2,
+                              -1.1
+                            ],
+                            "clap": [
+                              -12,
+                              -8,
+                              -4,
+                              -1.5,
+                              0.8,
+                              0,
+                              -1,
+                              -2
+                            ],
+                            "rim": [
+                              -12,
+                              -8,
+                              -3.5,
+                              -1.2,
+                              0,
+                              -0.5,
+                              -1.2,
+                              -2
+                            ],
+                            "bass": [
+                              -1.2,
+                              2.8,
+                              -1.4,
+                              -4.8,
+                              -6,
+                              -8,
+                              -10,
+                              -10
+                            ],
+                            "chord": [
+                              -8,
+                              -2.8,
+                              -4.8,
+                              -0.8,
+                              -1,
+                              -2.8,
+                              -4.8,
+                              -6.5
+                            ],
+                            "guitar": [
+                              -8,
+                              -4.8,
+                              -3.4,
+                              -2.2,
+                              1.2,
+                              1.4,
+                              0.2,
+                              -1.8
+                            ],
+                            "rhythmSynth": [
+                              -10,
+                              -6,
+                              -3.8,
+                              -1.6,
+                              0.8,
+                              1.8,
+                              0,
+                              -2.8
+                            ]
+                          },
+                          "panSettings": {
+                            "kick": 0,
+                            "snare": 0.03,
+                            "hat": 0.24,
+                            "clap": -0.18,
+                            "rim": 0.16,
+                            "bass": -0.01,
+                            "chord": -0.22,
+                            "guitar": 0.26,
+                            "rhythmSynth": 0.02
+                          },
+                          "delaySettings": {
+                            "chord": {
+                              "enabled": true,
+                              "time": 0.29,
+                              "feedback": 0.12,
+                              "mix": 0.1
+                            },
+                            "guitar": {
+                              "enabled": true,
+                              "time": 0.19,
+                              "feedback": 0.16,
+                              "mix": 0.11
+                            },
+                            "rhythmSynth": {
+                              "enabled": true,
+                              "time": 0.24,
+                              "feedback": 0.1,
+                              "mix": 0.07
+                            }
+                          },
+                          "synthParams": {
+                            "bass": {
+                              "waveform": "triangle",
+                              "filterCutoff": 220,
+                              "filterQ": 0.92,
+                              "attack": 0.035,
+                              "release": 0.56,
+                              "peakGain": 0.25,
+                              "sustainGain": 0.14,
+                              "secondaryWaveform": "sawtooth",
+                              "secondaryGain": 0.22,
+                              "secondaryDetune": -5,
+                              "filterEnvStart": 640,
+                              "filterEnvDecay": 0.23,
+                              "decay": 0.26,
+                              "subGain": 0.08,
+                              "drive": 0.68
+                            },
+                            "chord": {
+                              "style": "dark",
+                              "oscType": "triangle",
+                              "oscType2": "sine",
+                              "filterCutoff": 500,
+                              "filterSettleRatio": 0.86,
+                              "attack": 0.48,
+                              "release": 1.9,
+                              "gain": 0.22,
+                              "noteAttack": 0.06,
+                              "noteDecay": 0.22,
+                              "noteSustain": 0.42,
+                              "noteRelease": 0.7,
+                              "noteFilterCutoff": 1350,
+                              "noteFilterEndRatio": 0.24,
+                              "noteDetuneRange": 3.6
+                            },
+                            "guitar": {
+                              "oscType": "sawtooth",
+                              "lowpassFreq": 2600,
+                              "wahFreqStart": 560,
+                              "wahFreqPeak": 1180,
+                              "wahFreqEnd": 700,
+                              "peakGain": 0.104,
+                              "release": 0.56,
+                              "detuneRange": 5,
+                              "wahQ": 0.68,
+                              "stringDamping": 0.5,
+                              "attack": 0.015,
+                              "spreadRatio": 0.2,
+                              "pickNoiseGain": 0.045,
+                              "pickFilterFreq": 2500,
+                              "pickDecay": 0.019,
+                              "bodyFreq": 620,
+                              "bodyQ": 1.15,
+                              "bodyGain": 2.8
+                            },
+                            "rhythmSynth": {
+                              "oscType": "triangle",
+                              "filterCutoff": 1860,
+                              "filterQ": 0.72,
+                              "attack": 0.038,
+                              "peakGain": 0.112,
+                              "decay": 0.22,
+                              "sustainGain": 0.064,
+                              "release": 0.66,
+                              "source": "voice_oohs",
+                              "oscType2": "sine",
+                              "osc2Gain": 0.22,
+                              "osc2Detune": 3,
+                              "transpose": 12,
+                              "filterEnvStart": 2650,
+                              "filterEnvDecay": 0.2,
+                              "highpassFreq": 260,
+                              "drive": 0.12,
+                              "vibratoDepth": 8,
+                              "vibratoRate": 4.7,
+                              "vibratoDelay": 0.11,
+                              "formantFreq": 1120,
+                              "formantQ": 0.85,
+                              "formantGain": 0.8
+                            },
+                            "humanize": {
+                              "enabled": true,
+                              "seed": "monkberry-humanized-v1",
+                              "timingMs": 8,
+                              "velocity": 0.075,
+                              "swing": 0.055,
+                              "instrumentDelayMs": {
+                                "kick": 0,
+                                "snare": 7,
+                                "hat": 3,
+                                "clap": 10,
+                                "rim": 6,
+                                "bass": 2,
+                                "chord": 5,
+                                "guitar": 9,
+                                "rhythmSynth": 12
+                              }
+                            },
+                            "drums": {
+                              "kick": {
+                                "freqStart": 118,
+                                "freqEnd": 43,
+                                "pitchDecay": 0.17,
+                                "decay": 0.28,
+                                "gain": 0.96,
+                                "clickGain": 0.018,
+                                "clickDecay": 0.012,
+                                "drive": 0.9
+                              },
+                              "snare": {
+                                "noiseFilterFreq": 520,
+                                "noiseGain": 0.18,
+                                "noiseDecay": 0.22,
+                                "toneFreq": 190,
+                                "toneGain": 0.25,
+                                "toneDecay": 0.22
+                              },
+                              "hat": {
+                                "filterFreq": 6100,
+                                "gain": 0.115,
+                                "decay": 0.105
+                              },
+                              "clap": {
+                                "filterFreq": 1120,
+                                "gain": 0.16,
+                                "burstDecay": 0.095
+                              },
+                              "rim": {
+                                "noiseFilterFreq": 1800,
+                                "noiseGain": 0.09,
+                                "noiseDecay": 0.075,
+                                "toneFreq": 410,
+                                "toneGain": 0.06,
+                                "toneDecay": 0.08
+                              }
+                            },
+                            "ambience": {
+                              "enabled": true,
+                              "room": {
+                                "enabled": true,
+                                "seconds": 0.46,
+                                "decay": 2.25,
+                                "gain": 0.11,
+                                "preDelay": 0.014,
+                                "highpass": 220,
+                                "lowpass": 5400
+                              },
+                              "plate": {
+                                "enabled": true,
+                                "seconds": 1.05,
+                                "decay": 2.85,
+                                "gain": 0.08,
+                                "preDelay": 0.038,
+                                "highpass": 560,
+                                "lowpass": 4600
+                              },
+                              "sends": {
+                                "kick": {
+                                  "room": 0.008
+                                },
+                                "snare": {
+                                  "room": 0.16,
+                                  "plate": 0.055
+                                },
+                                "hat": {
+                                  "room": 0.026
+                                },
+                                "clap": {
+                                  "room": 0.12,
+                                  "plate": 0.045
+                                },
+                                "rim": {
+                                  "room": 0.08
+                                },
+                                "bass": {
+                                  "room": 0.016
+                                },
+                                "chord": {
+                                  "room": 0.11,
+                                  "plate": 0.085
+                                },
+                                "guitar": {
+                                  "room": 0.115,
+                                  "plate": 0.09
+                                },
+                                "rhythmSynth": {
+                                  "room": 0.06,
+                                  "plate": 0.13
+                                }
+                              }
+                            },
+                            "groupBuses": {
+                              "music": {
+                                "enabled": true,
+                                "gain": 1,
+                                "drive": 1.12,
+                                "highpass": 170,
+                                "lowpass": 6200,
+                                "lowshelfFreq": 240,
+                                "lowshelfGain": -0.4,
+                                "presenceFreq": 2150,
+                                "presenceQ": 0.95,
+                                "presenceGain": -0.7,
+                                "highshelfFreq": 4700,
+                                "highshelfGain": -1.1,
+                                "compressor": {
+                                  "threshold": -22,
+                                  "ratio": 2.4,
+                                  "attack": 0.014,
+                                  "release": 0.26,
+                                  "knee": 20
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "supportsOfflineAudio": true
+                      }
+                    }
+                  },
+                  "return_summary": [
+                    {
+                      "label": "available",
+                      "path": "available",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "diagnostic.selectedSong.selectedSong",
+                      "path": "diagnostic.selectedSong.selectedSong",
+                      "exists": true,
+                      "value": "Monkberry Moon Delight (Tab)"
+                    }
+                  ]
+                }
+              ],
+              "deterministic_runtime_total": 0,
+              "deterministic_runtime_truncated": false,
+              "deterministic_runtime": [],
+              "set_range_value_total": 0,
+              "set_range_value_truncated": false,
+              "set_range_value": [],
+              "drag_total": 0,
+              "drag_truncated": false,
+              "drag": [],
+              "tap_total": 0,
+              "tap_truncated": false,
+              "tap": [],
+              "tap_until_total": 0,
+              "tap_until_tap_total": 0,
+              "tap_until_truncated": false,
+              "tap_until": [],
+              "keyboard_total": 0,
+              "keyboard_truncated": false,
+              "keyboard": [],
+              "canvas_signature_total": 0,
+              "canvas_signature_truncated": false,
+              "canvas_signature": [],
+              "canvas_signature_stable_hash_groups": [],
+              "clicked": [],
+              "text_samples": [],
+              "failed": [],
+              "optional_failed": []
+            }
+          ]
+        },
+        "failed": []
+      }
+    },
+    {
+      "type": "route_loaded",
+      "label": "route_loaded",
+      "status": "passed",
+      "evidence": {
+        "expected_path": "/games/drum-sequencer",
+        "observed_paths": [
+          "/games/drum-sequencer"
+        ],
+        "http_statuses": [
+          200
+        ],
+        "route_errors": [
+          null
+        ]
+      }
+    },
+    {
+      "type": "selector_visible",
+      "label": "selector_visible",
+      "status": "passed",
+      "evidence": {
+        "selector": ".drum-sequencer h1",
+        "visible_counts": [
+          1
+        ]
+      }
+    },
+    {
+      "type": "text_visible",
+      "label": "text_visible",
+      "status": "passed",
+      "evidence": {
+        "text": "Neon Step Sequencer",
+        "matches": [
+          true
+        ],
+        "viewports": [
+          {
+            "viewport": "desktop",
+            "matched": true,
+            "samples": [],
+            "case_insensitive_samples": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "no_horizontal_overflow",
+      "label": "no_horizontal_overflow",
+      "status": "passed",
+      "evidence": {
+        "max_overflow_px": 1,
+        "overflow_px": [
+          0
+        ],
+        "bounds_overflow_px": [
+          0
+        ],
+        "overflow_offender_counts": [
+          0
+        ],
+        "viewports": [
+          "desktop"
+        ]
+      }
+    },
+    {
+      "type": "no_fatal_console_errors",
+      "label": "no_fatal_console_errors",
+      "status": "passed",
+      "evidence": {
+        "console_fatal_count": 0,
+        "page_error_count": 0,
+        "total_console_fatal_count": 0,
+        "total_page_error_count": 0,
+        "allowed_console_fatal_count": 0,
+        "explicitly_allowed_console_fatal_count": 0,
+        "allowed_expected_network_mock_console_count": 0,
+        "allowed_expected_network_mock_console_events": [],
+        "allowed_page_error_count": 0,
+        "allowed_console_texts": [],
+        "allowed_console_patterns": [],
+        "allowed_page_error_texts": [],
+        "allowed_page_error_patterns": []
+      }
+    }
+  ],
+  "summary": "lilarcade-neon-fast-mix-health passed 6 check(s) across 1 viewport(s) (desktop).",
+  "captured_at": "2026-05-24T14:09:51.100Z",
+  "metadata": {
+    "pack_id": "neon_step_sequencer",
+    "evidence_role_pattern": "current_target",
+    "does_not_prove": [
+      "subjective mix quality",
+      "full-song coverage"
+    ]
+  },
+  "evidence": {
+    "version": "riddle-proof.profile-evidence.v1",
+    "profile_name": "lilarcade-neon-fast-mix-health",
+    "target_url": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    "baseline_policy": "invariant_only",
+    "captured_at": "2026-05-24T14:09:51.100Z",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000,
+        "url": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+        "route": {
+          "requested": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        },
+        "title": "LilArcade",
+        "body_text_length": 2149,
+        "body_text_sample": "🕹️ LilArcade RHYTHM LAB Neon Step Sequencer Paint a 4-bar, 64-step loop and keep the arcade pulsing. My Sequences MONKBERRY MOON DELIGHT Bass Trainer Open Playalong Play All Shuffle Clear Debug Meters Off Verbose Off Auto-Mix Pass Auto-mix ready VERBOSE LOGS TEMPO 98 BPM Audio ready SONG Blank Yakety Yak (Dark) (G) Monkberry Moon Delight (Sheet) (C minor) Monkberry Moon Delight (Full OMR) (C minor) Monkberry Moon Delight (Tab) (C minor) Dark Progression (Em) Midnight Protocol (Am) INSTRUMENT LANES Power, source, mix, and editor focus in one place ON DRUMS Kick, snare, hat, clap, rim 208 HITS DRUM SOURCE Sampled Kit Samples + Synth Synth Drums LEVEL 0.49X Mute Sampled Kit Kick 0.90x Snare 0.67x Hat 0.34x Clap 0.27x Rim 0.29x ON BASS Low end foundation 68 NOTES BASS INSTRUMENT Dub Bass Electric Bass + Sub Electric Bass Finger Bass (SoundFont) Synth Bass LEVEL 0.62X PAN 0.01L Mute TONE Electric Bass + Sub ON VOCAL MELODY Vocal melody line 77 NOTES VOCAL INSTRUMENT Synth Vocal Voice Oohs Choir Aahs Voice Lead Synth Choir LEVEL 0.84X PAN 0.02R DELAY 0.07 Mute TONE Voice Oohs ON PAD / KEYS Harmony bed 84 NOTES KEYS INSTRUMENT Piano + Pad Piano Synth Pad LEVEL 0.28X PAN 0.22L DELAY 0.10 Mute TONE Piano + Pad ON GUITAR / LEAD LINE Hooks and strums 639 NOTES GUITAR INSTRUMENT Guitar + Synth Electric Guitar Synth Lead Line LEVEL 0.65X PAN 0.26R DELAY 0.11 Mute TONE Guitar + Synth PART: A B C D E F G H I + ARRANGEMENT 1 A B C D E F G H I · · · · · · · 17 · · · · · · · · · · · · · · · · 33 · · · · · · · · · · · · · · · · 49 · · · · · · · · · · · · · · · · FOCUS Mix Drums Bass Vocal Melody Pad Guitar Trainer Meters BAR − 16 + 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 INSTRUMENT TRAINER 68 notes in part A PART A PLAYING Bass INSTRUMENT Drums Bass Vocal Melody Pad / Keys Guitar / Lead Line WINDOW 1 bar 2 bars 4 bars Full Mix Focus Up Solo Pick a part, slow the tempo, and ride the hit line. Use the bar buttons above to jump sections. F1 F#1 G1 G#1 A1 A#1 B1 C2 C#2 D2 F1 F#1 C2 C#2 D2 BAR 1 BAR 2 BAR 3 C2 G1 C2 G1 C2 G1 C2 G1 C2 HIT LINE Tip: layer a simple kick on 1/5/9/13 and sprinkle hats in between. Works best with headphones.",
+        "scroll_width": 1440,
+        "client_width": 1440,
+        "overflow_px": 0,
+        "bounds_overflow_px": 0,
+        "overflow_offenders": [],
+        "selectors": {
+          ".drum-sequencer h1": {
+            "count": 1,
+            "visible_count": 1
+          }
+        },
+        "frames": {},
+        "text_sequences": {},
+        "text_matches": {
+          "text:Neon Step Sequencer": true
+        },
+        "text_match_samples": {
+          "text:Neon Step Sequencer": [
+            "🕹️ LilArcade RHYTHM LAB Neon Step Sequencer Paint a 4-bar, 64-step loop and keep the arcade pulsing. My Sequences MONKBERRY MOON DELIGHT Bass Trainer Open Playalon..."
+          ]
+        },
+        "text_case_insensitive_samples": {
+          "text:Neon Step Sequencer": [
+            "🕹️ LilArcade RHYTHM LAB Neon Step Sequencer Paint a 4-bar, 64-step loop and keep the arcade pulsing. My Sequences MONKBERRY MOON DELIGHT Bass Trainer Open Playalon..."
+          ]
+        },
+        "observations": {},
+        "http_statuses": {},
+        "link_statuses": {},
+        "setup_action_results": [
+          {
+            "ok": true,
+            "action": "window_eval",
+            "ordinal": 0,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "script_length": 236,
+            "arg_count": 0,
+            "returned": {
+              "available": true,
+              "diagnostic": {
+                "version": "neon-step-sequencer.capture-diagnostic.v1",
+                "target": "neon-step-sequencer",
+                "capturedAt": "2026-05-24T14:09:56.239Z",
+                "routeState": {
+                  "proofKind": "neon-route-state",
+                  "route": "/games/drum-sequencer",
+                  "mode": "song",
+                  "selectedSong": "Monkberry Moon Delight (Tab)",
+                  "selectedPartIndex": 0
+                },
+                "selectedSong": {
+                  "proofKind": "neon-selected-song",
+                  "selectedSong": "Monkberry Moon Delight (Tab)",
+                  "partCount": 9,
+                  "mixProfile": {
+                    "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "label": "Monkberry humanized EQ mix",
+                    "description": "Humanized imported-tab mix with softer vocal formants, fuller bass harmonics, darker pads, and a deeper shared room/plate space.",
+                    "proofWindows": [
+                      {
+                        "name": "introBed",
+                        "label": "Intro Bed",
+                        "bars": 1,
+                        "seed": "riddle-sequencer-bed",
+                        "requiredActive": [
+                          "bass",
+                          "chord",
+                          "guitar"
+                        ]
+                      },
+                      {
+                        "name": "vocalEntry",
+                        "label": "Vocal Entry",
+                        "bars": 3,
+                        "seed": "riddle-sequencer-vocal-melody",
+                        "requiredActive": [
+                          "rhythmSynth"
+                        ]
+                      }
+                    ],
+                    "eqSettings": {
+                      "kick": [
+                        2.2,
+                        -0.8,
+                        -3.2,
+                        -4.5,
+                        -5.5,
+                        -5,
+                        0.8,
+                        0
+                      ],
+                      "snare": [
+                        -6,
+                        -2.5,
+                        1.4,
+                        -3,
+                        -0.6,
+                        1.4,
+                        0.4,
+                        -1.8
+                      ],
+                      "hat": [
+                        -12,
+                        -12,
+                        -12,
+                        -10,
+                        -7,
+                        -2.5,
+                        -2.2,
+                        -1.1
+                      ],
+                      "clap": [
+                        -12,
+                        -8,
+                        -4,
+                        -1.5,
+                        0.8,
+                        0,
+                        -1,
+                        -2
+                      ],
+                      "rim": [
+                        -12,
+                        -8,
+                        -3.5,
+                        -1.2,
+                        0,
+                        -0.5,
+                        -1.2,
+                        -2
+                      ],
+                      "bass": [
+                        -1.2,
+                        2.8,
+                        -1.4,
+                        -4.8,
+                        -6,
+                        -8,
+                        -10,
+                        -10
+                      ],
+                      "chord": [
+                        -8,
+                        -2.8,
+                        -4.8,
+                        -0.8,
+                        -1,
+                        -2.8,
+                        -4.8,
+                        -6.5
+                      ],
+                      "guitar": [
+                        -8,
+                        -4.8,
+                        -3.4,
+                        -2.2,
+                        1.2,
+                        1.4,
+                        0.2,
+                        -1.8
+                      ],
+                      "rhythmSynth": [
+                        -10,
+                        -6,
+                        -3.8,
+                        -1.6,
+                        0.8,
+                        1.8,
+                        0,
+                        -2.8
+                      ]
+                    },
+                    "mixLanes": {
+                      "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                      "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                      "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                      "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                      "chord": "Darker pad bed with more room depth and less plasticky top.",
+                      "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                      "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                    }
+                  }
+                },
+                "mixerState": {
+                  "proofKind": "neon-mixer-state",
+                  "levels": {
+                    "kick": 0.9,
+                    "snare": 0.67,
+                    "hat": 0.34,
+                    "clap": 0.27,
+                    "rim": 0.29,
+                    "bass": 0.62,
+                    "chord": 0.28,
+                    "guitar": 0.65,
+                    "rhythmSynth": 0.84
+                  },
+                  "eqSettings": {
+                    "kick": [
+                      2.2,
+                      -0.8,
+                      -3.2,
+                      -4.5,
+                      -5.5,
+                      -5,
+                      0.8,
+                      0
+                    ],
+                    "snare": [
+                      -6,
+                      -2.5,
+                      1.4,
+                      -3,
+                      -0.6,
+                      1.4,
+                      0.4,
+                      -1.8
+                    ],
+                    "hat": [
+                      -12,
+                      -12,
+                      -12,
+                      -10,
+                      -7,
+                      -2.5,
+                      -2.2,
+                      -1.1
+                    ],
+                    "clap": [
+                      -12,
+                      -8,
+                      -4,
+                      -1.5,
+                      0.8,
+                      0,
+                      -1,
+                      -2
+                    ],
+                    "rim": [
+                      -12,
+                      -8,
+                      -3.5,
+                      -1.2,
+                      0,
+                      -0.5,
+                      -1.2,
+                      -2
+                    ],
+                    "bass": [
+                      -1.2,
+                      2.8,
+                      -1.4,
+                      -4.8,
+                      -6,
+                      -8,
+                      -10,
+                      -10
+                    ],
+                    "chord": [
+                      -8,
+                      -2.8,
+                      -4.8,
+                      -0.8,
+                      -1,
+                      -2.8,
+                      -4.8,
+                      -6.5
+                    ],
+                    "guitar": [
+                      -8,
+                      -4.8,
+                      -3.4,
+                      -2.2,
+                      1.2,
+                      1.4,
+                      0.2,
+                      -1.8
+                    ],
+                    "rhythmSynth": [
+                      -10,
+                      -6,
+                      -3.8,
+                      -1.6,
+                      0.8,
+                      1.8,
+                      0,
+                      -2.8
+                    ]
+                  },
+                  "panSettings": {
+                    "kick": 0,
+                    "snare": 0.03,
+                    "hat": 0.24,
+                    "clap": -0.18,
+                    "rim": 0.16,
+                    "bass": -0.01,
+                    "chord": -0.22,
+                    "guitar": 0.26,
+                    "rhythmSynth": 0.02
+                  },
+                  "delaySettings": {
+                    "chord": {
+                      "enabled": true,
+                      "time": 0.29,
+                      "feedback": 0.12,
+                      "mix": 0.1
+                    },
+                    "guitar": {
+                      "enabled": true,
+                      "time": 0.19,
+                      "feedback": 0.16,
+                      "mix": 0.11
+                    },
+                    "rhythmSynth": {
+                      "enabled": true,
+                      "time": 0.24,
+                      "feedback": 0.1,
+                      "mix": 0.07
+                    }
+                  },
+                  "synthParams": {
+                    "bass": {
+                      "waveform": "triangle",
+                      "filterCutoff": 220,
+                      "filterQ": 0.92,
+                      "attack": 0.035,
+                      "release": 0.56,
+                      "peakGain": 0.25,
+                      "sustainGain": 0.14,
+                      "secondaryWaveform": "sawtooth",
+                      "secondaryGain": 0.22,
+                      "secondaryDetune": -5,
+                      "filterEnvStart": 640,
+                      "filterEnvDecay": 0.23,
+                      "decay": 0.26,
+                      "subGain": 0.08,
+                      "drive": 0.68
+                    },
+                    "chord": {
+                      "style": "dark",
+                      "oscType": "triangle",
+                      "oscType2": "sine",
+                      "filterCutoff": 500,
+                      "filterSettleRatio": 0.86,
+                      "attack": 0.48,
+                      "release": 1.9,
+                      "gain": 0.22,
+                      "noteAttack": 0.06,
+                      "noteDecay": 0.22,
+                      "noteSustain": 0.42,
+                      "noteRelease": 0.7,
+                      "noteFilterCutoff": 1350,
+                      "noteFilterEndRatio": 0.24,
+                      "noteDetuneRange": 3.6
+                    },
+                    "guitar": {
+                      "oscType": "sawtooth",
+                      "lowpassFreq": 2600,
+                      "wahFreqStart": 560,
+                      "wahFreqPeak": 1180,
+                      "wahFreqEnd": 700,
+                      "peakGain": 0.104,
+                      "release": 0.56,
+                      "detuneRange": 5,
+                      "wahQ": 0.68,
+                      "stringDamping": 0.5,
+                      "attack": 0.015,
+                      "spreadRatio": 0.2,
+                      "pickNoiseGain": 0.045,
+                      "pickFilterFreq": 2500,
+                      "pickDecay": 0.019,
+                      "bodyFreq": 620,
+                      "bodyQ": 1.15,
+                      "bodyGain": 2.8
+                    },
+                    "rhythmSynth": {
+                      "oscType": "triangle",
+                      "filterCutoff": 1860,
+                      "filterQ": 0.72,
+                      "attack": 0.038,
+                      "peakGain": 0.112,
+                      "decay": 0.22,
+                      "sustainGain": 0.064,
+                      "release": 0.66,
+                      "source": "voice_oohs",
+                      "oscType2": "sine",
+                      "osc2Gain": 0.22,
+                      "osc2Detune": 3,
+                      "transpose": 12,
+                      "filterEnvStart": 2650,
+                      "filterEnvDecay": 0.2,
+                      "highpassFreq": 260,
+                      "drive": 0.12,
+                      "vibratoDepth": 8,
+                      "vibratoRate": 4.7,
+                      "vibratoDelay": 0.11,
+                      "formantFreq": 1120,
+                      "formantQ": 0.85,
+                      "formantGain": 0.8
+                    },
+                    "humanize": {
+                      "enabled": true,
+                      "seed": "monkberry-humanized-v1",
+                      "timingMs": 8,
+                      "velocity": 0.075,
+                      "swing": 0.055,
+                      "instrumentDelayMs": {
+                        "kick": 0,
+                        "snare": 7,
+                        "hat": 3,
+                        "clap": 10,
+                        "rim": 6,
+                        "bass": 2,
+                        "chord": 5,
+                        "guitar": 9,
+                        "rhythmSynth": 12
+                      }
+                    },
+                    "drums": {
+                      "kick": {
+                        "freqStart": 118,
+                        "freqEnd": 43,
+                        "pitchDecay": 0.17,
+                        "decay": 0.28,
+                        "gain": 0.96,
+                        "clickGain": 0.018,
+                        "clickDecay": 0.012,
+                        "drive": 0.9
+                      },
+                      "snare": {
+                        "noiseFilterFreq": 520,
+                        "noiseGain": 0.18,
+                        "noiseDecay": 0.22,
+                        "toneFreq": 190,
+                        "toneGain": 0.25,
+                        "toneDecay": 0.22
+                      },
+                      "hat": {
+                        "filterFreq": 6100,
+                        "gain": 0.115,
+                        "decay": 0.105
+                      },
+                      "clap": {
+                        "filterFreq": 1120,
+                        "gain": 0.16,
+                        "burstDecay": 0.095
+                      },
+                      "rim": {
+                        "noiseFilterFreq": 1800,
+                        "noiseGain": 0.09,
+                        "noiseDecay": 0.075,
+                        "toneFreq": 410,
+                        "toneGain": 0.06,
+                        "toneDecay": 0.08
+                      }
+                    },
+                    "ambience": {
+                      "enabled": true,
+                      "room": {
+                        "enabled": true,
+                        "seconds": 0.46,
+                        "decay": 2.25,
+                        "gain": 0.11,
+                        "preDelay": 0.014,
+                        "highpass": 220,
+                        "lowpass": 5400
+                      },
+                      "plate": {
+                        "enabled": true,
+                        "seconds": 1.05,
+                        "decay": 2.85,
+                        "gain": 0.08,
+                        "preDelay": 0.038,
+                        "highpass": 560,
+                        "lowpass": 4600
+                      },
+                      "sends": {
+                        "kick": {
+                          "room": 0.008
+                        },
+                        "snare": {
+                          "room": 0.16,
+                          "plate": 0.055
+                        },
+                        "hat": {
+                          "room": 0.026
+                        },
+                        "clap": {
+                          "room": 0.12,
+                          "plate": 0.045
+                        },
+                        "rim": {
+                          "room": 0.08
+                        },
+                        "bass": {
+                          "room": 0.016
+                        },
+                        "chord": {
+                          "room": 0.11,
+                          "plate": 0.085
+                        },
+                        "guitar": {
+                          "room": 0.115,
+                          "plate": 0.09
+                        },
+                        "rhythmSynth": {
+                          "room": 0.06,
+                          "plate": 0.13
+                        }
+                      }
+                    },
+                    "groupBuses": {
+                      "music": {
+                        "enabled": true,
+                        "gain": 1,
+                        "drive": 1.12,
+                        "highpass": 170,
+                        "lowpass": 6200,
+                        "lowshelfFreq": 240,
+                        "lowshelfGain": -0.4,
+                        "presenceFreq": 2150,
+                        "presenceQ": 0.95,
+                        "presenceGain": -0.7,
+                        "highshelfFreq": 4700,
+                        "highshelfGain": -1.1,
+                        "compressor": {
+                          "threshold": -22,
+                          "ratio": 2.4,
+                          "attack": 0.014,
+                          "release": 0.26,
+                          "knee": 20
+                        }
+                      }
+                    }
+                  },
+                  "mixProfile": {
+                    "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "label": "Monkberry humanized EQ mix",
+                    "trackLabels": {
+                      "chord": "Pad / Keys",
+                      "rhythmSynth": "Vocal Melody"
+                    },
+                    "trackRoles": {
+                      "kick": "Drum low end",
+                      "snare": "Backbeat",
+                      "hat": "Pulse",
+                      "clap": "Cymbal accents",
+                      "rim": "Toms",
+                      "bass": "With-vocal bass foundation",
+                      "chord": "Reduced harmony bed",
+                      "guitar": "Lead and rhythm guitars",
+                      "rhythmSynth": "With-vocal top line"
+                    },
+                    "mixLanes": {
+                      "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                      "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                      "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                      "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                      "chord": "Darker pad bed with more room depth and less plasticky top.",
+                      "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                      "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                    },
+                    "proofWindows": [
+                      {
+                        "name": "introBed",
+                        "label": "Intro Bed",
+                        "bars": 1,
+                        "seed": "riddle-sequencer-bed",
+                        "requiredActive": [
+                          "bass",
+                          "chord",
+                          "guitar"
+                        ]
+                      },
+                      {
+                        "name": "vocalEntry",
+                        "label": "Vocal Entry",
+                        "bars": 3,
+                        "seed": "riddle-sequencer-vocal-melody",
+                        "requiredActive": [
+                          "rhythmSynth"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "sourceState": {
+                  "proofKind": "neon-source-state",
+                  "drums": {
+                    "source": "samples",
+                    "status": "idle",
+                    "loadedTrackCount": 0,
+                    "loadedSampleCount": 0,
+                    "loadedSampleNames": [],
+                    "library": {
+                      "name": "LM-2 sampled drum machine",
+                      "license": "Public domain sample pack",
+                      "trackCount": 5,
+                      "sampleCount": 8,
+                      "sampleNames": [
+                        "kick",
+                        "kick-alt",
+                        "snare-m",
+                        "hhclosed-short",
+                        "hhclosed",
+                        "hhclosed-long",
+                        "clap",
+                        "stick-m"
+                      ]
+                    }
+                  },
+                  "bass": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 0,
+                    "library": {
+                      "name": "tonejs-instruments bass-electric",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 6
+                    }
+                  },
+                  "chord": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 0,
+                    "library": {
+                      "name": "tonejs-instruments piano",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 7
+                    }
+                  },
+                  "guitar": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 0,
+                    "library": {
+                      "name": "tonejs-instruments guitar-electric",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 9
+                    }
+                  },
+                  "vocal": {
+                    "source": "voice_oohs",
+                    "status": "idle",
+                    "loadedSampleCount": 0,
+                    "library": {
+                      "name": "FluidR3 General MIDI SoundFont",
+                      "license": "CC BY 3.0",
+                      "instruments": [
+                        "voice_oohs",
+                        "choir_aahs",
+                        "lead_6_voice",
+                        "synth_choir"
+                      ]
+                    }
+                  }
+                },
+                "playbackState": {
+                  "proofKind": "neon-playback-state",
+                  "isPlaying": false,
+                  "selectedPartIndex": 0,
+                  "arrangement": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                  ],
+                  "trainer": {
+                    "selectedInstrument": "bass",
+                    "partIndex": 0,
+                    "partLabel": "A",
+                    "sequencePosition": 0,
+                    "playbackPartIndex": null,
+                    "playbackStepCount": 256,
+                    "currentStep": 0,
+                    "eventCount": 68,
+                    "visibleEventCount": 9,
+                    "pianoKeyCount": 10,
+                    "windowBars": 2,
+                    "backingMode": "full"
+                  }
+                },
+                "state": {
+                  "route": "/games/drum-sequencer",
+                  "mode": "song",
+                  "isPlaying": false,
+                  "selectedSong": "Monkberry Moon Delight (Tab)",
+                  "selectedPartIndex": 0,
+                  "partCount": 9,
+                  "arrangement": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
+                  ],
+                  "trainer": {
+                    "selectedInstrument": "bass",
+                    "partIndex": 0,
+                    "partLabel": "A",
+                    "sequencePosition": 0,
+                    "playbackPartIndex": null,
+                    "playbackStepCount": 256,
+                    "currentStep": 0,
+                    "eventCount": 68,
+                    "visibleEventCount": 9,
+                    "pianoKeyCount": 10,
+                    "windowBars": 2,
+                    "backingMode": "full"
+                  },
+                  "profile": {
+                    "tempo": 98,
+                    "barCount": 16,
+                    "enabled": {
+                      "bass": true,
+                      "chord": true,
+                      "guitar": true,
+                      "rhythmSynth": true
+                    },
+                    "labels": {
+                      "rhythmSynth": "Vocal Melody",
+                      "chord": "Pad / Keys"
+                    },
+                    "mixProfile": {
+                      "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                      "label": "Monkberry humanized EQ mix",
+                      "description": "Humanized imported-tab mix with softer vocal formants, fuller bass harmonics, darker pads, and a deeper shared room/plate space.",
+                      "proofWindows": [
+                        {
+                          "name": "introBed",
+                          "label": "Intro Bed",
+                          "bars": 1,
+                          "seed": "riddle-sequencer-bed",
+                          "requiredActive": [
+                            "bass",
+                            "chord",
+                            "guitar"
+                          ]
+                        },
+                        {
+                          "name": "vocalEntry",
+                          "label": "Vocal Entry",
+                          "bars": 3,
+                          "seed": "riddle-sequencer-vocal-melody",
+                          "requiredActive": [
+                            "rhythmSynth"
+                          ]
+                        }
+                      ],
+                      "eqSettings": {
+                        "kick": [
+                          2.2,
+                          -0.8,
+                          -3.2,
+                          -4.5,
+                          -5.5,
+                          -5,
+                          0.8,
+                          0
+                        ],
+                        "snare": [
+                          -6,
+                          -2.5,
+                          1.4,
+                          -3,
+                          -0.6,
+                          1.4,
+                          0.4,
+                          -1.8
+                        ],
+                        "hat": [
+                          -12,
+                          -12,
+                          -12,
+                          -10,
+                          -7,
+                          -2.5,
+                          -2.2,
+                          -1.1
+                        ],
+                        "clap": [
+                          -12,
+                          -8,
+                          -4,
+                          -1.5,
+                          0.8,
+                          0,
+                          -1,
+                          -2
+                        ],
+                        "rim": [
+                          -12,
+                          -8,
+                          -3.5,
+                          -1.2,
+                          0,
+                          -0.5,
+                          -1.2,
+                          -2
+                        ],
+                        "bass": [
+                          -1.2,
+                          2.8,
+                          -1.4,
+                          -4.8,
+                          -6,
+                          -8,
+                          -10,
+                          -10
+                        ],
+                        "chord": [
+                          -8,
+                          -2.8,
+                          -4.8,
+                          -0.8,
+                          -1,
+                          -2.8,
+                          -4.8,
+                          -6.5
+                        ],
+                        "guitar": [
+                          -8,
+                          -4.8,
+                          -3.4,
+                          -2.2,
+                          1.2,
+                          1.4,
+                          0.2,
+                          -1.8
+                        ],
+                        "rhythmSynth": [
+                          -10,
+                          -6,
+                          -3.8,
+                          -1.6,
+                          0.8,
+                          1.8,
+                          0,
+                          -2.8
+                        ]
+                      },
+                      "mixLanes": {
+                        "kick": "Sub thump around 60 Hz with most low-mid box removed.",
+                        "bass": "Bass foundation around 80-160 Hz with more 120 Hz body for small speakers.",
+                        "snare": "Backbeat body near 250 Hz with controlled upper presence.",
+                        "hat": "Soft high pulse, trimmed in brittle 4-8 kHz bands.",
+                        "chord": "Darker pad bed with more room depth and less plasticky top.",
+                        "guitar": "Mid/presence lane around 1-2 kHz, wider than the pad and glued into the shared music bus.",
+                        "rhythmSynth": "Vocal melody lane in the upper mids, forward enough to survive the small-speaker monitor without crowding 1 kHz."
+                      }
+                    },
+                    "trackRoles": {
+                      "kick": "Drum low end",
+                      "snare": "Backbeat",
+                      "hat": "Pulse",
+                      "clap": "Cymbal accents",
+                      "rim": "Toms",
+                      "bass": "With-vocal bass foundation",
+                      "chord": "Reduced harmony bed",
+                      "guitar": "Lead and rhythm guitars",
+                      "rhythmSynth": "With-vocal top line"
+                    },
+                    "activeCounts": {
+                      "drums": 208,
+                      "bass": 68,
+                      "chord": 84,
+                      "guitar": 639,
+                      "rhythmSynth": 77
+                    },
+                    "activeRows": {
+                      "drums": 3,
+                      "bass": 6,
+                      "chord": 10,
+                      "guitar": 16
+                    },
+                    "mixerLevels": {
+                      "kick": 0.9,
+                      "snare": 0.67,
+                      "hat": 0.34,
+                      "clap": 0.27,
+                      "rim": 0.29,
+                      "bass": 0.62,
+                      "chord": 0.28,
+                      "guitar": 0.65,
+                      "rhythmSynth": 0.84
+                    },
+                    "eqSettings": {
+                      "kick": [
+                        2.2,
+                        -0.8,
+                        -3.2,
+                        -4.5,
+                        -5.5,
+                        -5,
+                        0.8,
+                        0
+                      ],
+                      "snare": [
+                        -6,
+                        -2.5,
+                        1.4,
+                        -3,
+                        -0.6,
+                        1.4,
+                        0.4,
+                        -1.8
+                      ],
+                      "hat": [
+                        -12,
+                        -12,
+                        -12,
+                        -10,
+                        -7,
+                        -2.5,
+                        -2.2,
+                        -1.1
+                      ],
+                      "clap": [
+                        -12,
+                        -8,
+                        -4,
+                        -1.5,
+                        0.8,
+                        0,
+                        -1,
+                        -2
+                      ],
+                      "rim": [
+                        -12,
+                        -8,
+                        -3.5,
+                        -1.2,
+                        0,
+                        -0.5,
+                        -1.2,
+                        -2
+                      ],
+                      "bass": [
+                        -1.2,
+                        2.8,
+                        -1.4,
+                        -4.8,
+                        -6,
+                        -8,
+                        -10,
+                        -10
+                      ],
+                      "chord": [
+                        -8,
+                        -2.8,
+                        -4.8,
+                        -0.8,
+                        -1,
+                        -2.8,
+                        -4.8,
+                        -6.5
+                      ],
+                      "guitar": [
+                        -8,
+                        -4.8,
+                        -3.4,
+                        -2.2,
+                        1.2,
+                        1.4,
+                        0.2,
+                        -1.8
+                      ],
+                      "rhythmSynth": [
+                        -10,
+                        -6,
+                        -3.8,
+                        -1.6,
+                        0.8,
+                        1.8,
+                        0,
+                        -2.8
+                      ]
+                    },
+                    "panSettings": {
+                      "kick": 0,
+                      "snare": 0.03,
+                      "hat": 0.24,
+                      "clap": -0.18,
+                      "rim": 0.16,
+                      "bass": -0.01,
+                      "chord": -0.22,
+                      "guitar": 0.26,
+                      "rhythmSynth": 0.02
+                    },
+                    "delaySettings": {
+                      "chord": {
+                        "enabled": true,
+                        "time": 0.29,
+                        "feedback": 0.12,
+                        "mix": 0.1
+                      },
+                      "guitar": {
+                        "enabled": true,
+                        "time": 0.19,
+                        "feedback": 0.16,
+                        "mix": 0.11
+                      },
+                      "rhythmSynth": {
+                        "enabled": true,
+                        "time": 0.24,
+                        "feedback": 0.1,
+                        "mix": 0.07
+                      }
+                    },
+                    "synthParams": {
+                      "bass": {
+                        "waveform": "triangle",
+                        "filterCutoff": 220,
+                        "filterQ": 0.92,
+                        "attack": 0.035,
+                        "release": 0.56,
+                        "peakGain": 0.25,
+                        "sustainGain": 0.14,
+                        "secondaryWaveform": "sawtooth",
+                        "secondaryGain": 0.22,
+                        "secondaryDetune": -5,
+                        "filterEnvStart": 640,
+                        "filterEnvDecay": 0.23,
+                        "decay": 0.26,
+                        "subGain": 0.08,
+                        "drive": 0.68
+                      },
+                      "chord": {
+                        "style": "dark",
+                        "oscType": "triangle",
+                        "oscType2": "sine",
+                        "filterCutoff": 500,
+                        "filterSettleRatio": 0.86,
+                        "attack": 0.48,
+                        "release": 1.9,
+                        "gain": 0.22,
+                        "noteAttack": 0.06,
+                        "noteDecay": 0.22,
+                        "noteSustain": 0.42,
+                        "noteRelease": 0.7,
+                        "noteFilterCutoff": 1350,
+                        "noteFilterEndRatio": 0.24,
+                        "noteDetuneRange": 3.6
+                      },
+                      "guitar": {
+                        "oscType": "sawtooth",
+                        "lowpassFreq": 2600,
+                        "wahFreqStart": 560,
+                        "wahFreqPeak": 1180,
+                        "wahFreqEnd": 700,
+                        "peakGain": 0.104,
+                        "release": 0.56,
+                        "detuneRange": 5,
+                        "wahQ": 0.68,
+                        "stringDamping": 0.5,
+                        "attack": 0.015,
+                        "spreadRatio": 0.2,
+                        "pickNoiseGain": 0.045,
+                        "pickFilterFreq": 2500,
+                        "pickDecay": 0.019,
+                        "bodyFreq": 620,
+                        "bodyQ": 1.15,
+                        "bodyGain": 2.8
+                      },
+                      "rhythmSynth": {
+                        "oscType": "triangle",
+                        "filterCutoff": 1860,
+                        "filterQ": 0.72,
+                        "attack": 0.038,
+                        "peakGain": 0.112,
+                        "decay": 0.22,
+                        "sustainGain": 0.064,
+                        "release": 0.66,
+                        "source": "voice_oohs",
+                        "oscType2": "sine",
+                        "osc2Gain": 0.22,
+                        "osc2Detune": 3,
+                        "transpose": 12,
+                        "filterEnvStart": 2650,
+                        "filterEnvDecay": 0.2,
+                        "highpassFreq": 260,
+                        "drive": 0.12,
+                        "vibratoDepth": 8,
+                        "vibratoRate": 4.7,
+                        "vibratoDelay": 0.11,
+                        "formantFreq": 1120,
+                        "formantQ": 0.85,
+                        "formantGain": 0.8
+                      },
+                      "humanize": {
+                        "enabled": true,
+                        "seed": "monkberry-humanized-v1",
+                        "timingMs": 8,
+                        "velocity": 0.075,
+                        "swing": 0.055,
+                        "instrumentDelayMs": {
+                          "kick": 0,
+                          "snare": 7,
+                          "hat": 3,
+                          "clap": 10,
+                          "rim": 6,
+                          "bass": 2,
+                          "chord": 5,
+                          "guitar": 9,
+                          "rhythmSynth": 12
+                        }
+                      },
+                      "drums": {
+                        "kick": {
+                          "freqStart": 118,
+                          "freqEnd": 43,
+                          "pitchDecay": 0.17,
+                          "decay": 0.28,
+                          "gain": 0.96,
+                          "clickGain": 0.018,
+                          "clickDecay": 0.012,
+                          "drive": 0.9
+                        },
+                        "snare": {
+                          "noiseFilterFreq": 520,
+                          "noiseGain": 0.18,
+                          "noiseDecay": 0.22,
+                          "toneFreq": 190,
+                          "toneGain": 0.25,
+                          "toneDecay": 0.22
+                        },
+                        "hat": {
+                          "filterFreq": 6100,
+                          "gain": 0.115,
+                          "decay": 0.105
+                        },
+                        "clap": {
+                          "filterFreq": 1120,
+                          "gain": 0.16,
+                          "burstDecay": 0.095
+                        },
+                        "rim": {
+                          "noiseFilterFreq": 1800,
+                          "noiseGain": 0.09,
+                          "noiseDecay": 0.075,
+                          "toneFreq": 410,
+                          "toneGain": 0.06,
+                          "toneDecay": 0.08
+                        }
+                      },
+                      "ambience": {
+                        "enabled": true,
+                        "room": {
+                          "enabled": true,
+                          "seconds": 0.46,
+                          "decay": 2.25,
+                          "gain": 0.11,
+                          "preDelay": 0.014,
+                          "highpass": 220,
+                          "lowpass": 5400
+                        },
+                        "plate": {
+                          "enabled": true,
+                          "seconds": 1.05,
+                          "decay": 2.85,
+                          "gain": 0.08,
+                          "preDelay": 0.038,
+                          "highpass": 560,
+                          "lowpass": 4600
+                        },
+                        "sends": {
+                          "kick": {
+                            "room": 0.008
+                          },
+                          "snare": {
+                            "room": 0.16,
+                            "plate": 0.055
+                          },
+                          "hat": {
+                            "room": 0.026
+                          },
+                          "clap": {
+                            "room": 0.12,
+                            "plate": 0.045
+                          },
+                          "rim": {
+                            "room": 0.08
+                          },
+                          "bass": {
+                            "room": 0.016
+                          },
+                          "chord": {
+                            "room": 0.11,
+                            "plate": 0.085
+                          },
+                          "guitar": {
+                            "room": 0.115,
+                            "plate": 0.09
+                          },
+                          "rhythmSynth": {
+                            "room": 0.06,
+                            "plate": 0.13
+                          }
+                        }
+                      },
+                      "groupBuses": {
+                        "music": {
+                          "enabled": true,
+                          "gain": 1,
+                          "drive": 1.12,
+                          "highpass": 170,
+                          "lowpass": 6200,
+                          "lowshelfFreq": 240,
+                          "lowshelfGain": -0.4,
+                          "presenceFreq": 2150,
+                          "presenceQ": 0.95,
+                          "presenceGain": -0.7,
+                          "highshelfFreq": 4700,
+                          "highshelfGain": -1.1,
+                          "compressor": {
+                            "threshold": -22,
+                            "ratio": 2.4,
+                            "attack": 0.014,
+                            "release": 0.26,
+                            "knee": 20
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "supportsOfflineAudio": true
+                }
+              }
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonMixProof.contract",
+            "return_summary_fields": [
+              {
+                "path": "available"
+              },
+              {
+                "path": "diagnostic.selectedSong.selectedSong"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 1,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonMixProof.contract.available",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "window_call",
+            "ordinal": 2,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__NEON_MIX_PROOF__.prepareForAudioProof",
+            "arg_count": 1,
+            "returned": {
+              "ok": true,
+              "proofKind": "sample-source-preparation",
+              "sources": {
+                "drums": "samples",
+                "bass": "hybrid",
+                "chord": "hybrid",
+                "guitar": "hybrid",
+                "vocal": "voice_oohs"
+              },
+              "loaded": {
+                "drums": true,
+                "bass": true,
+                "guitar": true,
+                "chord": true,
+                "vocal": true
+              },
+              "states": {
+                "bass": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 6,
+                  "library": {
+                    "name": "tonejs-instruments bass-electric",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 6
+                  }
+                },
+                "chord": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 7,
+                  "library": {
+                    "name": "tonejs-instruments piano",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 7
+                  }
+                },
+                "guitar": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 9,
+                  "library": {
+                    "name": "tonejs-instruments guitar-electric",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 9
+                  }
+                },
+                "vocal": {
+                  "source": "voice_oohs",
+                  "status": "idle",
+                  "loadedSampleCount": 37,
+                  "library": {
+                    "name": "FluidR3 General MIDI SoundFont",
+                    "license": "CC BY 3.0",
+                    "instruments": [
+                      "voice_oohs",
+                      "choir_aahs",
+                      "lead_6_voice",
+                      "synth_choir"
+                    ]
+                  }
+                },
+                "drums": {
+                  "source": "samples",
+                  "status": "idle",
+                  "loadedTrackCount": 5,
+                  "loadedSampleCount": 8,
+                  "loadedSampleNames": [
+                    "snare-m",
+                    "kick-alt",
+                    "kick",
+                    "stick-m",
+                    "clap",
+                    "hhclosed",
+                    "hhclosed-long",
+                    "hhclosed-short"
+                  ],
+                  "library": {
+                    "name": "LM-2 sampled drum machine",
+                    "license": "Public domain sample pack",
+                    "trackCount": 5,
+                    "sampleCount": 8,
+                    "sampleNames": [
+                      "kick",
+                      "kick-alt",
+                      "snare-m",
+                      "hhclosed-short",
+                      "hhclosed",
+                      "hhclosed-long",
+                      "clap",
+                      "stick-m"
+                    ]
+                  }
+                }
+              }
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonMixProof.sources",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "window_call",
+            "ordinal": 3,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__NEON_MIX_PROOF__.renderOfflineMetrics",
+            "arg_count": 1,
+            "returned": {
+              "ok": true,
+              "proofKind": "offline-audio-metrics",
+              "bars": 1,
+              "seed": "lilarcade-neon-fast-mix-health",
+              "monitorProfile": "smallSpeaker",
+              "summary": {
+                "total": 71.6116,
+                "mix": {
+                  "slopeDbPerOct": -5.991,
+                  "slopePenalty": 0.5509,
+                  "rolloffPenalty": 2.8443,
+                  "presenceRatio": 0.045,
+                  "presencePenalty": 0.8409,
+                  "presenceFloorPenalty": 1.125,
+                  "mixPenaltyScale": 1
+                },
+                "mud": {
+                  "ratio": 0.2171,
+                  "penalty": 0
+                },
+                "top": [
+                  {
+                    "instrument": "kick",
+                    "score": 89.342,
+                    "skipped": false
+                  },
+                  {
+                    "instrument": "snare",
+                    "score": 58.667,
+                    "skipped": false
+                  },
+                  {
+                    "instrument": "hat",
+                    "score": 2.224,
+                    "skipped": false
+                  }
+                ],
+                "eqPenalty": 3.3732
+              },
+              "mixHealth": {
+                "rms": 0.1234,
+                "peak": 0.8303,
+                "clipping": false,
+                "headroomDb": 1.62,
+                "lowLevel": false
+              },
+              "score": {
+                "total": 71.6116,
+                "perInstrument": {
+                  "kick": {
+                    "score": 89.34198773250658,
+                    "penalties": {
+                      "centroidHz": 0.000008163265306122682,
+                      "rolloffHz": 0.03343673469387755,
+                      "flatness": 0.060024999999999995,
+                      "crestDb": 0,
+                      "lowMidOverLow": 0.14851783454738218,
+                      "highOverMid": 89.10000000000001
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0.003654970760233918,
+                      "midOverLowMid": 0.04,
+                      "highOverMid": 1,
+                      "highOverTotal": 0.000145623998835008,
+                      "low": 0.01368,
+                      "lowMid": 0.000049999999999999996,
+                      "total": 0.013734
+                    }
+                  },
+                  "snare": {
+                    "score": 58.666548999980805,
+                    "penalties": {
+                      "centroidHz": 0.01781011570247934,
+                      "rolloffHz": 0.22374082515625,
+                      "flatness": 0.4728854444444444,
+                      "crestDb": 0,
+                      "midOverLowMid": 0.43505353486729054,
+                      "highOverMid": 57.491238919810336,
+                      "presenceFloor": 0.025820159999999995
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 2.0658244680851063,
+                      "midOverLowMid": 0.010621177985194723,
+                      "highOverMid": 6.06060606060606,
+                      "highOverTotal": 0.041288191577208914,
+                      "low": 0.0015040000000000001,
+                      "lowMid": 0.003107,
+                      "total": 0.004844
+                    }
+                  },
+                  "hat": {
+                    "score": 2.2242299999999995,
+                    "penalties": {
+                      "centroidHz": 0,
+                      "rolloffHz": 0,
+                      "flatness": 1.8906249999999993,
+                      "crestDb": 0.28560500000000016,
+                      "highOverTotal": 0.048000000000000084,
+                      "presenceFloor": 0
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0,
+                      "midOverLowMid": 0,
+                      "highOverMid": 0,
+                      "highOverTotal": 1,
+                      "low": 0,
+                      "lowMid": 0,
+                      "total": 0.000023
+                    }
+                  },
+                  "clap": {
+                    "score": 0,
+                    "skipped": true
+                  },
+                  "rim": {
+                    "score": 0,
+                    "skipped": true
+                  },
+                  "bass": {
+                    "score": 1.2493086627244034,
+                    "penalties": {
+                      "centroidHz": 0.0004840000000000013,
+                      "rolloffHz": 0.13778943999999999,
+                      "flatness": 0.04000000000000001,
+                      "crestDb": 0.7951152,
+                      "lowMidOverLow": 0.27592002272440347,
+                      "highOverMid": 0
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0.0898876404494382,
+                      "midOverLowMid": 0,
+                      "highOverMid": 0,
+                      "highOverTotal": 0,
+                      "low": 0.000089,
+                      "lowMid": 0.000008,
+                      "total": 0.000097
+                    }
+                  },
+                  "chord": {
+                    "score": 1.3176275669444446,
+                    "penalties": {
+                      "centroidHz": 0,
+                      "rolloffHz": 0.2796823225,
+                      "flatness": 0.10934044444444448,
+                      "crestDb": 0.6786048,
+                      "midOverLowMid": 0.25,
+                      "highOverMid": 0
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0,
+                      "midOverLowMid": 0,
+                      "highOverMid": 0,
+                      "highOverTotal": 0,
+                      "low": 0,
+                      "lowMid": 0.000002,
+                      "total": 0.000002
+                    }
+                  },
+                  "guitar": {
+                    "score": 1.4871859136455468,
+                    "penalties": {
+                      "centroidHz": 0,
+                      "rolloffHz": 0.1497408558677686,
+                      "flatness": 0.34433424,
+                      "crestDb": 0.8266800000000001,
+                      "midOverLowMid": 0.12017777777777783,
+                      "highOverMid": 0,
+                      "presenceFloor": 0.04625303999999999
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 30,
+                      "midOverLowMid": 0.9799999999999999,
+                      "highOverMid": 0.06802721088435375,
+                      "highOverTotal": 0.03205128205128205,
+                      "low": 0.000005,
+                      "lowMid": 0.00015000000000000001,
+                      "total": 0.00031200000000000005
+                    }
+                  },
+                  "rhythmSynth": {
+                    "score": 0,
+                    "skipped": true
+                  }
+                },
+                "mud": {
+                  "ratio": 0.2171,
+                  "penalty": 0
+                },
+                "mix": {
+                  "slopeDbPerOct": -5.991,
+                  "slopePenalty": 0.5509,
+                  "rolloffPenalty": 2.8443,
+                  "presenceRatio": 0.045,
+                  "presencePenalty": 0.8409,
+                  "presenceFloorPenalty": 1.125,
+                  "mixPenaltyScale": 1
+                },
+                "eqPenalty": 3.3732
+              },
+              "mixMetrics": {
+                "bands": [
+                  {
+                    "label": "60",
+                    "db": -61.8,
+                    "energy": 0.001184,
+                    "ratio": 0.324
+                  },
+                  {
+                    "label": "120",
+                    "db": -63.8,
+                    "energy": 0.000864,
+                    "ratio": 0.2365
+                  },
+                  {
+                    "label": "250",
+                    "db": -53.7,
+                    "energy": 0.000871,
+                    "ratio": 0.2385
+                  },
+                  {
+                    "label": "500",
+                    "db": -60.2,
+                    "energy": 0.000496,
+                    "ratio": 0.1357
+                  },
+                  {
+                    "label": "1k",
+                    "db": -66.9,
+                    "energy": 0.000557,
+                    "ratio": 0.1523
+                  },
+                  {
+                    "label": "2k",
+                    "db": -73.3,
+                    "energy": 0.000141,
+                    "ratio": 0.0385
+                  },
+                  {
+                    "label": "4k",
+                    "db": -87.1,
+                    "energy": 0.000052,
+                    "ratio": 0.0141
+                  },
+                  {
+                    "label": "8k",
+                    "db": -108.6,
+                    "energy": 0.000021,
+                    "ratio": 0.0057
+                  }
+                ],
+                "centroidHz": 457.1,
+                "rolloffHz": 567.4,
+                "flatness": 0.1081,
+                "totalEnergy": 0.003653,
+                "rms": 0.1234,
+                "peak": 0.8303,
+                "crestDb": 16.56
+              },
+              "monitorMetrics": {
+                "bands": [
+                  {
+                    "label": "60",
+                    "db": -89.3,
+                    "energy": 0,
+                    "ratio": 0
+                  },
+                  {
+                    "label": "120",
+                    "db": -74.3,
+                    "energy": 0,
+                    "ratio": 0.0151
+                  },
+                  {
+                    "label": "250",
+                    "db": -56.2,
+                    "energy": 0.000004,
+                    "ratio": 0.2774
+                  },
+                  {
+                    "label": "500",
+                    "db": -51.4,
+                    "energy": 0.000009,
+                    "ratio": 0.6581
+                  },
+                  {
+                    "label": "1k",
+                    "db": -65.2,
+                    "energy": 0,
+                    "ratio": 0.0258
+                  },
+                  {
+                    "label": "2k",
+                    "db": -77.5,
+                    "energy": 0,
+                    "ratio": 0.0022
+                  },
+                  {
+                    "label": "4k",
+                    "db": -83.7,
+                    "energy": 0,
+                    "ratio": 0
+                  },
+                  {
+                    "label": "8k",
+                    "db": -99.1,
+                    "energy": 0,
+                    "ratio": 0
+                  }
+                ],
+                "centroidHz": 413.6,
+                "rolloffHz": 662,
+                "flatness": 0.0486,
+                "totalEnergy": 0.000014,
+                "rms": 0.129,
+                "peak": 0.8303,
+                "crestDb": 16.17
+              },
+              "instrumentMetrics": {
+                "kick": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -39.5,
+                      "energy": 0.00943,
+                      "ratio": 0.8028
+                    },
+                    {
+                      "label": "120",
+                      "db": -55.3,
+                      "energy": 0.00425,
+                      "ratio": 0.3618
+                    },
+                    {
+                      "label": "250",
+                      "db": -76.2,
+                      "energy": 0.000047,
+                      "ratio": 0.004
+                    },
+                    {
+                      "label": "500",
+                      "db": -91.6,
+                      "energy": 0.000003,
+                      "ratio": 0.0003
+                    },
+                    {
+                      "label": "1k",
+                      "db": -98.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -97.3,
+                      "energy": 0.000002,
+                      "ratio": 0.0002
+                    },
+                    {
+                      "label": "4k",
+                      "db": -108.1,
+                      "energy": 0.000002,
+                      "ratio": 0.0002
+                    },
+                    {
+                      "label": "8k",
+                      "db": -131.8,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 69.8,
+                  "rolloffHz": 86,
+                  "flatness": 0.001,
+                  "totalEnergy": 0.011746,
+                  "rms": 0.1772,
+                  "peak": 0.8076,
+                  "crestDb": 13.17
+                },
+                "snare": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -82.9,
+                      "energy": 0.000002,
+                      "ratio": 0.0004
+                    },
+                    {
+                      "label": "120",
+                      "db": -60.4,
+                      "energy": 0.001502,
+                      "ratio": 0.4103
+                    },
+                    {
+                      "label": "250",
+                      "db": -54.9,
+                      "energy": 0.003079,
+                      "ratio": 0.8408
+                    },
+                    {
+                      "label": "500",
+                      "db": -72.7,
+                      "energy": 0.000028,
+                      "ratio": 0.0076
+                    },
+                    {
+                      "label": "1k",
+                      "db": -79.6,
+                      "energy": 0.000008,
+                      "ratio": 0.002
+                    },
+                    {
+                      "label": "2k",
+                      "db": -75,
+                      "energy": 0.000025,
+                      "ratio": 0.0069
+                    },
+                    {
+                      "label": "4k",
+                      "db": -71.7,
+                      "energy": 0.000089,
+                      "ratio": 0.0242
+                    },
+                    {
+                      "label": "8k",
+                      "db": -73,
+                      "energy": 0.000111,
+                      "ratio": 0.0302
+                    }
+                  ],
+                  "centroidHz": 506.4,
+                  "rolloffHz": 215.9,
+                  "flatness": 0.0937,
+                  "totalEnergy": 0.003661,
+                  "rms": 0.1017,
+                  "peak": 0.5852,
+                  "crestDb": 15.2
+                },
+                "hat": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -158.9,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -162.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -151.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -127.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -115.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -97.3,
+                      "energy": 0,
+                      "ratio": 0.0051
+                    },
+                    {
+                      "label": "4k",
+                      "db": -84.5,
+                      "energy": 0.000009,
+                      "ratio": 0.2601
+                    },
+                    {
+                      "label": "8k",
+                      "db": -83.3,
+                      "energy": 0.000014,
+                      "ratio": 0.4217
+                    }
+                  ],
+                  "centroidHz": 8167.3,
+                  "rolloffHz": 12511.5,
+                  "flatness": 0.1875,
+                  "totalEnergy": 0.000033,
+                  "rms": 0.0113,
+                  "peak": 0.124,
+                  "crestDb": 20.78
+                },
+                "clap": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                },
+                "rim": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                },
+                "bass": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -58.5,
+                      "energy": 0.000067,
+                      "ratio": 0.7714
+                    },
+                    {
+                      "label": "120",
+                      "db": -72.8,
+                      "energy": 0.000022,
+                      "ratio": 0.2511
+                    },
+                    {
+                      "label": "250",
+                      "db": -86.5,
+                      "energy": 0.000008,
+                      "ratio": 0.0893
+                    },
+                    {
+                      "label": "500",
+                      "db": -112.9,
+                      "energy": 0,
+                      "ratio": 0.0029
+                    },
+                    {
+                      "label": "1k",
+                      "db": -143.8,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -176,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -203.7,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -217.4,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 77.8,
+                  "rolloffHz": 114.4,
+                  "flatness": 0,
+                  "totalEnergy": 0.000087,
+                  "rms": 0.0209,
+                  "peak": 0.0838,
+                  "crestDb": 12.07
+                },
+                "chord": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -125.7,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -87.6,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -76.8,
+                      "energy": 0.000001,
+                      "ratio": 0.5833
+                    },
+                    {
+                      "label": "500",
+                      "db": -82.6,
+                      "energy": 0.000001,
+                      "ratio": 0.3333
+                    },
+                    {
+                      "label": "1k",
+                      "db": -97.1,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -103.8,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -126.6,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -154.8,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 439.2,
+                  "rolloffHz": 684.6,
+                  "flatness": 0.0012,
+                  "totalEnergy": 0.000002,
+                  "rms": 0.0036,
+                  "peak": 0.0138,
+                  "crestDb": 11.76
+                },
+                "guitar": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -117.7,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -79.5,
+                      "energy": 0.000005,
+                      "ratio": 0.0164
+                    },
+                    {
+                      "label": "250",
+                      "db": -63.6,
+                      "energy": 0.000057,
+                      "ratio": 0.1913
+                    },
+                    {
+                      "label": "500",
+                      "db": -68.5,
+                      "energy": 0.000093,
+                      "ratio": 0.3134
+                    },
+                    {
+                      "label": "1k",
+                      "db": -74.8,
+                      "energy": 0.000111,
+                      "ratio": 0.3709
+                    },
+                    {
+                      "label": "2k",
+                      "db": -81.2,
+                      "energy": 0.000036,
+                      "ratio": 0.1207
+                    },
+                    {
+                      "label": "4k",
+                      "db": -99.6,
+                      "energy": 0.00001,
+                      "ratio": 0.0322
+                    },
+                    {
+                      "label": "8k",
+                      "db": -129,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 854.3,
+                  "rolloffHz": 1371.7,
+                  "flatness": 0.0033,
+                  "totalEnergy": 0.000298,
+                  "rms": 0.0407,
+                  "peak": 0.2285,
+                  "crestDb": 14.98
+                },
+                "rhythmSynth": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                }
+              },
+              "compact": {
+                "ok": true,
+                "proofKind": "offline-audio-metrics",
+                "mixHealth": {
+                  "rms": 0.1234,
+                  "peak": 0.8303,
+                  "clipping": false,
+                  "headroomDb": 1.62,
+                  "lowLevel": false
+                },
+                "objectivePenalty": {
+                  "total": 71.6116,
+                  "mix": {
+                    "slopeDbPerOct": -5.991,
+                    "slopePenalty": 0.5509,
+                    "rolloffPenalty": 2.8443,
+                    "presenceRatio": 0.045,
+                    "presencePenalty": 0.8409,
+                    "presenceFloorPenalty": 1.125,
+                    "mixPenaltyScale": 1
+                  },
+                  "mud": {
+                    "ratio": 0.2171,
+                    "penalty": 0
+                  },
+                  "top": [
+                    {
+                      "instrument": "kick",
+                      "score": 89.342,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "snare",
+                      "score": 58.667,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "hat",
+                      "score": 2.224,
+                      "skipped": false
+                    }
+                  ],
+                  "eqPenalty": 3.3732
+                },
+                "score": {
+                  "total": 71.6116,
+                  "mix": {
+                    "slopeDbPerOct": -5.991,
+                    "slopePenalty": 0.5509,
+                    "rolloffPenalty": 2.8443,
+                    "presenceRatio": 0.045,
+                    "presencePenalty": 0.8409,
+                    "presenceFloorPenalty": 1.125,
+                    "mixPenaltyScale": 1
+                  },
+                  "mud": {
+                    "ratio": 0.2171,
+                    "penalty": 0
+                  },
+                  "top": [
+                    {
+                      "instrument": "kick",
+                      "score": 89.342,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "snare",
+                      "score": 58.667,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "hat",
+                      "score": 2.224,
+                      "skipped": false
+                    }
+                  ],
+                  "eqPenalty": 3.3732
+                },
+                "activeInstrumentCount": 6,
+                "activeInstruments": [
+                  {
+                    "name": "kick",
+                    "rms": 0.1772,
+                    "peak": 0.8076,
+                    "totalEnergy": 0.011746
+                  },
+                  {
+                    "name": "snare",
+                    "rms": 0.1017,
+                    "peak": 0.5852,
+                    "totalEnergy": 0.003661
+                  },
+                  {
+                    "name": "hat",
+                    "rms": 0.0113,
+                    "peak": 0.124,
+                    "totalEnergy": 0.000033
+                  },
+                  {
+                    "name": "bass",
+                    "rms": 0.0209,
+                    "peak": 0.0838,
+                    "totalEnergy": 0.000087
+                  },
+                  {
+                    "name": "chord",
+                    "rms": 0.0036,
+                    "peak": 0.0138,
+                    "totalEnergy": 0.000002
+                  },
+                  {
+                    "name": "guitar",
+                    "rms": 0.0407,
+                    "peak": 0.2285,
+                    "totalEnergy": 0.000298
+                  }
+                ]
+              }
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonMixProof.metrics",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              },
+              {
+                "path": "mixHealth.peak"
+              },
+              {
+                "path": "mixHealth.rms"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 4,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonMixProof.metrics.ok",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_number",
+            "ordinal": 5,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonMixProof.metrics.mixHealth.peak",
+            "value": 0.8303,
+            "max_value": 0.98,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_number",
+            "ordinal": 6,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonMixProof.metrics.mixHealth.rms",
+            "value": 0.1234,
+            "min_value": 0.005,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "screenshot",
+            "ordinal": 7,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "label": "neon-fast-mix-health",
+            "screenshot_label": "lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health",
+            "full_page": false
+          }
+        ],
+        "screenshot_label": "lilarcade-neon-fast-mix-health-desktop",
+        "screenshot_full_page": null
+      }
+    ],
+    "console": {
+      "events": [],
+      "fatal_count": 0
+    },
+    "page_errors": [],
+    "dialogs": [],
+    "network_mocks": [],
+    "dom_summary": {
+      "expected_viewport_count": 1,
+      "viewport_count": 1,
+      "partial": false,
+      "routes": [
+        {
+          "requested": "http://127.0.0.1:5178/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        }
+      ],
+      "titles": [
+        "LilArcade"
+      ],
+      "overflow_px": [
+        0
+      ],
+      "bounds_overflow_px": [
+        0
+      ],
+      "overflow_offender_counts": [
+        0
+      ],
+      "frames": [
+        {
+          "viewport": "desktop",
+          "selectors": []
+        }
+      ],
+      "http_status": [],
+      "link_status": [],
+      "route_inventory": [],
+      "network_mock_count": 0,
+      "network_mock_hit_count": 0,
+      "dialog_count": 0,
+      "dialog_accept_count": 0,
+      "dialog_dismiss_count": 0
+    }
+  }
+}

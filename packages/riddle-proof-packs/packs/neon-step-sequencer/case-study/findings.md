@@ -134,6 +134,17 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026 with local Playwright.
 - next sharper question: can follow-on agents use the applied-candidate packet to prepare a code/config patch only when the operator explicitly asks for a durable edit?
 
+### Run 008 closed the durable source handoff
+
+- run: `run-008-durable-mix-patch-handoff`
+- claim: an applied human-review packet can become a scoped source/config patch only after durable-readiness validation, and the running app should then prove it sees that durable state.
+- observed evidence: durable plan status was `ready_for_durable_patch`; source file was `src/Games/songs/neon-approved-mix-overrides.json`; target was `Monkberry Moon Delight (Tab)` with mix profile `monkberry-moon-delight-eq-lane-mix-v7`; durable mixer level was `chord: 0.28`; final current-target proof passed with contract chord level `0.28`, peak `0.8303`, RMS `0.1234`, clipping `false`, low-level window `false`, and `6` active instruments.
+- classification: none; passing durable handoff plus `current_target` proof with subjective listening caveat.
+- smallest layer changed: reusable pack helper/CLI, app source override, and proof-pack example docs.
+- change made: added a durable candidate plan helper that refuses transient/unapproved packets, committed a scoped Neon override in the app, and captured final proof that the running app saw the durable level.
+- rerun: passed on May 24, 2026 with local Playwright and deployed in LilArcade PR #490.
+- next sharper question: can this durable handoff become the default follow-on step for proof-backed creative edits across more strategies than `mix-level-search`?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`
