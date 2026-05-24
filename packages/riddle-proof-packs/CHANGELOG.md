@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.5
+
+### Patch Changes
+
+- 4e34db8: Add the `riddle-proof-review-packet` CLI for extracting proof-emitted human-review packets into compact JSON and Markdown handoff artifacts.
+
 ## 0.4.4
 
 ### Patch Changes
