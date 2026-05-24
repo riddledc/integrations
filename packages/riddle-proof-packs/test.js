@@ -126,6 +126,29 @@ assert.ok(neonExplorationArgs && typeof neonExplorationArgs === "object");
 assert.equal(neonExplorationArgs.maxSongs, 4);
 assert.equal(neonExplorationArgs.maxPartsPerSong, 2);
 
+const neonPlaybackProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-playback-sync",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonPlaybackProfile.metadata?.evidence_role_pattern, "interaction_snapshots");
+const playbackActions = neonPlaybackProfile.target.setup_actions ?? [];
+assert.ok(
+  playbackActions.some((action) => action.type === "wait_for_text" && action.selector === "button.drum-play" && action.text === "Stop"),
+  "playback-sync profile should wait for the visible Stop state after clicking Play",
+);
+assert.ok(
+  playbackActions.some((action) => action.type === "assert_window_value" && action.path === "__neonProof.postPlayback.isPlaying" && action.expected_value === true),
+  "playback-sync profile should assert post-action playback is running",
+);
+assert.ok(
+  playbackActions.some((action) => action.type === "assert_window_value" && action.path === "__neonProof.postPlayback.movedForward" && action.expected_value === true),
+  "playback-sync profile should assert the trainer playhead moved after the click",
+);
+const playbackPostCapture = playbackActions.find((action) => action.type === "window_eval" && action.label === "capture-post-playback-state");
+assert.ok(playbackPostCapture?.script?.includes("api?.getPlaybackState?.()"));
+assert.ok(playbackPostCapture?.script?.includes("raw?.trainer||raw||{}"));
+assert.ok(playbackPostCapture?.return_summary_fields?.some((field) => field.path === "movedForward"));
+
 const neonExampleRuns = [
   ["run-001-fast-mix-health", "lilarcade-neon-fast-mix-health"],
   ["run-002-mix-change", "lilarcade-neon-mix-change-before-after"],
