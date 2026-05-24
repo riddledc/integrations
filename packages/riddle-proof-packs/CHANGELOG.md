@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.0
+
+### Minor Changes
+
+- bd68a01: Add the Neon bounded ratchet-loop proof profile for the `mix-level-search` strategy.
+
 ## 0.3.0
 
 ### Minor Changes

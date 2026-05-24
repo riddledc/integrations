@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.4.3
+
+### Patch Changes
+
+- bd68a01: Clear local Playwright runner timeout timers after successful runs so timed profiles do not keep the CLI process open after artifacts are written.
+
 ## 0.4.2
 
 ### Patch Changes
