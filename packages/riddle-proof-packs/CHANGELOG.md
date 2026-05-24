@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.6
+
+### Patch Changes
+
+- 3f89a41: Add the Neon approved-candidate ratchet profile, example proof evidence, and review-packet approval/application fields.
+
 ## 0.4.5
 
 ### Patch Changes
