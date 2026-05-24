@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.4
+
+### Patch Changes
+
+- c9d35c7: Add reusable human-review packet helpers for extracting proof-emitted review packets and formatting compact JSON/Markdown handoffs without treating ranking as a taste score.
+
 ## 0.4.3
 
 ### Patch Changes
