@@ -28,4 +28,4 @@ Most ratchet steps should change profile JSON, pack docs, app proof contracts, o
 
 ## Loops are generic
 
-A ratchet loop should be domain-neutral: propose a candidate, apply it, collect evidence, classify the result, restore or keep state, and repeat within a budget. Neon `mix-level-search` is a strategy plugged into that loop, not the loop's identity.
+A ratchet loop should be domain-neutral: propose a claim candidate, apply its action, collect evidence, classify receipt-level support, restore or keep state, and repeat within a budget. Neon `mix-level-search` is a strategy plugged into that loop, not the loop's identity.

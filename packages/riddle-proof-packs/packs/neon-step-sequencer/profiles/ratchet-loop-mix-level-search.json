@@ -36,7 +36,7 @@
       },
       {
         "type": "window_call",
-        "label": "run-ratchet-loop-mix-level-search",
+        "label": "test-claim-candidates-mix-level-search",
         "path": "__NEON_MIX_PROOF__.runRatchetLoop",
         "args": [
           {
@@ -68,10 +68,13 @@
             "path": "strategy"
           },
           {
-            "path": "improvement"
+            "path": "best.claimVerdict.status"
           },
           {
-            "path": "best.candidate.track"
+            "path": "best.claimCandidate.action.track"
+          },
+          {
+            "path": "supportedClaimCandidateCount"
           }
         ]
       },
@@ -121,16 +124,18 @@
     "pack_id": "neon_step_sequencer",
     "pack_public_name": "Neon Step Sequencer Pack",
     "evidence_role_pattern": "interaction_snapshots",
-    "purpose": "Run a bounded automated ratchet loop using the Neon mix-level-search strategy.",
+    "purpose": "Run a bounded loop that tests Neon mix-level change-claim candidates using the mix-level-search strategy.",
     "required_receipts": [
       "ratchet loop returns ok",
       "baseline proof-window summary is captured",
-      "candidate attempts are captured",
-      "best candidate or human-review status is captured"
+      "claim candidates are captured",
+      "each candidate records claim receipts",
+      "best supported claim candidate or human-review status is captured",
+      "state restoration receipt is captured"
     ],
     "does_not_prove": [
       "subjective mix quality",
-      "that the best objective candidate should be kept",
+      "that a supported claim candidate should be kept",
       "all possible mix edits"
     ]
   }
