@@ -27,14 +27,22 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 - `profiles/mobile-trainer-layout.json`: current-target audit for phone/tablet trainer reachability.
 - `profiles/full-mix-health-matrix.json`: current-target matrix across desktop, phone, iPad Mini, and iPad.
 - `profiles/explore-songs-and-mixes.json`: exploration sweep for proof-window health.
+- `profiles/ratchet-loop-mix-level-search.json`: bounded ratchet loop using the Neon `mix-level-search` strategy.
+
+## Ratchet loop strategy
+
+The loop is not mix-specific as a proof concept. The proof concept is a bounded ratchet loop: propose a candidate, apply it, collect evidence, classify the result, restore or keep state, and repeat until the budget is exhausted.
+
+This pack's first concrete strategy is `mix-level-search`, which tries small level edits against Neon proof windows and returns objective evidence for the best candidate. It still does not decide subjective mix taste; the output is a listening and review packet.
 
 ## Example evidence
 
-The `examples/` directory contains three local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
+The `examples/` directory contains four local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
 
 - `run-001-fast-mix-health`: passing `current_target` audit with proof contract, source readiness, mix RMS `0.1234`, peak `0.8321`, and no clipping.
 - `run-002-mix-change`: passing `interaction_snapshots` proof where a bass-level edit moved bass RMS from `0.0507` to `0.1071` and mix RMS from `0.073` to `0.1264` without clipping.
 - `run-003-full-matrix`: passing `current_target` viewport matrix across desktop, phone, iPad Mini, and iPad with `0 px` horizontal overflow.
+- `run-004-ratchet-loop-mix-level-search`: passing `interaction_snapshots` proof where a bounded loop tested six mix-level candidates and returned `chord -0.10` as the best objective candidate without keeping the edit.
 
 ## Naming note
 

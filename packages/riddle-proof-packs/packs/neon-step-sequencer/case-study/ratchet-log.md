@@ -173,26 +173,58 @@ Next sharper question:
 
 Can the pack explore song/mix combinations and produce a prioritized confidence map?
 
-## Run 004 - Exploration sweep
+## Run 004 - Bounded mix-level ratchet loop
 
 Claim:
 
-The pack can identify which proof windows or song/mix combinations need attention.
+Neon can run a bounded ratchet loop that proposes mix-level candidates, applies each candidate, captures proof-window evidence, ranks candidates by objective metrics, and restores app state.
 
 Profile:
 
-`profiles/explore-songs-and-mixes.json`
+`profiles/ratchet-loop-mix-level-search.json`
 
 Evidence to capture:
 
-- app-provided proof windows
-- window-level render verdicts
-- failing or review-needed windows
-- compact summary for human handoff
+- baseline proof-window score
+- per-candidate proof-window score
+- best candidate and objective improvement
+- state restoration receipt
+- compact caveats for human handoff
 
-Expected outcome:
+Possible outcomes:
 
-Either a clean confidence map or a prioritized finding list.
+- `candidate_found`: at least one candidate improves objective metrics.
+- `needs_human_review`: evidence is valid but no objective candidate clears the threshold.
+- `proof_insufficient`: the app contract or proof window does not provide enough evidence.
+- `profile_calibration`: the chosen tracks, windows, or thresholds do not fit the target.
+
+Observed status:
+
+Passed on May 24, 2026 with `local-playwright`.
+
+Observed evidence:
+
+- strategy `mix-level-search`
+- tested `6` candidates across `bass`, `chord`, `guitar`, and `rhythmSynth`
+- baseline score `28.83345`
+- best score `27.0708`
+- objective improvement `1.7627`
+- best candidate `chord -0.10` to level `0.28`
+- loop status `candidate_found`
+- app state restored after the run
+- console fatal count `0`
+
+Failure classification:
+
+None. This was a passing `interaction_snapshots` loop proof, with an explicit listening-review caveat.
+
+Smallest layer changed:
+
+The app proof contract gained a generic `runRatchetLoop` method. The Neon-specific part is the `mix-level-search` strategy.
+
+Next sharper question:
+
+Can the pack explore song/mix combinations and produce a prioritized confidence map?
 
 ## Project note
 

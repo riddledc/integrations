@@ -167,12 +167,17 @@ function resolveResultFromScript(profile: RiddleProofProfile, value: unknown): R
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs?: number) {
   if (!timeoutMs || timeoutMs <= 0) return promise;
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`local runner timed out after ${timeoutMs}ms`)), timeoutMs);
-    }),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`local runner timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function ensureFile(name: string, value: unknown, store: ReturnType<typeof createRiddleProofArtifactStore>) {

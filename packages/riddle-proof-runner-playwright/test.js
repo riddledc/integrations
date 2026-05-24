@@ -71,6 +71,37 @@ try {
   assert.equal(helpResult.status, 0);
   assert.equal(helpResult.stderr, "");
   assert.equal(helpResult.stdout.includes("riddle-proof-playwright"), true);
+
+  const timeoutProfilePath = path.join(workspace, "profile-with-timeout.json");
+  const timeoutOutputDir = path.join(workspace, "timeout-artifacts");
+  writeFileSync(
+    timeoutProfilePath,
+    JSON.stringify({
+      ...profile,
+      name: "local-runner-timeout-cleanup-smoke",
+      target: {
+        ...profile.target,
+        timeout_sec: 60,
+      },
+    }),
+    "utf8",
+  );
+  const timeoutResult = spawnSync(process.execPath, [
+    "./bin/riddle-proof-playwright",
+    "run-profile",
+    "--profile",
+    timeoutProfilePath,
+    "--url",
+    `file://${targetPath}`,
+    "--output",
+    timeoutOutputDir,
+  ], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  assert.equal(timeoutResult.signal, null, timeoutResult.stderr || timeoutResult.stdout);
+  assert.equal(timeoutResult.status, 0, timeoutResult.stderr || timeoutResult.stdout);
+  assert.equal(existsSync(path.join(timeoutOutputDir, "profile-result.json")), true);
 } finally {
   rmSync(workspace, { recursive: true, force: true });
 }

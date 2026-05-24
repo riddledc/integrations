@@ -25,3 +25,7 @@ Large metrics belong in artifacts. The summary should answer:
 ## Core changes are last
 
 Most ratchet steps should change profile JSON, pack docs, app proof contracts, or app fixtures. Riddle Proof core changes are justified only when the missing primitive applies beyond Neon.
+
+## Loops are generic
+
+A ratchet loop should be domain-neutral: propose a candidate, apply it, collect evidence, classify the result, restore or keep state, and repeat within a budget. Neon `mix-level-search` is a strategy plugged into that loop, not the loop's identity.
