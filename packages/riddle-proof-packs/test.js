@@ -7,6 +7,10 @@ import {
   getRiddleProofProfilesByPackId,
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
+  createHumanReviewPacketArtifacts,
+  findHumanReviewPacket,
+  formatHumanReviewPacketMarkdown,
+  requireHumanReviewPacket,
   RIDDLE_PROOF_PACK_MANIFEST,
   RIDDLE_PROOF_PACK_PROFILES,
 } from "./dist/index.js";
@@ -17,6 +21,10 @@ assert.equal(typeof getRiddleProofProfilesByPackId, "function");
 assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
+assert.equal(typeof findHumanReviewPacket, "function");
+assert.equal(typeof requireHumanReviewPacket, "function");
+assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
+assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 
 const pageContent = getRiddleProofPackProfile("page-content-basic");
 assert.ok(pageContent, "page-content-basic profile should be present");
@@ -134,6 +142,34 @@ assert.equal(reviewPacketReturn?.humanReviewPacket?.guardrails?.stateRestoredAft
 assert.equal(reviewPacketReturn?.humanReviewPacket?.guardrails?.noPermanentEditUnlessApplyBest, true);
 assert.ok(reviewPacketReturn?.humanReviewPacket?.caveats?.some((caveat) => caveat.includes("does not prove subjective mix quality")));
 assert.ok(existsSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/screenshots/lilarcade-neon-ratchet-loop-mix-level-search-desktop.png"));
+
+const extractedReviewPacket = findHumanReviewPacket(neonReviewPacketRun);
+assert.equal(extractedReviewPacket?.kind, "human_review_packet");
+assert.equal(extractedReviewPacket?.recommendation?.candidate?.label, "chord -0.10");
+assert.equal(requireHumanReviewPacket(neonReviewPacketRun), extractedReviewPacket);
+const reviewPacketMarkdown = formatHumanReviewPacketMarkdown(extractedReviewPacket, {
+  title: "Neon Human Review Packet",
+});
+assert.match(reviewPacketMarkdown, /^# Neon Human Review Packet/u);
+assert.match(reviewPacketMarkdown, /candidate_ready_for_listening_review/u);
+assert.match(reviewPacketMarkdown, /review_order_only/u);
+assert.match(reviewPacketMarkdown, /musical taste still requires listening review/u);
+assert.match(reviewPacketMarkdown, /does not prove subjective mix quality/u);
+assert.doesNotMatch(reviewPacketMarkdown, /automatically better/u);
+const reviewPacketArtifacts = createHumanReviewPacketArtifacts(neonReviewPacketRun, {
+  title: "Neon Human Review Packet",
+});
+assert.equal(JSON.parse(reviewPacketArtifacts.json).kind, "human_review_packet");
+assert.equal(reviewPacketArtifacts.packet, extractedReviewPacket);
+assert.equal(reviewPacketArtifacts.markdown, reviewPacketMarkdown);
+assert.throws(() => requireHumanReviewPacket({ ok: true }), /No human_review_packet found/u);
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/human-review-packet.json"));
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/human-review-packet.md"));
+const bundledReviewPacketMarkdown = readFileSync(
+  "packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/human-review-packet.md",
+  "utf8",
+);
+assert.equal(bundledReviewPacketMarkdown, reviewPacketMarkdown);
 
 const mobileProfile = instantiateRiddleProofProfile("mobile-layout-smoke", {
   url: "https://example.com",

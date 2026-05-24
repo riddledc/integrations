@@ -2,7 +2,7 @@
 
 These examples are local Playwright runner outputs captured against LilArcade Neon Step Sequencer on May 24, 2026. They are included to show how this pack records atomic proof claims with explicit evidence-role patterns.
 
-The raw `profile-result.json` files are real runner outputs. They intentionally keep enough evidence to audit the verdict, but the summaries are the preferred place to start.
+The raw `profile-result.json` files are real runner outputs. They intentionally keep enough evidence to audit the verdict, but the summaries are the preferred place to start. Run 006 also includes standalone `human-review-packet.json` and `human-review-packet.md` files generated from the proof artifact.
 
 ## Runs
 

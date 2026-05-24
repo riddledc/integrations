@@ -24,6 +24,14 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Returns first manifest entry for a matching `pack_id`.
 - `instantiateRiddleProofProfile(name, options)`:
   - Returns a copy of a profile with optional `url`, `route`, and `target` overrides.
+- `findHumanReviewPacket(proofOrPacket)`:
+  - Recursively finds the first `human_review_packet` in a proof artifact or returns `null`.
+- `requireHumanReviewPacket(proofOrPacket)`:
+  - Same extraction behavior, but throws if no packet is present.
+- `formatHumanReviewPacketMarkdown(packet, options)`:
+  - Formats a compact Markdown handoff with recommendation, objective receipts, ranking role, proof boundary, listening prompts, and caveats.
+- `createHumanReviewPacketArtifacts(proofOrPacket, options)`:
+  - Returns `{ packet, json, markdown }` for storing a standalone review packet next to a proof run.
 
 ## Proof claims and evidence roles
 
@@ -97,6 +105,33 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 The `audio-mix` directory contains reusable audio-proof authoring guidance, a profile template, a metrics schema, a ratchet method, and a human-review rubric.
 
 The `neon-step-sequencer` directory contains the first app-specific ratchet lab under the new architecture. Its profiles declare `current_target` or `interaction_snapshots` evidence-role patterns and explicitly state what they do not prove. The ratchet-loop profile now expects a compact `humanReviewPacket` for listening handoff: supported/rejected candidates, objective guardrails, state restoration, review-order ranking, and taste caveats. The case-study files record the claim, evidence, failure classification, smallest layer changed, and next sharper question for each run.
+
+### Human-review packet handoff
+
+Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
+
+```ts
+import {
+  createHumanReviewPacketArtifacts,
+  findHumanReviewPacket,
+  formatHumanReviewPacketMarkdown,
+} from "@riddledc/riddle-proof-packs";
+
+const proof = JSON.parse(await fs.promises.readFile("proof.json", "utf8"));
+const packet = findHumanReviewPacket(proof);
+if (!packet) throw new Error("proof did not emit a human review packet");
+
+const markdown = formatHumanReviewPacketMarkdown(packet, {
+  title: "Neon Human Review Packet",
+});
+const artifacts = createHumanReviewPacketArtifacts(proof, {
+  title: "Neon Human Review Packet",
+});
+
+console.log(markdown);
+await fs.promises.writeFile("human-review-packet.json", artifacts.json);
+await fs.promises.writeFile("human-review-packet.md", artifacts.markdown);
+```
 
 ## Usage
 
