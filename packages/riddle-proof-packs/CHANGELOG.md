@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.3
+
+### Patch Changes
+
+- 7f36b98: Update the Neon ratchet-loop pack to assert the app-level `humanReviewPacket` handoff, and add Run 006 evidence showing supported claim candidates, objective guardrails, review-order ranking, state restoration, and listening caveats without claiming automated taste.
+
 ## 0.4.2
 
 ### Patch Changes
