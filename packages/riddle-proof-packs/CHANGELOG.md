@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.5.0
+
+### Minor Changes
+
+- b516e73: Add a Neon durable current-target profile, helper exports, and production proof example for verifying approved durable mix overrides against app contract state, visible mixer state, and render guardrails without treating the result as a taste verdict.
+
 ## 0.4.9
 
 ### Patch Changes
