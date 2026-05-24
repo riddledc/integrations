@@ -14,3 +14,12 @@ export {
   getRiddleProofPackProfileByPackId,
 } from "./listPacks";
 export { instantiateRiddleProofProfile } from "./instantiateProfile";
+export {
+  createHumanReviewPacketArtifacts,
+  findHumanReviewPacket,
+  formatHumanReviewPacketMarkdown,
+  requireHumanReviewPacket,
+  type HumanReviewPacket,
+  type HumanReviewPacketArtifacts,
+  type HumanReviewPacketMarkdownOptions,
+} from "./humanReviewPacket";
