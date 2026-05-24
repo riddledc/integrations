@@ -5,7 +5,6 @@
 ### Minor Changes
 
 - bd68a01: Add the Neon bounded ratchet-loop proof profile for the `mix-level-search` strategy.
-  Clear local Playwright runner timeout timers after successful runs so timed profiles do not keep the CLI process open after artifacts are written.
 
 ## 0.3.0
 
