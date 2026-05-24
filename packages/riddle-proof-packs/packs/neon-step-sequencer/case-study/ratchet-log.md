@@ -177,7 +177,7 @@ Can the pack explore song/mix combinations and produce a prioritized confidence 
 
 Claim:
 
-Neon can run a bounded ratchet loop that proposes mix-level candidates, applies each candidate, captures proof-window evidence, ranks candidates by objective metrics, and restores app state.
+Neon can run a bounded ratchet loop that proposes mix-level change-claim candidates, applies each candidate action, captures proof-window evidence, records receipt-level verdicts, selects a supported candidate for review, and restores app state.
 
 Profile:
 
@@ -185,16 +185,16 @@ Profile:
 
 Evidence to capture:
 
-- baseline proof-window score
-- per-candidate proof-window score
-- best candidate and objective improvement
+- baseline candidate-ranking metric
+- per-candidate receipt verdicts
+- supported claim candidate and ranking metric delta
 - state restoration receipt
 - compact caveats for human handoff
 
 Possible outcomes:
 
-- `candidate_found`: at least one candidate improves objective metrics.
-- `needs_human_review`: evidence is valid but no objective candidate clears the threshold.
+- `claim_candidate_supported`: at least one candidate has the receipts needed to support its change claim.
+- `needs_human_review`: evidence is valid but no candidate has enough receipts to support the proposed claim automatically.
 - `proof_insufficient`: the app contract or proof window does not provide enough evidence.
 - `profile_calibration`: the chosen tracks, windows, or thresholds do not fit the target.
 
@@ -206,17 +206,18 @@ Observed evidence:
 
 - strategy `mix-level-search`
 - tested `6` candidates across `bass`, `chord`, `guitar`, and `rhythmSynth`
-- baseline score `28.83345`
-- best score `27.0708`
-- objective improvement `1.7627`
-- best candidate `chord -0.10` to level `0.28`
-- loop status `candidate_found`
+- baseline candidate-ranking metric `28.8336`
+- best candidate-ranking metric `27.07095`
+- ranking metric delta `1.7627`
+- best supported claim candidate `chord -0.10` to level `0.28`
+- claim receipts recorded for edit acceptance, contract level agreement, rendered target metric movement, required instrument activity, no clipping, and no low-level proof window
+- loop status `claim_candidate_supported`
 - app state restored after the run
 - console fatal count `0`
 
 Failure classification:
 
-None. This was a passing `interaction_snapshots` loop proof, with an explicit listening-review caveat.
+None. This was a passing `interaction_snapshots` loop proof, with an explicit listening-review caveat and a ranking metric that is only a review-order hint.
 
 Smallest layer changed:
 

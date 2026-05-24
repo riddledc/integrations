@@ -41,7 +41,7 @@ Profile render window, song fixture, or authoring guide.
 
 ### Subjective boundary
 
-Metrics pass, but deciding whether the mix is better requires listening.
+Receipts can support that a requested mix-level change happened and stayed inside guardrails, but deciding whether the mix is musically better requires listening.
 
 Likely change:
 
@@ -93,9 +93,9 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 ### Run 004 proved the bounded loop shape without making it mix-specific
 
 - run: `run-004-ratchet-loop-mix-level-search`
-- claim: a bounded ratchet loop can try candidate edits, collect proof-window evidence, rank candidates, and restore state.
-- observed evidence: `mix-level-search` tested `6` candidates; baseline score was `28.83345`; best score was `27.0708`; best candidate was `chord -0.10` to level `0.28`; loop status was `candidate_found`; console fatal count was `0`.
-- classification: none; passing `interaction_snapshots` proof with subjective listening caveat.
+- claim: a bounded ratchet loop can try change-claim candidates, collect proof-window evidence, record receipt verdicts, select a supported candidate for review, and restore state.
+- observed evidence: `mix-level-search` tested `6` candidates; baseline candidate-ranking metric was `28.8336`; best candidate-ranking metric was `27.07095`; best supported claim candidate was `chord -0.10` to level `0.28`; loop status was `claim_candidate_supported`; receipt checks covered edit acceptance, contract level agreement, rendered target metric movement, required instrument activity, no clipping, and no low-level proof window; console fatal count was `0`.
+- classification: none; passing `interaction_snapshots` proof with subjective listening caveat. The ranking metric is a review-order hint, not a proof verdict.
 - smallest layer changed: generic app proof-contract loop plus one Neon strategy.
 - change made: added `runRatchetLoop` with a `mix-level-search` strategy and a proof-pack profile that calls it.
 - rerun: passed on May 24, 2026.
@@ -108,6 +108,6 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - observed evidence: complete passing artifacts were written, but the wrapper process lingered after artifact write and had to be stopped.
 - classification: `proof_insufficient` for operator ergonomics, not a Neon product regression.
 - smallest layer changed: none in this pack.
-- change made: documented the issue and used an outer timeout for the matrix run.
-- rerun: not yet rerun after a runner fix.
+- change made: fixed the local Playwright runner timeout cleanup in `@riddledc/riddle-proof-runner-playwright`.
+- rerun: later runner smoke tests and the published `0.4.3` package exited cleanly.
 - next sharper question: should the local runner force-close browser handles or expose a clearer artifact-written exit phase?

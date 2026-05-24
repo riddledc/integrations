@@ -33,7 +33,7 @@ The project shows that a complex audio app can improve proof confidence mostly b
 - Run 001: a `current_target` audit connected the Neon route, proof contract, source readiness, and offline mix-health metrics.
 - Run 002: an `interaction_snapshots` proof showed a bass-level edit moving bass RMS from `0.0507` to `0.1071` and mix RMS from `0.073` to `0.1264` without clipping.
 - Run 003: a `current_target` matrix passed across desktop, phone, iPad Mini, and iPad with `0 px` horizontal overflow.
-- Run 004: a bounded loop tested six `mix-level-search` candidates, returned `chord -0.10` as the best objective candidate, and restored app state.
+- Run 004: a bounded loop tested six `mix-level-search` change-claim candidates, returned `chord -0.10` as a supported review candidate with receipt-level evidence, and restored app state.
 
 ## Honest boundary
 

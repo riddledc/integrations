@@ -67,6 +67,10 @@ const neonRatchetLoopProfile = instantiateRiddleProofProfile(
 );
 assert.equal(neonRatchetLoopProfile.metadata?.evidence_role_pattern, "interaction_snapshots");
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[2]?.type, "window_call");
+const neonRatchetLoopArgs = neonRatchetLoopProfile.target.setup_actions?.[2]?.args?.[0];
+assert.ok(neonRatchetLoopArgs && typeof neonRatchetLoopArgs === "object");
+assert.equal(Object.hasOwn(neonRatchetLoopArgs, "minImprovement"), false);
+assert.equal(neonRatchetLoopArgs.applyBest, false);
 
 const neonExampleRuns = [
   ["run-001-fast-mix-health", "lilarcade-neon-fast-mix-health"],

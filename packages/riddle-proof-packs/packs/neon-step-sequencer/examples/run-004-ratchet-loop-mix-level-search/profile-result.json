@@ -122,10 +122,11 @@
                   "returned": {
                     "ok": true,
                     "proofKind": "neon-ratchet-loop",
-                    "status": "candidate_found",
+                    "status": "claim_candidate_supported",
                     "strategy": "mix-level-search",
                     "domain": "audio_mix",
                     "evidenceRolePattern": "interaction_snapshots",
+                    "candidateKind": "change_claim_candidate",
                     "focusTracks": [
                       "bass",
                       "chord",
@@ -135,10 +136,10 @@
                     "maxIterations": 6,
                     "restore": true,
                     "applyBest": false,
-                    "baselineScore": 28.83345,
-                    "bestScore": 27.0708,
-                    "improvement": 1.7627,
-                    "improved": true,
+                    "baselineCandidateRankingMetric": 28.8336,
+                    "bestCandidateRankingMetric": 27.07095,
+                    "rankingMetricDelta": 1.7627,
+                    "supportedClaimCandidateCount": 6,
                     "baseline": {
                       "ok": true,
                       "proofKind": "offline-audio-window-set",
@@ -193,8 +194,42 @@
                             "headroomDb": 6,
                             "lowLevel": false
                           },
+                          "objectivePenalty": {
+                            "total": 27.0807,
+                            "mix": {
+                              "slopeDbPerOct": -6.392,
+                              "slopePenalty": 1.1591,
+                              "rolloffPenalty": 3.0532,
+                              "presenceRatio": 0.0942,
+                              "presencePenalty": 0.3918,
+                              "presenceFloorPenalty": 0.1331,
+                              "mixPenaltyScale": 1
+                            },
+                            "mud": {
+                              "ratio": 0.0573,
+                              "penalty": 0
+                            },
+                            "top": [
+                              {
+                                "instrument": "snare",
+                                "score": 7.333,
+                                "skipped": false
+                              },
+                              {
+                                "instrument": "guitar",
+                                "score": 4.16,
+                                "skipped": false
+                              },
+                              {
+                                "instrument": "chord",
+                                "score": 2.831,
+                                "skipped": false
+                              }
+                            ],
+                            "eqPenalty": 3.3732
+                          },
                           "score": {
-                            "total": 27.0806,
+                            "total": 27.0807,
                             "mix": {
                               "slopeDbPerOct": -6.392,
                               "slopePenalty": 1.1591,
@@ -232,7 +267,7 @@
                             {
                               "name": "kick",
                               "rms": 0.0594,
-                              "peak": 0.3988,
+                              "peak": 0.3989,
                               "totalEnergy": 0.001264
                             },
                             {
@@ -294,8 +329,42 @@
                             "headroomDb": 5.82,
                             "lowLevel": false
                           },
+                          "objectivePenalty": {
+                            "total": 30.5865,
+                            "mix": {
+                              "slopeDbPerOct": -6.57,
+                              "slopePenalty": 1.501,
+                              "rolloffPenalty": 3.1085,
+                              "presenceRatio": 0.0701,
+                              "presencePenalty": 0.5906,
+                              "presenceFloorPenalty": 0.498,
+                              "mixPenaltyScale": 1
+                            },
+                            "mud": {
+                              "ratio": 0.0762,
+                              "penalty": 0
+                            },
+                            "top": [
+                              {
+                                "instrument": "snare",
+                                "score": 4.878,
+                                "skipped": false
+                              },
+                              {
+                                "instrument": "guitar",
+                                "score": 4.223,
+                                "skipped": false
+                              },
+                              {
+                                "instrument": "chord",
+                                "score": 3.002,
+                                "skipped": false
+                              }
+                            ],
+                            "eqPenalty": 3.3732
+                          },
                           "score": {
-                            "total": 30.5863,
+                            "total": 30.5865,
                             "mix": {
                               "slopeDbPerOct": -6.57,
                               "slopePenalty": 1.501,
@@ -333,7 +402,7 @@
                             {
                               "name": "kick",
                               "rms": 0.0571,
-                              "peak": 0.3989,
+                              "peak": 0.3988,
                               "totalEnergy": 0.001158
                             },
                             {
@@ -384,7 +453,63 @@
                         "candidate": {
                           "track": "bass",
                           "value": 0.74,
-                          "label": "bass +0.12"
+                          "label": "bass +0.12",
+                          "claimCandidate": {
+                            "id": "set-bass-level-0.62-to-0.74",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting bass level from 0.62 to 0.74 changes rendered bass metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "bass",
+                              "from": 0.62,
+                              "to": 0.74,
+                              "delta": 0.12
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-bass-level-0.62-to-0.74",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting bass level from 0.62 to 0.74 changes rendered bass metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "bass",
+                            "from": 0.62,
+                            "to": 0.74,
+                            "delta": 0.12
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -394,7 +519,90 @@
                           "value": 0.74,
                           "levels": null
                         },
-                        "score": 31.79925,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "bass",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "expectedLevel": 0.74,
+                              "observedLevel": 0.74
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "moved": true,
+                              "before": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.058,
+                                "peak": 0.18415,
+                                "totalEnergy": 0.000621
+                              },
+                              "after": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.06925,
+                                "peak": 0.21975,
+                                "totalEnergy": 0.000885
+                              },
+                              "deltas": {
+                                "rms": 0.01125,
+                                "peak": 0.0356,
+                                "totalEnergy": 0.000264
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 31.7993,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -449,8 +657,42 @@
                                 "headroomDb": 5.55,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 28.6059,
+                                "mix": {
+                                  "slopeDbPerOct": -6.577,
+                                  "slopePenalty": 1.5148,
+                                  "rolloffPenalty": 3.0872,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0504,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.831,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 28.6058,
+                                "total": 28.6059,
                                 "mix": {
                                   "slopeDbPerOct": -6.577,
                                   "slopePenalty": 1.5148,
@@ -488,7 +730,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0594,
-                                  "peak": 0.3988,
+                                  "peak": 0.3989,
                                   "totalEnergy": 0.001264
                                 },
                                 {
@@ -550,6 +792,40 @@
                                 "headroomDb": 5.38,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 34.9927,
+                                "mix": {
+                                  "slopeDbPerOct": -7.033,
+                                  "slopePenalty": 2.5943,
+                                  "rolloffPenalty": 3.1194,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0652,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 3.002,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
                                 "total": 34.9927,
                                 "mix": {
@@ -589,7 +865,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0571,
-                                  "peak": 0.3988,
+                                  "peak": 0.3989,
                                   "totalEnergy": 0.001158
                                 },
                                 {
@@ -640,7 +916,63 @@
                         "candidate": {
                           "track": "bass",
                           "value": 0.52,
-                          "label": "bass -0.10"
+                          "label": "bass -0.10",
+                          "claimCandidate": {
+                            "id": "set-bass-level-0.62-to-0.52",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting bass level from 0.62 to 0.52 changes rendered bass metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "bass",
+                              "from": 0.62,
+                              "to": 0.52,
+                              "delta": -0.1
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-bass-level-0.62-to-0.52",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting bass level from 0.62 to 0.52 changes rendered bass metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "bass",
+                            "from": 0.62,
+                            "to": 0.52,
+                            "delta": -0.1
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -650,7 +982,90 @@
                           "value": 0.52,
                           "levels": null
                         },
-                        "score": 29.170099999999998,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "bass",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "expectedLevel": 0.52,
+                              "observedLevel": 0.52
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "moved": true,
+                              "before": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.058,
+                                "peak": 0.18415,
+                                "totalEnergy": 0.000621
+                              },
+                              "after": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.04865,
+                                "peak": 0.1544,
+                                "totalEnergy": 0.000437
+                              },
+                              "deltas": {
+                                "rms": -0.00935,
+                                "peak": -0.02975,
+                                "totalEnergy": -0.000184
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 29.1701,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -705,8 +1120,42 @@
                                 "headroomDb": 6.41,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 25.7834,
+                                "mix": {
+                                  "slopeDbPerOct": -6.22,
+                                  "slopePenalty": 0.871,
+                                  "rolloffPenalty": 3.0044,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0628,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.831,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 25.7835,
+                                "total": 25.7834,
                                 "mix": {
                                   "slopeDbPerOct": -6.22,
                                   "slopePenalty": 0.871,
@@ -744,7 +1193,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0594,
-                                  "peak": 0.3989,
+                                  "peak": 0.3988,
                                   "totalEnergy": 0.001264
                                 },
                                 {
@@ -806,8 +1255,42 @@
                                 "headroomDb": 6.21,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 32.5568,
+                                "mix": {
+                                  "slopeDbPerOct": -6.792,
+                                  "slopePenalty": 1.9871,
+                                  "rolloffPenalty": 3.1167,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0858,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 3.002,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 32.5567,
+                                "total": 32.5568,
                                 "mix": {
                                   "slopeDbPerOct": -6.792,
                                   "slopePenalty": 1.9871,
@@ -845,7 +1328,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0571,
-                                  "peak": 0.3988,
+                                  "peak": 0.3989,
                                   "totalEnergy": 0.001158
                                 },
                                 {
@@ -896,7 +1379,63 @@
                         "candidate": {
                           "track": "bass",
                           "value": 0.8200000000000001,
-                          "label": "bass +0.20"
+                          "label": "bass +0.20",
+                          "claimCandidate": {
+                            "id": "set-bass-level-0.62-to-0.82",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting bass level from 0.62 to 0.82 changes rendered bass metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "bass",
+                              "from": 0.62,
+                              "to": 0.8200000000000001,
+                              "delta": 0.2
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-bass-level-0.62-to-0.82",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting bass level from 0.62 to 0.82 changes rendered bass metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "bass",
+                            "from": 0.62,
+                            "to": 0.8200000000000001,
+                            "delta": 0.2
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -906,7 +1445,90 @@
                           "value": 0.8200000000000001,
                           "levels": null
                         },
-                        "score": 35.25595,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "bass",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "expectedLevel": 0.8200000000000001,
+                              "observedLevel": 0.82
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "moved": true,
+                              "before": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.058,
+                                "peak": 0.18415,
+                                "totalEnergy": 0.000621
+                              },
+                              "after": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.0767,
+                                "peak": 0.24355,
+                                "totalEnergy": 0.001087
+                              },
+                              "deltas": {
+                                "rms": 0.0187,
+                                "peak": 0.0594,
+                                "totalEnergy": 0.000466
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 35.25595,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -961,6 +1583,40 @@
                                 "headroomDb": 5.26,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 29.6779,
+                                "mix": {
+                                  "slopeDbPerOct": -6.697,
+                                  "slopePenalty": 1.7706,
+                                  "rolloffPenalty": 3.1034,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0462,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.831,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
                                 "total": 29.6779,
                                 "mix": {
@@ -1000,7 +1656,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0594,
-                                  "peak": 0.3989,
+                                  "peak": 0.3987,
                                   "totalEnergy": 0.001264
                                 },
                                 {
@@ -1062,6 +1718,40 @@
                                 "headroomDb": 5.1,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 40.834,
+                                "mix": {
+                                  "slopeDbPerOct": -7.513,
+                                  "slopePenalty": 4.0438,
+                                  "rolloffPenalty": 3.1338,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0587,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 3.002,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
                                 "total": 40.834,
                                 "mix": {
@@ -1101,7 +1791,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0571,
-                                  "peak": 0.3988,
+                                  "peak": 0.3989,
                                   "totalEnergy": 0.001158
                                 },
                                 {
@@ -1152,7 +1842,63 @@
                         "candidate": {
                           "track": "bass",
                           "value": 0.44,
-                          "label": "bass -0.18"
+                          "label": "bass -0.18",
+                          "claimCandidate": {
+                            "id": "set-bass-level-0.62-to-0.44",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting bass level from 0.62 to 0.44 changes rendered bass metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "bass",
+                              "from": 0.62,
+                              "to": 0.44,
+                              "delta": -0.18
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-bass-level-0.62-to-0.44",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting bass level from 0.62 to 0.44 changes rendered bass metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "bass",
+                            "from": 0.62,
+                            "to": 0.44,
+                            "delta": -0.18
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -1162,7 +1908,90 @@
                           "value": 0.44,
                           "levels": null
                         },
-                        "score": 27.4895,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "bass",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "expectedLevel": 0.44,
+                              "observedLevel": 0.44
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "bass",
+                              "moved": true,
+                              "before": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.058,
+                                "peak": 0.18415,
+                                "totalEnergy": 0.000621
+                              },
+                              "after": {
+                                "track": "bass",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.04175,
+                                "peak": 0.13065,
+                                "totalEnergy": 0.000317
+                              },
+                              "deltas": {
+                                "rms": -0.01625,
+                                "peak": -0.0535,
+                                "totalEnergy": -0.000304
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 27.4895,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -1217,8 +2046,42 @@
                                 "headroomDb": 6.75,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 24.6459,
+                                "mix": {
+                                  "slopeDbPerOct": -6.049,
+                                  "slopePenalty": 0.6256,
+                                  "rolloffPenalty": 2.9601,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0672,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.831,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 24.646,
+                                "total": 24.6459,
                                 "mix": {
                                   "slopeDbPerOct": -6.049,
                                   "slopePenalty": 0.6256,
@@ -1256,7 +2119,7 @@
                                 {
                                   "name": "kick",
                                   "rms": 0.0594,
-                                  "peak": 0.3988,
+                                  "peak": 0.3989,
                                   "totalEnergy": 0.001264
                                 },
                                 {
@@ -1318,8 +2181,42 @@
                                 "headroomDb": 6.27,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 30.3331,
+                                "mix": {
+                                  "slopeDbPerOct": -6.537,
+                                  "slopePenalty": 1.433,
+                                  "rolloffPenalty": 3.1142,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0943,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 3.002,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 30.333,
+                                "total": 30.3331,
                                 "mix": {
                                   "slopeDbPerOct": -6.537,
                                   "slopePenalty": 1.433,
@@ -1408,7 +2305,63 @@
                         "candidate": {
                           "track": "chord",
                           "value": 0.5,
-                          "label": "chord +0.12"
+                          "label": "chord +0.12",
+                          "claimCandidate": {
+                            "id": "set-chord-level-0.38-to-0.50",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting chord level from 0.38 to 0.50 changes rendered chord metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "chord",
+                              "from": 0.38,
+                              "to": 0.5,
+                              "delta": 0.12
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-chord-level-0.38-to-0.50",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting chord level from 0.38 to 0.50 changes rendered chord metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "chord",
+                            "from": 0.38,
+                            "to": 0.5,
+                            "delta": 0.12
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -1418,7 +2371,90 @@
                           "value": 0.5,
                           "levels": null
                         },
-                        "score": 28.516,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "chord",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "chord",
+                              "expectedLevel": 0.5,
+                              "observedLevel": 0.5
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "chord",
+                              "moved": true,
+                              "before": {
+                                "track": "chord",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.0062,
+                                "peak": 0.0334,
+                                "totalEnergy": 0.000007
+                              },
+                              "after": {
+                                "track": "chord",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.0082,
+                                "peak": 0.0439,
+                                "totalEnergy": 0.000012
+                              },
+                              "deltas": {
+                                "rms": 0.002,
+                                "peak": 0.0105,
+                                "totalEnergy": 0.000005
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 28.5062,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -1473,11 +2509,11 @@
                                 "headroomDb": 6.68,
                                 "lowLevel": false
                               },
-                              "score": {
-                                "total": 25.038,
+                              "objectivePenalty": {
+                                "total": 25.0181,
                                 "mix": {
-                                  "slopeDbPerOct": -6.119,
-                                  "slopePenalty": 0.7207,
+                                  "slopeDbPerOct": -6.115,
+                                  "slopePenalty": 0.7157,
                                   "rolloffPenalty": 2.964,
                                   "presenceRatio": 0.0942,
                                   "presencePenalty": 0.3918,
@@ -1485,7 +2521,41 @@
                                   "mixPenaltyScale": 1
                                 },
                                 "mud": {
-                                  "ratio": 0.0696,
+                                  "ratio": 0.0697,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.831,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
+                              "score": {
+                                "total": 25.0181,
+                                "mix": {
+                                  "slopeDbPerOct": -6.115,
+                                  "slopePenalty": 0.7157,
+                                  "rolloffPenalty": 2.964,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0697,
                                   "penalty": 0
                                 },
                                 "top": [
@@ -1574,8 +2644,42 @@
                                 "headroomDb": 6.29,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 31.9943,
+                                "mix": {
+                                  "slopeDbPerOct": -6.732,
+                                  "slopePenalty": 1.8498,
+                                  "rolloffPenalty": 3.1123,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0967,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 3.002,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 31.994,
+                                "total": 31.9943,
                                 "mix": {
                                   "slopeDbPerOct": -6.732,
                                   "slopePenalty": 1.8498,
@@ -1664,7 +2768,63 @@
                         "candidate": {
                           "track": "chord",
                           "value": 0.28,
-                          "label": "chord -0.10"
+                          "label": "chord -0.10",
+                          "claimCandidate": {
+                            "id": "set-chord-level-0.38-to-0.28",
+                            "kind": "change_claim_candidate",
+                            "domain": "audio_mix",
+                            "strategy": "mix-level-search",
+                            "evidenceRolePattern": "interaction_snapshots",
+                            "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                            "action": {
+                              "type": "set_mixer_level",
+                              "track": "chord",
+                              "from": 0.38,
+                              "to": 0.28,
+                              "delta": -0.1
+                            },
+                            "expectedReceipts": [
+                              "mixer edit accepted",
+                              "contract mixer level reflects requested value",
+                              "rendered target track metrics changed",
+                              "required instruments remain active",
+                              "no clipping",
+                              "no low-level proof window"
+                            ],
+                            "rankingHint": {
+                              "metric": "objective_mix_health_penalty",
+                              "lowerIsBetter": true,
+                              "role": "review_order_only"
+                            }
+                          }
+                        },
+                        "claimCandidate": {
+                          "id": "set-chord-level-0.38-to-0.28",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "chord",
+                            "from": 0.38,
+                            "to": 0.28,
+                            "delta": -0.1
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
                         },
                         "edit": {
                           "ok": true,
@@ -1674,7 +2834,90 @@
                           "value": 0.28,
                           "levels": null
                         },
-                        "score": 27.0708,
+                        "claimReceipts": [
+                          {
+                            "name": "mixer_edit_accepted",
+                            "ok": true,
+                            "evidence": {
+                              "proofKind": "neon-mixer-edit",
+                              "track": "chord",
+                              "error": null
+                            }
+                          },
+                          {
+                            "name": "contract_mixer_level_reflects_action",
+                            "ok": true,
+                            "evidence": {
+                              "track": "chord",
+                              "expectedLevel": 0.28,
+                              "observedLevel": 0.28
+                            }
+                          },
+                          {
+                            "name": "rendered_target_metric_changed",
+                            "ok": true,
+                            "evidence": {
+                              "track": "chord",
+                              "moved": true,
+                              "before": {
+                                "track": "chord",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.0062,
+                                "peak": 0.0334,
+                                "totalEnergy": 0.000007
+                              },
+                              "after": {
+                                "track": "chord",
+                                "sampleCount": 2,
+                                "activeCount": 0,
+                                "rms": 0.005,
+                                "peak": 0.0246,
+                                "totalEnergy": 0.000004
+                              },
+                              "deltas": {
+                                "rms": -0.0012,
+                                "peak": -0.0088,
+                                "totalEnergy": -0.000003
+                              },
+                              "thresholds": {
+                                "rms": 0.00001,
+                                "peak": 0.00001,
+                                "totalEnergy": 0.000001
+                              }
+                            }
+                          },
+                          {
+                            "name": "required_instruments_preserved",
+                            "ok": true,
+                            "evidence": {
+                              "windowCount": 2,
+                              "findingCount": 0,
+                              "findings": []
+                            }
+                          },
+                          {
+                            "name": "no_clipping",
+                            "ok": true,
+                            "evidence": {
+                              "clippingWindows": []
+                            }
+                          },
+                          {
+                            "name": "no_low_level_proof_window",
+                            "ok": true,
+                            "evidence": {
+                              "lowLevelWindows": []
+                            }
+                          }
+                        ],
+                        "claimVerdict": {
+                          "ok": true,
+                          "status": "supported",
+                          "classification": null,
+                          "failedReceipts": []
+                        },
+                        "candidateRankingMetric": 27.07095,
                         "summary": {
                           "ok": true,
                           "proofKind": "offline-audio-window-set",
@@ -1729,8 +2972,42 @@
                                 "headroomDb": 6.81,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 24.1782,
+                                "mix": {
+                                  "slopeDbPerOct": -5.988,
+                                  "slopePenalty": 0.5473,
+                                  "rolloffPenalty": 2.9539,
+                                  "presenceRatio": 0.0942,
+                                  "presencePenalty": 0.3918,
+                                  "presenceFloorPenalty": 0.1331,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.066,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 7.333,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.16,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.378,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 24.1783,
+                                "total": 24.1782,
                                 "mix": {
                                   "slopeDbPerOct": -5.988,
                                   "slopePenalty": 0.5473,
@@ -1830,8 +3107,42 @@
                                 "headroomDb": 6.25,
                                 "lowLevel": false
                               },
+                              "objectivePenalty": {
+                                "total": 29.9637,
+                                "mix": {
+                                  "slopeDbPerOct": -6.507,
+                                  "slopePenalty": 1.3749,
+                                  "rolloffPenalty": 3.1166,
+                                  "presenceRatio": 0.0701,
+                                  "presencePenalty": 0.5906,
+                                  "presenceFloorPenalty": 0.498,
+                                  "mixPenaltyScale": 1
+                                },
+                                "mud": {
+                                  "ratio": 0.0931,
+                                  "penalty": 0
+                                },
+                                "top": [
+                                  {
+                                    "instrument": "snare",
+                                    "score": 4.878,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "guitar",
+                                    "score": 4.223,
+                                    "skipped": false
+                                  },
+                                  {
+                                    "instrument": "chord",
+                                    "score": 2.523,
+                                    "skipped": false
+                                  }
+                                ],
+                                "eqPenalty": 3.3732
+                              },
                               "score": {
-                                "total": 29.9633,
+                                "total": 29.9637,
                                 "mix": {
                                   "slopeDbPerOct": -6.507,
                                   "slopePenalty": 1.3749,
@@ -1921,7 +3232,63 @@
                       "candidate": {
                         "track": "chord",
                         "value": 0.28,
-                        "label": "chord -0.10"
+                        "label": "chord -0.10",
+                        "claimCandidate": {
+                          "id": "set-chord-level-0.38-to-0.28",
+                          "kind": "change_claim_candidate",
+                          "domain": "audio_mix",
+                          "strategy": "mix-level-search",
+                          "evidenceRolePattern": "interaction_snapshots",
+                          "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                          "action": {
+                            "type": "set_mixer_level",
+                            "track": "chord",
+                            "from": 0.38,
+                            "to": 0.28,
+                            "delta": -0.1
+                          },
+                          "expectedReceipts": [
+                            "mixer edit accepted",
+                            "contract mixer level reflects requested value",
+                            "rendered target track metrics changed",
+                            "required instruments remain active",
+                            "no clipping",
+                            "no low-level proof window"
+                          ],
+                          "rankingHint": {
+                            "metric": "objective_mix_health_penalty",
+                            "lowerIsBetter": true,
+                            "role": "review_order_only"
+                          }
+                        }
+                      },
+                      "claimCandidate": {
+                        "id": "set-chord-level-0.38-to-0.28",
+                        "kind": "change_claim_candidate",
+                        "domain": "audio_mix",
+                        "strategy": "mix-level-search",
+                        "evidenceRolePattern": "interaction_snapshots",
+                        "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                        "action": {
+                          "type": "set_mixer_level",
+                          "track": "chord",
+                          "from": 0.38,
+                          "to": 0.28,
+                          "delta": -0.1
+                        },
+                        "expectedReceipts": [
+                          "mixer edit accepted",
+                          "contract mixer level reflects requested value",
+                          "rendered target track metrics changed",
+                          "required instruments remain active",
+                          "no clipping",
+                          "no low-level proof window"
+                        ],
+                        "rankingHint": {
+                          "metric": "objective_mix_health_penalty",
+                          "lowerIsBetter": true,
+                          "role": "review_order_only"
+                        }
                       },
                       "edit": {
                         "ok": true,
@@ -1931,7 +3298,90 @@
                         "value": 0.28,
                         "levels": null
                       },
-                      "score": 27.0708,
+                      "claimReceipts": [
+                        {
+                          "name": "mixer_edit_accepted",
+                          "ok": true,
+                          "evidence": {
+                            "proofKind": "neon-mixer-edit",
+                            "track": "chord",
+                            "error": null
+                          }
+                        },
+                        {
+                          "name": "contract_mixer_level_reflects_action",
+                          "ok": true,
+                          "evidence": {
+                            "track": "chord",
+                            "expectedLevel": 0.28,
+                            "observedLevel": 0.28
+                          }
+                        },
+                        {
+                          "name": "rendered_target_metric_changed",
+                          "ok": true,
+                          "evidence": {
+                            "track": "chord",
+                            "moved": true,
+                            "before": {
+                              "track": "chord",
+                              "sampleCount": 2,
+                              "activeCount": 0,
+                              "rms": 0.0062,
+                              "peak": 0.0334,
+                              "totalEnergy": 0.000007
+                            },
+                            "after": {
+                              "track": "chord",
+                              "sampleCount": 2,
+                              "activeCount": 0,
+                              "rms": 0.005,
+                              "peak": 0.0246,
+                              "totalEnergy": 0.000004
+                            },
+                            "deltas": {
+                              "rms": -0.0012,
+                              "peak": -0.0088,
+                              "totalEnergy": -0.000003
+                            },
+                            "thresholds": {
+                              "rms": 0.00001,
+                              "peak": 0.00001,
+                              "totalEnergy": 0.000001
+                            }
+                          }
+                        },
+                        {
+                          "name": "required_instruments_preserved",
+                          "ok": true,
+                          "evidence": {
+                            "windowCount": 2,
+                            "findingCount": 0,
+                            "findings": []
+                          }
+                        },
+                        {
+                          "name": "no_clipping",
+                          "ok": true,
+                          "evidence": {
+                            "clippingWindows": []
+                          }
+                        },
+                        {
+                          "name": "no_low_level_proof_window",
+                          "ok": true,
+                          "evidence": {
+                            "lowLevelWindows": []
+                          }
+                        }
+                      ],
+                      "claimVerdict": {
+                        "ok": true,
+                        "status": "supported",
+                        "classification": null,
+                        "failedReceipts": []
+                      },
+                      "candidateRankingMetric": 27.07095,
                       "summary": {
                         "ok": true,
                         "proofKind": "offline-audio-window-set",
@@ -1986,8 +3436,42 @@
                               "headroomDb": 6.81,
                               "lowLevel": false
                             },
+                            "objectivePenalty": {
+                              "total": 24.1782,
+                              "mix": {
+                                "slopeDbPerOct": -5.988,
+                                "slopePenalty": 0.5473,
+                                "rolloffPenalty": 2.9539,
+                                "presenceRatio": 0.0942,
+                                "presencePenalty": 0.3918,
+                                "presenceFloorPenalty": 0.1331,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.066,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 7.333,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "guitar",
+                                  "score": 4.16,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "chord",
+                                  "score": 2.378,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
                             "score": {
-                              "total": 24.1783,
+                              "total": 24.1782,
                               "mix": {
                                 "slopeDbPerOct": -5.988,
                                 "slopePenalty": 0.5473,
@@ -2087,8 +3571,42 @@
                               "headroomDb": 6.25,
                               "lowLevel": false
                             },
+                            "objectivePenalty": {
+                              "total": 29.9637,
+                              "mix": {
+                                "slopeDbPerOct": -6.507,
+                                "slopePenalty": 1.3749,
+                                "rolloffPenalty": 3.1166,
+                                "presenceRatio": 0.0701,
+                                "presencePenalty": 0.5906,
+                                "presenceFloorPenalty": 0.498,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.0931,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 4.878,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "guitar",
+                                  "score": 4.223,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "chord",
+                                  "score": 2.523,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
                             "score": {
-                              "total": 29.9633,
+                              "total": 29.9637,
                               "mix": {
                                 "slopeDbPerOct": -6.507,
                                 "slopePenalty": 1.3749,
@@ -2172,11 +3690,52 @@
                         "findings": []
                       }
                     },
+                    "bestClaimCandidate": {
+                      "id": "set-chord-level-0.38-to-0.28",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "chord",
+                        "from": 0.38,
+                        "to": 0.28,
+                        "delta": -0.1
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    },
+                    "restorationReceipt": {
+                      "name": "state_restored_after_claim_candidate_loop",
+                      "ok": true,
+                      "expectedLevels": {
+                        "bass": 0.62,
+                        "chord": 0.38
+                      },
+                      "observedLevels": {
+                        "bass": 0.62,
+                        "chord": 0.38
+                      }
+                    },
                     "classification": null,
                     "caveats": [
-                      "candidate ranking uses objective mix metrics only",
-                      "human listening review is still required before calling the mix better",
-                      "candidate edits are transient unless applyBest is true"
+                      "candidateRankingMetric is only a review-order hint",
+                      "claim verdicts come from receipts and invariants, not taste optimization",
+                      "human listening review is required before accepting any musical change",
+                      "candidate actions are transient unless applyBest is true"
                     ]
                   },
                   "return_summary": [
@@ -2190,7 +3749,7 @@
                       "label": "status",
                       "path": "status",
                       "exists": true,
-                      "value": "candidate_found"
+                      "value": "claim_candidate_supported"
                     },
                     {
                       "label": "strategy",
@@ -2199,16 +3758,22 @@
                       "value": "mix-level-search"
                     },
                     {
-                      "label": "improvement",
-                      "path": "improvement",
+                      "label": "best.claimVerdict.status",
+                      "path": "best.claimVerdict.status",
                       "exists": true,
-                      "value": 1.7627
+                      "value": "supported"
                     },
                     {
-                      "label": "best.candidate.track",
-                      "path": "best.candidate.track",
+                      "label": "best.claimCandidate.action.track",
+                      "path": "best.claimCandidate.action.track",
                       "exists": true,
                       "value": "chord"
+                    },
+                    {
+                      "label": "supportedClaimCandidateCount",
+                      "path": "supportedClaimCandidateCount",
+                      "exists": true,
+                      "value": 6
                     }
                   ]
                 }
@@ -2230,7 +3795,7 @@
                     "diagnostic": {
                       "version": "neon-step-sequencer.capture-diagnostic.v1",
                       "target": "neon-step-sequencer",
-                      "capturedAt": "2026-05-24T03:31:28.577Z",
+                      "capturedAt": "2026-05-24T04:21:49.888Z",
                       "routeState": {
                         "proofKind": "neon-route-state",
                         "route": "/games/drum-sequencer",
@@ -3544,20 +5109,22 @@
     }
   ],
   "summary": "lilarcade-neon-ratchet-loop-mix-level-search passed 5 check(s) across 1 viewport(s) (desktop).",
-  "captured_at": "2026-05-24T03:31:26.020Z",
+  "captured_at": "2026-05-24T04:21:47.248Z",
   "metadata": {
     "pack_id": "neon_step_sequencer",
     "evidence_role_pattern": "interaction_snapshots",
-    "purpose": "Run a bounded automated ratchet loop using the Neon mix-level-search strategy.",
+    "purpose": "Run a bounded loop that tests Neon mix-level change-claim candidates using the mix-level-search strategy.",
     "required_receipts": [
       "ratchet loop returns ok",
       "baseline proof-window summary is captured",
-      "candidate attempts are captured",
-      "best candidate or human-review status is captured"
+      "claim candidates are captured",
+      "each candidate records claim receipts",
+      "best supported claim candidate or human-review status is captured",
+      "state restoration receipt is captured"
     ],
     "does_not_prove": [
       "subjective mix quality",
-      "that the best objective candidate should be kept",
+      "that a supported claim candidate should be kept",
       "all possible mix edits"
     ]
   },
@@ -3566,7 +5133,7 @@
     "profile_name": "lilarcade-neon-ratchet-loop-mix-level-search",
     "target_url": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
     "baseline_policy": "invariant_only",
-    "captured_at": "2026-05-24T03:31:26.020Z",
+    "captured_at": "2026-05-24T04:21:47.248Z",
     "viewports": [
       {
         "name": "desktop",
@@ -3617,7 +5184,7 @@
               "diagnostic": {
                 "version": "neon-step-sequencer.capture-diagnostic.v1",
                 "target": "neon-step-sequencer",
-                "capturedAt": "2026-05-24T03:31:28.577Z",
+                "capturedAt": "2026-05-24T04:21:49.888Z",
                 "routeState": {
                   "proofKind": "neon-route-state",
                   "route": "/games/drum-sequencer",
@@ -4847,10 +6414,11 @@
             "returned": {
               "ok": true,
               "proofKind": "neon-ratchet-loop",
-              "status": "candidate_found",
+              "status": "claim_candidate_supported",
               "strategy": "mix-level-search",
               "domain": "audio_mix",
               "evidenceRolePattern": "interaction_snapshots",
+              "candidateKind": "change_claim_candidate",
               "focusTracks": [
                 "bass",
                 "chord",
@@ -4860,10 +6428,10 @@
               "maxIterations": 6,
               "restore": true,
               "applyBest": false,
-              "baselineScore": 28.83345,
-              "bestScore": 27.0708,
-              "improvement": 1.7627,
-              "improved": true,
+              "baselineCandidateRankingMetric": 28.8336,
+              "bestCandidateRankingMetric": 27.07095,
+              "rankingMetricDelta": 1.7627,
+              "supportedClaimCandidateCount": 6,
               "baseline": {
                 "ok": true,
                 "proofKind": "offline-audio-window-set",
@@ -4918,8 +6486,42 @@
                       "headroomDb": 6,
                       "lowLevel": false
                     },
+                    "objectivePenalty": {
+                      "total": 27.0807,
+                      "mix": {
+                        "slopeDbPerOct": -6.392,
+                        "slopePenalty": 1.1591,
+                        "rolloffPenalty": 3.0532,
+                        "presenceRatio": 0.0942,
+                        "presencePenalty": 0.3918,
+                        "presenceFloorPenalty": 0.1331,
+                        "mixPenaltyScale": 1
+                      },
+                      "mud": {
+                        "ratio": 0.0573,
+                        "penalty": 0
+                      },
+                      "top": [
+                        {
+                          "instrument": "snare",
+                          "score": 7.333,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "guitar",
+                          "score": 4.16,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "chord",
+                          "score": 2.831,
+                          "skipped": false
+                        }
+                      ],
+                      "eqPenalty": 3.3732
+                    },
                     "score": {
-                      "total": 27.0806,
+                      "total": 27.0807,
                       "mix": {
                         "slopeDbPerOct": -6.392,
                         "slopePenalty": 1.1591,
@@ -4957,7 +6559,7 @@
                       {
                         "name": "kick",
                         "rms": 0.0594,
-                        "peak": 0.3988,
+                        "peak": 0.3989,
                         "totalEnergy": 0.001264
                       },
                       {
@@ -5019,8 +6621,42 @@
                       "headroomDb": 5.82,
                       "lowLevel": false
                     },
+                    "objectivePenalty": {
+                      "total": 30.5865,
+                      "mix": {
+                        "slopeDbPerOct": -6.57,
+                        "slopePenalty": 1.501,
+                        "rolloffPenalty": 3.1085,
+                        "presenceRatio": 0.0701,
+                        "presencePenalty": 0.5906,
+                        "presenceFloorPenalty": 0.498,
+                        "mixPenaltyScale": 1
+                      },
+                      "mud": {
+                        "ratio": 0.0762,
+                        "penalty": 0
+                      },
+                      "top": [
+                        {
+                          "instrument": "snare",
+                          "score": 4.878,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "guitar",
+                          "score": 4.223,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "chord",
+                          "score": 3.002,
+                          "skipped": false
+                        }
+                      ],
+                      "eqPenalty": 3.3732
+                    },
                     "score": {
-                      "total": 30.5863,
+                      "total": 30.5865,
                       "mix": {
                         "slopeDbPerOct": -6.57,
                         "slopePenalty": 1.501,
@@ -5058,7 +6694,7 @@
                       {
                         "name": "kick",
                         "rms": 0.0571,
-                        "peak": 0.3989,
+                        "peak": 0.3988,
                         "totalEnergy": 0.001158
                       },
                       {
@@ -5109,7 +6745,63 @@
                   "candidate": {
                     "track": "bass",
                     "value": 0.74,
-                    "label": "bass +0.12"
+                    "label": "bass +0.12",
+                    "claimCandidate": {
+                      "id": "set-bass-level-0.62-to-0.74",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting bass level from 0.62 to 0.74 changes rendered bass metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "bass",
+                        "from": 0.62,
+                        "to": 0.74,
+                        "delta": 0.12
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-bass-level-0.62-to-0.74",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting bass level from 0.62 to 0.74 changes rendered bass metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "bass",
+                      "from": 0.62,
+                      "to": 0.74,
+                      "delta": 0.12
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -5119,7 +6811,90 @@
                     "value": 0.74,
                     "levels": null
                   },
-                  "score": 31.79925,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "bass",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "expectedLevel": 0.74,
+                        "observedLevel": 0.74
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "moved": true,
+                        "before": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.058,
+                          "peak": 0.18415,
+                          "totalEnergy": 0.000621
+                        },
+                        "after": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.06925,
+                          "peak": 0.21975,
+                          "totalEnergy": 0.000885
+                        },
+                        "deltas": {
+                          "rms": 0.01125,
+                          "peak": 0.0356,
+                          "totalEnergy": 0.000264
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 31.7993,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -5174,8 +6949,42 @@
                           "headroomDb": 5.55,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 28.6059,
+                          "mix": {
+                            "slopeDbPerOct": -6.577,
+                            "slopePenalty": 1.5148,
+                            "rolloffPenalty": 3.0872,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0504,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.831,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 28.6058,
+                          "total": 28.6059,
                           "mix": {
                             "slopeDbPerOct": -6.577,
                             "slopePenalty": 1.5148,
@@ -5213,7 +7022,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0594,
-                            "peak": 0.3988,
+                            "peak": 0.3989,
                             "totalEnergy": 0.001264
                           },
                           {
@@ -5275,6 +7084,40 @@
                           "headroomDb": 5.38,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 34.9927,
+                          "mix": {
+                            "slopeDbPerOct": -7.033,
+                            "slopePenalty": 2.5943,
+                            "rolloffPenalty": 3.1194,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0652,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 3.002,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
                           "total": 34.9927,
                           "mix": {
@@ -5314,7 +7157,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0571,
-                            "peak": 0.3988,
+                            "peak": 0.3989,
                             "totalEnergy": 0.001158
                           },
                           {
@@ -5365,7 +7208,63 @@
                   "candidate": {
                     "track": "bass",
                     "value": 0.52,
-                    "label": "bass -0.10"
+                    "label": "bass -0.10",
+                    "claimCandidate": {
+                      "id": "set-bass-level-0.62-to-0.52",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting bass level from 0.62 to 0.52 changes rendered bass metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "bass",
+                        "from": 0.62,
+                        "to": 0.52,
+                        "delta": -0.1
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-bass-level-0.62-to-0.52",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting bass level from 0.62 to 0.52 changes rendered bass metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "bass",
+                      "from": 0.62,
+                      "to": 0.52,
+                      "delta": -0.1
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -5375,7 +7274,90 @@
                     "value": 0.52,
                     "levels": null
                   },
-                  "score": 29.170099999999998,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "bass",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "expectedLevel": 0.52,
+                        "observedLevel": 0.52
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "moved": true,
+                        "before": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.058,
+                          "peak": 0.18415,
+                          "totalEnergy": 0.000621
+                        },
+                        "after": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.04865,
+                          "peak": 0.1544,
+                          "totalEnergy": 0.000437
+                        },
+                        "deltas": {
+                          "rms": -0.00935,
+                          "peak": -0.02975,
+                          "totalEnergy": -0.000184
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 29.1701,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -5430,8 +7412,42 @@
                           "headroomDb": 6.41,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 25.7834,
+                          "mix": {
+                            "slopeDbPerOct": -6.22,
+                            "slopePenalty": 0.871,
+                            "rolloffPenalty": 3.0044,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0628,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.831,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 25.7835,
+                          "total": 25.7834,
                           "mix": {
                             "slopeDbPerOct": -6.22,
                             "slopePenalty": 0.871,
@@ -5469,7 +7485,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0594,
-                            "peak": 0.3989,
+                            "peak": 0.3988,
                             "totalEnergy": 0.001264
                           },
                           {
@@ -5531,8 +7547,42 @@
                           "headroomDb": 6.21,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 32.5568,
+                          "mix": {
+                            "slopeDbPerOct": -6.792,
+                            "slopePenalty": 1.9871,
+                            "rolloffPenalty": 3.1167,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0858,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 3.002,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 32.5567,
+                          "total": 32.5568,
                           "mix": {
                             "slopeDbPerOct": -6.792,
                             "slopePenalty": 1.9871,
@@ -5570,7 +7620,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0571,
-                            "peak": 0.3988,
+                            "peak": 0.3989,
                             "totalEnergy": 0.001158
                           },
                           {
@@ -5621,7 +7671,63 @@
                   "candidate": {
                     "track": "bass",
                     "value": 0.8200000000000001,
-                    "label": "bass +0.20"
+                    "label": "bass +0.20",
+                    "claimCandidate": {
+                      "id": "set-bass-level-0.62-to-0.82",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting bass level from 0.62 to 0.82 changes rendered bass metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "bass",
+                        "from": 0.62,
+                        "to": 0.8200000000000001,
+                        "delta": 0.2
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-bass-level-0.62-to-0.82",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting bass level from 0.62 to 0.82 changes rendered bass metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "bass",
+                      "from": 0.62,
+                      "to": 0.8200000000000001,
+                      "delta": 0.2
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -5631,7 +7737,90 @@
                     "value": 0.8200000000000001,
                     "levels": null
                   },
-                  "score": 35.25595,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "bass",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "expectedLevel": 0.8200000000000001,
+                        "observedLevel": 0.82
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "moved": true,
+                        "before": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.058,
+                          "peak": 0.18415,
+                          "totalEnergy": 0.000621
+                        },
+                        "after": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.0767,
+                          "peak": 0.24355,
+                          "totalEnergy": 0.001087
+                        },
+                        "deltas": {
+                          "rms": 0.0187,
+                          "peak": 0.0594,
+                          "totalEnergy": 0.000466
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 35.25595,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -5686,6 +7875,40 @@
                           "headroomDb": 5.26,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 29.6779,
+                          "mix": {
+                            "slopeDbPerOct": -6.697,
+                            "slopePenalty": 1.7706,
+                            "rolloffPenalty": 3.1034,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0462,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.831,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
                           "total": 29.6779,
                           "mix": {
@@ -5725,7 +7948,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0594,
-                            "peak": 0.3989,
+                            "peak": 0.3987,
                             "totalEnergy": 0.001264
                           },
                           {
@@ -5787,6 +8010,40 @@
                           "headroomDb": 5.1,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 40.834,
+                          "mix": {
+                            "slopeDbPerOct": -7.513,
+                            "slopePenalty": 4.0438,
+                            "rolloffPenalty": 3.1338,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0587,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 3.002,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
                           "total": 40.834,
                           "mix": {
@@ -5826,7 +8083,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0571,
-                            "peak": 0.3988,
+                            "peak": 0.3989,
                             "totalEnergy": 0.001158
                           },
                           {
@@ -5877,7 +8134,63 @@
                   "candidate": {
                     "track": "bass",
                     "value": 0.44,
-                    "label": "bass -0.18"
+                    "label": "bass -0.18",
+                    "claimCandidate": {
+                      "id": "set-bass-level-0.62-to-0.44",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting bass level from 0.62 to 0.44 changes rendered bass metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "bass",
+                        "from": 0.62,
+                        "to": 0.44,
+                        "delta": -0.18
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-bass-level-0.62-to-0.44",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting bass level from 0.62 to 0.44 changes rendered bass metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "bass",
+                      "from": 0.62,
+                      "to": 0.44,
+                      "delta": -0.18
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -5887,7 +8200,90 @@
                     "value": 0.44,
                     "levels": null
                   },
-                  "score": 27.4895,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "bass",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "expectedLevel": 0.44,
+                        "observedLevel": 0.44
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "bass",
+                        "moved": true,
+                        "before": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.058,
+                          "peak": 0.18415,
+                          "totalEnergy": 0.000621
+                        },
+                        "after": {
+                          "track": "bass",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.04175,
+                          "peak": 0.13065,
+                          "totalEnergy": 0.000317
+                        },
+                        "deltas": {
+                          "rms": -0.01625,
+                          "peak": -0.0535,
+                          "totalEnergy": -0.000304
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 27.4895,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -5942,8 +8338,42 @@
                           "headroomDb": 6.75,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 24.6459,
+                          "mix": {
+                            "slopeDbPerOct": -6.049,
+                            "slopePenalty": 0.6256,
+                            "rolloffPenalty": 2.9601,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0672,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.831,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 24.646,
+                          "total": 24.6459,
                           "mix": {
                             "slopeDbPerOct": -6.049,
                             "slopePenalty": 0.6256,
@@ -5981,7 +8411,7 @@
                           {
                             "name": "kick",
                             "rms": 0.0594,
-                            "peak": 0.3988,
+                            "peak": 0.3989,
                             "totalEnergy": 0.001264
                           },
                           {
@@ -6043,8 +8473,42 @@
                           "headroomDb": 6.27,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 30.3331,
+                          "mix": {
+                            "slopeDbPerOct": -6.537,
+                            "slopePenalty": 1.433,
+                            "rolloffPenalty": 3.1142,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0943,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 3.002,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 30.333,
+                          "total": 30.3331,
                           "mix": {
                             "slopeDbPerOct": -6.537,
                             "slopePenalty": 1.433,
@@ -6133,7 +8597,63 @@
                   "candidate": {
                     "track": "chord",
                     "value": 0.5,
-                    "label": "chord +0.12"
+                    "label": "chord +0.12",
+                    "claimCandidate": {
+                      "id": "set-chord-level-0.38-to-0.50",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting chord level from 0.38 to 0.50 changes rendered chord metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "chord",
+                        "from": 0.38,
+                        "to": 0.5,
+                        "delta": 0.12
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-chord-level-0.38-to-0.50",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting chord level from 0.38 to 0.50 changes rendered chord metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "chord",
+                      "from": 0.38,
+                      "to": 0.5,
+                      "delta": 0.12
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -6143,7 +8663,90 @@
                     "value": 0.5,
                     "levels": null
                   },
-                  "score": 28.516,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "chord",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "chord",
+                        "expectedLevel": 0.5,
+                        "observedLevel": 0.5
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "chord",
+                        "moved": true,
+                        "before": {
+                          "track": "chord",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.0062,
+                          "peak": 0.0334,
+                          "totalEnergy": 0.000007
+                        },
+                        "after": {
+                          "track": "chord",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.0082,
+                          "peak": 0.0439,
+                          "totalEnergy": 0.000012
+                        },
+                        "deltas": {
+                          "rms": 0.002,
+                          "peak": 0.0105,
+                          "totalEnergy": 0.000005
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 28.5062,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -6198,11 +8801,11 @@
                           "headroomDb": 6.68,
                           "lowLevel": false
                         },
-                        "score": {
-                          "total": 25.038,
+                        "objectivePenalty": {
+                          "total": 25.0181,
                           "mix": {
-                            "slopeDbPerOct": -6.119,
-                            "slopePenalty": 0.7207,
+                            "slopeDbPerOct": -6.115,
+                            "slopePenalty": 0.7157,
                             "rolloffPenalty": 2.964,
                             "presenceRatio": 0.0942,
                             "presencePenalty": 0.3918,
@@ -6210,7 +8813,41 @@
                             "mixPenaltyScale": 1
                           },
                           "mud": {
-                            "ratio": 0.0696,
+                            "ratio": 0.0697,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.831,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
+                        "score": {
+                          "total": 25.0181,
+                          "mix": {
+                            "slopeDbPerOct": -6.115,
+                            "slopePenalty": 0.7157,
+                            "rolloffPenalty": 2.964,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0697,
                             "penalty": 0
                           },
                           "top": [
@@ -6299,8 +8936,42 @@
                           "headroomDb": 6.29,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 31.9943,
+                          "mix": {
+                            "slopeDbPerOct": -6.732,
+                            "slopePenalty": 1.8498,
+                            "rolloffPenalty": 3.1123,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0967,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 3.002,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 31.994,
+                          "total": 31.9943,
                           "mix": {
                             "slopeDbPerOct": -6.732,
                             "slopePenalty": 1.8498,
@@ -6389,7 +9060,63 @@
                   "candidate": {
                     "track": "chord",
                     "value": 0.28,
-                    "label": "chord -0.10"
+                    "label": "chord -0.10",
+                    "claimCandidate": {
+                      "id": "set-chord-level-0.38-to-0.28",
+                      "kind": "change_claim_candidate",
+                      "domain": "audio_mix",
+                      "strategy": "mix-level-search",
+                      "evidenceRolePattern": "interaction_snapshots",
+                      "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                      "action": {
+                        "type": "set_mixer_level",
+                        "track": "chord",
+                        "from": 0.38,
+                        "to": 0.28,
+                        "delta": -0.1
+                      },
+                      "expectedReceipts": [
+                        "mixer edit accepted",
+                        "contract mixer level reflects requested value",
+                        "rendered target track metrics changed",
+                        "required instruments remain active",
+                        "no clipping",
+                        "no low-level proof window"
+                      ],
+                      "rankingHint": {
+                        "metric": "objective_mix_health_penalty",
+                        "lowerIsBetter": true,
+                        "role": "review_order_only"
+                      }
+                    }
+                  },
+                  "claimCandidate": {
+                    "id": "set-chord-level-0.38-to-0.28",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "chord",
+                      "from": 0.38,
+                      "to": 0.28,
+                      "delta": -0.1
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
                   },
                   "edit": {
                     "ok": true,
@@ -6399,7 +9126,90 @@
                     "value": 0.28,
                     "levels": null
                   },
-                  "score": 27.0708,
+                  "claimReceipts": [
+                    {
+                      "name": "mixer_edit_accepted",
+                      "ok": true,
+                      "evidence": {
+                        "proofKind": "neon-mixer-edit",
+                        "track": "chord",
+                        "error": null
+                      }
+                    },
+                    {
+                      "name": "contract_mixer_level_reflects_action",
+                      "ok": true,
+                      "evidence": {
+                        "track": "chord",
+                        "expectedLevel": 0.28,
+                        "observedLevel": 0.28
+                      }
+                    },
+                    {
+                      "name": "rendered_target_metric_changed",
+                      "ok": true,
+                      "evidence": {
+                        "track": "chord",
+                        "moved": true,
+                        "before": {
+                          "track": "chord",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.0062,
+                          "peak": 0.0334,
+                          "totalEnergy": 0.000007
+                        },
+                        "after": {
+                          "track": "chord",
+                          "sampleCount": 2,
+                          "activeCount": 0,
+                          "rms": 0.005,
+                          "peak": 0.0246,
+                          "totalEnergy": 0.000004
+                        },
+                        "deltas": {
+                          "rms": -0.0012,
+                          "peak": -0.0088,
+                          "totalEnergy": -0.000003
+                        },
+                        "thresholds": {
+                          "rms": 0.00001,
+                          "peak": 0.00001,
+                          "totalEnergy": 0.000001
+                        }
+                      }
+                    },
+                    {
+                      "name": "required_instruments_preserved",
+                      "ok": true,
+                      "evidence": {
+                        "windowCount": 2,
+                        "findingCount": 0,
+                        "findings": []
+                      }
+                    },
+                    {
+                      "name": "no_clipping",
+                      "ok": true,
+                      "evidence": {
+                        "clippingWindows": []
+                      }
+                    },
+                    {
+                      "name": "no_low_level_proof_window",
+                      "ok": true,
+                      "evidence": {
+                        "lowLevelWindows": []
+                      }
+                    }
+                  ],
+                  "claimVerdict": {
+                    "ok": true,
+                    "status": "supported",
+                    "classification": null,
+                    "failedReceipts": []
+                  },
+                  "candidateRankingMetric": 27.07095,
                   "summary": {
                     "ok": true,
                     "proofKind": "offline-audio-window-set",
@@ -6454,8 +9264,42 @@
                           "headroomDb": 6.81,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 24.1782,
+                          "mix": {
+                            "slopeDbPerOct": -5.988,
+                            "slopePenalty": 0.5473,
+                            "rolloffPenalty": 2.9539,
+                            "presenceRatio": 0.0942,
+                            "presencePenalty": 0.3918,
+                            "presenceFloorPenalty": 0.1331,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.066,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 7.333,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.16,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.378,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 24.1783,
+                          "total": 24.1782,
                           "mix": {
                             "slopeDbPerOct": -5.988,
                             "slopePenalty": 0.5473,
@@ -6555,8 +9399,42 @@
                           "headroomDb": 6.25,
                           "lowLevel": false
                         },
+                        "objectivePenalty": {
+                          "total": 29.9637,
+                          "mix": {
+                            "slopeDbPerOct": -6.507,
+                            "slopePenalty": 1.3749,
+                            "rolloffPenalty": 3.1166,
+                            "presenceRatio": 0.0701,
+                            "presencePenalty": 0.5906,
+                            "presenceFloorPenalty": 0.498,
+                            "mixPenaltyScale": 1
+                          },
+                          "mud": {
+                            "ratio": 0.0931,
+                            "penalty": 0
+                          },
+                          "top": [
+                            {
+                              "instrument": "snare",
+                              "score": 4.878,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "guitar",
+                              "score": 4.223,
+                              "skipped": false
+                            },
+                            {
+                              "instrument": "chord",
+                              "score": 2.523,
+                              "skipped": false
+                            }
+                          ],
+                          "eqPenalty": 3.3732
+                        },
                         "score": {
-                          "total": 29.9633,
+                          "total": 29.9637,
                           "mix": {
                             "slopeDbPerOct": -6.507,
                             "slopePenalty": 1.3749,
@@ -6646,7 +9524,63 @@
                 "candidate": {
                   "track": "chord",
                   "value": 0.28,
-                  "label": "chord -0.10"
+                  "label": "chord -0.10",
+                  "claimCandidate": {
+                    "id": "set-chord-level-0.38-to-0.28",
+                    "kind": "change_claim_candidate",
+                    "domain": "audio_mix",
+                    "strategy": "mix-level-search",
+                    "evidenceRolePattern": "interaction_snapshots",
+                    "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                    "action": {
+                      "type": "set_mixer_level",
+                      "track": "chord",
+                      "from": 0.38,
+                      "to": 0.28,
+                      "delta": -0.1
+                    },
+                    "expectedReceipts": [
+                      "mixer edit accepted",
+                      "contract mixer level reflects requested value",
+                      "rendered target track metrics changed",
+                      "required instruments remain active",
+                      "no clipping",
+                      "no low-level proof window"
+                    ],
+                    "rankingHint": {
+                      "metric": "objective_mix_health_penalty",
+                      "lowerIsBetter": true,
+                      "role": "review_order_only"
+                    }
+                  }
+                },
+                "claimCandidate": {
+                  "id": "set-chord-level-0.38-to-0.28",
+                  "kind": "change_claim_candidate",
+                  "domain": "audio_mix",
+                  "strategy": "mix-level-search",
+                  "evidenceRolePattern": "interaction_snapshots",
+                  "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                  "action": {
+                    "type": "set_mixer_level",
+                    "track": "chord",
+                    "from": 0.38,
+                    "to": 0.28,
+                    "delta": -0.1
+                  },
+                  "expectedReceipts": [
+                    "mixer edit accepted",
+                    "contract mixer level reflects requested value",
+                    "rendered target track metrics changed",
+                    "required instruments remain active",
+                    "no clipping",
+                    "no low-level proof window"
+                  ],
+                  "rankingHint": {
+                    "metric": "objective_mix_health_penalty",
+                    "lowerIsBetter": true,
+                    "role": "review_order_only"
+                  }
                 },
                 "edit": {
                   "ok": true,
@@ -6656,7 +9590,90 @@
                   "value": 0.28,
                   "levels": null
                 },
-                "score": 27.0708,
+                "claimReceipts": [
+                  {
+                    "name": "mixer_edit_accepted",
+                    "ok": true,
+                    "evidence": {
+                      "proofKind": "neon-mixer-edit",
+                      "track": "chord",
+                      "error": null
+                    }
+                  },
+                  {
+                    "name": "contract_mixer_level_reflects_action",
+                    "ok": true,
+                    "evidence": {
+                      "track": "chord",
+                      "expectedLevel": 0.28,
+                      "observedLevel": 0.28
+                    }
+                  },
+                  {
+                    "name": "rendered_target_metric_changed",
+                    "ok": true,
+                    "evidence": {
+                      "track": "chord",
+                      "moved": true,
+                      "before": {
+                        "track": "chord",
+                        "sampleCount": 2,
+                        "activeCount": 0,
+                        "rms": 0.0062,
+                        "peak": 0.0334,
+                        "totalEnergy": 0.000007
+                      },
+                      "after": {
+                        "track": "chord",
+                        "sampleCount": 2,
+                        "activeCount": 0,
+                        "rms": 0.005,
+                        "peak": 0.0246,
+                        "totalEnergy": 0.000004
+                      },
+                      "deltas": {
+                        "rms": -0.0012,
+                        "peak": -0.0088,
+                        "totalEnergy": -0.000003
+                      },
+                      "thresholds": {
+                        "rms": 0.00001,
+                        "peak": 0.00001,
+                        "totalEnergy": 0.000001
+                      }
+                    }
+                  },
+                  {
+                    "name": "required_instruments_preserved",
+                    "ok": true,
+                    "evidence": {
+                      "windowCount": 2,
+                      "findingCount": 0,
+                      "findings": []
+                    }
+                  },
+                  {
+                    "name": "no_clipping",
+                    "ok": true,
+                    "evidence": {
+                      "clippingWindows": []
+                    }
+                  },
+                  {
+                    "name": "no_low_level_proof_window",
+                    "ok": true,
+                    "evidence": {
+                      "lowLevelWindows": []
+                    }
+                  }
+                ],
+                "claimVerdict": {
+                  "ok": true,
+                  "status": "supported",
+                  "classification": null,
+                  "failedReceipts": []
+                },
+                "candidateRankingMetric": 27.07095,
                 "summary": {
                   "ok": true,
                   "proofKind": "offline-audio-window-set",
@@ -6711,8 +9728,42 @@
                         "headroomDb": 6.81,
                         "lowLevel": false
                       },
+                      "objectivePenalty": {
+                        "total": 24.1782,
+                        "mix": {
+                          "slopeDbPerOct": -5.988,
+                          "slopePenalty": 0.5473,
+                          "rolloffPenalty": 2.9539,
+                          "presenceRatio": 0.0942,
+                          "presencePenalty": 0.3918,
+                          "presenceFloorPenalty": 0.1331,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.066,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 7.333,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "guitar",
+                            "score": 4.16,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "chord",
+                            "score": 2.378,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
                       "score": {
-                        "total": 24.1783,
+                        "total": 24.1782,
                         "mix": {
                           "slopeDbPerOct": -5.988,
                           "slopePenalty": 0.5473,
@@ -6812,8 +9863,42 @@
                         "headroomDb": 6.25,
                         "lowLevel": false
                       },
+                      "objectivePenalty": {
+                        "total": 29.9637,
+                        "mix": {
+                          "slopeDbPerOct": -6.507,
+                          "slopePenalty": 1.3749,
+                          "rolloffPenalty": 3.1166,
+                          "presenceRatio": 0.0701,
+                          "presencePenalty": 0.5906,
+                          "presenceFloorPenalty": 0.498,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.0931,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 4.878,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "guitar",
+                            "score": 4.223,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "chord",
+                            "score": 2.523,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
                       "score": {
-                        "total": 29.9633,
+                        "total": 29.9637,
                         "mix": {
                           "slopeDbPerOct": -6.507,
                           "slopePenalty": 1.3749,
@@ -6897,11 +9982,52 @@
                   "findings": []
                 }
               },
+              "bestClaimCandidate": {
+                "id": "set-chord-level-0.38-to-0.28",
+                "kind": "change_claim_candidate",
+                "domain": "audio_mix",
+                "strategy": "mix-level-search",
+                "evidenceRolePattern": "interaction_snapshots",
+                "claim": "Setting chord level from 0.38 to 0.28 changes rendered chord metrics while preserving Neon proof invariants.",
+                "action": {
+                  "type": "set_mixer_level",
+                  "track": "chord",
+                  "from": 0.38,
+                  "to": 0.28,
+                  "delta": -0.1
+                },
+                "expectedReceipts": [
+                  "mixer edit accepted",
+                  "contract mixer level reflects requested value",
+                  "rendered target track metrics changed",
+                  "required instruments remain active",
+                  "no clipping",
+                  "no low-level proof window"
+                ],
+                "rankingHint": {
+                  "metric": "objective_mix_health_penalty",
+                  "lowerIsBetter": true,
+                  "role": "review_order_only"
+                }
+              },
+              "restorationReceipt": {
+                "name": "state_restored_after_claim_candidate_loop",
+                "ok": true,
+                "expectedLevels": {
+                  "bass": 0.62,
+                  "chord": 0.38
+                },
+                "observedLevels": {
+                  "bass": 0.62,
+                  "chord": 0.38
+                }
+              },
               "classification": null,
               "caveats": [
-                "candidate ranking uses objective mix metrics only",
-                "human listening review is still required before calling the mix better",
-                "candidate edits are transient unless applyBest is true"
+                "candidateRankingMetric is only a review-order hint",
+                "claim verdicts come from receipts and invariants, not taste optimization",
+                "human listening review is required before accepting any musical change",
+                "candidate actions are transient unless applyBest is true"
               ]
             },
             "return_captured": true,
@@ -6917,10 +10043,13 @@
                 "path": "strategy"
               },
               {
-                "path": "improvement"
+                "path": "best.claimVerdict.status"
               },
               {
-                "path": "best.candidate.track"
+                "path": "best.claimCandidate.action.track"
+              },
+              {
+                "path": "supportedClaimCandidateCount"
               }
             ]
           },
