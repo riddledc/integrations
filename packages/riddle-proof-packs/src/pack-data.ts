@@ -6,6 +6,7 @@ import gameplayWindowCallUntilProfile from "../packs/gameplay-window-call-until/
 import handledRecoveryActionMalformedSuccessProfile from "../packs/handled-recovery-action-malformed-success/profile.json";
 import handledRecoveryListLoadProfile from "../packs/handled-recovery-list-load/profile.json";
 import mobileLayoutSmokeProfile from "../packs/mobile-layout-smoke/profile.json";
+import neonDeepExploreSongsAndMixesProfile from "../packs/neon-step-sequencer/profiles/deep-explore-songs-and-mixes.json";
 import neonExploreSongsAndMixesProfile from "../packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json";
 import neonFastMixHealthProfile from "../packs/neon-step-sequencer/profiles/fast-mix-health.json";
 import neonFullMixHealthMatrixProfile from "../packs/neon-step-sequencer/profiles/full-mix-health-matrix.json";
@@ -82,6 +83,7 @@ const rawProfiles = {
   "neon-step-sequencer-mobile-trainer-layout": neonMobileTrainerLayoutProfile,
   "neon-step-sequencer-full-mix-health-matrix": neonFullMixHealthMatrixProfile,
   "neon-step-sequencer-explore-songs-and-mixes": neonExploreSongsAndMixesProfile,
+  "neon-step-sequencer-deep-explore-songs-and-mixes": neonDeepExploreSongsAndMixesProfile,
   "neon-step-sequencer-ratchet-loop-mix-level-search": neonRatchetLoopMixLevelSearchProfile,
   "neon-step-sequencer-ratchet-loop-approved-candidate": neonRatchetLoopApprovedCandidateProfile,
 };
@@ -94,6 +96,7 @@ const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
   "neon-step-sequencer-mobile-trainer-layout": "packs/neon-step-sequencer/profiles/mobile-trainer-layout.json",
   "neon-step-sequencer-full-mix-health-matrix": "packs/neon-step-sequencer/profiles/full-mix-health-matrix.json",
   "neon-step-sequencer-explore-songs-and-mixes": "packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json",
+  "neon-step-sequencer-deep-explore-songs-and-mixes": "packs/neon-step-sequencer/profiles/deep-explore-songs-and-mixes.json",
   "neon-step-sequencer-ratchet-loop-mix-level-search": "packs/neon-step-sequencer/profiles/ratchet-loop-mix-level-search.json",
   "neon-step-sequencer-ratchet-loop-approved-candidate": "packs/neon-step-sequencer/profiles/ratchet-loop-approved-candidate.json",
 });

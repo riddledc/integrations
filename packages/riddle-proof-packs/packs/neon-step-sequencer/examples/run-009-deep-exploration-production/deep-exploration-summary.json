@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "profileStatus": "passed",
+  "sweepStatus": "passed",
+  "coverage": {
+    "availableSongCount": 6,
+    "proofCapableSongCount": 6,
+    "skippedSongCount": 0,
+    "sampledSongCount": 6,
+    "sampledPartCount": 19,
+    "sampledWindowCount": 22
+  },
+  "entryCount": 19,
+  "findingCount": 0,
+  "restorationOk": true,
+  "findings": [],
+  "boundary": "Objective guardrails only; this does not prove subjective mix taste."
+}

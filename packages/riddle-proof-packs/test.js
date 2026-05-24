@@ -61,7 +61,7 @@ assert.ok(packEnabledProfiles.length >= 1);
 assert.ok(RIDDLE_PROOF_PACK_MANIFEST.length >= allProfiles.length);
 
 const neonProfiles = getRiddleProofProfilesByPackId("neon_step_sequencer");
-assert.equal(neonProfiles.length, 9);
+assert.equal(neonProfiles.length, 10);
 assert.ok(neonProfiles.every((entry) => entry.packPublicName === "Neon Step Sequencer Pack"));
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-mix-level-search"),
@@ -126,6 +126,21 @@ assert.ok(neonExplorationArgs && typeof neonExplorationArgs === "object");
 assert.equal(neonExplorationArgs.maxSongs, 4);
 assert.equal(neonExplorationArgs.maxPartsPerSong, 2);
 
+const neonDeepExplorationProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-deep-explore-songs-and-mixes",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonDeepExplorationProfile.metadata?.evidence_role_pattern, "current_target");
+assert.equal(neonDeepExplorationProfile.target.timeout_sec, 600);
+assert.equal(neonDeepExplorationProfile.target.setup_actions?.[3]?.type, "window_call");
+assert.equal(neonDeepExplorationProfile.target.setup_actions?.[3]?.path, "__NEON_MIX_PROOF__.runExplorationSweep");
+const neonDeepExplorationArgs = neonDeepExplorationProfile.target.setup_actions?.[3]?.args?.[0];
+assert.ok(neonDeepExplorationArgs && typeof neonDeepExplorationArgs === "object");
+assert.equal(neonDeepExplorationArgs.maxSongs, 6);
+assert.equal(neonDeepExplorationArgs.maxPartsPerSong, 4);
+assert.equal(neonDeepExplorationArgs.maxWindowsPerPart, 2);
+assert.equal(neonDeepExplorationProfile.target.setup_actions?.[6]?.path, "__neonProof.exploration.restorationReceipt.ok");
+
 const neonPlaybackProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-playback-sync",
   { url: "http://127.0.0.1:5173" },
@@ -157,6 +172,7 @@ const neonExampleRuns = [
   ["run-005-explore-songs-and-mixes-final", "neon-step-sequencer-explore-songs-and-mixes"],
   ["run-006-ratchet-loop-human-review-packet", "lilarcade-neon-ratchet-loop-mix-level-search"],
   ["run-007-approved-candidate-applied", "lilarcade-neon-ratchet-loop-approved-candidate"],
+  ["run-009-deep-exploration-production", "neon-step-sequencer-deep-explore-songs-and-mixes"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
@@ -177,6 +193,24 @@ assert.equal(explorationReturn?.status, "passed");
 assert.equal(explorationReturn?.entryCount, 8);
 assert.equal(explorationReturn?.findingCount, 0);
 assert.ok(existsSync("packs/neon-step-sequencer/examples/run-005-explore-songs-and-mixes-final/screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop.png"));
+
+const neonDeepExplorationRun = JSON.parse(
+  readFileSync("packs/neon-step-sequencer/examples/run-009-deep-exploration-production/proof.json", "utf8"),
+);
+const deepExplorationSetupCheck = neonDeepExplorationRun.checks.find((check) => check.type === "setup_actions_succeeded");
+const deepExplorationReturn = deepExplorationSetupCheck?.evidence?.setup_summary?.viewports?.[0]?.window_call?.[0]?.returned;
+assert.equal(deepExplorationReturn?.proofKind, "neon-exploration-sweep");
+assert.equal(deepExplorationReturn?.status, "passed");
+assert.equal(deepExplorationReturn?.coverage?.sampledSongCount, 6);
+assert.equal(deepExplorationReturn?.coverage?.sampledPartCount, 19);
+assert.equal(deepExplorationReturn?.coverage?.sampledWindowCount, 22);
+assert.equal(deepExplorationReturn?.findingCount, 0);
+assert.equal(deepExplorationReturn?.restorationReceipt?.ok, true);
+const deepExplorationSummary = JSON.parse(
+  readFileSync("packs/neon-step-sequencer/examples/run-009-deep-exploration-production/deep-exploration-summary.json", "utf8"),
+);
+assert.equal(deepExplorationSummary.boundary, "Objective guardrails only; this does not prove subjective mix taste.");
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-009-deep-exploration-production/screenshots/neon-step-sequencer-deep-explore-songs-and-mixes-desktop.png"));
 
 const neonReviewPacketRun = JSON.parse(
   readFileSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/proof.json", "utf8"),
