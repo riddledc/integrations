@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.5.1
+
+### Patch Changes
+
+- 407626a: Add a reusable Neon approved-candidate profile helper that turns a human-review packet recommendation into a one-candidate approval proof profile.
+
 ## 0.5.0
 
 ### Minor Changes
