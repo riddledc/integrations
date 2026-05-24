@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.9
+
+### Patch Changes
+
+- cdaba03: Add a deep Neon exploration proof-pack profile for slower pre-deploy song/part/window sweeps, with restoration assertions and docs for the two-speed local ratchet pattern.
+
 ## 0.4.8
 
 ### Patch Changes
