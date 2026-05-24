@@ -90,9 +90,20 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026.
 - next sharper question: can the exploration profile produce a prioritized song/mix confidence map?
 
+### Run 004 proved the bounded loop shape without making it mix-specific
+
+- run: `run-004-ratchet-loop-mix-level-search`
+- claim: a bounded ratchet loop can try candidate edits, collect proof-window evidence, rank candidates, and restore state.
+- observed evidence: `mix-level-search` tested `6` candidates; baseline score was `28.83345`; best score was `27.0708`; best candidate was `chord -0.10` to level `0.28`; loop status was `candidate_found`; console fatal count was `0`.
+- classification: none; passing `interaction_snapshots` proof with subjective listening caveat.
+- smallest layer changed: generic app proof-contract loop plus one Neon strategy.
+- change made: added `runRatchetLoop` with a `mix-level-search` strategy and a proof-pack profile that calls it.
+- rerun: passed on May 24, 2026.
+- next sharper question: can the loop run multiple strategy classes without changing the proof primitive?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
-- run: `run-002-mix-change`, `run-003-full-matrix`
+- run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`
 - claim: proof artifacts should be written and the CLI process should exit cleanly.
 - observed evidence: complete passing artifacts were written, but the wrapper process lingered after artifact write and had to be stopped.
 - classification: `proof_insufficient` for operator ergonomics, not a Neon product regression.

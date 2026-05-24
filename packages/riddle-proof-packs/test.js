@@ -44,8 +44,12 @@ assert.ok(packEnabledProfiles.length >= 1);
 assert.ok(RIDDLE_PROOF_PACK_MANIFEST.length >= allProfiles.length);
 
 const neonProfiles = getRiddleProofProfilesByPackId("neon_step_sequencer");
-assert.equal(neonProfiles.length, 7);
+assert.equal(neonProfiles.length, 8);
 assert.ok(neonProfiles.every((entry) => entry.packPublicName === "Neon Step Sequencer Pack"));
+assert.ok(
+  neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-mix-level-search"),
+  "Neon ratchet-loop profile should be present",
+);
 
 const authManifest = getRiddleProofPackProfileManifest("auth-smoke");
 assert.ok(authManifest, "auth-smoke manifest should be resolvable");
@@ -57,10 +61,18 @@ const neonFastProfile = instantiateRiddleProofProfile("neon-step-sequencer-fast-
 assert.equal(neonFastProfile.target.url, "http://127.0.0.1:5173");
 assert.equal(neonFastProfile.metadata?.evidence_role_pattern, "current_target");
 
+const neonRatchetLoopProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-ratchet-loop-mix-level-search",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonRatchetLoopProfile.metadata?.evidence_role_pattern, "interaction_snapshots");
+assert.equal(neonRatchetLoopProfile.target.setup_actions?.[2]?.type, "window_call");
+
 const neonExampleRuns = [
   ["run-001-fast-mix-health", "lilarcade-neon-fast-mix-health"],
   ["run-002-mix-change", "lilarcade-neon-mix-change-before-after"],
   ["run-003-full-matrix", "lilarcade-neon-full-mix-health-matrix"],
+  ["run-004-ratchet-loop-mix-level-search", "lilarcade-neon-ratchet-loop-mix-level-search"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
