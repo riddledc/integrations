@@ -101,6 +101,17 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026.
 - next sharper question: can the loop run multiple strategy classes without changing the proof primitive?
 
+### Run 005 restored the exploration flywheel
+
+- run: `run-005-explore-songs-and-mixes-final`
+- claim: a bounded current-target sweep can explore multiple Neon songs/parts, classify findings, and end with a useful confidence map.
+- observed evidence: final run sampled `4` songs and `8` song/part entries; all `8` entries passed; prioritized findings dropped to `0`; source preparation loaded drums `samples`, bass/chord/guitar `hybrid`, and vocal `voice_oohs`; final sampled peaks stayed below the clipping threshold; console fatal count was `0`.
+- classification: resolved chain of `proof_insufficient`, `app_contract_gap`, and `product_regression` findings during the local ratchet.
+- smallest layer changed: app proof contract, app snapshot normalization, app fixture/mix data, and profile JSON.
+- change made: made the exploration profile call `runExplorationSweep`; added the app-contract sweep method; normalized arbitrary song/part tempo and bar count; preserved bass/chord/guitar lane enable flags in song snapshots; lowered only hot built-in Yakety and Monkberry Sheet mix data enough to clear clipping receipts.
+- rerun: passed on May 24, 2026 with `8` entries, `8` passed, and `0` findings.
+- next sharper question: can this exploration workflow become the normal local pack/profile loop before any changeset or npm release?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`

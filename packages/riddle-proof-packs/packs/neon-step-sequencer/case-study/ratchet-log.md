@@ -227,6 +227,61 @@ Next sharper question:
 
 Can the pack explore song/mix combinations and produce a prioritized confidence map?
 
+## Run 005 - Bounded song/mix exploration sweep
+
+Claim:
+
+Neon can run a bounded current-target exploration sweep across multiple songs and parts, produce a confidence map, classify weak layers, and close the loop after small user-controlled changes.
+
+Profile:
+
+`profiles/explore-songs-and-mixes.json`
+
+Evidence to capture:
+
+- route and proof-contract availability
+- sample/source preparation receipt
+- bounded song/part entries
+- per-window active-instrument, peak, headroom, and clipping receipts
+- prioritized findings
+- screenshot, console health, and layout health
+
+Possible outcomes:
+
+- `app_contract_gap`: the app cannot render arbitrary song/part proof states yet.
+- `proof_insufficient`: the exploration profile runs but cannot support the claim.
+- `profile_calibration`: proof windows or required-active receipts target the wrong musical window.
+- `product_regression`: a sampled song/part clips or violates objective guardrails.
+
+Observed status:
+
+Passed on May 24, 2026 with `local-playwright` after three local ratchet iterations.
+
+Observed evidence:
+
+- final run sampled `4` songs and `8` song/part entries
+- final run passed `8` entries with `0` prioritized findings
+- source preparation loaded drums `samples`, bass/chord/guitar `hybrid`, and vocal `voice_oohs`
+- final sampled peaks stayed below the clipping threshold: Yakety `0.9589` and `0.9756`, Monkberry Sheet `0.9734` and `0.9550`, Monkberry Full OMR `0.8345` and `0.8327`, Monkberry Tab proof windows `0.8328` to `0.8423`
+- console fatal count `0`
+- horizontal overflow `0 px`
+
+Failure classification:
+
+Resolved during the ratchet:
+
+- `proof_insufficient`: the first corrected sweep hit an `OfflineAudioContext` zero-frame error because historical song/part proof states did not normalize tempo/bar count.
+- `app_contract_gap`: the next sweep showed saved/song snapshots preserved `rhythmSynthEnabled` but not bass/chord/guitar enable flags.
+- `product_regression`: after lane flags were fixed, the sweep found clipping in Yakety Dark and Monkberry Sheet presets.
+
+Smallest layer changed:
+
+App proof contract, app snapshot normalization, app fixture/mix data, and the local exploration profile. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can the same exploration shape become a reusable pack/profile workflow where a user can choose a bounded target set, run locally during iteration, and publish only after the evidence is worth sharing?
+
 ## Project note
 
 The ratchet is not a pass. The ratchet is the next sharper question.

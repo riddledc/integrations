@@ -18,10 +18,13 @@
         "label": "install-neon-exploration-proof",
         "timeout_ms": 10000,
         "store_return_to": "__neonProof.install",
-        "script": "window.__neonProofApi=()=>window.__NEON_MIX_PROOF__||window.__RIDDLE_SEQUENCER_PROOF__; window.__neonProofWindows=async()=>{const api=window.__neonProofApi(); if(api?.renderProofWindows) return await api.renderProofWindows({}); if(api?.renderOfflineMetrics) return {ok:true,proofKind:'offline-audio-window-set',windows:[await api.renderOfflineMetrics({bars:1,seed:'neon-explore-fallback',monitorProfile:'smallSpeaker'})]}; return {ok:false,error:'missing renderProofWindows'};}; const api=window.__neonProofApi(); const state=api?.getState?.()||api?.getSummary?.()||{}; return {available:Boolean(api),selectedSong:state.selectedSong||null};",
+        "script": "window.__neonProofApi=()=>window.__NEON_MIX_PROOF__||window.__RIDDLE_SEQUENCER_PROOF__; const api=window.__neonProofApi(); const state=api?.getState?.()||api?.getSummary?.()||{}; return {available:Boolean(api),hasExplorationSweep:typeof api?.runExplorationSweep==='function',selectedSong:state.selectedSong||null};",
         "return_summary_fields": [
           {
             "path": "available"
+          },
+          {
+            "path": "hasExplorationSweep"
           },
           {
             "path": "selectedSong"
@@ -36,8 +39,17 @@
       },
       {
         "type": "window_call",
-        "label": "render-proof-windows",
-        "path": "__neonProofWindows",
+        "label": "run-exploration-sweep",
+        "path": "__NEON_MIX_PROOF__.runExplorationSweep",
+        "args": [
+          {
+            "maxSongs": 4,
+            "maxPartsPerSong": 2,
+            "maxWindowsPerPart": 2,
+            "monitorProfile": "smallSpeaker",
+            "loadAllSources": true
+          }
+        ],
         "store_return_to": "__neonProof.exploration",
         "capture_return": true,
         "timeout_ms": 180000,
@@ -46,12 +58,24 @@
             "path": "ok"
           },
           {
+            "path": "status"
+          },
+          {
             "path": "proofKind"
           },
           {
-            "path": "windows.length"
+            "path": "entryCount"
+          },
+          {
+            "path": "findingCount"
           }
         ]
+      },
+      {
+        "type": "assert_window_value",
+        "path": "__neonProof.exploration.proofKind",
+        "expected_value": "neon-exploration-sweep",
+        "timeout_ms": 10000
       },
       {
         "type": "assert_window_value",
@@ -96,10 +120,12 @@
     "pack_id": "neon_step_sequencer",
     "pack_public_name": "Neon Step Sequencer Pack",
     "evidence_role_pattern": "current_target",
-    "purpose": "Exploration sweep over the app-provided proof windows for prioritizing the next weakest song/mix combination.",
+    "purpose": "Bounded exploration sweep over Neon songs, parts, mix profiles, and proof windows for prioritizing the next weakest review target.",
     "required_receipts": [
-      "proof-window set returns ok",
-      "window receipts are captured",
+      "exploration sweep contract is available",
+      "song/part entries are captured",
+      "all sampled entries pass objective guardrails",
+      "prioritized findings are captured",
       "browser health is clean",
       "screenshot is captured"
     ],

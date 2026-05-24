@@ -37,12 +37,13 @@ This pack's first concrete strategy is `mix-level-search`, which turns small lev
 
 ## Example evidence
 
-The `examples/` directory contains four local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
+The `examples/` directory contains local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
 
 - `run-001-fast-mix-health`: passing `current_target` audit with proof contract, source readiness, mix RMS `0.1234`, peak `0.8321`, and no clipping.
 - `run-002-mix-change`: passing `interaction_snapshots` proof where a bass-level edit moved bass RMS from `0.0507` to `0.1071` and mix RMS from `0.073` to `0.1264` without clipping.
 - `run-003-full-matrix`: passing `current_target` viewport matrix across desktop, phone, iPad Mini, and iPad with `0 px` horizontal overflow.
 - `run-004-ratchet-loop-mix-level-search`: passing `interaction_snapshots` proof where a bounded loop tested six mix-level change-claim candidates, found a supported `chord -0.10` candidate, recorded receipt-level verdicts, and restored app state without keeping the edit.
+- `run-005-explore-songs-and-mixes-final`: passing `current_target` exploration sweep across four songs and eight song/part entries, with `8` passing entries, `0` prioritized findings, and no clipping after the local app-contract and mix-headroom ratchet.
 
 ## Naming note
 

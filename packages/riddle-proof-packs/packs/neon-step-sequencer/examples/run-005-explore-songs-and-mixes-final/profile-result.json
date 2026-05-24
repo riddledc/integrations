@@ -1,0 +1,2917 @@
+{
+  "version": "riddle-proof.profile-result.v1",
+  "profile_name": "neon-step-sequencer-explore-songs-and-mixes",
+  "runner": "local-playwright",
+  "status": "passed",
+  "baseline_policy": "invariant_only",
+  "route": {
+    "requested": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    "observed": "/games/drum-sequencer",
+    "expected_path": "/games/drum-sequencer",
+    "matched": true,
+    "http_status": 200
+  },
+  "artifacts": {
+    "screenshots": [
+      "neon-step-sequencer-explore-songs-and-mixes-desktop",
+      "neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes",
+      "screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes.png",
+      "screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop.png"
+    ],
+    "console": "console.json",
+    "proof_json": "proof.json",
+    "dom_summary": "dom-summary.json",
+    "riddle_artifacts": [
+      {
+        "name": "proof.json",
+        "path": "proof.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "console.json",
+        "path": "console.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "dom-summary.json",
+        "path": "dom-summary.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes.png",
+        "path": "screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      },
+      {
+        "name": "neon-step-sequencer-explore-songs-and-mixes-desktop.png",
+        "path": "screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "setup_actions_succeeded",
+      "label": "setup actions succeeded",
+      "status": "passed",
+      "evidence": {
+        "action_count": 6,
+        "viewports": [
+          {
+            "name": "desktop",
+            "expected_action_count": 6,
+            "ok": true,
+            "result_count": 6
+          }
+        ],
+        "setup_summary": {
+          "viewport_count": 1,
+          "action_count": 6,
+          "final_screenshot_count": 1,
+          "final_screenshot_full_page": null,
+          "final_screenshot_mode": null,
+          "viewports": [
+            {
+              "name": "desktop",
+              "expected_action_count": 6,
+              "ok": true,
+              "result_count": 6,
+              "observed_path": "/games/drum-sequencer",
+              "final_url": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+              "action_counts": {
+                "window_eval": 1,
+                "assert_window_value": 3,
+                "window_call": 1,
+                "screenshot": 1
+              },
+              "frame_action_count": 0,
+              "frame_urls": [],
+              "final_screenshot": "neon-step-sequencer-explore-songs-and-mixes-desktop",
+              "final_screenshot_full_page": null,
+              "setup_screenshots": [
+                "neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes"
+              ],
+              "clicked_total": 0,
+              "clicked_truncated": false,
+              "click_sequence_total": 0,
+              "click_sequence_truncated": false,
+              "click_sequences": [],
+              "click_count_action_total": 0,
+              "click_count_value_total": 0,
+              "window_call_until_total": 0,
+              "window_call_until_call_total": 0,
+              "window_call_until_truncated": false,
+              "window_call_until": [],
+              "window_call_total": 1,
+              "window_call_stored_total": 1,
+              "window_call_captured_total": 1,
+              "window_call_truncated": false,
+              "window_call": [
+                {
+                  "ordinal": 2,
+                  "ok": true,
+                  "path": "__NEON_MIX_PROOF__.runExplorationSweep",
+                  "return_captured": true,
+                  "return_stored_to": "__neonProof.exploration",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "proofKind": "neon-exploration-sweep",
+                    "evidenceRolePattern": "current_target",
+                    "status": "passed",
+                    "classification": null,
+                    "songCount": 4,
+                    "entryCount": 8,
+                    "passedCount": 8,
+                    "findingCount": 0,
+                    "prepareReceipt": {
+                      "ok": true,
+                      "proofKind": "sample-source-preparation",
+                      "sources": {
+                        "drums": "samples",
+                        "bass": "hybrid",
+                        "chord": "hybrid",
+                        "guitar": "hybrid",
+                        "vocal": "voice_oohs"
+                      },
+                      "loaded": {
+                        "drums": true,
+                        "chord": true,
+                        "bass": true,
+                        "guitar": true,
+                        "vocal": true
+                      },
+                      "states": {
+                        "bass": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 6,
+                          "library": {
+                            "name": "tonejs-instruments bass-electric",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 6
+                          }
+                        },
+                        "chord": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 7,
+                          "library": {
+                            "name": "tonejs-instruments piano",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 7
+                          }
+                        },
+                        "guitar": {
+                          "source": "hybrid",
+                          "status": "idle",
+                          "loadedSampleCount": 9,
+                          "library": {
+                            "name": "tonejs-instruments guitar-electric",
+                            "license": "CC BY 3.0",
+                            "sampleCount": 9
+                          }
+                        },
+                        "vocal": {
+                          "source": "voice_oohs",
+                          "status": "idle",
+                          "loadedSampleCount": 37,
+                          "library": {
+                            "name": "FluidR3 General MIDI SoundFont",
+                            "license": "CC BY 3.0",
+                            "instruments": [
+                              "voice_oohs",
+                              "choir_aahs",
+                              "lead_6_voice",
+                              "synth_choir"
+                            ]
+                          }
+                        },
+                        "drums": {
+                          "source": "samples",
+                          "status": "idle",
+                          "loadedTrackCount": 5,
+                          "loadedSampleCount": 8,
+                          "loadedSampleNames": [
+                            "clap",
+                            "kick-alt",
+                            "kick",
+                            "hhclosed",
+                            "hhclosed-short",
+                            "hhclosed-long",
+                            "stick-m",
+                            "snare-m"
+                          ],
+                          "library": {
+                            "name": "LM-2 sampled drum machine",
+                            "license": "Public domain sample pack",
+                            "trackCount": 5,
+                            "sampleCount": 8,
+                            "sampleNames": [
+                              "kick",
+                              "kick-alt",
+                              "snare-m",
+                              "hhclosed-short",
+                              "hhclosed",
+                              "hhclosed-long",
+                              "clap",
+                              "stick-m"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "entries": [
+                      {
+                        "song": "Yakety Yak (Dark)",
+                        "songSlug": "yakety-yak-dark",
+                        "songIndex": 0,
+                        "partIndex": 0,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-1",
+                            "label": "Part 1",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.0835,
+                              "peak": 0.9589,
+                              "clipping": false,
+                              "headroomDb": 0.36,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 221.5431,
+                              "mix": {
+                                "slopeDbPerOct": -5.811,
+                                "slopePenalty": 0.3512,
+                                "rolloffPenalty": 2.2236,
+                                "presenceRatio": 0.5252,
+                                "presencePenalty": 0.2351,
+                                "presenceFloorPenalty": 0,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.0268,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "rim",
+                                  "score": 685.102,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "chord",
+                                  "score": 7.779,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "bass",
+                                  "score": 4.227,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 0.516
+                            },
+                            "activeInstrumentCount": 5,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.2332,
+                                "peak": 1.1739,
+                                "totalEnergy": 0.012908
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0438,
+                                "peak": 0.5234,
+                                "totalEnergy": 0.000677
+                              },
+                              {
+                                "name": "rim",
+                                "active": true,
+                                "rms": 0.0333,
+                                "peak": 0.2979,
+                                "totalEnergy": 0.000579
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0281,
+                                "peak": 0.2047,
+                                "totalEnergy": 0.000157
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0067,
+                                "peak": 0.069,
+                                "totalEnergy": 0.000013
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Yakety Yak (Dark)",
+                        "songSlug": "yakety-yak-dark",
+                        "songIndex": 0,
+                        "partIndex": 1,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-2",
+                            "label": "Part 2",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.11,
+                              "peak": 0.9756,
+                              "clipping": false,
+                              "headroomDb": 0.21,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 239.3114,
+                              "mix": {
+                                "slopeDbPerOct": -3.746,
+                                "slopePenalty": 0.0166,
+                                "rolloffPenalty": 2.7969,
+                                "presenceRatio": 0.0616,
+                                "presencePenalty": 0.6704,
+                                "presenceFloorPenalty": 0.6821,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.4726,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "rim",
+                                  "score": 551.092,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "clap",
+                                  "score": 158.974,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "snare",
+                                  "score": 13.778,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 0.516
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.2022,
+                                "peak": 1.0234,
+                                "totalEnergy": 0.009111
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.138,
+                                "peak": 0.8614,
+                                "totalEnergy": 0.007337
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0382,
+                                "peak": 0.4563,
+                                "totalEnergy": 0.000515
+                              },
+                              {
+                                "name": "clap",
+                                "active": true,
+                                "rms": 0.0701,
+                                "peak": 0.4986,
+                                "totalEnergy": 0.001526
+                              },
+                              {
+                                "name": "rim",
+                                "active": true,
+                                "rms": 0.029,
+                                "peak": 0.2612,
+                                "totalEnergy": 0.000437
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0272,
+                                "peak": 0.2327,
+                                "totalEnergy": 0.000146
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0048,
+                                "peak": 0.0407,
+                                "totalEnergy": 0.000006
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Sheet)",
+                        "songSlug": "monkberry-moon-delight-sheet",
+                        "songIndex": 1,
+                        "partIndex": 0,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-1",
+                            "label": "Part 1",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.3642,
+                              "peak": 0.9734,
+                              "clipping": false,
+                              "headroomDb": 0.23,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 137.8721,
+                              "mix": {
+                                "slopeDbPerOct": -7.256,
+                                "slopePenalty": 3.2293,
+                                "rolloffPenalty": 3.1531,
+                                "presenceRatio": 0.0418,
+                                "presencePenalty": 0.876,
+                                "presenceFloorPenalty": 1.223,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.1855,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "rim",
+                                  "score": 178.015,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 89.357,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "snare",
+                                  "score": 60.408,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1624,
+                                "peak": 0.8735,
+                                "totalEnergy": 0.012992
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.0912,
+                                "peak": 0.5743,
+                                "totalEnergy": 0.003198
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0074,
+                                "peak": 0.0703,
+                                "totalEnergy": 0.000011
+                              },
+                              {
+                                "name": "rim",
+                                "active": true,
+                                "rms": 0.0167,
+                                "peak": 0.0973,
+                                "totalEnergy": 0.000052
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0343,
+                                "peak": 0.1469,
+                                "totalEnergy": 0.000225
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0041,
+                                "peak": 0.0197,
+                                "totalEnergy": 0.000004
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0473,
+                                "peak": 0.2333,
+                                "totalEnergy": 0.000427
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Sheet)",
+                        "songSlug": "monkberry-moon-delight-sheet",
+                        "songIndex": 1,
+                        "partIndex": 1,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-2",
+                            "label": "Part 2",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.364,
+                              "peak": 0.955,
+                              "clipping": false,
+                              "headroomDb": 0.4,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 139.7282,
+                              "mix": {
+                                "slopeDbPerOct": -7.273,
+                                "slopePenalty": 3.2805,
+                                "rolloffPenalty": 3.1529,
+                                "presenceRatio": 0.0405,
+                                "presencePenalty": 0.8904,
+                                "presenceFloorPenalty": 1.264,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.1924,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "rim",
+                                  "score": 178.015,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 89.357,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "snare",
+                                  "score": 60.408,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1624,
+                                "peak": 0.8735,
+                                "totalEnergy": 0.012992
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.0912,
+                                "peak": 0.5743,
+                                "totalEnergy": 0.003198
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0074,
+                                "peak": 0.0703,
+                                "totalEnergy": 0.000011
+                              },
+                              {
+                                "name": "rim",
+                                "active": true,
+                                "rms": 0.0167,
+                                "peak": 0.0973,
+                                "totalEnergy": 0.000052
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0347,
+                                "peak": 0.1815,
+                                "totalEnergy": 0.000229
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0049,
+                                "peak": 0.04,
+                                "totalEnergy": 0.000006
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0507,
+                                "peak": 0.2685,
+                                "totalEnergy": 0.000582
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Full OMR)",
+                        "songSlug": "monkberry-moon-delight-full-omr",
+                        "songIndex": 2,
+                        "partIndex": 0,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-1",
+                            "label": "Part 1",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.1138,
+                              "peak": 0.8345,
+                              "clipping": false,
+                              "headroomDb": 1.57,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 50.9534,
+                              "mix": {
+                                "slopeDbPerOct": -6.147,
+                                "slopePenalty": 0.7617,
+                                "rolloffPenalty": 3.1174,
+                                "presenceRatio": 0.0389,
+                                "presencePenalty": 0.9084,
+                                "presenceFloorPenalty": 1.3154,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.2929,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 44.313,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 27.741,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "hat",
+                                  "score": 2.204,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 5,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1932,
+                                "peak": 0.8922,
+                                "totalEnergy": 0.014815
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1318,
+                                "peak": 0.7828,
+                                "totalEnergy": 0.006737
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0101,
+                                "peak": 0.11,
+                                "totalEnergy": 0.000026
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0442,
+                                "peak": 0.1309,
+                                "totalEnergy": 0.000308
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0217,
+                                "peak": 0.095,
+                                "totalEnergy": 0.000084
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Full OMR)",
+                        "songSlug": "monkberry-moon-delight-full-omr",
+                        "songIndex": 2,
+                        "partIndex": 1,
+                        "mixProfile": null,
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 1,
+                        "windows": [
+                          {
+                            "name": "part-2",
+                            "label": "Part 2",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.1226,
+                              "peak": 0.8327,
+                              "clipping": false,
+                              "headroomDb": 1.59,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 50.5555,
+                              "mix": {
+                                "slopeDbPerOct": -6.057,
+                                "slopePenalty": 0.6361,
+                                "rolloffPenalty": 3.1359,
+                                "presenceRatio": 0.0389,
+                                "presencePenalty": 0.9084,
+                                "presenceFloorPenalty": 1.3154,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.2917,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 44.313,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 27.741,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "hat",
+                                  "score": 2.204,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 5,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1932,
+                                "peak": 0.8922,
+                                "totalEnergy": 0.014815
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1318,
+                                "peak": 0.7828,
+                                "totalEnergy": 0.006737
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0101,
+                                "peak": 0.11,
+                                "totalEnergy": 0.000026
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0429,
+                                "peak": 0.151,
+                                "totalEnergy": 0.000302
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0169,
+                                "peak": 0.0703,
+                                "totalEnergy": 0.000053
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Tab)",
+                        "songSlug": "monkberry-moon-delight-tab",
+                        "songIndex": 3,
+                        "partIndex": 0,
+                        "mixProfile": {
+                          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                          "label": "Monkberry humanized EQ mix"
+                        },
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 2,
+                        "windows": [
+                          {
+                            "name": "introBed",
+                            "label": "Intro Bed",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [
+                              "bass",
+                              "chord",
+                              "guitar"
+                            ],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.1234,
+                              "peak": 0.8328,
+                              "clipping": false,
+                              "headroomDb": 1.59,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 71.7069,
+                              "mix": {
+                                "slopeDbPerOct": -5.991,
+                                "slopePenalty": 0.5509,
+                                "rolloffPenalty": 2.8442,
+                                "presenceRatio": 0.045,
+                                "presencePenalty": 0.8409,
+                                "presenceFloorPenalty": 1.125,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.2172,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "kick",
+                                  "score": 89.342,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "snare",
+                                  "score": 58.667,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "hat",
+                                  "score": 2.224,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 6,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1772,
+                                "peak": 0.8076,
+                                "totalEnergy": 0.011746
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1017,
+                                "peak": 0.5852,
+                                "totalEnergy": 0.003661
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0113,
+                                "peak": 0.124,
+                                "totalEnergy": 0.000033
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0209,
+                                "peak": 0.0838,
+                                "totalEnergy": 0.000087
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0044,
+                                "peak": 0.0187,
+                                "totalEnergy": 0.000004
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0407,
+                                "peak": 0.2284,
+                                "totalEnergy": 0.000298
+                              }
+                            ],
+                            "error": null
+                          },
+                          {
+                            "name": "vocalEntry",
+                            "label": "Vocal Entry",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [
+                              "rhythmSynth"
+                            ],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.3206,
+                              "peak": 0.833,
+                              "clipping": false,
+                              "headroomDb": 1.59,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 52.3665,
+                              "mix": {
+                                "slopeDbPerOct": -6.84,
+                                "slopePenalty": 2.1015,
+                                "rolloffPenalty": 3.1712,
+                                "presenceRatio": 0.0383,
+                                "presencePenalty": 0.9151,
+                                "presenceFloorPenalty": 1.335,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.303,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 37.99,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 17.84,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "hat",
+                                  "score": 2.225,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1638,
+                                "peak": 0.8076,
+                                "totalEnergy": 0.010533
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1089,
+                                "peak": 0.6427,
+                                "totalEnergy": 0.004719
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0112,
+                                "peak": 0.1242,
+                                "totalEnergy": 0.000033
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0264,
+                                "peak": 0.1086,
+                                "totalEnergy": 0.000114
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0042,
+                                "peak": 0.0187,
+                                "totalEnergy": 0.000003
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0517,
+                                "peak": 0.2756,
+                                "totalEnergy": 0.000451
+                              },
+                              {
+                                "name": "rhythmSynth",
+                                "active": true,
+                                "rms": 0.0094,
+                                "peak": 0.024,
+                                "totalEnergy": 0.000015
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      },
+                      {
+                        "song": "Monkberry Moon Delight (Tab)",
+                        "songSlug": "monkberry-moon-delight-tab",
+                        "songIndex": 3,
+                        "partIndex": 1,
+                        "mixProfile": {
+                          "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                          "label": "Monkberry humanized EQ mix"
+                        },
+                        "ok": true,
+                        "status": "passed",
+                        "windowCount": 2,
+                        "windows": [
+                          {
+                            "name": "introBed",
+                            "label": "Intro Bed",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [
+                              "bass",
+                              "chord",
+                              "guitar"
+                            ],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.1191,
+                              "peak": 0.8338,
+                              "clipping": false,
+                              "headroomDb": 1.58,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 72.7459,
+                              "mix": {
+                                "slopeDbPerOct": -6.145,
+                                "slopePenalty": 0.7577,
+                                "rolloffPenalty": 2.8543,
+                                "presenceRatio": 0.0447,
+                                "presencePenalty": 0.8441,
+                                "presenceFloorPenalty": 1.134,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.2393,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "kick",
+                                  "score": 89.342,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "snare",
+                                  "score": 58.667,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "hat",
+                                  "score": 2.203,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.1688,
+                                "peak": 0.7323,
+                                "totalEnergy": 0.010469
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1017,
+                                "peak": 0.5852,
+                                "totalEnergy": 0.003661
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0112,
+                                "peak": 0.1199,
+                                "totalEnergy": 0.000033
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.0204,
+                                "peak": 0.0837,
+                                "totalEnergy": 0.000083
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0042,
+                                "peak": 0.017,
+                                "totalEnergy": 0.000003
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0379,
+                                "peak": 0.247,
+                                "totalEnergy": 0.000267
+                              },
+                              {
+                                "name": "rhythmSynth",
+                                "active": true,
+                                "rms": 0.0078,
+                                "peak": 0.0257,
+                                "totalEnergy": 0.00001
+                              }
+                            ],
+                            "error": null
+                          },
+                          {
+                            "name": "vocalEntry",
+                            "label": "Vocal Entry",
+                            "ok": true,
+                            "status": "passed",
+                            "classification": null,
+                            "requiredActive": [
+                              "rhythmSynth"
+                            ],
+                            "missingRequiredActive": [],
+                            "mixHealth": {
+                              "rms": 0.3124,
+                              "peak": 0.8423,
+                              "clipping": false,
+                              "headroomDb": 1.49,
+                              "lowLevel": false
+                            },
+                            "objectivePenalty": {
+                              "total": 55.841,
+                              "mix": {
+                                "slopeDbPerOct": -7.157,
+                                "slopePenalty": 2.9387,
+                                "rolloffPenalty": 3.1733,
+                                "presenceRatio": 0.0384,
+                                "presencePenalty": 0.914,
+                                "presenceFloorPenalty": 1.3317,
+                                "mixPenaltyScale": 1
+                              },
+                              "mud": {
+                                "ratio": 0.3115,
+                                "penalty": 0
+                              },
+                              "top": [
+                                {
+                                  "instrument": "snare",
+                                  "score": 37.99,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "kick",
+                                  "score": 17.84,
+                                  "skipped": false
+                                },
+                                {
+                                  "instrument": "chord",
+                                  "score": 2.485,
+                                  "skipped": false
+                                }
+                              ],
+                              "eqPenalty": 3.3732
+                            },
+                            "activeInstrumentCount": 7,
+                            "activeInstruments": [
+                              {
+                                "name": "kick",
+                                "active": true,
+                                "rms": 0.161,
+                                "peak": 0.7426,
+                                "totalEnergy": 0.010107
+                              },
+                              {
+                                "name": "snare",
+                                "active": true,
+                                "rms": 0.1089,
+                                "peak": 0.6427,
+                                "totalEnergy": 0.004719
+                              },
+                              {
+                                "name": "hat",
+                                "active": true,
+                                "rms": 0.0112,
+                                "peak": 0.1242,
+                                "totalEnergy": 0.000033
+                              },
+                              {
+                                "name": "bass",
+                                "active": true,
+                                "rms": 0.027,
+                                "peak": 0.11,
+                                "totalEnergy": 0.000118
+                              },
+                              {
+                                "name": "chord",
+                                "active": true,
+                                "rms": 0.0042,
+                                "peak": 0.0216,
+                                "totalEnergy": 0.000003
+                              },
+                              {
+                                "name": "guitar",
+                                "active": true,
+                                "rms": 0.0504,
+                                "peak": 0.2525,
+                                "totalEnergy": 0.000424
+                              },
+                              {
+                                "name": "rhythmSynth",
+                                "active": true,
+                                "rms": 0.0076,
+                                "peak": 0.0257,
+                                "totalEnergy": 0.000009
+                              }
+                            ],
+                            "error": null
+                          }
+                        ]
+                      }
+                    ],
+                    "prioritizedFindings": [],
+                    "caveats": [
+                      "bounded exploration only covers the configured songs, parts, and proof windows",
+                      "ranking and findings identify review targets; they do not decide musical taste"
+                    ]
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "status",
+                      "path": "status",
+                      "exists": true,
+                      "value": "passed"
+                    },
+                    {
+                      "label": "proofKind",
+                      "path": "proofKind",
+                      "exists": true,
+                      "value": "neon-exploration-sweep"
+                    },
+                    {
+                      "label": "entryCount",
+                      "path": "entryCount",
+                      "exists": true,
+                      "value": 8
+                    },
+                    {
+                      "label": "findingCount",
+                      "path": "findingCount",
+                      "exists": true,
+                      "value": 0
+                    }
+                  ]
+                }
+              ],
+              "window_eval_total": 1,
+              "window_eval_stored_total": 1,
+              "window_eval_captured_total": 1,
+              "window_eval_truncated": false,
+              "window_eval": [
+                {
+                  "ordinal": 0,
+                  "ok": true,
+                  "script_length": 314,
+                  "return_captured": true,
+                  "return_stored_to": "__neonProof.install",
+                  "reason": null,
+                  "returned": {
+                    "available": true,
+                    "hasExplorationSweep": true,
+                    "selectedSong": "Monkberry Moon Delight (Tab)"
+                  },
+                  "return_summary": [
+                    {
+                      "label": "available",
+                      "path": "available",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "hasExplorationSweep",
+                      "path": "hasExplorationSweep",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "selectedSong",
+                      "path": "selectedSong",
+                      "exists": true,
+                      "value": "Monkberry Moon Delight (Tab)"
+                    }
+                  ]
+                }
+              ],
+              "deterministic_runtime_total": 0,
+              "deterministic_runtime_truncated": false,
+              "deterministic_runtime": [],
+              "set_range_value_total": 0,
+              "set_range_value_truncated": false,
+              "set_range_value": [],
+              "drag_total": 0,
+              "drag_truncated": false,
+              "drag": [],
+              "tap_total": 0,
+              "tap_truncated": false,
+              "tap": [],
+              "tap_until_total": 0,
+              "tap_until_tap_total": 0,
+              "tap_until_truncated": false,
+              "tap_until": [],
+              "keyboard_total": 0,
+              "keyboard_truncated": false,
+              "keyboard": [],
+              "canvas_signature_total": 0,
+              "canvas_signature_truncated": false,
+              "canvas_signature": [],
+              "canvas_signature_stable_hash_groups": [],
+              "clicked": [],
+              "text_samples": [],
+              "failed": [],
+              "optional_failed": []
+            }
+          ]
+        },
+        "failed": []
+      }
+    },
+    {
+      "type": "route_loaded",
+      "label": "route_loaded",
+      "status": "passed",
+      "evidence": {
+        "expected_path": "/games/drum-sequencer",
+        "observed_paths": [
+          "/games/drum-sequencer"
+        ],
+        "http_statuses": [
+          200
+        ],
+        "route_errors": [
+          null
+        ]
+      }
+    },
+    {
+      "type": "selector_visible",
+      "label": "selector_visible",
+      "status": "passed",
+      "evidence": {
+        "selector": ".drum-sequencer h1",
+        "visible_counts": [
+          1
+        ]
+      }
+    },
+    {
+      "type": "no_fatal_console_errors",
+      "label": "no_fatal_console_errors",
+      "status": "passed",
+      "evidence": {
+        "console_fatal_count": 0,
+        "page_error_count": 0,
+        "total_console_fatal_count": 0,
+        "total_page_error_count": 0,
+        "allowed_console_fatal_count": 0,
+        "explicitly_allowed_console_fatal_count": 0,
+        "allowed_expected_network_mock_console_count": 0,
+        "allowed_expected_network_mock_console_events": [],
+        "allowed_page_error_count": 0,
+        "allowed_console_texts": [],
+        "allowed_console_patterns": [],
+        "allowed_page_error_texts": [],
+        "allowed_page_error_patterns": []
+      }
+    }
+  ],
+  "summary": "neon-step-sequencer-explore-songs-and-mixes passed 4 check(s) across 1 viewport(s) (desktop).",
+  "captured_at": "2026-05-24T05:09:43.225Z",
+  "metadata": {
+    "pack_id": "neon_step_sequencer",
+    "pack_public_name": "Neon Step Sequencer Pack",
+    "evidence_role_pattern": "current_target",
+    "purpose": "Bounded exploration sweep over Neon songs, parts, mix profiles, and proof windows for prioritizing the next weakest review target.",
+    "required_receipts": [
+      "exploration sweep contract is available",
+      "song/part entries are captured",
+      "all sampled entries pass objective guardrails",
+      "prioritized findings are captured",
+      "browser health is clean",
+      "screenshot is captured"
+    ],
+    "does_not_prove": [
+      "every possible song/mix combination",
+      "subjective listening quality",
+      "mobile layout"
+    ]
+  },
+  "evidence": {
+    "version": "riddle-proof.profile-evidence.v1",
+    "profile_name": "neon-step-sequencer-explore-songs-and-mixes",
+    "target_url": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+    "baseline_policy": "invariant_only",
+    "captured_at": "2026-05-24T05:09:43.225Z",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000,
+        "url": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+        "route": {
+          "requested": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        },
+        "title": "LilArcade",
+        "body_text_length": 2149,
+        "body_text_sample": "🕹️ LilArcade RHYTHM LAB Neon Step Sequencer Paint a 4-bar, 64-step loop and keep the arcade pulsing. My Sequences MONKBERRY MOON DELIGHT Bass Trainer Open Playalong Play All Shuffle Clear Debug Meters Off Verbose Off Auto-Mix Pass Auto-mix ready VERBOSE LOGS TEMPO 98 BPM Audio ready SONG Blank Yakety Yak (Dark) (G) Monkberry Moon Delight (Sheet) (C minor) Monkberry Moon Delight (Full OMR) (C minor) Monkberry Moon Delight (Tab) (C minor) Dark Progression (Em) Midnight Protocol (Am) INSTRUMENT LANES Power, source, mix, and editor focus in one place ON DRUMS Kick, snare, hat, clap, rim 208 HITS DRUM SOURCE Sampled Kit Samples + Synth Synth Drums LEVEL 0.49X Mute Sampled Kit Kick 0.90x Snare 0.67x Hat 0.34x Clap 0.27x Rim 0.29x ON BASS Low end foundation 68 NOTES BASS INSTRUMENT Dub Bass Electric Bass + Sub Electric Bass Finger Bass (SoundFont) Synth Bass LEVEL 0.62X PAN 0.01L Mute TONE Electric Bass + Sub ON VOCAL MELODY Vocal melody line 77 NOTES VOCAL INSTRUMENT Synth Vocal Voice Oohs Choir Aahs Voice Lead Synth Choir LEVEL 0.84X PAN 0.02R DELAY 0.07 Mute TONE Voice Oohs ON PAD / KEYS Harmony bed 84 NOTES KEYS INSTRUMENT Piano + Pad Piano Synth Pad LEVEL 0.38X PAN 0.22L DELAY 0.10 Mute TONE Piano + Pad ON GUITAR / LEAD LINE Hooks and strums 639 NOTES GUITAR INSTRUMENT Guitar + Synth Electric Guitar Synth Lead Line LEVEL 0.65X PAN 0.26R DELAY 0.11 Mute TONE Guitar + Synth PART: A B C D E F G H I + ARRANGEMENT 1 A B C D E F G H I · · · · · · · 17 · · · · · · · · · · · · · · · · 33 · · · · · · · · · · · · · · · · 49 · · · · · · · · · · · · · · · · FOCUS Mix Drums Bass Vocal Melody Pad Guitar Trainer Meters BAR − 16 + 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 INSTRUMENT TRAINER 68 notes in part A PART A PLAYING Bass INSTRUMENT Drums Bass Vocal Melody Pad / Keys Guitar / Lead Line WINDOW 1 bar 2 bars 4 bars Full Mix Focus Up Solo Pick a part, slow the tempo, and ride the hit line. Use the bar buttons above to jump sections. F1 F#1 G1 G#1 A1 A#1 B1 C2 C#2 D2 F1 F#1 C2 C#2 D2 BAR 1 BAR 2 BAR 3 C2 G1 C2 G1 C2 G1 C2 G1 C2 HIT LINE Tip: layer a simple kick on 1/5/9/13 and sprinkle hats in between. Works best with headphones.",
+        "scroll_width": 1440,
+        "client_width": 1440,
+        "overflow_px": 0,
+        "bounds_overflow_px": 0,
+        "overflow_offenders": [],
+        "selectors": {
+          ".drum-sequencer h1": {
+            "count": 1,
+            "visible_count": 1
+          }
+        },
+        "frames": {},
+        "text_sequences": {},
+        "text_matches": {},
+        "text_match_samples": {},
+        "text_case_insensitive_samples": {},
+        "observations": {},
+        "http_statuses": {},
+        "link_statuses": {},
+        "setup_action_results": [
+          {
+            "ok": true,
+            "action": "window_eval",
+            "ordinal": 0,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "script_length": 314,
+            "arg_count": 0,
+            "returned": {
+              "available": true,
+              "hasExplorationSweep": true,
+              "selectedSong": "Monkberry Moon Delight (Tab)"
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonProof.install",
+            "return_summary_fields": [
+              {
+                "path": "available"
+              },
+              {
+                "path": "hasExplorationSweep"
+              },
+              {
+                "path": "selectedSong"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 1,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonProof.install.available",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "window_call",
+            "ordinal": 2,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__NEON_MIX_PROOF__.runExplorationSweep",
+            "arg_count": 1,
+            "returned": {
+              "ok": true,
+              "proofKind": "neon-exploration-sweep",
+              "evidenceRolePattern": "current_target",
+              "status": "passed",
+              "classification": null,
+              "songCount": 4,
+              "entryCount": 8,
+              "passedCount": 8,
+              "findingCount": 0,
+              "prepareReceipt": {
+                "ok": true,
+                "proofKind": "sample-source-preparation",
+                "sources": {
+                  "drums": "samples",
+                  "bass": "hybrid",
+                  "chord": "hybrid",
+                  "guitar": "hybrid",
+                  "vocal": "voice_oohs"
+                },
+                "loaded": {
+                  "drums": true,
+                  "chord": true,
+                  "bass": true,
+                  "guitar": true,
+                  "vocal": true
+                },
+                "states": {
+                  "bass": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 6,
+                    "library": {
+                      "name": "tonejs-instruments bass-electric",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 6
+                    }
+                  },
+                  "chord": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 7,
+                    "library": {
+                      "name": "tonejs-instruments piano",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 7
+                    }
+                  },
+                  "guitar": {
+                    "source": "hybrid",
+                    "status": "idle",
+                    "loadedSampleCount": 9,
+                    "library": {
+                      "name": "tonejs-instruments guitar-electric",
+                      "license": "CC BY 3.0",
+                      "sampleCount": 9
+                    }
+                  },
+                  "vocal": {
+                    "source": "voice_oohs",
+                    "status": "idle",
+                    "loadedSampleCount": 37,
+                    "library": {
+                      "name": "FluidR3 General MIDI SoundFont",
+                      "license": "CC BY 3.0",
+                      "instruments": [
+                        "voice_oohs",
+                        "choir_aahs",
+                        "lead_6_voice",
+                        "synth_choir"
+                      ]
+                    }
+                  },
+                  "drums": {
+                    "source": "samples",
+                    "status": "idle",
+                    "loadedTrackCount": 5,
+                    "loadedSampleCount": 8,
+                    "loadedSampleNames": [
+                      "clap",
+                      "kick-alt",
+                      "kick",
+                      "hhclosed",
+                      "hhclosed-short",
+                      "hhclosed-long",
+                      "stick-m",
+                      "snare-m"
+                    ],
+                    "library": {
+                      "name": "LM-2 sampled drum machine",
+                      "license": "Public domain sample pack",
+                      "trackCount": 5,
+                      "sampleCount": 8,
+                      "sampleNames": [
+                        "kick",
+                        "kick-alt",
+                        "snare-m",
+                        "hhclosed-short",
+                        "hhclosed",
+                        "hhclosed-long",
+                        "clap",
+                        "stick-m"
+                      ]
+                    }
+                  }
+                }
+              },
+              "entries": [
+                {
+                  "song": "Yakety Yak (Dark)",
+                  "songSlug": "yakety-yak-dark",
+                  "songIndex": 0,
+                  "partIndex": 0,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-1",
+                      "label": "Part 1",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.0835,
+                        "peak": 0.9589,
+                        "clipping": false,
+                        "headroomDb": 0.36,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 221.5431,
+                        "mix": {
+                          "slopeDbPerOct": -5.811,
+                          "slopePenalty": 0.3512,
+                          "rolloffPenalty": 2.2236,
+                          "presenceRatio": 0.5252,
+                          "presencePenalty": 0.2351,
+                          "presenceFloorPenalty": 0,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.0268,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "rim",
+                            "score": 685.102,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "chord",
+                            "score": 7.779,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "bass",
+                            "score": 4.227,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 0.516
+                      },
+                      "activeInstrumentCount": 5,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.2332,
+                          "peak": 1.1739,
+                          "totalEnergy": 0.012908
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0438,
+                          "peak": 0.5234,
+                          "totalEnergy": 0.000677
+                        },
+                        {
+                          "name": "rim",
+                          "active": true,
+                          "rms": 0.0333,
+                          "peak": 0.2979,
+                          "totalEnergy": 0.000579
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0281,
+                          "peak": 0.2047,
+                          "totalEnergy": 0.000157
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0067,
+                          "peak": 0.069,
+                          "totalEnergy": 0.000013
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Yakety Yak (Dark)",
+                  "songSlug": "yakety-yak-dark",
+                  "songIndex": 0,
+                  "partIndex": 1,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-2",
+                      "label": "Part 2",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.11,
+                        "peak": 0.9756,
+                        "clipping": false,
+                        "headroomDb": 0.21,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 239.3114,
+                        "mix": {
+                          "slopeDbPerOct": -3.746,
+                          "slopePenalty": 0.0166,
+                          "rolloffPenalty": 2.7969,
+                          "presenceRatio": 0.0616,
+                          "presencePenalty": 0.6704,
+                          "presenceFloorPenalty": 0.6821,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.4726,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "rim",
+                            "score": 551.092,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "clap",
+                            "score": 158.974,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 13.778,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 0.516
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.2022,
+                          "peak": 1.0234,
+                          "totalEnergy": 0.009111
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.138,
+                          "peak": 0.8614,
+                          "totalEnergy": 0.007337
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0382,
+                          "peak": 0.4563,
+                          "totalEnergy": 0.000515
+                        },
+                        {
+                          "name": "clap",
+                          "active": true,
+                          "rms": 0.0701,
+                          "peak": 0.4986,
+                          "totalEnergy": 0.001526
+                        },
+                        {
+                          "name": "rim",
+                          "active": true,
+                          "rms": 0.029,
+                          "peak": 0.2612,
+                          "totalEnergy": 0.000437
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0272,
+                          "peak": 0.2327,
+                          "totalEnergy": 0.000146
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0048,
+                          "peak": 0.0407,
+                          "totalEnergy": 0.000006
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Sheet)",
+                  "songSlug": "monkberry-moon-delight-sheet",
+                  "songIndex": 1,
+                  "partIndex": 0,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-1",
+                      "label": "Part 1",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.3642,
+                        "peak": 0.9734,
+                        "clipping": false,
+                        "headroomDb": 0.23,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 137.8721,
+                        "mix": {
+                          "slopeDbPerOct": -7.256,
+                          "slopePenalty": 3.2293,
+                          "rolloffPenalty": 3.1531,
+                          "presenceRatio": 0.0418,
+                          "presencePenalty": 0.876,
+                          "presenceFloorPenalty": 1.223,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.1855,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "rim",
+                            "score": 178.015,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 89.357,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 60.408,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1624,
+                          "peak": 0.8735,
+                          "totalEnergy": 0.012992
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.0912,
+                          "peak": 0.5743,
+                          "totalEnergy": 0.003198
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0074,
+                          "peak": 0.0703,
+                          "totalEnergy": 0.000011
+                        },
+                        {
+                          "name": "rim",
+                          "active": true,
+                          "rms": 0.0167,
+                          "peak": 0.0973,
+                          "totalEnergy": 0.000052
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0343,
+                          "peak": 0.1469,
+                          "totalEnergy": 0.000225
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0041,
+                          "peak": 0.0197,
+                          "totalEnergy": 0.000004
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0473,
+                          "peak": 0.2333,
+                          "totalEnergy": 0.000427
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Sheet)",
+                  "songSlug": "monkberry-moon-delight-sheet",
+                  "songIndex": 1,
+                  "partIndex": 1,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-2",
+                      "label": "Part 2",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.364,
+                        "peak": 0.955,
+                        "clipping": false,
+                        "headroomDb": 0.4,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 139.7282,
+                        "mix": {
+                          "slopeDbPerOct": -7.273,
+                          "slopePenalty": 3.2805,
+                          "rolloffPenalty": 3.1529,
+                          "presenceRatio": 0.0405,
+                          "presencePenalty": 0.8904,
+                          "presenceFloorPenalty": 1.264,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.1924,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "rim",
+                            "score": 178.015,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 89.357,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 60.408,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1624,
+                          "peak": 0.8735,
+                          "totalEnergy": 0.012992
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.0912,
+                          "peak": 0.5743,
+                          "totalEnergy": 0.003198
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0074,
+                          "peak": 0.0703,
+                          "totalEnergy": 0.000011
+                        },
+                        {
+                          "name": "rim",
+                          "active": true,
+                          "rms": 0.0167,
+                          "peak": 0.0973,
+                          "totalEnergy": 0.000052
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0347,
+                          "peak": 0.1815,
+                          "totalEnergy": 0.000229
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0049,
+                          "peak": 0.04,
+                          "totalEnergy": 0.000006
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0507,
+                          "peak": 0.2685,
+                          "totalEnergy": 0.000582
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Full OMR)",
+                  "songSlug": "monkberry-moon-delight-full-omr",
+                  "songIndex": 2,
+                  "partIndex": 0,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-1",
+                      "label": "Part 1",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.1138,
+                        "peak": 0.8345,
+                        "clipping": false,
+                        "headroomDb": 1.57,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 50.9534,
+                        "mix": {
+                          "slopeDbPerOct": -6.147,
+                          "slopePenalty": 0.7617,
+                          "rolloffPenalty": 3.1174,
+                          "presenceRatio": 0.0389,
+                          "presencePenalty": 0.9084,
+                          "presenceFloorPenalty": 1.3154,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2929,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 44.313,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 27.741,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.204,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 5,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1932,
+                          "peak": 0.8922,
+                          "totalEnergy": 0.014815
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1318,
+                          "peak": 0.7828,
+                          "totalEnergy": 0.006737
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0101,
+                          "peak": 0.11,
+                          "totalEnergy": 0.000026
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0442,
+                          "peak": 0.1309,
+                          "totalEnergy": 0.000308
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0217,
+                          "peak": 0.095,
+                          "totalEnergy": 0.000084
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Full OMR)",
+                  "songSlug": "monkberry-moon-delight-full-omr",
+                  "songIndex": 2,
+                  "partIndex": 1,
+                  "mixProfile": null,
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 1,
+                  "windows": [
+                    {
+                      "name": "part-2",
+                      "label": "Part 2",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.1226,
+                        "peak": 0.8327,
+                        "clipping": false,
+                        "headroomDb": 1.59,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 50.5555,
+                        "mix": {
+                          "slopeDbPerOct": -6.057,
+                          "slopePenalty": 0.6361,
+                          "rolloffPenalty": 3.1359,
+                          "presenceRatio": 0.0389,
+                          "presencePenalty": 0.9084,
+                          "presenceFloorPenalty": 1.3154,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2917,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 44.313,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 27.741,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.204,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 5,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1932,
+                          "peak": 0.8922,
+                          "totalEnergy": 0.014815
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1318,
+                          "peak": 0.7828,
+                          "totalEnergy": 0.006737
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0101,
+                          "peak": 0.11,
+                          "totalEnergy": 0.000026
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0429,
+                          "peak": 0.151,
+                          "totalEnergy": 0.000302
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0169,
+                          "peak": 0.0703,
+                          "totalEnergy": 0.000053
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Tab)",
+                  "songSlug": "monkberry-moon-delight-tab",
+                  "songIndex": 3,
+                  "partIndex": 0,
+                  "mixProfile": {
+                    "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "label": "Monkberry humanized EQ mix"
+                  },
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 2,
+                  "windows": [
+                    {
+                      "name": "introBed",
+                      "label": "Intro Bed",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [
+                        "bass",
+                        "chord",
+                        "guitar"
+                      ],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.1234,
+                        "peak": 0.8328,
+                        "clipping": false,
+                        "headroomDb": 1.59,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 71.7069,
+                        "mix": {
+                          "slopeDbPerOct": -5.991,
+                          "slopePenalty": 0.5509,
+                          "rolloffPenalty": 2.8442,
+                          "presenceRatio": 0.045,
+                          "presencePenalty": 0.8409,
+                          "presenceFloorPenalty": 1.125,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2172,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 58.667,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.224,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 6,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1772,
+                          "peak": 0.8076,
+                          "totalEnergy": 0.011746
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1017,
+                          "peak": 0.5852,
+                          "totalEnergy": 0.003661
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0113,
+                          "peak": 0.124,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0209,
+                          "peak": 0.0838,
+                          "totalEnergy": 0.000087
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0044,
+                          "peak": 0.0187,
+                          "totalEnergy": 0.000004
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0407,
+                          "peak": 0.2284,
+                          "totalEnergy": 0.000298
+                        }
+                      ],
+                      "error": null
+                    },
+                    {
+                      "name": "vocalEntry",
+                      "label": "Vocal Entry",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [
+                        "rhythmSynth"
+                      ],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.3206,
+                        "peak": 0.833,
+                        "clipping": false,
+                        "headroomDb": 1.59,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 52.3665,
+                        "mix": {
+                          "slopeDbPerOct": -6.84,
+                          "slopePenalty": 2.1015,
+                          "rolloffPenalty": 3.1712,
+                          "presenceRatio": 0.0383,
+                          "presencePenalty": 0.9151,
+                          "presenceFloorPenalty": 1.335,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.303,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 37.99,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 17.84,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.225,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1638,
+                          "peak": 0.8076,
+                          "totalEnergy": 0.010533
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1089,
+                          "peak": 0.6427,
+                          "totalEnergy": 0.004719
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0112,
+                          "peak": 0.1242,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0264,
+                          "peak": 0.1086,
+                          "totalEnergy": 0.000114
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0042,
+                          "peak": 0.0187,
+                          "totalEnergy": 0.000003
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0517,
+                          "peak": 0.2756,
+                          "totalEnergy": 0.000451
+                        },
+                        {
+                          "name": "rhythmSynth",
+                          "active": true,
+                          "rms": 0.0094,
+                          "peak": 0.024,
+                          "totalEnergy": 0.000015
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                },
+                {
+                  "song": "Monkberry Moon Delight (Tab)",
+                  "songSlug": "monkberry-moon-delight-tab",
+                  "songIndex": 3,
+                  "partIndex": 1,
+                  "mixProfile": {
+                    "id": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "label": "Monkberry humanized EQ mix"
+                  },
+                  "ok": true,
+                  "status": "passed",
+                  "windowCount": 2,
+                  "windows": [
+                    {
+                      "name": "introBed",
+                      "label": "Intro Bed",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [
+                        "bass",
+                        "chord",
+                        "guitar"
+                      ],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.1191,
+                        "peak": 0.8338,
+                        "clipping": false,
+                        "headroomDb": 1.58,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 72.7459,
+                        "mix": {
+                          "slopeDbPerOct": -6.145,
+                          "slopePenalty": 0.7577,
+                          "rolloffPenalty": 2.8543,
+                          "presenceRatio": 0.0447,
+                          "presencePenalty": 0.8441,
+                          "presenceFloorPenalty": 1.134,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2393,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 58.667,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.203,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.1688,
+                          "peak": 0.7323,
+                          "totalEnergy": 0.010469
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1017,
+                          "peak": 0.5852,
+                          "totalEnergy": 0.003661
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0112,
+                          "peak": 0.1199,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.0204,
+                          "peak": 0.0837,
+                          "totalEnergy": 0.000083
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0042,
+                          "peak": 0.017,
+                          "totalEnergy": 0.000003
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0379,
+                          "peak": 0.247,
+                          "totalEnergy": 0.000267
+                        },
+                        {
+                          "name": "rhythmSynth",
+                          "active": true,
+                          "rms": 0.0078,
+                          "peak": 0.0257,
+                          "totalEnergy": 0.00001
+                        }
+                      ],
+                      "error": null
+                    },
+                    {
+                      "name": "vocalEntry",
+                      "label": "Vocal Entry",
+                      "ok": true,
+                      "status": "passed",
+                      "classification": null,
+                      "requiredActive": [
+                        "rhythmSynth"
+                      ],
+                      "missingRequiredActive": [],
+                      "mixHealth": {
+                        "rms": 0.3124,
+                        "peak": 0.8423,
+                        "clipping": false,
+                        "headroomDb": 1.49,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 55.841,
+                        "mix": {
+                          "slopeDbPerOct": -7.157,
+                          "slopePenalty": 2.9387,
+                          "rolloffPenalty": 3.1733,
+                          "presenceRatio": 0.0384,
+                          "presencePenalty": 0.914,
+                          "presenceFloorPenalty": 1.3317,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.3115,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "snare",
+                            "score": 37.99,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "kick",
+                            "score": 17.84,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "chord",
+                            "score": 2.485,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 7,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "active": true,
+                          "rms": 0.161,
+                          "peak": 0.7426,
+                          "totalEnergy": 0.010107
+                        },
+                        {
+                          "name": "snare",
+                          "active": true,
+                          "rms": 0.1089,
+                          "peak": 0.6427,
+                          "totalEnergy": 0.004719
+                        },
+                        {
+                          "name": "hat",
+                          "active": true,
+                          "rms": 0.0112,
+                          "peak": 0.1242,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "active": true,
+                          "rms": 0.027,
+                          "peak": 0.11,
+                          "totalEnergy": 0.000118
+                        },
+                        {
+                          "name": "chord",
+                          "active": true,
+                          "rms": 0.0042,
+                          "peak": 0.0216,
+                          "totalEnergy": 0.000003
+                        },
+                        {
+                          "name": "guitar",
+                          "active": true,
+                          "rms": 0.0504,
+                          "peak": 0.2525,
+                          "totalEnergy": 0.000424
+                        },
+                        {
+                          "name": "rhythmSynth",
+                          "active": true,
+                          "rms": 0.0076,
+                          "peak": 0.0257,
+                          "totalEnergy": 0.000009
+                        }
+                      ],
+                      "error": null
+                    }
+                  ]
+                }
+              ],
+              "prioritizedFindings": [],
+              "caveats": [
+                "bounded exploration only covers the configured songs, parts, and proof windows",
+                "ranking and findings identify review targets; they do not decide musical taste"
+              ]
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonProof.exploration",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              },
+              {
+                "path": "status"
+              },
+              {
+                "path": "proofKind"
+              },
+              {
+                "path": "entryCount"
+              },
+              {
+                "path": "findingCount"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 3,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonProof.exploration.proofKind",
+            "value": "neon-exploration-sweep",
+            "expected_value": "neon-exploration-sweep",
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 4,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonProof.exploration.ok",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "screenshot",
+            "ordinal": 5,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "label": "neon-explore-songs-and-mixes",
+            "screenshot_label": "neon-step-sequencer-explore-songs-and-mixes-desktop-neon-explore-songs-and-mixes",
+            "full_page": false
+          }
+        ],
+        "screenshot_label": "neon-step-sequencer-explore-songs-and-mixes-desktop",
+        "screenshot_full_page": null
+      }
+    ],
+    "console": {
+      "events": [],
+      "fatal_count": 0
+    },
+    "page_errors": [],
+    "dialogs": [],
+    "network_mocks": [],
+    "dom_summary": {
+      "expected_viewport_count": 1,
+      "viewport_count": 1,
+      "partial": false,
+      "routes": [
+        {
+          "requested": "http://127.0.0.1:5173/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        }
+      ],
+      "titles": [
+        "LilArcade"
+      ],
+      "overflow_px": [
+        0
+      ],
+      "bounds_overflow_px": [
+        0
+      ],
+      "overflow_offender_counts": [
+        0
+      ],
+      "frames": [
+        {
+          "viewport": "desktop",
+          "selectors": []
+        }
+      ],
+      "http_status": [],
+      "link_status": [],
+      "route_inventory": [],
+      "network_mock_count": 0,
+      "network_mock_hit_count": 0,
+      "dialog_count": 0,
+      "dialog_accept_count": 0,
+      "dialog_dismiss_count": 0
+    }
+  }
+}
