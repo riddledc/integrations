@@ -30,6 +30,7 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 - `profiles/deep-explore-songs-and-mixes.json`: slower pre-deploy exploration sweep for batching deterministic catalog, proof-window, clipping/headroom, and restoration findings before release.
 - `profiles/ratchet-loop-mix-level-search.json`: bounded ratchet loop using the Neon `mix-level-search` strategy.
 - `profiles/ratchet-loop-approved-candidate.json`: bounded ratchet loop that uses an explicit operator-approval surrogate, applies the supported candidate, and keeps the listening-review caveat visible.
+- `profiles/durable-current-target.json`: final current-target audit that checks an approved durable mix override against app contract state, mix-profile source levels, visible mixer text, and basic render guardrails.
 
 ## Two-speed exploration
 
@@ -50,6 +51,8 @@ The approved-candidate profile is the next handoff pattern after review-packet g
 
 The durable patch handoff is a separate step after the approved-candidate proof. A follow-on agent can validate the applied `humanReviewPacket`, generate a scoped durable candidate plan, edit the app/config source, and then run a final `current_target` proof. That handoff proves the approved candidate became visible durable state in the running app. It still does not prove the mix is aesthetically better.
 
+The durable current-target profile is that final gate as a reusable profile/helper pattern. It is useful after batching source/config changes because it checks the running target rather than the local patch plan: selected song, mix profile id, contract mixer levels, mix-profile source levels, visible level text, and a bounded render all have to agree.
+
 ## Example evidence
 
 The `examples/` directory contains local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
@@ -63,6 +66,7 @@ The `examples/` directory contains local Playwright proof results captured again
 - `run-007-approved-candidate-applied`: passing `interaction_snapshots` proof where an explicit `mixing_canon_surrogate` approval mode applied the supported `chord -0.10` candidate for listening review and recorded `approvedCandidateApplied`.
 - `run-008-durable-mix-patch-handoff`: passing durable handoff example where the applied packet became a scoped source/config plan for `chord: 0.28`, followed by a `current_target` proof showing the running app saw the durable level without clipping or low-level windows.
 - `run-009-deep-exploration-production`: passing `current_target` deep exploration proof against deployed LilArcade after the local ratchet fixed proof-window overclaim and hot preset clipping findings.
+- `run-010-durable-current-target-production`: passing deployed `current_target` proof where the running app sees the approved durable `chord: 0.18` override in contract levels, mix-profile source levels, visible mixer text, and render guardrails.
 
 ## Naming note
 

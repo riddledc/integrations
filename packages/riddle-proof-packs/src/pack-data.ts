@@ -7,6 +7,7 @@ import handledRecoveryActionMalformedSuccessProfile from "../packs/handled-recov
 import handledRecoveryListLoadProfile from "../packs/handled-recovery-list-load/profile.json";
 import mobileLayoutSmokeProfile from "../packs/mobile-layout-smoke/profile.json";
 import neonDeepExploreSongsAndMixesProfile from "../packs/neon-step-sequencer/profiles/deep-explore-songs-and-mixes.json";
+import neonDurableCurrentTargetProfile from "../packs/neon-step-sequencer/profiles/durable-current-target.json";
 import neonExploreSongsAndMixesProfile from "../packs/neon-step-sequencer/profiles/explore-songs-and-mixes.json";
 import neonFastMixHealthProfile from "../packs/neon-step-sequencer/profiles/fast-mix-health.json";
 import neonFullMixHealthMatrixProfile from "../packs/neon-step-sequencer/profiles/full-mix-health-matrix.json";
@@ -86,6 +87,7 @@ const rawProfiles = {
   "neon-step-sequencer-deep-explore-songs-and-mixes": neonDeepExploreSongsAndMixesProfile,
   "neon-step-sequencer-ratchet-loop-mix-level-search": neonRatchetLoopMixLevelSearchProfile,
   "neon-step-sequencer-ratchet-loop-approved-candidate": neonRatchetLoopApprovedCandidateProfile,
+  "neon-step-sequencer-durable-current-target": neonDurableCurrentTargetProfile,
 };
 
 const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
@@ -99,6 +101,7 @@ const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
   "neon-step-sequencer-deep-explore-songs-and-mixes": "packs/neon-step-sequencer/profiles/deep-explore-songs-and-mixes.json",
   "neon-step-sequencer-ratchet-loop-mix-level-search": "packs/neon-step-sequencer/profiles/ratchet-loop-mix-level-search.json",
   "neon-step-sequencer-ratchet-loop-approved-candidate": "packs/neon-step-sequencer/profiles/ratchet-loop-approved-candidate.json",
+  "neon-step-sequencer-durable-current-target": "packs/neon-step-sequencer/profiles/durable-current-target.json",
 });
 
 export const RIDDLE_PROOF_PACK_PROFILES: Readonly<Record<string, RiddleProofProfile>> = Object.freeze(

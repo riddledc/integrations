@@ -12,7 +12,13 @@ import {
   instantiateRiddleProofProfile,
   createDurableCandidatePatchPlan,
   createDurableCandidatePatchPlanArtifacts,
+  buildNeonDurableCurrentTargetProfile,
+  createNeonDurableCurrentTargetArtifacts,
   formatDurableCandidatePatchPlanMarkdown,
+  formatNeonDurableCurrentTargetSummaryMarkdown,
+  normalizeNeonDurableMixOverride,
+  readActiveNeonDurableMixOverrides,
+  routeForNeonDurableOverride,
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
@@ -29,7 +35,13 @@ assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof createDurableCandidatePatchPlan, "function");
 assert.equal(typeof createDurableCandidatePatchPlanArtifacts, "function");
+assert.equal(typeof buildNeonDurableCurrentTargetProfile, "function");
+assert.equal(typeof createNeonDurableCurrentTargetArtifacts, "function");
 assert.equal(typeof formatDurableCandidatePatchPlanMarkdown, "function");
+assert.equal(typeof formatNeonDurableCurrentTargetSummaryMarkdown, "function");
+assert.equal(typeof normalizeNeonDurableMixOverride, "function");
+assert.equal(typeof readActiveNeonDurableMixOverrides, "function");
+assert.equal(typeof routeForNeonDurableOverride, "function");
 assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
@@ -61,7 +73,7 @@ assert.ok(packEnabledProfiles.length >= 1);
 assert.ok(RIDDLE_PROOF_PACK_MANIFEST.length >= allProfiles.length);
 
 const neonProfiles = getRiddleProofProfilesByPackId("neon_step_sequencer");
-assert.equal(neonProfiles.length, 10);
+assert.equal(neonProfiles.length, 11);
 assert.ok(neonProfiles.every((entry) => entry.packPublicName === "Neon Step Sequencer Pack"));
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-mix-level-search"),
@@ -70,6 +82,10 @@ assert.ok(
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-approved-candidate"),
   "Neon approved-candidate profile should be present",
+);
+assert.ok(
+  neonProfiles.some((entry) => entry.name === "neon-step-sequencer-durable-current-target"),
+  "Neon durable current-target profile should be present",
 );
 
 const authManifest = getRiddleProofPackProfileManifest("auth-smoke");
@@ -113,6 +129,67 @@ assert.equal(neonApprovedCandidateArgs.approval?.mode, "mixing_canon_surrogate")
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[4]?.path, "__neonMixProof.approvedCandidateLoop.appliedCandidateReceipt.ok");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[5]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.status");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[7]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.guardrails.approvedCandidateApplied");
+
+const durableOverrides = readActiveNeonDurableMixOverrides({
+  overrides: [
+    {
+      id: "monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+      status: "active",
+      target: {
+        song: "Monkberry Moon Delight (Tab)",
+        mixProfileId: "monkberry-moon-delight-eq-lane-mix-v7",
+      },
+      mixerLevels: {
+        chord: "0.18",
+      },
+      doesNotProve: ["subjective mix quality"],
+    },
+    {
+      id: "inactive-example",
+      status: "inactive",
+      target: {
+        song: "Monkberry Moon Delight (Tab)",
+        mixProfileId: "monkberry-moon-delight-eq-lane-mix-v7",
+      },
+      mixerLevels: {
+        chord: 0.2,
+      },
+    },
+  ],
+});
+assert.equal(durableOverrides.length, 1);
+const durableOverride = durableOverrides[0];
+assert.equal(durableOverride.id, "monkberry-moon-delight-tab-chord-minus-01-approved-candidate");
+assert.deepEqual(durableOverride.mixerLevels, { chord: 0.18 });
+assert.equal(
+  routeForNeonDurableOverride(durableOverride),
+  "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+);
+assert.equal(
+  routeForNeonDurableOverride({
+    ...durableOverride,
+    mixerLevels: { rhythmSynth: 0.22 },
+  }),
+  "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=rhythm-synth",
+);
+const builtDurableCurrentTargetProfile = buildNeonDurableCurrentTargetProfile(durableOverride, {
+  name: "neon-step-sequencer-durable-current-target",
+  url: "http://127.0.0.1:5173",
+});
+assert.equal(builtDurableCurrentTargetProfile.name, "neon-step-sequencer-durable-current-target");
+assert.equal(builtDurableCurrentTargetProfile.target.url, "http://127.0.0.1:5173");
+assert.equal(builtDurableCurrentTargetProfile.metadata?.evidence_role_pattern, "current_target");
+assert.ok(builtDurableCurrentTargetProfile.target.setup_actions?.some((action) => action.label === "verify-durable-current-target"));
+assert.ok(builtDurableCurrentTargetProfile.target.setup_actions?.some((action) => action.path === "__neonDurableCurrentTarget.check.ok"));
+assert.ok(builtDurableCurrentTargetProfile.target.setup_actions?.some((action) => action.path === "__NEON_MIX_PROOF__.renderOfflineMetrics"));
+
+const neonDurableCurrentTargetProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-durable-current-target",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonDurableCurrentTargetProfile.metadata?.evidence_role_pattern, "current_target");
+assert.equal(neonDurableCurrentTargetProfile.metadata?.override_id, "monkberry-moon-delight-tab-chord-minus-01-approved-candidate");
+assert.equal(neonDurableCurrentTargetProfile.target.setup_actions?.[1]?.label, "verify-durable-current-target");
 
 const neonExplorationProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-explore-songs-and-mixes",
@@ -173,6 +250,7 @@ const neonExampleRuns = [
   ["run-006-ratchet-loop-human-review-packet", "lilarcade-neon-ratchet-loop-mix-level-search"],
   ["run-007-approved-candidate-applied", "lilarcade-neon-ratchet-loop-approved-candidate"],
   ["run-009-deep-exploration-production", "neon-step-sequencer-deep-explore-songs-and-mixes"],
+  ["run-010-durable-current-target-production", "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
@@ -363,6 +441,65 @@ assert.equal(durableDiagnostic?.selectedSong?.selectedSong, "Monkberry Moon Deli
 assert.equal(durableDiagnostic?.mixerState?.levels?.chord, 0.28);
 assert.equal(durableMetrics?.mixHealth?.clipping, false);
 assert.equal(durableMetrics?.mixHealth?.lowLevel, false);
+
+const neonDurableCurrentTargetRunDir = "packs/neon-step-sequencer/examples/run-010-durable-current-target-production";
+assert.ok(existsSync(`${neonDurableCurrentTargetRunDir}/summary.md`));
+assert.ok(existsSync(`${neonDurableCurrentTargetRunDir}/durable-current-target-summary.json`));
+assert.ok(existsSync(`${neonDurableCurrentTargetRunDir}/screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png`));
+const neonDurableCurrentTargetProfileResult = JSON.parse(readFileSync(`${neonDurableCurrentTargetRunDir}/profile-result.json`, "utf8"));
+const neonDurableCurrentTargetArtifacts = createNeonDurableCurrentTargetArtifacts({
+  override: durableOverride,
+  profileResult: neonDurableCurrentTargetProfileResult,
+}, {
+  title: "Neon Durable Current-Target Proof",
+});
+assert.equal(neonDurableCurrentTargetArtifacts.summary.ok, true);
+assert.equal(neonDurableCurrentTargetArtifacts.summary.status, "passed");
+assert.equal(neonDurableCurrentTargetArtifacts.summary.selectedSong, "Monkberry Moon Delight (Tab)");
+assert.equal(neonDurableCurrentTargetArtifacts.summary.mixProfileId, "monkberry-moon-delight-eq-lane-mix-v7");
+assert.equal(neonDurableCurrentTargetArtifacts.summary.observations[0]?.profileLevel, 0.18);
+assert.equal(neonDurableCurrentTargetArtifacts.summary.observations[0]?.visibleMatches, true);
+assert.equal(neonDurableCurrentTargetArtifacts.summary.mixHealth?.clipping, false);
+assert.equal(neonDurableCurrentTargetArtifacts.summary.mixHealth?.lowLevel, false);
+assert.match(neonDurableCurrentTargetArtifacts.markdown, /does not prove subjective mix taste/u);
+assert.doesNotMatch(neonDurableCurrentTargetArtifacts.markdown, /automatically better/u);
+const bundledDurableCurrentTargetSummary = JSON.parse(readFileSync(`${neonDurableCurrentTargetRunDir}/durable-current-target-summary.json`, "utf8"));
+assert.equal(bundledDurableCurrentTargetSummary.status, "ready_for_promotion_review");
+assert.equal(bundledDurableCurrentTargetSummary.results[0]?.expectedMixerLevels?.chord, 0.18);
+assert.equal(bundledDurableCurrentTargetSummary.results[0]?.observations?.[0]?.profileMatches, true);
+
+const profileMismatchSummary = createNeonDurableCurrentTargetArtifacts({
+  override: durableOverride,
+  profileResult: {
+    status: "failed",
+    checks: [{
+      type: "setup_actions_succeeded",
+      evidence: {
+        setup_summary: {
+          viewports: [{
+            window_eval: [{
+              return_stored_to: "__neonDurableCurrentTarget.check",
+              returned: {
+                ok: false,
+                observations: [{
+                  track: "chord",
+                  expectedLevel: 0.18,
+                  actualLevel: 0.18,
+                  profileLevel: null,
+                  contractMatches: true,
+                  profileMatches: false,
+                  visibleMatches: true,
+                }],
+              },
+            }],
+          }],
+        },
+      },
+    }],
+  },
+});
+assert.equal(profileMismatchSummary.summary.status, "deterministic_findings_present");
+assert.equal(profileMismatchSummary.summary.findings[0]?.classification, "app_contract_gap");
 
 const reviewPacketCliHelp = spawnSync(process.execPath, ["bin/riddle-proof-review-packet", "--help"], {
   encoding: "utf8",

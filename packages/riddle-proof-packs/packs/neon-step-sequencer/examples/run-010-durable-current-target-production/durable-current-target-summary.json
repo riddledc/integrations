@@ -1,0 +1,54 @@
+{
+  "version": "lilarcade.neon-durable-current-target-summary.v1",
+  "status": "ready_for_promotion_review",
+  "ok": true,
+  "deterministicOk": true,
+  "allowFindings": false,
+  "overrideCount": 1,
+  "findingCount": 0,
+  "outputDir": "/tmp/neon-durable-current-target-prod-after-contract-20260524",
+  "results": [
+    {
+      "ok": true,
+      "status": "passed",
+      "overrideId": "monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+      "target": {
+        "song": "Monkberry Moon Delight (Tab)",
+        "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7"
+      },
+      "expectedMixerLevels": {
+        "chord": 0.18
+      },
+      "selectedSong": "Monkberry Moon Delight (Tab)",
+      "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+      "observations": [
+        {
+          "track": "chord",
+          "expectedLevel": 0.18,
+          "actualLevel": 0.18,
+          "profileLevel": 0.18,
+          "visibleToken": "0.18X",
+          "contractMatches": true,
+          "profileMatches": true,
+          "visibleMatches": true
+        }
+      ],
+      "mixHealth": {
+        "rms": 0.1112,
+        "peak": 0.7777,
+        "clipping": false,
+        "headroomDb": 2.18,
+        "lowLevel": false
+      },
+      "findings": [],
+      "boundary": "Current-target durable override audit only; this does not prove subjective mix taste.",
+      "exitCode": 0,
+      "outputDir": "/tmp/neon-durable-current-target-prod-after-contract-20260524/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+      "generatedProfilePath": "/tmp/neon-durable-current-target-prod-after-contract-20260524/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate/generated-profile.json",
+      "profileResultPath": "/tmp/neon-durable-current-target-prod-after-contract-20260524/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate/profile-result.json",
+      "error": null
+    }
+  ],
+  "findings": [],
+  "boundary": "This command proves deterministic current-target receipts for durable mix overrides. It does not prove subjective mix taste."
+}

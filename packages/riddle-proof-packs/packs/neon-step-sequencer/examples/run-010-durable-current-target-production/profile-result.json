@@ -1,0 +1,2791 @@
+{
+  "version": "riddle-proof.profile-result.v1",
+  "profile_name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+  "runner": "local-playwright",
+  "status": "passed",
+  "baseline_policy": "invariant_only",
+  "route": {
+    "requested": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+    "observed": "/games/drum-sequencer",
+    "expected_path": "/games/drum-sequencer",
+    "matched": true,
+    "http_status": 200
+  },
+  "artifacts": {
+    "screenshots": [
+      "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop",
+      "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop-neon-durable-current-target",
+      "screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop-neon-durable-current-target.png",
+      "screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png"
+    ],
+    "console": "console.json",
+    "proof_json": "proof.json",
+    "dom_summary": "dom-summary.json",
+    "riddle_artifacts": [
+      {
+        "name": "proof.json",
+        "path": "proof.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "console.json",
+        "path": "console.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "dom-summary.json",
+        "path": "dom-summary.json",
+        "kind": "text",
+        "source": "artifacts"
+      },
+      {
+        "name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop-neon-durable-current-target.png",
+        "path": "screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop-neon-durable-current-target.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      },
+      {
+        "name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png",
+        "path": "screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png",
+        "kind": "screenshot",
+        "source": "artifacts"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "setup_actions_succeeded",
+      "label": "setup actions succeeded",
+      "status": "passed",
+      "evidence": {
+        "action_count": 13,
+        "viewports": [
+          {
+            "name": "desktop",
+            "expected_action_count": 13,
+            "ok": true,
+            "result_count": 13
+          }
+        ],
+        "setup_summary": {
+          "viewport_count": 1,
+          "action_count": 13,
+          "final_screenshot_count": 1,
+          "final_screenshot_full_page": null,
+          "final_screenshot_mode": null,
+          "viewports": [
+            {
+              "name": "desktop",
+              "expected_action_count": 13,
+              "ok": true,
+              "result_count": 13,
+              "observed_path": "/games/drum-sequencer",
+              "final_url": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+              "action_counts": {
+                "wait_for_selector": 1,
+                "window_eval": 1,
+                "assert_window_value": 6,
+                "window_call": 2,
+                "assert_window_number": 2,
+                "screenshot": 1
+              },
+              "frame_action_count": 0,
+              "frame_urls": [],
+              "final_screenshot": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop",
+              "final_screenshot_full_page": null,
+              "setup_screenshots": [
+                "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop-neon-durable-current-target"
+              ],
+              "clicked_total": 0,
+              "clicked_truncated": false,
+              "click_sequence_total": 0,
+              "click_sequence_truncated": false,
+              "click_sequences": [],
+              "click_count_action_total": 0,
+              "click_count_value_total": 0,
+              "window_call_until_total": 0,
+              "window_call_until_call_total": 0,
+              "window_call_until_truncated": false,
+              "window_call_until": [],
+              "window_call_total": 2,
+              "window_call_stored_total": 2,
+              "window_call_captured_total": 2,
+              "window_call_truncated": false,
+              "window_call": [
+                {
+                  "ordinal": 7,
+                  "ok": true,
+                  "path": "__NEON_MIX_PROOF__.prepareForAudioProof",
+                  "return_captured": true,
+                  "return_stored_to": "__neonDurableCurrentTarget.sources",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "proofKind": "sample-source-preparation",
+                    "sources": {
+                      "drums": "samples",
+                      "bass": "hybrid",
+                      "chord": "hybrid",
+                      "guitar": "hybrid",
+                      "vocal": "voice_oohs"
+                    },
+                    "loaded": {
+                      "drums": true,
+                      "bass": true,
+                      "chord": true,
+                      "guitar": true,
+                      "vocal": true
+                    },
+                    "skipped": {},
+                    "states": {
+                      "bass": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 6,
+                        "library": {
+                          "name": "tonejs-instruments bass-electric",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 6
+                        }
+                      },
+                      "chord": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 7,
+                        "library": {
+                          "name": "tonejs-instruments piano",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 7
+                        }
+                      },
+                      "guitar": {
+                        "source": "hybrid",
+                        "status": "idle",
+                        "loadedSampleCount": 9,
+                        "library": {
+                          "name": "tonejs-instruments guitar-electric",
+                          "license": "CC BY 3.0",
+                          "sampleCount": 9
+                        }
+                      },
+                      "vocal": {
+                        "source": "voice_oohs",
+                        "status": "idle",
+                        "loadedSampleCount": 37,
+                        "library": {
+                          "name": "FluidR3 General MIDI SoundFont",
+                          "license": "CC BY 3.0",
+                          "instruments": [
+                            "voice_oohs",
+                            "choir_aahs",
+                            "lead_6_voice",
+                            "synth_choir"
+                          ]
+                        }
+                      },
+                      "drums": {
+                        "source": "samples",
+                        "status": "idle",
+                        "loadedTrackCount": 5,
+                        "loadedSampleCount": 8,
+                        "loadedSampleNames": [
+                          "stick-m",
+                          "kick-alt",
+                          "kick",
+                          "clap",
+                          "snare-m",
+                          "hhclosed",
+                          "hhclosed-short",
+                          "hhclosed-long"
+                        ],
+                        "library": {
+                          "name": "LM-2 sampled drum machine",
+                          "license": "Public domain sample pack",
+                          "trackCount": 5,
+                          "sampleCount": 8,
+                          "sampleNames": [
+                            "kick",
+                            "kick-alt",
+                            "snare-m",
+                            "hhclosed-short",
+                            "hhclosed",
+                            "hhclosed-long",
+                            "clap",
+                            "stick-m"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "sources.drums",
+                      "path": "sources.drums",
+                      "exists": true,
+                      "value": "samples"
+                    },
+                    {
+                      "label": "sources.bass",
+                      "path": "sources.bass",
+                      "exists": true,
+                      "value": "hybrid"
+                    }
+                  ]
+                },
+                {
+                  "ordinal": 8,
+                  "ok": true,
+                  "path": "__NEON_MIX_PROOF__.renderOfflineMetrics",
+                  "return_captured": true,
+                  "return_stored_to": "__neonDurableCurrentTarget.metrics",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "proofKind": "offline-audio-metrics",
+                    "bars": 1,
+                    "seed": "neon-durable-current-target-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+                    "monitorProfile": "smallSpeaker",
+                    "summary": {
+                      "total": 71.0016,
+                      "mix": {
+                        "slopeDbPerOct": -5.988,
+                        "slopePenalty": 0.548,
+                        "rolloffPenalty": 2.8481,
+                        "presenceRatio": 0.0451,
+                        "presencePenalty": 0.8398,
+                        "presenceFloorPenalty": 1.122,
+                        "mixPenaltyScale": 1
+                      },
+                      "mud": {
+                        "ratio": 0.2159,
+                        "penalty": 0
+                      },
+                      "top": [
+                        {
+                          "instrument": "kick",
+                          "score": 89.342,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "snare",
+                          "score": 57.978,
+                          "skipped": false
+                        },
+                        {
+                          "instrument": "hat",
+                          "score": 2.228,
+                          "skipped": false
+                        }
+                      ],
+                      "eqPenalty": 3.3732
+                    },
+                    "mixHealth": {
+                      "rms": 0.1112,
+                      "peak": 0.7777,
+                      "clipping": false,
+                      "headroomDb": 2.18,
+                      "lowLevel": false
+                    },
+                    "score": {
+                      "total": 71.0016,
+                      "perInstrument": {
+                        "kick": {
+                          "score": 89.34198773250658,
+                          "penalties": {
+                            "centroidHz": 0.000008163265306122682,
+                            "rolloffHz": 0.03343673469387755,
+                            "flatness": 0.060024999999999995,
+                            "crestDb": 0,
+                            "lowMidOverLow": 0.14851783454738218,
+                            "highOverMid": 89.10000000000001
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0.003654970760233918,
+                            "midOverLowMid": 0.04,
+                            "highOverMid": 1,
+                            "highOverTotal": 0.000145623998835008,
+                            "low": 0.01368,
+                            "lowMid": 0.000049999999999999996,
+                            "total": 0.013734
+                          }
+                        },
+                        "snare": {
+                          "score": 57.97763579224093,
+                          "penalties": {
+                            "centroidHz": 0.01758034917355372,
+                            "rolloffHz": 0.22371717515625,
+                            "flatness": 0.4710534444444443,
+                            "crestDb": 0,
+                            "midOverLowMid": 0.4349960643984476,
+                            "highOverMid": 56.80478251906824,
+                            "presenceFloor": 0.025506239999999996
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 2.066934404283802,
+                            "midOverLowMid": 0.010686528497409328,
+                            "highOverMid": 6.03030303030303,
+                            "highOverTotal": 0.04133776485251351,
+                            "low": 0.0014939999999999999,
+                            "lowMid": 0.0030879999999999996,
+                            "total": 0.004814
+                          }
+                        },
+                        "hat": {
+                          "score": 2.2278984444444445,
+                          "penalties": {
+                            "centroidHz": 0,
+                            "rolloffHz": 0,
+                            "flatness": 1.8942934444444441,
+                            "crestDb": 0.28560500000000016,
+                            "highOverTotal": 0.048000000000000084,
+                            "presenceFloor": 0
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0,
+                            "midOverLowMid": 0,
+                            "highOverMid": 0,
+                            "highOverTotal": 1,
+                            "low": 0,
+                            "lowMid": 0,
+                            "total": 0.000023
+                          }
+                        },
+                        "clap": {
+                          "score": 0,
+                          "skipped": true
+                        },
+                        "rim": {
+                          "score": 0,
+                          "skipped": true
+                        },
+                        "bass": {
+                          "score": 1.2493086627244034,
+                          "penalties": {
+                            "centroidHz": 0.0004840000000000013,
+                            "rolloffHz": 0.13778943999999999,
+                            "flatness": 0.04000000000000001,
+                            "crestDb": 0.7951152,
+                            "lowMidOverLow": 0.27592002272440347,
+                            "highOverMid": 0
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 0.0898876404494382,
+                            "midOverLowMid": 0,
+                            "highOverMid": 0,
+                            "highOverTotal": 0,
+                            "low": 0.000089,
+                            "lowMid": 0.000008,
+                            "total": 0.000097
+                          }
+                        },
+                        "chord": {
+                          "score": 0,
+                          "skipped": true
+                        },
+                        "guitar": {
+                          "score": 1.5127735710478525,
+                          "penalties": {
+                            "centroidHz": 0,
+                            "rolloffHz": 0.1463132046280992,
+                            "flatness": 0.34433424,
+                            "crestDb": 0.8500833333333335,
+                            "midOverLowMid": 0.1264197530864198,
+                            "highOverMid": 0,
+                            "presenceFloor": 0.04562304
+                          },
+                          "ratios": {
+                            "lowMidOverLow": 30,
+                            "midOverLowMid": 0.9666666666666666,
+                            "highOverMid": 0.06896551724137931,
+                            "highOverTotal": 0.03225806451612903,
+                            "low": 0.000005,
+                            "lowMid": 0.00015000000000000001,
+                            "total": 0.00031000000000000005
+                          }
+                        },
+                        "rhythmSynth": {
+                          "score": 0,
+                          "skipped": true
+                        }
+                      },
+                      "mud": {
+                        "ratio": 0.2159,
+                        "penalty": 0
+                      },
+                      "mix": {
+                        "slopeDbPerOct": -5.988,
+                        "slopePenalty": 0.548,
+                        "rolloffPenalty": 2.8481,
+                        "presenceRatio": 0.0451,
+                        "presencePenalty": 0.8398,
+                        "presenceFloorPenalty": 1.122,
+                        "mixPenaltyScale": 1
+                      },
+                      "eqPenalty": 3.3732
+                    },
+                    "mixMetrics": {
+                      "bands": [
+                        {
+                          "label": "60",
+                          "db": -62.7,
+                          "energy": 0.000986,
+                          "ratio": 0.3288
+                        },
+                        {
+                          "label": "120",
+                          "db": -64.9,
+                          "energy": 0.000715,
+                          "ratio": 0.2385
+                        },
+                        {
+                          "label": "250",
+                          "db": -54.7,
+                          "energy": 0.00071,
+                          "ratio": 0.237
+                        },
+                        {
+                          "label": "500",
+                          "db": -61.2,
+                          "energy": 0.000401,
+                          "ratio": 0.1337
+                        },
+                        {
+                          "label": "1k",
+                          "db": -67.8,
+                          "energy": 0.000449,
+                          "ratio": 0.1497
+                        },
+                        {
+                          "label": "2k",
+                          "db": -74.2,
+                          "energy": 0.000115,
+                          "ratio": 0.0384
+                        },
+                        {
+                          "label": "4k",
+                          "db": -88.1,
+                          "energy": 0.000043,
+                          "ratio": 0.0142
+                        },
+                        {
+                          "label": "8k",
+                          "db": -109.6,
+                          "energy": 0.000017,
+                          "ratio": 0.0058
+                        }
+                      ],
+                      "centroidHz": 454.1,
+                      "rolloffHz": 561.9,
+                      "flatness": 0.1065,
+                      "totalEnergy": 0.002998,
+                      "rms": 0.1112,
+                      "peak": 0.7777,
+                      "crestDb": 16.9
+                    },
+                    "monitorMetrics": {
+                      "bands": [
+                        {
+                          "label": "60",
+                          "db": -90.2,
+                          "energy": 0,
+                          "ratio": 0
+                        },
+                        {
+                          "label": "120",
+                          "db": -75.2,
+                          "energy": 0,
+                          "ratio": 0.0186
+                        },
+                        {
+                          "label": "250",
+                          "db": -57.1,
+                          "energy": 0.000003,
+                          "ratio": 0.2838
+                        },
+                        {
+                          "label": "500",
+                          "db": -52.3,
+                          "energy": 0.000007,
+                          "ratio": 0.6658
+                        },
+                        {
+                          "label": "1k",
+                          "db": -66.2,
+                          "energy": 0,
+                          "ratio": 0.0186
+                        },
+                        {
+                          "label": "2k",
+                          "db": -77.8,
+                          "energy": 0,
+                          "ratio": 0.0027
+                        },
+                        {
+                          "label": "4k",
+                          "db": -84.9,
+                          "energy": 0,
+                          "ratio": 0
+                        },
+                        {
+                          "label": "8k",
+                          "db": -99.9,
+                          "energy": 0,
+                          "ratio": 0
+                        }
+                      ],
+                      "centroidHz": 413.2,
+                      "rolloffHz": 660.4,
+                      "flatness": 0.0484,
+                      "totalEnergy": 0.000011,
+                      "rms": 0.1163,
+                      "peak": 0.7777,
+                      "crestDb": 16.51
+                    },
+                    "instrumentMetrics": {
+                      "kick": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -39.5,
+                            "energy": 0.00943,
+                            "ratio": 0.8028
+                          },
+                          {
+                            "label": "120",
+                            "db": -55.3,
+                            "energy": 0.00425,
+                            "ratio": 0.3619
+                          },
+                          {
+                            "label": "250",
+                            "db": -76.2,
+                            "energy": 0.000047,
+                            "ratio": 0.004
+                          },
+                          {
+                            "label": "500",
+                            "db": -91.6,
+                            "energy": 0.000003,
+                            "ratio": 0.0003
+                          },
+                          {
+                            "label": "1k",
+                            "db": -98.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -97.3,
+                            "energy": 0.000002,
+                            "ratio": 0.0002
+                          },
+                          {
+                            "label": "4k",
+                            "db": -108.1,
+                            "energy": 0.000002,
+                            "ratio": 0.0002
+                          },
+                          {
+                            "label": "8k",
+                            "db": -131.7,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 69.8,
+                        "rolloffHz": 86,
+                        "flatness": 0.001,
+                        "totalEnergy": 0.011746,
+                        "rms": 0.1772,
+                        "peak": 0.8076,
+                        "crestDb": 13.17
+                      },
+                      "snare": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -82.9,
+                            "energy": 0.000001,
+                            "ratio": 0.0003
+                          },
+                          {
+                            "label": "120",
+                            "db": -60.5,
+                            "energy": 0.001493,
+                            "ratio": 0.4102
+                          },
+                          {
+                            "label": "250",
+                            "db": -54.9,
+                            "energy": 0.00306,
+                            "ratio": 0.8407
+                          },
+                          {
+                            "label": "500",
+                            "db": -72.6,
+                            "energy": 0.000028,
+                            "ratio": 0.0076
+                          },
+                          {
+                            "label": "1k",
+                            "db": -79.6,
+                            "energy": 0.000008,
+                            "ratio": 0.0021
+                          },
+                          {
+                            "label": "2k",
+                            "db": -75,
+                            "energy": 0.000025,
+                            "ratio": 0.0069
+                          },
+                          {
+                            "label": "4k",
+                            "db": -71.7,
+                            "energy": 0.000089,
+                            "ratio": 0.0244
+                          },
+                          {
+                            "label": "8k",
+                            "db": -73,
+                            "energy": 0.00011,
+                            "ratio": 0.0304
+                          }
+                        ],
+                        "centroidHz": 508.3,
+                        "rolloffHz": 216.1,
+                        "flatness": 0.0941,
+                        "totalEnergy": 0.00364,
+                        "rms": 0.1014,
+                        "peak": 0.5843,
+                        "crestDb": 15.21
+                      },
+                      "hat": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -158,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -163.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -151.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -127.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -115.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -97.3,
+                            "energy": 0,
+                            "ratio": 0.0051
+                          },
+                          {
+                            "label": "4k",
+                            "db": -84.5,
+                            "energy": 0.000009,
+                            "ratio": 0.2601
+                          },
+                          {
+                            "label": "8k",
+                            "db": -83.3,
+                            "energy": 0.000014,
+                            "ratio": 0.4217
+                          }
+                        ],
+                        "centroidHz": 8167.3,
+                        "rolloffHz": 12511.5,
+                        "flatness": 0.1871,
+                        "totalEnergy": 0.000033,
+                        "rms": 0.0113,
+                        "peak": 0.124,
+                        "crestDb": 20.78
+                      },
+                      "clap": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      },
+                      "rim": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      },
+                      "bass": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -58.5,
+                            "energy": 0.000067,
+                            "ratio": 0.7714
+                          },
+                          {
+                            "label": "120",
+                            "db": -72.8,
+                            "energy": 0.000022,
+                            "ratio": 0.2511
+                          },
+                          {
+                            "label": "250",
+                            "db": -86.5,
+                            "energy": 0.000008,
+                            "ratio": 0.0893
+                          },
+                          {
+                            "label": "500",
+                            "db": -112.9,
+                            "energy": 0,
+                            "ratio": 0.0029
+                          },
+                          {
+                            "label": "1k",
+                            "db": -143.8,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -176,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -203.6,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -217.3,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 77.8,
+                        "rolloffHz": 114.4,
+                        "flatness": 0,
+                        "totalEnergy": 0.000087,
+                        "rms": 0.0209,
+                        "peak": 0.0838,
+                        "crestDb": 12.07
+                      },
+                      "chord": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -128,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -90.3,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -79.9,
+                            "energy": 0.000001,
+                            "ratio": 0.6
+                          },
+                          {
+                            "label": "500",
+                            "db": -85.5,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -100.2,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -106.7,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -130,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -161,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 437.8,
+                        "rolloffHz": 682.6,
+                        "flatness": 0.0011,
+                        "totalEnergy": 0.000001,
+                        "rms": 0.0024,
+                        "peak": 0.0088,
+                        "crestDb": 11.46
+                      },
+                      "guitar": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -117.8,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -79.5,
+                            "energy": 0.000005,
+                            "ratio": 0.0165
+                          },
+                          {
+                            "label": "250",
+                            "db": -63.6,
+                            "energy": 0.000057,
+                            "ratio": 0.193
+                          },
+                          {
+                            "label": "500",
+                            "db": -68.6,
+                            "energy": 0.000093,
+                            "ratio": 0.3129
+                          },
+                          {
+                            "label": "1k",
+                            "db": -74.8,
+                            "energy": 0.000109,
+                            "ratio": 0.3698
+                          },
+                          {
+                            "label": "2k",
+                            "db": -81.2,
+                            "energy": 0.000036,
+                            "ratio": 0.1212
+                          },
+                          {
+                            "label": "4k",
+                            "db": -99.7,
+                            "energy": 0.00001,
+                            "ratio": 0.0328
+                          },
+                          {
+                            "label": "8k",
+                            "db": -129,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 855.6,
+                        "rolloffHz": 1396.2,
+                        "flatness": 0.0033,
+                        "totalEnergy": 0.000296,
+                        "rms": 0.0406,
+                        "peak": 0.2295,
+                        "crestDb": 15.05
+                      },
+                      "rhythmSynth": {
+                        "bands": [
+                          {
+                            "label": "60",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "120",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "250",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "500",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "1k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "2k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "4k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          },
+                          {
+                            "label": "8k",
+                            "db": -120,
+                            "energy": 0,
+                            "ratio": 0
+                          }
+                        ],
+                        "centroidHz": 0,
+                        "rolloffHz": 0,
+                        "flatness": 0,
+                        "totalEnergy": 0,
+                        "rms": 0,
+                        "peak": 0,
+                        "crestDb": 0
+                      }
+                    },
+                    "compact": {
+                      "ok": true,
+                      "proofKind": "offline-audio-metrics",
+                      "mixHealth": {
+                        "rms": 0.1112,
+                        "peak": 0.7777,
+                        "clipping": false,
+                        "headroomDb": 2.18,
+                        "lowLevel": false
+                      },
+                      "objectivePenalty": {
+                        "total": 71.0016,
+                        "mix": {
+                          "slopeDbPerOct": -5.988,
+                          "slopePenalty": 0.548,
+                          "rolloffPenalty": 2.8481,
+                          "presenceRatio": 0.0451,
+                          "presencePenalty": 0.8398,
+                          "presenceFloorPenalty": 1.122,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2159,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 57.978,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.228,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "score": {
+                        "total": 71.0016,
+                        "mix": {
+                          "slopeDbPerOct": -5.988,
+                          "slopePenalty": 0.548,
+                          "rolloffPenalty": 2.8481,
+                          "presenceRatio": 0.0451,
+                          "presencePenalty": 0.8398,
+                          "presenceFloorPenalty": 1.122,
+                          "mixPenaltyScale": 1
+                        },
+                        "mud": {
+                          "ratio": 0.2159,
+                          "penalty": 0
+                        },
+                        "top": [
+                          {
+                            "instrument": "kick",
+                            "score": 89.342,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "snare",
+                            "score": 57.978,
+                            "skipped": false
+                          },
+                          {
+                            "instrument": "hat",
+                            "score": 2.228,
+                            "skipped": false
+                          }
+                        ],
+                        "eqPenalty": 3.3732
+                      },
+                      "activeInstrumentCount": 6,
+                      "activeInstruments": [
+                        {
+                          "name": "kick",
+                          "rms": 0.1772,
+                          "peak": 0.8076,
+                          "totalEnergy": 0.011746
+                        },
+                        {
+                          "name": "snare",
+                          "rms": 0.1014,
+                          "peak": 0.5843,
+                          "totalEnergy": 0.00364
+                        },
+                        {
+                          "name": "hat",
+                          "rms": 0.0113,
+                          "peak": 0.124,
+                          "totalEnergy": 0.000033
+                        },
+                        {
+                          "name": "bass",
+                          "rms": 0.0209,
+                          "peak": 0.0838,
+                          "totalEnergy": 0.000087
+                        },
+                        {
+                          "name": "chord",
+                          "rms": 0.0024,
+                          "peak": 0.0088,
+                          "totalEnergy": 0.000001
+                        },
+                        {
+                          "name": "guitar",
+                          "rms": 0.0406,
+                          "peak": 0.2295,
+                          "totalEnergy": 0.000296
+                        }
+                      ]
+                    }
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "mixHealth.peak",
+                      "path": "mixHealth.peak",
+                      "exists": true,
+                      "value": 0.7777
+                    },
+                    {
+                      "label": "mixHealth.rms",
+                      "path": "mixHealth.rms",
+                      "exists": true,
+                      "value": 0.1112
+                    },
+                    {
+                      "label": "mixHealth.clipping",
+                      "path": "mixHealth.clipping",
+                      "exists": true,
+                      "value": false
+                    }
+                  ]
+                }
+              ],
+              "window_eval_total": 1,
+              "window_eval_stored_total": 1,
+              "window_eval_captured_total": 1,
+              "window_eval_truncated": false,
+              "window_eval": [
+                {
+                  "ordinal": 1,
+                  "ok": true,
+                  "script_length": 2170,
+                  "return_captured": true,
+                  "return_stored_to": "__neonDurableCurrentTarget.check",
+                  "reason": null,
+                  "returned": {
+                    "ok": true,
+                    "available": true,
+                    "selectedSong": "Monkberry Moon Delight (Tab)",
+                    "expectedSong": "Monkberry Moon Delight (Tab)",
+                    "selectedSongMatches": true,
+                    "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "expectedMixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+                    "mixProfileMatches": true,
+                    "observations": [
+                      {
+                        "track": "chord",
+                        "expectedLevel": 0.18,
+                        "actualLevel": 0.18,
+                        "profileLevel": 0.18,
+                        "visibleToken": "0.18X",
+                        "contractMatches": true,
+                        "profileMatches": true,
+                        "visibleMatches": true
+                      }
+                    ],
+                    "levelsMatch": true,
+                    "visibleLevelMatches": true,
+                    "boundary": "current-target durable override audit only; this does not prove subjective mix taste"
+                  },
+                  "return_summary": [
+                    {
+                      "label": "ok",
+                      "path": "ok",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "selectedSong",
+                      "path": "selectedSong",
+                      "exists": true,
+                      "value": "Monkberry Moon Delight (Tab)"
+                    },
+                    {
+                      "label": "mixProfileId",
+                      "path": "mixProfileId",
+                      "exists": true,
+                      "value": "monkberry-moon-delight-eq-lane-mix-v7"
+                    },
+                    {
+                      "label": "levelsMatch",
+                      "path": "levelsMatch",
+                      "exists": true,
+                      "value": true
+                    },
+                    {
+                      "label": "visibleLevelMatches",
+                      "path": "visibleLevelMatches",
+                      "exists": true,
+                      "value": true
+                    }
+                  ]
+                }
+              ],
+              "deterministic_runtime_total": 0,
+              "deterministic_runtime_truncated": false,
+              "deterministic_runtime": [],
+              "set_range_value_total": 0,
+              "set_range_value_truncated": false,
+              "set_range_value": [],
+              "drag_total": 0,
+              "drag_truncated": false,
+              "drag": [],
+              "tap_total": 0,
+              "tap_truncated": false,
+              "tap": [],
+              "tap_until_total": 0,
+              "tap_until_tap_total": 0,
+              "tap_until_truncated": false,
+              "tap_until": [],
+              "keyboard_total": 0,
+              "keyboard_truncated": false,
+              "keyboard": [],
+              "canvas_signature_total": 0,
+              "canvas_signature_truncated": false,
+              "canvas_signature": [],
+              "canvas_signature_stable_hash_groups": [],
+              "clicked": [],
+              "text_samples": [],
+              "failed": [],
+              "optional_failed": []
+            }
+          ]
+        },
+        "failed": []
+      }
+    },
+    {
+      "type": "route_loaded",
+      "label": "route_loaded",
+      "status": "passed",
+      "evidence": {
+        "expected_path": "/games/drum-sequencer",
+        "observed_paths": [
+          "/games/drum-sequencer"
+        ],
+        "http_statuses": [
+          200
+        ],
+        "route_errors": [
+          null
+        ]
+      }
+    },
+    {
+      "type": "selector_visible",
+      "label": "selector_visible",
+      "status": "passed",
+      "evidence": {
+        "selector": ".drum-sequencer h1",
+        "visible_counts": [
+          1
+        ]
+      }
+    },
+    {
+      "type": "no_horizontal_overflow",
+      "label": "no_horizontal_overflow",
+      "status": "passed",
+      "evidence": {
+        "max_overflow_px": 1,
+        "overflow_px": [
+          0
+        ],
+        "bounds_overflow_px": [
+          0
+        ],
+        "overflow_offender_counts": [
+          0
+        ],
+        "viewports": [
+          "desktop"
+        ]
+      }
+    },
+    {
+      "type": "no_fatal_console_errors",
+      "label": "no_fatal_console_errors",
+      "status": "passed",
+      "evidence": {
+        "console_fatal_count": 0,
+        "page_error_count": 0,
+        "total_console_fatal_count": 0,
+        "total_page_error_count": 0,
+        "allowed_console_fatal_count": 0,
+        "explicitly_allowed_console_fatal_count": 0,
+        "allowed_expected_network_mock_console_count": 0,
+        "allowed_expected_network_mock_console_events": [],
+        "allowed_page_error_count": 0,
+        "allowed_console_texts": [],
+        "allowed_console_patterns": [],
+        "allowed_page_error_texts": [],
+        "allowed_page_error_patterns": []
+      }
+    }
+  ],
+  "summary": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate passed 5 check(s) across 1 viewport(s) (desktop).",
+  "captured_at": "2026-05-24T21:44:41.293Z",
+  "metadata": {
+    "pack_id": "neon_step_sequencer",
+    "evidence_role_pattern": "current_target",
+    "purpose": "Current-target proof that an approved durable mix override is live in the app contract, visible UI, and basic offline render guardrails.",
+    "override_id": "monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+    "required_receipts": [
+      "selected song matches durable override target",
+      "mix profile id matches durable override target",
+      "contract mixer levels match durable override levels",
+      "visible mixer level text reflects durable override levels",
+      "current target render passes basic headroom and non-silence guardrails"
+    ],
+    "does_not_prove": [
+      "subjective mix quality",
+      "that the approval surrogate is a real listener preference",
+      "all possible mix edits"
+    ]
+  },
+  "evidence": {
+    "version": "riddle-proof.profile-evidence.v1",
+    "profile_name": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+    "target_url": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+    "baseline_policy": "invariant_only",
+    "captured_at": "2026-05-24T21:44:41.293Z",
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000,
+        "url": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+        "route": {
+          "requested": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        },
+        "title": "LilArcade",
+        "body_text_length": 2203,
+        "body_text_sample": "🕹️ LilArcade RHYTHM LAB Neon Step Sequencer Paint a 4-bar, 64-step loop and keep the arcade pulsing. My Sequences MONKBERRY MOON DELIGHT Bass Trainer Open Playalong Play All Shuffle Clear Debug Meters Off Verbose Off Auto-Mix Pass Auto-mix ready VERBOSE LOGS TEMPO 98 BPM Audio ready SONG Blank Yakety Yak (Dark) (G) Monkberry Moon Delight (Sheet) (C minor) Monkberry Moon Delight (Full OMR) (C minor) Monkberry Moon Delight (Tab) (C minor) Dark Progression (Em) Midnight Protocol (Am) INSTRUMENT LANES Power, source, mix, and editor focus in one place ON DRUMS Kick, snare, hat, clap, rim 208 HITS DRUM SOURCE Sampled Kit Samples + Synth Synth Drums LEVEL 0.49X Mute Sampled Kit Kick 0.90x Snare 0.67x Hat 0.34x Clap 0.27x Rim 0.29x ON BASS Low end foundation 68 NOTES BASS INSTRUMENT Dub Bass Electric Bass + Sub Electric Bass Finger Bass (SoundFont) Synth Bass LEVEL 0.62X PAN 0.01L Mute TONE Electric Bass + Sub ON VOCAL MELODY Vocal melody line 77 NOTES VOCAL INSTRUMENT Synth Vocal Voice Oohs Choir Aahs Voice Lead Synth Choir LEVEL 0.84X PAN 0.02R DELAY 0.07 Mute TONE Voice Oohs ON PAD / KEYS Harmony bed 84 NOTES KEYS INSTRUMENT Piano + Pad Piano Synth Pad LEVEL 0.18X PAN 0.22L DELAY 0.10 Mute TONE Piano + Pad ON GUITAR / LEAD LINE Hooks and strums 639 NOTES GUITAR INSTRUMENT Guitar + Synth Electric Guitar Synth Lead Line LEVEL 0.65X PAN 0.26R DELAY 0.11 Mute TONE Guitar + Synth PART: A B C D E F G H I + ARRANGEMENT 1 A B C D E F G H I · · · · · · · 17 · · · · · · · · · · · · · · · · 33 · · · · · · · · · · · · · · · · 49 · · · · · · · · · · · · · · · · FOCUS Mix Drums Bass Vocal Melody Pad Guitar Trainer Meters BAR − 16 + 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 INSTRUMENT TRAINER 84 notes in part A PART A PLAYING Pad / Keys INSTRUMENT Drums Bass Vocal Melody Pad / Keys Guitar / Lead Line WINDOW 1 bar 2 bars 4 bars Full Mix Focus Up Solo Pick a part, slow the tempo, and ride the hit line. Use the bar buttons above to jump sections. C3 C#3 D3 D#3 E3 F3 F#3 G3 G#3 A3 A#3 B3 C4 C#4 D4 D#4 E4 F4 C3 G3 B3 D4 F4 BAR 1 BAR 2 BAR 3 C3 D#3 G3 C3 D#3 G3 C3 D#3 G3 C3 D#3 G3 C3 D#3 G3 HIT LINE Tip: layer a simple kick on 1/5/9/13 and sprinkle hats in between. Works best with headphones.",
+        "scroll_width": 1440,
+        "client_width": 1440,
+        "overflow_px": 0,
+        "bounds_overflow_px": 0,
+        "overflow_offenders": [],
+        "selectors": {
+          ".drum-sequencer h1": {
+            "count": 1,
+            "visible_count": 1
+          }
+        },
+        "frames": {},
+        "text_sequences": {},
+        "text_matches": {},
+        "text_match_samples": {},
+        "text_case_insensitive_samples": {},
+        "observations": {},
+        "http_statuses": {},
+        "link_statuses": {},
+        "setup_action_results": [
+          {
+            "ok": true,
+            "action": "wait_for_selector",
+            "ordinal": 0,
+            "selector": ".drum-sequencer h1",
+            "frame_selector": null,
+            "optional": false,
+            "timeout_ms": 20000
+          },
+          {
+            "ok": true,
+            "action": "window_eval",
+            "ordinal": 1,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "script_length": 2170,
+            "arg_count": 0,
+            "returned": {
+              "ok": true,
+              "available": true,
+              "selectedSong": "Monkberry Moon Delight (Tab)",
+              "expectedSong": "Monkberry Moon Delight (Tab)",
+              "selectedSongMatches": true,
+              "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+              "expectedMixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+              "mixProfileMatches": true,
+              "observations": [
+                {
+                  "track": "chord",
+                  "expectedLevel": 0.18,
+                  "actualLevel": 0.18,
+                  "profileLevel": 0.18,
+                  "visibleToken": "0.18X",
+                  "contractMatches": true,
+                  "profileMatches": true,
+                  "visibleMatches": true
+                }
+              ],
+              "levelsMatch": true,
+              "visibleLevelMatches": true,
+              "boundary": "current-target durable override audit only; this does not prove subjective mix taste"
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonDurableCurrentTarget.check",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              },
+              {
+                "path": "selectedSong"
+              },
+              {
+                "path": "mixProfileId"
+              },
+              {
+                "path": "levelsMatch"
+              },
+              {
+                "path": "visibleLevelMatches"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 2,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.check.ok",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 3,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.check.selectedSongMatches",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 4,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.check.mixProfileMatches",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 5,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.check.levelsMatch",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 6,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.check.visibleLevelMatches",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "window_call",
+            "ordinal": 7,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__NEON_MIX_PROOF__.prepareForAudioProof",
+            "arg_count": 1,
+            "returned": {
+              "ok": true,
+              "proofKind": "sample-source-preparation",
+              "sources": {
+                "drums": "samples",
+                "bass": "hybrid",
+                "chord": "hybrid",
+                "guitar": "hybrid",
+                "vocal": "voice_oohs"
+              },
+              "loaded": {
+                "drums": true,
+                "bass": true,
+                "chord": true,
+                "guitar": true,
+                "vocal": true
+              },
+              "skipped": {},
+              "states": {
+                "bass": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 6,
+                  "library": {
+                    "name": "tonejs-instruments bass-electric",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 6
+                  }
+                },
+                "chord": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 7,
+                  "library": {
+                    "name": "tonejs-instruments piano",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 7
+                  }
+                },
+                "guitar": {
+                  "source": "hybrid",
+                  "status": "idle",
+                  "loadedSampleCount": 9,
+                  "library": {
+                    "name": "tonejs-instruments guitar-electric",
+                    "license": "CC BY 3.0",
+                    "sampleCount": 9
+                  }
+                },
+                "vocal": {
+                  "source": "voice_oohs",
+                  "status": "idle",
+                  "loadedSampleCount": 37,
+                  "library": {
+                    "name": "FluidR3 General MIDI SoundFont",
+                    "license": "CC BY 3.0",
+                    "instruments": [
+                      "voice_oohs",
+                      "choir_aahs",
+                      "lead_6_voice",
+                      "synth_choir"
+                    ]
+                  }
+                },
+                "drums": {
+                  "source": "samples",
+                  "status": "idle",
+                  "loadedTrackCount": 5,
+                  "loadedSampleCount": 8,
+                  "loadedSampleNames": [
+                    "stick-m",
+                    "kick-alt",
+                    "kick",
+                    "clap",
+                    "snare-m",
+                    "hhclosed",
+                    "hhclosed-short",
+                    "hhclosed-long"
+                  ],
+                  "library": {
+                    "name": "LM-2 sampled drum machine",
+                    "license": "Public domain sample pack",
+                    "trackCount": 5,
+                    "sampleCount": 8,
+                    "sampleNames": [
+                      "kick",
+                      "kick-alt",
+                      "snare-m",
+                      "hhclosed-short",
+                      "hhclosed",
+                      "hhclosed-long",
+                      "clap",
+                      "stick-m"
+                    ]
+                  }
+                }
+              }
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonDurableCurrentTarget.sources",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              },
+              {
+                "path": "sources.drums"
+              },
+              {
+                "path": "sources.bass"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "window_call",
+            "ordinal": 8,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__NEON_MIX_PROOF__.renderOfflineMetrics",
+            "arg_count": 1,
+            "returned": {
+              "ok": true,
+              "proofKind": "offline-audio-metrics",
+              "bars": 1,
+              "seed": "neon-durable-current-target-monkberry-moon-delight-tab-chord-minus-01-approved-candidate",
+              "monitorProfile": "smallSpeaker",
+              "summary": {
+                "total": 71.0016,
+                "mix": {
+                  "slopeDbPerOct": -5.988,
+                  "slopePenalty": 0.548,
+                  "rolloffPenalty": 2.8481,
+                  "presenceRatio": 0.0451,
+                  "presencePenalty": 0.8398,
+                  "presenceFloorPenalty": 1.122,
+                  "mixPenaltyScale": 1
+                },
+                "mud": {
+                  "ratio": 0.2159,
+                  "penalty": 0
+                },
+                "top": [
+                  {
+                    "instrument": "kick",
+                    "score": 89.342,
+                    "skipped": false
+                  },
+                  {
+                    "instrument": "snare",
+                    "score": 57.978,
+                    "skipped": false
+                  },
+                  {
+                    "instrument": "hat",
+                    "score": 2.228,
+                    "skipped": false
+                  }
+                ],
+                "eqPenalty": 3.3732
+              },
+              "mixHealth": {
+                "rms": 0.1112,
+                "peak": 0.7777,
+                "clipping": false,
+                "headroomDb": 2.18,
+                "lowLevel": false
+              },
+              "score": {
+                "total": 71.0016,
+                "perInstrument": {
+                  "kick": {
+                    "score": 89.34198773250658,
+                    "penalties": {
+                      "centroidHz": 0.000008163265306122682,
+                      "rolloffHz": 0.03343673469387755,
+                      "flatness": 0.060024999999999995,
+                      "crestDb": 0,
+                      "lowMidOverLow": 0.14851783454738218,
+                      "highOverMid": 89.10000000000001
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0.003654970760233918,
+                      "midOverLowMid": 0.04,
+                      "highOverMid": 1,
+                      "highOverTotal": 0.000145623998835008,
+                      "low": 0.01368,
+                      "lowMid": 0.000049999999999999996,
+                      "total": 0.013734
+                    }
+                  },
+                  "snare": {
+                    "score": 57.97763579224093,
+                    "penalties": {
+                      "centroidHz": 0.01758034917355372,
+                      "rolloffHz": 0.22371717515625,
+                      "flatness": 0.4710534444444443,
+                      "crestDb": 0,
+                      "midOverLowMid": 0.4349960643984476,
+                      "highOverMid": 56.80478251906824,
+                      "presenceFloor": 0.025506239999999996
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 2.066934404283802,
+                      "midOverLowMid": 0.010686528497409328,
+                      "highOverMid": 6.03030303030303,
+                      "highOverTotal": 0.04133776485251351,
+                      "low": 0.0014939999999999999,
+                      "lowMid": 0.0030879999999999996,
+                      "total": 0.004814
+                    }
+                  },
+                  "hat": {
+                    "score": 2.2278984444444445,
+                    "penalties": {
+                      "centroidHz": 0,
+                      "rolloffHz": 0,
+                      "flatness": 1.8942934444444441,
+                      "crestDb": 0.28560500000000016,
+                      "highOverTotal": 0.048000000000000084,
+                      "presenceFloor": 0
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0,
+                      "midOverLowMid": 0,
+                      "highOverMid": 0,
+                      "highOverTotal": 1,
+                      "low": 0,
+                      "lowMid": 0,
+                      "total": 0.000023
+                    }
+                  },
+                  "clap": {
+                    "score": 0,
+                    "skipped": true
+                  },
+                  "rim": {
+                    "score": 0,
+                    "skipped": true
+                  },
+                  "bass": {
+                    "score": 1.2493086627244034,
+                    "penalties": {
+                      "centroidHz": 0.0004840000000000013,
+                      "rolloffHz": 0.13778943999999999,
+                      "flatness": 0.04000000000000001,
+                      "crestDb": 0.7951152,
+                      "lowMidOverLow": 0.27592002272440347,
+                      "highOverMid": 0
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 0.0898876404494382,
+                      "midOverLowMid": 0,
+                      "highOverMid": 0,
+                      "highOverTotal": 0,
+                      "low": 0.000089,
+                      "lowMid": 0.000008,
+                      "total": 0.000097
+                    }
+                  },
+                  "chord": {
+                    "score": 0,
+                    "skipped": true
+                  },
+                  "guitar": {
+                    "score": 1.5127735710478525,
+                    "penalties": {
+                      "centroidHz": 0,
+                      "rolloffHz": 0.1463132046280992,
+                      "flatness": 0.34433424,
+                      "crestDb": 0.8500833333333335,
+                      "midOverLowMid": 0.1264197530864198,
+                      "highOverMid": 0,
+                      "presenceFloor": 0.04562304
+                    },
+                    "ratios": {
+                      "lowMidOverLow": 30,
+                      "midOverLowMid": 0.9666666666666666,
+                      "highOverMid": 0.06896551724137931,
+                      "highOverTotal": 0.03225806451612903,
+                      "low": 0.000005,
+                      "lowMid": 0.00015000000000000001,
+                      "total": 0.00031000000000000005
+                    }
+                  },
+                  "rhythmSynth": {
+                    "score": 0,
+                    "skipped": true
+                  }
+                },
+                "mud": {
+                  "ratio": 0.2159,
+                  "penalty": 0
+                },
+                "mix": {
+                  "slopeDbPerOct": -5.988,
+                  "slopePenalty": 0.548,
+                  "rolloffPenalty": 2.8481,
+                  "presenceRatio": 0.0451,
+                  "presencePenalty": 0.8398,
+                  "presenceFloorPenalty": 1.122,
+                  "mixPenaltyScale": 1
+                },
+                "eqPenalty": 3.3732
+              },
+              "mixMetrics": {
+                "bands": [
+                  {
+                    "label": "60",
+                    "db": -62.7,
+                    "energy": 0.000986,
+                    "ratio": 0.3288
+                  },
+                  {
+                    "label": "120",
+                    "db": -64.9,
+                    "energy": 0.000715,
+                    "ratio": 0.2385
+                  },
+                  {
+                    "label": "250",
+                    "db": -54.7,
+                    "energy": 0.00071,
+                    "ratio": 0.237
+                  },
+                  {
+                    "label": "500",
+                    "db": -61.2,
+                    "energy": 0.000401,
+                    "ratio": 0.1337
+                  },
+                  {
+                    "label": "1k",
+                    "db": -67.8,
+                    "energy": 0.000449,
+                    "ratio": 0.1497
+                  },
+                  {
+                    "label": "2k",
+                    "db": -74.2,
+                    "energy": 0.000115,
+                    "ratio": 0.0384
+                  },
+                  {
+                    "label": "4k",
+                    "db": -88.1,
+                    "energy": 0.000043,
+                    "ratio": 0.0142
+                  },
+                  {
+                    "label": "8k",
+                    "db": -109.6,
+                    "energy": 0.000017,
+                    "ratio": 0.0058
+                  }
+                ],
+                "centroidHz": 454.1,
+                "rolloffHz": 561.9,
+                "flatness": 0.1065,
+                "totalEnergy": 0.002998,
+                "rms": 0.1112,
+                "peak": 0.7777,
+                "crestDb": 16.9
+              },
+              "monitorMetrics": {
+                "bands": [
+                  {
+                    "label": "60",
+                    "db": -90.2,
+                    "energy": 0,
+                    "ratio": 0
+                  },
+                  {
+                    "label": "120",
+                    "db": -75.2,
+                    "energy": 0,
+                    "ratio": 0.0186
+                  },
+                  {
+                    "label": "250",
+                    "db": -57.1,
+                    "energy": 0.000003,
+                    "ratio": 0.2838
+                  },
+                  {
+                    "label": "500",
+                    "db": -52.3,
+                    "energy": 0.000007,
+                    "ratio": 0.6658
+                  },
+                  {
+                    "label": "1k",
+                    "db": -66.2,
+                    "energy": 0,
+                    "ratio": 0.0186
+                  },
+                  {
+                    "label": "2k",
+                    "db": -77.8,
+                    "energy": 0,
+                    "ratio": 0.0027
+                  },
+                  {
+                    "label": "4k",
+                    "db": -84.9,
+                    "energy": 0,
+                    "ratio": 0
+                  },
+                  {
+                    "label": "8k",
+                    "db": -99.9,
+                    "energy": 0,
+                    "ratio": 0
+                  }
+                ],
+                "centroidHz": 413.2,
+                "rolloffHz": 660.4,
+                "flatness": 0.0484,
+                "totalEnergy": 0.000011,
+                "rms": 0.1163,
+                "peak": 0.7777,
+                "crestDb": 16.51
+              },
+              "instrumentMetrics": {
+                "kick": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -39.5,
+                      "energy": 0.00943,
+                      "ratio": 0.8028
+                    },
+                    {
+                      "label": "120",
+                      "db": -55.3,
+                      "energy": 0.00425,
+                      "ratio": 0.3619
+                    },
+                    {
+                      "label": "250",
+                      "db": -76.2,
+                      "energy": 0.000047,
+                      "ratio": 0.004
+                    },
+                    {
+                      "label": "500",
+                      "db": -91.6,
+                      "energy": 0.000003,
+                      "ratio": 0.0003
+                    },
+                    {
+                      "label": "1k",
+                      "db": -98.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -97.3,
+                      "energy": 0.000002,
+                      "ratio": 0.0002
+                    },
+                    {
+                      "label": "4k",
+                      "db": -108.1,
+                      "energy": 0.000002,
+                      "ratio": 0.0002
+                    },
+                    {
+                      "label": "8k",
+                      "db": -131.7,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 69.8,
+                  "rolloffHz": 86,
+                  "flatness": 0.001,
+                  "totalEnergy": 0.011746,
+                  "rms": 0.1772,
+                  "peak": 0.8076,
+                  "crestDb": 13.17
+                },
+                "snare": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -82.9,
+                      "energy": 0.000001,
+                      "ratio": 0.0003
+                    },
+                    {
+                      "label": "120",
+                      "db": -60.5,
+                      "energy": 0.001493,
+                      "ratio": 0.4102
+                    },
+                    {
+                      "label": "250",
+                      "db": -54.9,
+                      "energy": 0.00306,
+                      "ratio": 0.8407
+                    },
+                    {
+                      "label": "500",
+                      "db": -72.6,
+                      "energy": 0.000028,
+                      "ratio": 0.0076
+                    },
+                    {
+                      "label": "1k",
+                      "db": -79.6,
+                      "energy": 0.000008,
+                      "ratio": 0.0021
+                    },
+                    {
+                      "label": "2k",
+                      "db": -75,
+                      "energy": 0.000025,
+                      "ratio": 0.0069
+                    },
+                    {
+                      "label": "4k",
+                      "db": -71.7,
+                      "energy": 0.000089,
+                      "ratio": 0.0244
+                    },
+                    {
+                      "label": "8k",
+                      "db": -73,
+                      "energy": 0.00011,
+                      "ratio": 0.0304
+                    }
+                  ],
+                  "centroidHz": 508.3,
+                  "rolloffHz": 216.1,
+                  "flatness": 0.0941,
+                  "totalEnergy": 0.00364,
+                  "rms": 0.1014,
+                  "peak": 0.5843,
+                  "crestDb": 15.21
+                },
+                "hat": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -158,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -163.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -151.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -127.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -115.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -97.3,
+                      "energy": 0,
+                      "ratio": 0.0051
+                    },
+                    {
+                      "label": "4k",
+                      "db": -84.5,
+                      "energy": 0.000009,
+                      "ratio": 0.2601
+                    },
+                    {
+                      "label": "8k",
+                      "db": -83.3,
+                      "energy": 0.000014,
+                      "ratio": 0.4217
+                    }
+                  ],
+                  "centroidHz": 8167.3,
+                  "rolloffHz": 12511.5,
+                  "flatness": 0.1871,
+                  "totalEnergy": 0.000033,
+                  "rms": 0.0113,
+                  "peak": 0.124,
+                  "crestDb": 20.78
+                },
+                "clap": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                },
+                "rim": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                },
+                "bass": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -58.5,
+                      "energy": 0.000067,
+                      "ratio": 0.7714
+                    },
+                    {
+                      "label": "120",
+                      "db": -72.8,
+                      "energy": 0.000022,
+                      "ratio": 0.2511
+                    },
+                    {
+                      "label": "250",
+                      "db": -86.5,
+                      "energy": 0.000008,
+                      "ratio": 0.0893
+                    },
+                    {
+                      "label": "500",
+                      "db": -112.9,
+                      "energy": 0,
+                      "ratio": 0.0029
+                    },
+                    {
+                      "label": "1k",
+                      "db": -143.8,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -176,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -203.6,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -217.3,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 77.8,
+                  "rolloffHz": 114.4,
+                  "flatness": 0,
+                  "totalEnergy": 0.000087,
+                  "rms": 0.0209,
+                  "peak": 0.0838,
+                  "crestDb": 12.07
+                },
+                "chord": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -128,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -90.3,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -79.9,
+                      "energy": 0.000001,
+                      "ratio": 0.6
+                    },
+                    {
+                      "label": "500",
+                      "db": -85.5,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -100.2,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -106.7,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -130,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -161,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 437.8,
+                  "rolloffHz": 682.6,
+                  "flatness": 0.0011,
+                  "totalEnergy": 0.000001,
+                  "rms": 0.0024,
+                  "peak": 0.0088,
+                  "crestDb": 11.46
+                },
+                "guitar": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -117.8,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -79.5,
+                      "energy": 0.000005,
+                      "ratio": 0.0165
+                    },
+                    {
+                      "label": "250",
+                      "db": -63.6,
+                      "energy": 0.000057,
+                      "ratio": 0.193
+                    },
+                    {
+                      "label": "500",
+                      "db": -68.6,
+                      "energy": 0.000093,
+                      "ratio": 0.3129
+                    },
+                    {
+                      "label": "1k",
+                      "db": -74.8,
+                      "energy": 0.000109,
+                      "ratio": 0.3698
+                    },
+                    {
+                      "label": "2k",
+                      "db": -81.2,
+                      "energy": 0.000036,
+                      "ratio": 0.1212
+                    },
+                    {
+                      "label": "4k",
+                      "db": -99.7,
+                      "energy": 0.00001,
+                      "ratio": 0.0328
+                    },
+                    {
+                      "label": "8k",
+                      "db": -129,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 855.6,
+                  "rolloffHz": 1396.2,
+                  "flatness": 0.0033,
+                  "totalEnergy": 0.000296,
+                  "rms": 0.0406,
+                  "peak": 0.2295,
+                  "crestDb": 15.05
+                },
+                "rhythmSynth": {
+                  "bands": [
+                    {
+                      "label": "60",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "120",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "250",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "500",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "1k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "2k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "4k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    },
+                    {
+                      "label": "8k",
+                      "db": -120,
+                      "energy": 0,
+                      "ratio": 0
+                    }
+                  ],
+                  "centroidHz": 0,
+                  "rolloffHz": 0,
+                  "flatness": 0,
+                  "totalEnergy": 0,
+                  "rms": 0,
+                  "peak": 0,
+                  "crestDb": 0
+                }
+              },
+              "compact": {
+                "ok": true,
+                "proofKind": "offline-audio-metrics",
+                "mixHealth": {
+                  "rms": 0.1112,
+                  "peak": 0.7777,
+                  "clipping": false,
+                  "headroomDb": 2.18,
+                  "lowLevel": false
+                },
+                "objectivePenalty": {
+                  "total": 71.0016,
+                  "mix": {
+                    "slopeDbPerOct": -5.988,
+                    "slopePenalty": 0.548,
+                    "rolloffPenalty": 2.8481,
+                    "presenceRatio": 0.0451,
+                    "presencePenalty": 0.8398,
+                    "presenceFloorPenalty": 1.122,
+                    "mixPenaltyScale": 1
+                  },
+                  "mud": {
+                    "ratio": 0.2159,
+                    "penalty": 0
+                  },
+                  "top": [
+                    {
+                      "instrument": "kick",
+                      "score": 89.342,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "snare",
+                      "score": 57.978,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "hat",
+                      "score": 2.228,
+                      "skipped": false
+                    }
+                  ],
+                  "eqPenalty": 3.3732
+                },
+                "score": {
+                  "total": 71.0016,
+                  "mix": {
+                    "slopeDbPerOct": -5.988,
+                    "slopePenalty": 0.548,
+                    "rolloffPenalty": 2.8481,
+                    "presenceRatio": 0.0451,
+                    "presencePenalty": 0.8398,
+                    "presenceFloorPenalty": 1.122,
+                    "mixPenaltyScale": 1
+                  },
+                  "mud": {
+                    "ratio": 0.2159,
+                    "penalty": 0
+                  },
+                  "top": [
+                    {
+                      "instrument": "kick",
+                      "score": 89.342,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "snare",
+                      "score": 57.978,
+                      "skipped": false
+                    },
+                    {
+                      "instrument": "hat",
+                      "score": 2.228,
+                      "skipped": false
+                    }
+                  ],
+                  "eqPenalty": 3.3732
+                },
+                "activeInstrumentCount": 6,
+                "activeInstruments": [
+                  {
+                    "name": "kick",
+                    "rms": 0.1772,
+                    "peak": 0.8076,
+                    "totalEnergy": 0.011746
+                  },
+                  {
+                    "name": "snare",
+                    "rms": 0.1014,
+                    "peak": 0.5843,
+                    "totalEnergy": 0.00364
+                  },
+                  {
+                    "name": "hat",
+                    "rms": 0.0113,
+                    "peak": 0.124,
+                    "totalEnergy": 0.000033
+                  },
+                  {
+                    "name": "bass",
+                    "rms": 0.0209,
+                    "peak": 0.0838,
+                    "totalEnergy": 0.000087
+                  },
+                  {
+                    "name": "chord",
+                    "rms": 0.0024,
+                    "peak": 0.0088,
+                    "totalEnergy": 0.000001
+                  },
+                  {
+                    "name": "guitar",
+                    "rms": 0.0406,
+                    "peak": 0.2295,
+                    "totalEnergy": 0.000296
+                  }
+                ]
+              }
+            },
+            "return_captured": true,
+            "return_stored_to": "__neonDurableCurrentTarget.metrics",
+            "return_summary_fields": [
+              {
+                "path": "ok"
+              },
+              {
+                "path": "mixHealth.peak"
+              },
+              {
+                "path": "mixHealth.rms"
+              },
+              {
+                "path": "mixHealth.clipping"
+              }
+            ]
+          },
+          {
+            "ok": true,
+            "action": "assert_window_value",
+            "ordinal": 9,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.metrics.ok",
+            "value": true,
+            "expected_value": true,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_number",
+            "ordinal": 10,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.metrics.mixHealth.peak",
+            "value": 0.7777,
+            "max_value": 0.98,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "assert_window_number",
+            "ordinal": 11,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "path": "__neonDurableCurrentTarget.metrics.mixHealth.rms",
+            "value": 0.1112,
+            "min_value": 0.005,
+            "timeout_ms": 10000
+          },
+          {
+            "ok": true,
+            "action": "screenshot",
+            "ordinal": 12,
+            "selector": null,
+            "frame_selector": null,
+            "optional": false,
+            "label": "neon-durable-current-target",
+            "screenshot_label": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop-neon-durable-current-target",
+            "full_page": false
+          }
+        ],
+        "screenshot_label": "lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon--desktop",
+        "screenshot_full_page": null
+      }
+    ],
+    "console": {
+      "events": [],
+      "fatal_count": 0
+    },
+    "page_errors": [],
+    "dialogs": [],
+    "network_mocks": [],
+    "dom_summary": {
+      "expected_viewport_count": 1,
+      "viewport_count": 1,
+      "partial": false,
+      "routes": [
+        {
+          "requested": "https://lilarcade.com/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=chord",
+          "observed": "/games/drum-sequencer",
+          "expected_path": "/games/drum-sequencer",
+          "matched": true,
+          "http_status": 200
+        }
+      ],
+      "titles": [
+        "LilArcade"
+      ],
+      "overflow_px": [
+        0
+      ],
+      "bounds_overflow_px": [
+        0
+      ],
+      "overflow_offender_counts": [
+        0
+      ],
+      "frames": [
+        {
+          "viewport": "desktop",
+          "selectors": []
+        }
+      ],
+      "http_status": [],
+      "link_status": [],
+      "route_inventory": [],
+      "network_mock_count": 0,
+      "network_mock_hit_count": 0,
+      "dialog_count": 0,
+      "dialog_accept_count": 0,
+      "dialog_dismiss_count": 0
+    }
+  }
+}
