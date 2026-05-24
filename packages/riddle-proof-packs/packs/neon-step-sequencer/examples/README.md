@@ -12,11 +12,12 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 | `run-002-mix-change` | `interaction_snapshots` | passed | A bass-level edit changes rendered bass and mix metrics without clipping. |
 | `run-003-full-matrix` | `current_target` | passed | The mix-health proof holds across desktop, phone, iPad Mini, and iPad viewports. |
 | `run-004-ratchet-loop-mix-level-search` | `interaction_snapshots` | passed | A bounded ratchet loop tests mix-level change-claim candidates, records receipt verdicts, chooses a supported candidate for review, and restores app state. |
+| `run-005-explore-songs-and-mixes-final` | `current_target` | passed | A bounded exploration sweep samples four songs and eight song/part entries, producing a zero-finding confidence map after app-contract and mix-headroom fixes. |
 
 ## What these examples do not prove
 
 - They do not prove subjective mix taste.
-- They do not prove every song, section, or mix preset.
+- They do not prove every song, section, or mix preset. Run 005 is bounded to the configured song, part, and proof-window limits.
 - They do not prove production CDN asset availability; these were local dev-server runs.
 - They do not prove a reference/candidate release delta. The mix-change run uses pre-action/post-action snapshots inside one proof run, not a separate baseline deployment.
 - The ratchet-loop run does not prove that the loop primitive is mix-specific; `mix-level-search` is only this pack's first concrete strategy.

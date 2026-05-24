@@ -72,11 +72,24 @@ assert.ok(neonRatchetLoopArgs && typeof neonRatchetLoopArgs === "object");
 assert.equal(Object.hasOwn(neonRatchetLoopArgs, "minImprovement"), false);
 assert.equal(neonRatchetLoopArgs.applyBest, false);
 
+const neonExplorationProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-explore-songs-and-mixes",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonExplorationProfile.metadata?.evidence_role_pattern, "current_target");
+assert.equal(neonExplorationProfile.target.setup_actions?.[2]?.type, "window_call");
+assert.equal(neonExplorationProfile.target.setup_actions?.[2]?.path, "__NEON_MIX_PROOF__.runExplorationSweep");
+const neonExplorationArgs = neonExplorationProfile.target.setup_actions?.[2]?.args?.[0];
+assert.ok(neonExplorationArgs && typeof neonExplorationArgs === "object");
+assert.equal(neonExplorationArgs.maxSongs, 4);
+assert.equal(neonExplorationArgs.maxPartsPerSong, 2);
+
 const neonExampleRuns = [
   ["run-001-fast-mix-health", "lilarcade-neon-fast-mix-health"],
   ["run-002-mix-change", "lilarcade-neon-mix-change-before-after"],
   ["run-003-full-matrix", "lilarcade-neon-full-mix-health-matrix"],
   ["run-004-ratchet-loop-mix-level-search", "lilarcade-neon-ratchet-loop-mix-level-search"],
+  ["run-005-explore-songs-and-mixes-final", "neon-step-sequencer-explore-songs-and-mixes"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
@@ -86,6 +99,17 @@ for (const [runId, profileName] of neonExampleRuns) {
   assert.equal(profileResult.status, "passed");
   assert.ok(profileResult.evidence?.viewports?.length >= 1);
 }
+
+const neonExplorationRun = JSON.parse(
+  readFileSync("packs/neon-step-sequencer/examples/run-005-explore-songs-and-mixes-final/proof.json", "utf8"),
+);
+const explorationSetupCheck = neonExplorationRun.checks.find((check) => check.type === "setup_actions_succeeded");
+const explorationReturn = explorationSetupCheck?.evidence?.setup_summary?.viewports?.[0]?.window_call?.[0]?.returned;
+assert.equal(explorationReturn?.proofKind, "neon-exploration-sweep");
+assert.equal(explorationReturn?.status, "passed");
+assert.equal(explorationReturn?.entryCount, 8);
+assert.equal(explorationReturn?.findingCount, 0);
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-005-explore-songs-and-mixes-final/screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop.png"));
 
 const mobileProfile = instantiateRiddleProofProfile("mobile-layout-smoke", {
   url: "https://example.com",
