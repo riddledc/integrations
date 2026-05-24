@@ -50,8 +50,7 @@
             "maxIterations": 6,
             "monitorProfile": "smallSpeaker",
             "restore": true,
-            "applyBest": false,
-            "minImprovement": 0.1
+            "applyBest": false
           }
         ],
         "store_return_to": "__neonMixProof.ratchetLoop",
