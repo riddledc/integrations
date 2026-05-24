@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.1
+
+### Patch Changes
+
+- 46f45a6: Remove the legacy improvement threshold from the Neon ratchet-loop profile and keep the public pack framed around receipt-supported claim candidates for human review.
+
 ## 0.4.0
 
 ### Minor Changes
