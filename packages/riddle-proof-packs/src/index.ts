@@ -23,3 +23,11 @@ export {
   type HumanReviewPacketArtifacts,
   type HumanReviewPacketMarkdownOptions,
 } from "./humanReviewPacket";
+export {
+  createDurableCandidatePatchPlan,
+  createDurableCandidatePatchPlanArtifacts,
+  formatDurableCandidatePatchPlanMarkdown,
+  type DurableCandidatePatchPlan,
+  type DurableCandidatePatchPlanArtifacts,
+  type DurableCandidatePatchPlanOptions,
+} from "./durableCandidatePlan";

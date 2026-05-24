@@ -10,6 +10,18 @@ The audio ratchet is:
 6. Rerun with a sharper claim.
 7. Extract reusable pack guidance.
 
+For creative edits, add an explicit handoff gate before any durable source/config change:
+
+1. Generate bounded candidates.
+2. Keep ranking as review order only.
+3. Emit a human-review packet.
+4. Apply a candidate only when approval is explicit.
+5. Generate a durable candidate patch plan from the applied packet.
+6. Make the scoped source/config edit.
+7. Rerun a `current_target` proof that verifies the app sees the durable state.
+
+This proves the change claim and the durable application path. It still does not prove subjective mix quality.
+
 ## Smallest layer order
 
 Prefer changes in this order:

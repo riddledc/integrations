@@ -38,6 +38,8 @@ This pack's first concrete strategy is `mix-level-search`, which turns small lev
 
 The approved-candidate profile is the next handoff pattern after review-packet generation. It only applies a candidate when the app contract reports that the candidate's objective receipts passed, and the packet records `approvedCandidateApplied` plus the approval mode. The approval mode can keep development moving, but it is still an operator surrogate; it does not prove listener preference.
 
+The durable patch handoff is a separate step after the approved-candidate proof. A follow-on agent can validate the applied `humanReviewPacket`, generate a scoped durable candidate plan, edit the app/config source, and then run a final `current_target` proof. That handoff proves the approved candidate became visible durable state in the running app. It still does not prove the mix is aesthetically better.
+
 ## Example evidence
 
 The `examples/` directory contains local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
@@ -48,6 +50,8 @@ The `examples/` directory contains local Playwright proof results captured again
 - `run-004-ratchet-loop-mix-level-search`: passing `interaction_snapshots` proof where a bounded loop tested six mix-level change-claim candidates, found a supported `chord -0.10` candidate, recorded receipt-level verdicts, and restored app state without keeping the edit.
 - `run-005-explore-songs-and-mixes-final`: passing `current_target` exploration sweep across four songs and eight song/part entries, with `8` passing entries, `0` prioritized findings, and no clipping after the local app-contract and mix-headroom ratchet.
 - `run-006-ratchet-loop-human-review-packet`: passing `interaction_snapshots` proof where the same bounded loop returned a compact `humanReviewPacket` with the recommended `chord -0.10` candidate, objective guardrails, `review_order_only` ranking, state restoration, and explicit listening caveats.
+- `run-007-approved-candidate-applied`: passing `interaction_snapshots` proof where an explicit `mixing_canon_surrogate` approval mode applied the supported `chord -0.10` candidate for listening review and recorded `approvedCandidateApplied`.
+- `run-008-durable-mix-patch-handoff`: passing durable handoff example where the applied packet became a scoped source/config plan for `chord: 0.28`, followed by a `current_target` proof showing the running app saw the durable level without clipping or low-level windows.
 
 ## Naming note
 

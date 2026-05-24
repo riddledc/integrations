@@ -392,6 +392,63 @@ Next sharper question:
 
 Can the reusable pack expose this approved-candidate shape without making approval automatic, and can follow-on agents use the packet to prepare a code/config patch only when the operator explicitly asks for one?
 
+## Run 008 - Durable mix patch handoff
+
+Claim:
+
+An explicitly applied human-review packet can become a scoped durable source/config patch, and a final current-target proof can verify the running app sees that durable state without claiming subjective mix quality.
+
+Profile:
+
+`profiles/fast-mix-health.json`
+
+Evidence to capture:
+
+- applied human-review packet
+- durable candidate patch plan
+- source/config target
+- current app contract mixer state
+- offline mix-health metrics
+- listening-review caveat
+
+Possible outcomes:
+
+- `ready_for_durable_patch`: the packet is applied, approved, non-transient, ranked for review only, and still preserves the listening-review caveat.
+- `not_ready_for_durable_patch`: the packet is still transient, lacks approval metadata, has a disallowed action, lacks required target scope, or dropped the proof/taste boundary.
+- `current_target_passed`: the durable source edit is visible to the running app and current audio guardrails pass.
+- `product_regression`: the durable edit is not reflected in app state or the current target clips / falls below level guardrails.
+
+Observed status:
+
+Passed on May 24, 2026 with `local-playwright`.
+
+Observed evidence:
+
+- durable plan status `ready_for_durable_patch`
+- source file `src/Games/songs/neon-approved-mix-overrides.json`
+- target `Monkberry Moon Delight (Tab)`
+- mix profile `monkberry-moon-delight-eq-lane-mix-v7`
+- durable mixer level `chord: 0.28`
+- current-target profile status `passed`
+- contract chord level `0.28`
+- peak `0.8303`
+- RMS `0.1234`
+- clipping `false`
+- low-level window `false`
+- active instruments `6`
+
+Failure classification:
+
+None. This was a passing durable handoff plus `current_target` proof. It proves scoped durable application and browser-visible state, not listener preference.
+
+Smallest layer changed:
+
+Reusable proof-pack helper/CLI, app source override, and proof-pack example docs. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can this durable handoff become the default follow-on step after approved packets for more creative strategies than `mix-level-search`?
+
 ## Project note
 
 The ratchet is not a pass. The ratchet is the next sharper question.

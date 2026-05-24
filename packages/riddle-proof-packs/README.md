@@ -32,6 +32,12 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Formats a compact Markdown handoff with recommendation, objective receipts, ranking role, proof boundary, listening prompts, and caveats.
 - `createHumanReviewPacketArtifacts(proofOrPacket, options)`:
   - Returns `{ packet, json, markdown }` for storing a standalone review packet next to a proof run.
+- `createDurableCandidatePatchPlan(proofOrPacket, options)`:
+  - Validates an explicitly applied `human_review_packet` and returns a durable patch handoff plan.
+- `formatDurableCandidatePatchPlanMarkdown(plan, options)`:
+  - Formats the durable handoff without treating approval, ranking, or source application as proof of subjective taste.
+- `createDurableCandidatePatchPlanArtifacts(proofOrPacket, options)`:
+  - Returns `{ plan, json, markdown }` for storing a durable source/config handoff next to a proof run.
 
 ## Proof claims and evidence roles
 
@@ -142,6 +148,51 @@ const artifacts = createHumanReviewPacketArtifacts(proof, {
 console.log(markdown);
 await fs.promises.writeFile("human-review-packet.json", artifacts.json);
 await fs.promises.writeFile("human-review-packet.md", artifacts.markdown);
+```
+
+### Durable candidate patch handoff
+
+A human-review packet is still not a source edit. Durable patch handoff is the next gate after explicit approval:
+
+1. A bounded proof loop produces a supported candidate.
+2. A human or visible surrogate approval mode sets `applyBest`.
+3. The packet reports `candidate_applied_for_listening_review`.
+4. A durable candidate plan validates that the packet is no longer transient.
+5. The app/repo applies a scoped config/source patch.
+6. A final `current_target` proof verifies the running app sees the durable state.
+
+The durable plan refuses packets that still say `candidate_ready_for_listening_review`, packets without approval metadata, packets whose `candidateActionsAreTransient` flag is still `true`, and packets that lost the listening-review caveat.
+
+From the CLI:
+
+```sh
+riddle-proof-durable-candidate-plan \
+  --proof artifacts/riddle-proof/neon-approved-candidate/proof.json \
+  --output artifacts/riddle-proof/neon-approved-candidate \
+  --source-file src/Games/songs/neon-approved-mix-overrides.json \
+  --require-mix-profile
+```
+
+This writes `durable-candidate-patch-plan.json` and `durable-candidate-patch-plan.md`. If the packet is not ready for durable application, the plan is still written with `status: "not_ready_for_durable_patch"` and the CLI exits nonzero.
+
+```ts
+import {
+  createDurableCandidatePatchPlanArtifacts,
+} from "@riddledc/riddle-proof-packs";
+
+const proof = JSON.parse(await fs.promises.readFile("proof.json", "utf8"));
+const artifacts = createDurableCandidatePatchPlanArtifacts(proof, {
+  title: "Neon Durable Candidate Patch Plan",
+  sourceFile: "src/Games/songs/neon-approved-mix-overrides.json",
+  requireMixProfileId: true,
+});
+
+if (!artifacts.plan.ok) {
+  throw new Error(`not ready for durable patch: ${artifacts.plan.errors.join(", ")}`);
+}
+
+await fs.promises.writeFile("durable-candidate-patch-plan.json", artifacts.json);
+await fs.promises.writeFile("durable-candidate-patch-plan.md", artifacts.markdown);
 ```
 
 ## Usage

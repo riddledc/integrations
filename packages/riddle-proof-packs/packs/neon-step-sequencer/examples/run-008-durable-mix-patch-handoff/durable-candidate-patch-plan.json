@@ -1,0 +1,69 @@
+{
+  "version": "riddle-proof.durable-candidate-patch-plan.v1",
+  "kind": "durable_candidate_patch_plan",
+  "status": "ready_for_durable_patch",
+  "ok": true,
+  "errors": [],
+  "source": {
+    "packetStatus": "candidate_applied_for_listening_review",
+    "recommendationAction": "listen_to_applied_candidate",
+    "rankingRole": "review_order_only",
+    "proofBoundary": "Objective receipts support or reject candidate change claims; musical taste still requires listening review."
+  },
+  "target": {
+    "label": "Monkberry Moon Delight (Tab)",
+    "route": "/games/drum-sequencer",
+    "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7"
+  },
+  "candidate": {
+    "label": "chord -0.10",
+    "action": {
+      "type": "set_mixer_level",
+      "track": "chord",
+      "from": 0.38,
+      "to": 0.28,
+      "delta": -0.1
+    }
+  },
+  "approval": {
+    "mode": "mixing_canon_surrogate",
+    "approvedBy": "codex",
+    "basis": "subtle level reduction after objective receipts pass; this keeps development moving while preserving a listening-review caveat"
+  },
+  "durableEdit": {
+    "sourceFile": "src/Games/songs/neon-approved-mix-overrides.json",
+    "target": {
+      "label": "Monkberry Moon Delight (Tab)",
+      "route": "/games/drum-sequencer",
+      "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7"
+    },
+    "action": {
+      "type": "set_mixer_level",
+      "track": "chord",
+      "from": 0.38,
+      "to": 0.28,
+      "delta": -0.1
+    },
+    "mixerLevels": {
+      "chord": 0.28
+    },
+    "provenance": {
+      "humanReviewPacketStatus": "candidate_applied_for_listening_review",
+      "recommendationLabel": "chord -0.10",
+      "approvalMode": "mixing_canon_surrogate",
+      "approvedBy": "codex",
+      "basis": "subtle level reduction after objective receipts pass; this keeps development moving while preserving a listening-review caveat"
+    },
+    "doesNotProve": [
+      "subjective mix quality",
+      "that the approval surrogate is a real listener preference",
+      "all possible candidate edits"
+    ]
+  },
+  "boundary": "This is a durable patch handoff for an approved listening-review candidate. It does not prove subjective mix quality.",
+  "caveats": [
+    "A durable patch plan is not a taste verdict.",
+    "Ranking orders review only; it is not a universal mix-quality score.",
+    "Run a final current-target proof after the durable edit lands."
+  ]
+}
