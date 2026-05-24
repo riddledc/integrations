@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   getPackEnabledRiddleProofPackProfiles,
   getRiddleProofPackProfile,
@@ -170,6 +173,40 @@ const bundledReviewPacketMarkdown = readFileSync(
   "utf8",
 );
 assert.equal(bundledReviewPacketMarkdown, reviewPacketMarkdown);
+
+const reviewPacketCliHelp = spawnSync(process.execPath, ["bin/riddle-proof-review-packet", "--help"], {
+  encoding: "utf8",
+});
+assert.equal(reviewPacketCliHelp.status, 0, reviewPacketCliHelp.stderr);
+assert.match(reviewPacketCliHelp.stdout, /riddle-proof-review-packet --proof/u);
+
+const reviewPacketCliOutputDir = mkdtempSync(path.join(tmpdir(), "riddle-proof-review-packet-"));
+try {
+  const reviewPacketCliRun = spawnSync(process.execPath, [
+    "bin/riddle-proof-review-packet",
+    "--proof",
+    "packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/proof.json",
+    "--output",
+    reviewPacketCliOutputDir,
+    "--title",
+    "Neon Human Review Packet",
+  ], { encoding: "utf8" });
+  assert.equal(reviewPacketCliRun.status, 0, reviewPacketCliRun.stderr);
+  const cliSummary = JSON.parse(reviewPacketCliRun.stdout);
+  assert.equal(cliSummary.ok, true);
+  assert.equal(cliSummary.status, "candidate_ready_for_listening_review");
+  assert.equal(cliSummary.recommendation, "chord -0.10");
+  assert.equal(
+    readFileSync(path.join(reviewPacketCliOutputDir, "human-review-packet.md"), "utf8"),
+    reviewPacketMarkdown,
+  );
+  assert.equal(
+    JSON.parse(readFileSync(path.join(reviewPacketCliOutputDir, "human-review-packet.json"), "utf8")).kind,
+    "human_review_packet",
+  );
+} finally {
+  rmSync(reviewPacketCliOutputDir, { recursive: true, force: true });
+}
 
 const mobileProfile = instantiateRiddleProofProfile("mobile-layout-smoke", {
   url: "https://example.com",

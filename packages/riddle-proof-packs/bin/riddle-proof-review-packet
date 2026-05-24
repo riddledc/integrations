@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+
+const cliPath = new URL("../dist/reviewPacketCli.js", import.meta.url);
+await import(cliPath.href);

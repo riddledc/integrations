@@ -110,6 +110,16 @@ The `neon-step-sequencer` directory contains the first app-specific ratchet lab 
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
 
+From the CLI:
+
+```sh
+riddle-proof-review-packet \
+  --proof artifacts/riddle-proof/proof.json \
+  --output artifacts/riddle-proof
+```
+
+This writes `human-review-packet.json` and `human-review-packet.md` next to the proof run. Use `--stdout` when an agent should read the Markdown handoff immediately.
+
 ```ts
 import {
   createHumanReviewPacketArtifacts,
