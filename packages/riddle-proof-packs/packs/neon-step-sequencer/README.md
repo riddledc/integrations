@@ -33,7 +33,7 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 
 The loop is not mix-specific as a proof concept. The proof concept is a bounded ratchet loop: propose a candidate, apply it, collect evidence, classify the result, restore or keep state, and repeat until the budget is exhausted.
 
-This pack's first concrete strategy is `mix-level-search`, which turns small level edits into change-claim candidates. Each candidate says what action will be attempted, what receipts must support the claim, and what evidence should be reviewed afterward. The loop may include a ranking metric to order review, but the verdict comes from receipts and invariants, not from a universal mix-quality number. It still does not decide subjective mix taste; the output is a listening and review packet.
+This pack's first concrete strategy is `mix-level-search`, which turns small level edits into change-claim candidates. Each candidate says what action will be attempted, what receipts must support the claim, and what evidence should be reviewed afterward. The loop may include a ranking metric to order review, but the verdict comes from receipts and invariants, not from a universal mix-quality number. It still does not decide subjective mix taste; the output is a `humanReviewPacket` for listening handoff.
 
 ## Example evidence
 
@@ -44,6 +44,7 @@ The `examples/` directory contains local Playwright proof results captured again
 - `run-003-full-matrix`: passing `current_target` viewport matrix across desktop, phone, iPad Mini, and iPad with `0 px` horizontal overflow.
 - `run-004-ratchet-loop-mix-level-search`: passing `interaction_snapshots` proof where a bounded loop tested six mix-level change-claim candidates, found a supported `chord -0.10` candidate, recorded receipt-level verdicts, and restored app state without keeping the edit.
 - `run-005-explore-songs-and-mixes-final`: passing `current_target` exploration sweep across four songs and eight song/part entries, with `8` passing entries, `0` prioritized findings, and no clipping after the local app-contract and mix-headroom ratchet.
+- `run-006-ratchet-loop-human-review-packet`: passing `interaction_snapshots` proof where the same bounded loop returned a compact `humanReviewPacket` with the recommended `chord -0.10` candidate, objective guardrails, `review_order_only` ranking, state restoration, and explicit listening caveats.
 
 ## Naming note
 
