@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-packs",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Reusable proof pack profiles and metadata helpers for the Riddle proof framework.",
   "license": "MIT",
   "author": "RiddleDC",
