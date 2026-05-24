@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.2
+
+### Patch Changes
+
+- e29374c: Add the Neon Run 005 bounded song/mix exploration profile update and final passing sweep evidence, documenting how the pack catches objective audio guardrail failures without claiming automated taste.
+
 ## 0.4.1
 
 ### Patch Changes
