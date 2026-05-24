@@ -71,6 +71,13 @@ const neonRatchetLoopArgs = neonRatchetLoopProfile.target.setup_actions?.[2]?.ar
 assert.ok(neonRatchetLoopArgs && typeof neonRatchetLoopArgs === "object");
 assert.equal(Object.hasOwn(neonRatchetLoopArgs, "minImprovement"), false);
 assert.equal(neonRatchetLoopArgs.applyBest, false);
+assert.equal(neonRatchetLoopArgs.intent, "turn the chord part down a little");
+const neonRatchetLoopSummaryPaths = neonRatchetLoopProfile.target.setup_actions?.[2]?.return_summary_fields?.map((entry) => entry.path) ?? [];
+assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.status"));
+assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.ranking.role"));
+assert.equal(neonRatchetLoopProfile.target.setup_actions?.[4]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.kind");
+assert.equal(neonRatchetLoopProfile.target.setup_actions?.[5]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.ranking.role");
+assert.equal(neonRatchetLoopProfile.target.setup_actions?.[6]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.request.candidateActionsAreTransient");
 
 const neonExplorationProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-explore-songs-and-mixes",
@@ -90,6 +97,7 @@ const neonExampleRuns = [
   ["run-003-full-matrix", "lilarcade-neon-full-mix-health-matrix"],
   ["run-004-ratchet-loop-mix-level-search", "lilarcade-neon-ratchet-loop-mix-level-search"],
   ["run-005-explore-songs-and-mixes-final", "neon-step-sequencer-explore-songs-and-mixes"],
+  ["run-006-ratchet-loop-human-review-packet", "lilarcade-neon-ratchet-loop-mix-level-search"],
 ];
 for (const [runId, profileName] of neonExampleRuns) {
   const runDir = `packs/neon-step-sequencer/examples/${runId}`;
@@ -110,6 +118,22 @@ assert.equal(explorationReturn?.status, "passed");
 assert.equal(explorationReturn?.entryCount, 8);
 assert.equal(explorationReturn?.findingCount, 0);
 assert.ok(existsSync("packs/neon-step-sequencer/examples/run-005-explore-songs-and-mixes-final/screenshots/neon-step-sequencer-explore-songs-and-mixes-desktop.png"));
+
+const neonReviewPacketRun = JSON.parse(
+  readFileSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/proof.json", "utf8"),
+);
+const reviewPacketSetupCheck = neonReviewPacketRun.checks.find((check) => check.type === "setup_actions_succeeded");
+const reviewPacketReturn = reviewPacketSetupCheck?.evidence?.setup_summary?.viewports?.[0]?.window_call?.[0]?.returned;
+assert.equal(reviewPacketReturn?.status, "claim_candidate_supported");
+assert.equal(reviewPacketReturn?.humanReviewPacket?.kind, "human_review_packet");
+assert.equal(reviewPacketReturn?.humanReviewPacket?.status, "candidate_ready_for_listening_review");
+assert.equal(reviewPacketReturn?.humanReviewPacket?.recommendation?.candidate?.action?.track, "chord");
+assert.equal(reviewPacketReturn?.humanReviewPacket?.recommendation?.candidate?.action?.delta, -0.1);
+assert.equal(reviewPacketReturn?.humanReviewPacket?.ranking?.role, "review_order_only");
+assert.equal(reviewPacketReturn?.humanReviewPacket?.guardrails?.stateRestoredAfterLoop, true);
+assert.equal(reviewPacketReturn?.humanReviewPacket?.guardrails?.noPermanentEditUnlessApplyBest, true);
+assert.ok(reviewPacketReturn?.humanReviewPacket?.caveats?.some((caveat) => caveat.includes("does not prove subjective mix quality")));
+assert.ok(existsSync("packs/neon-step-sequencer/examples/run-006-ratchet-loop-human-review-packet/screenshots/lilarcade-neon-ratchet-loop-mix-level-search-desktop.png"));
 
 const mobileProfile = instantiateRiddleProofProfile("mobile-layout-smoke", {
   url: "https://example.com",

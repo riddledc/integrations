@@ -22,6 +22,10 @@ Large metrics belong in artifacts. The summary should answer:
 - did the intended metric move?
 - what should a human review next?
 
+## Handoff packets beat raw JSON spelunking
+
+The full proof result should remain auditable, but one-off and background loops need a compact handoff object. A good `humanReviewPacket` lists supported and rejected candidates, objective guardrails, restoration status, review-order ranking, and caveats that separate proof from taste.
+
 ## Core changes are last
 
 Most ratchet steps should change profile JSON, pack docs, app proof contracts, or app fixtures. Riddle Proof core changes are justified only when the missing primitive applies beyond Neon.

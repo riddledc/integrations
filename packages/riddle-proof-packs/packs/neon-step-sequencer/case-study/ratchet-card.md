@@ -35,7 +35,8 @@ The project shows that a complex audio app can improve proof confidence mostly b
 - Run 003: a `current_target` matrix passed across desktop, phone, iPad Mini, and iPad with `0 px` horizontal overflow.
 - Run 004: a bounded loop tested six `mix-level-search` change-claim candidates, returned `chord -0.10` as a supported review candidate with receipt-level evidence, and restored app state.
 - Run 005: a `current_target` exploration sweep sampled four songs and eight song/part entries. The first real sweep exposed app-contract normalization gaps and hot built-in song presets; after the local ratchet fixes it passed with `8` entries, `0` findings, and no clipping.
+- Run 006: the bounded loop returned a compact `humanReviewPacket` with the supported `chord -0.10` candidate, objective guardrails, state restoration, review-order ranking, and listening caveats.
 
 ## Honest boundary
 
-These runs prove objective claims about a running app target. They do not prove that the mix is tasteful, that every song section is healthy, or that a release candidate is better than production. Run 005 is still bounded to configured song/part limits. The ratchet loop is a generic proof-loop shape; `mix-level-search` is only the first Neon strategy plugged into it.
+These runs prove objective claims about a running app target. They do not prove that the mix is tasteful, that every song section is healthy, or that a release candidate is better than production. Run 005 is still bounded to configured song/part limits. Run 006 makes the human handoff explicit: the packet is a compact review object, not an automated taste verdict. The ratchet loop is a generic proof-loop shape; `mix-level-search` is only the first Neon strategy plugged into it.

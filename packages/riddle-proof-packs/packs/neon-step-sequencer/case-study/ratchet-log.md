@@ -282,6 +282,61 @@ Next sharper question:
 
 Can the same exploration shape become a reusable pack/profile workflow where a user can choose a bounded target set, run locally during iteration, and publish only after the evidence is worth sharing?
 
+## Run 006 - Human-review packet handoff
+
+Claim:
+
+Neon can turn the bounded `mix-level-search` loop into a compact handoff object that a human or follow-on agent can review without reading the full proof JSON.
+
+Profile:
+
+`profiles/ratchet-loop-mix-level-search.json`
+
+Evidence to capture:
+
+- loop status and supported candidate count
+- recommended candidate action
+- per-candidate objective guardrail summary
+- state restoration receipt
+- ranking role as review order only
+- listening-review caveats
+
+Possible outcomes:
+
+- `claim_candidate_supported`: at least one candidate has the receipts needed to support its change claim and the packet can recommend it for listening review.
+- `needs_human_review`: evidence is valid but no candidate satisfies every objective receipt.
+- `proof_insufficient`: the app contract does not expose a packet or enough candidate receipts.
+- `profile_calibration`: the packet exists but points to the wrong window, target, or candidate set.
+
+Observed status:
+
+Passed on May 24, 2026 with `local-playwright`.
+
+Observed evidence:
+
+- loop status `claim_candidate_supported`
+- packet kind `human_review_packet`
+- packet status `candidate_ready_for_listening_review`
+- recommended candidate `chord -0.10`
+- recommended action `set_mixer_level chord 0.38 -> 0.28`
+- supported candidates `6`
+- rejected candidates `0`
+- ranking role `review_order_only`
+- state restored after loop `true`
+- permanent edit kept `false`
+
+Failure classification:
+
+None. This was a passing `interaction_snapshots` proof with an explicit listening-review caveat.
+
+Smallest layer changed:
+
+App proof contract and proof-pack profile. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can one-off commands and background runs use this packet as their common output surface while strategy-specific code remains behind the app contract?
+
 ## Project note
 
 The ratchet is not a pass. The ratchet is the next sharper question.

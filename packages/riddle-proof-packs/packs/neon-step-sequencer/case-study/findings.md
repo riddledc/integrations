@@ -112,6 +112,17 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026 with `8` entries, `8` passed, and `0` findings.
 - next sharper question: can this exploration workflow become the normal local pack/profile loop before any changeset or npm release?
 
+### Run 006 made the listening handoff compact
+
+- run: `run-006-ratchet-loop-human-review-packet`
+- claim: a bounded ratchet loop can return a compact human-review packet that summarizes supported candidates, objective guardrails, state restoration, ranking-as-review-order, and listening caveats.
+- observed evidence: loop status was `claim_candidate_supported`; the packet kind was `human_review_packet`; packet status was `candidate_ready_for_listening_review`; the recommended candidate was `chord -0.10`; supported candidate count was `6`; rejected candidate count was `0`; ranking role was `review_order_only`; app state was restored after the loop; permanent edit was not kept.
+- classification: none; passing `interaction_snapshots` proof with subjective listening caveat.
+- smallest layer changed: app proof contract and proof-pack profile assertions.
+- change made: added `humanReviewPacket` to the Neon ratchet-loop result and updated the pack profile to assert the packet shape.
+- rerun: passed on May 24, 2026 with local Playwright.
+- next sharper question: can the packet become the standard output shape for one-off and background candidate operators across more than `mix-level-search`?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`
