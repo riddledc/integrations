@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.4.7
+
+### Patch Changes
+
+- 572d24f: Add durable candidate patch-plan helpers, a CLI, and Neon Run 008 evidence for the approved-packet to scoped-source handoff.
+
 ## 0.4.6
 
 ### Patch Changes
