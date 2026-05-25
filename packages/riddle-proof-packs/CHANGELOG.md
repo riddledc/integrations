@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.7.3
+
+### Patch Changes
+
+- c578ba1: Show explicit clipping, low-level, and headroom guardrail summaries in audio human-review packet candidate tables.
+
 ## 0.7.2
 
 ### Patch Changes
