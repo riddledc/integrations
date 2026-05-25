@@ -15,7 +15,9 @@ import {
   computeAudioSectionReviewMetric,
   inferAudioMixRequestedMagnitude,
   estimateLoudnessStyleLufs,
+  formatAudioExplorationCoverageMarkdown,
   resolveAudioMixRequestMagnitude,
+  summarizeAudioExplorationCoverage,
   summarizeAudioSectionEnergy,
   createMixingCanonSurrogateReview,
   buildNeonApprovedCandidateProfileFromReviewPacket,
@@ -51,8 +53,10 @@ assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
+assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
+assert.equal(typeof summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
 assert.equal(typeof createMixingCanonSurrogateReview, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
@@ -75,7 +79,9 @@ assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function"
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
+assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
+assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
 assert.equal(typeof audioReviewSubpath.createMixingCanonSurrogateReview, "function");
 
@@ -427,6 +433,91 @@ const tinyTrackedInstrumentMarkdown = formatHumanReviewPacketMarkdown({
 assert.match(tinyTrackedInstrumentMarkdown, /energy -0\.000038/u);
 assert.match(tinyTrackedInstrumentMarkdown, /energy 0\.000312 -> 0\.000274 \(-0\.000038\)/u);
 assert.doesNotMatch(tinyTrackedInstrumentMarkdown, /energy 0\.0003 -> 0\.0003 \(0\)/u);
+
+const audioExplorationCoverage = summarizeAudioExplorationCoverage({
+  findingCount: 1,
+  entries: [
+    {
+      songName: "Yakety Yak (Dark)",
+      partLabel: "Verse",
+      status: "passed",
+      windowCount: 1,
+      findingCount: 0,
+      summary: {
+        windows: [{
+          requiredActive: ["bass", "drums"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.9202, rms: 0.1125, headroomDb: 0.72, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+    {
+      songName: "Yakety Yak (Dark)",
+      partLabel: "Drop",
+      status: "guardrail_failed",
+      windowCount: 1,
+      findingCount: 1,
+      summary: {
+        windows: [{
+          requiredActive: ["bass"],
+          missingRequiredActive: ["lead"],
+          mixHealth: { peak: 1.02, rms: 0.14, headroomDb: -0.1, clipping: true, lowLevel: false },
+        }],
+      },
+    },
+    {
+      songName: "Monkberry Moon Delight (Tab)",
+      partLabel: "Chorus",
+      status: "passed",
+      summary: {
+        findingCount: 0,
+        windows: [{
+          requiredActive: ["chord"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.7699, rms: 0.0999, headroomDb: 2.27, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+  ],
+});
+assert.equal(audioExplorationCoverage.version, "riddle-proof.audio-exploration-coverage.v1");
+assert.equal(audioExplorationCoverage.role, "deterministic_audio_app_coverage");
+assert.equal(audioExplorationCoverage.entryCount, 3);
+assert.equal(audioExplorationCoverage.findingCount, 1);
+assert.equal(audioExplorationCoverage.coverageEntries.length, 3);
+assert.equal(audioExplorationCoverage.coverageEntries[0]?.songName, "Yakety Yak (Dark)");
+assert.equal(audioExplorationCoverage.coverageEntries[0]?.mixHealth.clipping, false);
+assert.equal(audioExplorationCoverage.coverageEntries[1]?.mixHealth.clipping, true);
+assert.equal(audioExplorationCoverage.coverageEntries[1]?.mixHealth.minHeadroomDb, -0.1);
+const yaketyCoverage = audioExplorationCoverage.songCoverage.find((entry) => entry.songName === "Yakety Yak (Dark)");
+assert.ok(yaketyCoverage);
+assert.equal(yaketyCoverage.partCount, 2);
+assert.equal(yaketyCoverage.windowCount, 2);
+assert.equal(yaketyCoverage.findingCount, 1);
+assert.equal(yaketyCoverage.peak, 1.02);
+assert.equal(yaketyCoverage.minHeadroomDb, -0.1);
+assert.equal(yaketyCoverage.clipping, true);
+assert.equal(yaketyCoverage.lowLevel, false);
+assert.deepEqual(yaketyCoverage.missingRequiredActive, ["lead"]);
+const audioExplorationCoverageFromArray = audioHeuristicsSubpath.summarizeAudioExplorationCoverage([
+  { songName: "Array Song", partLabel: "Intro", mixHealth: { peak: 0.5, rms: 0.1, minHeadroomDb: 6 } },
+]);
+assert.equal(audioExplorationCoverageFromArray.entryCount, 1);
+assert.equal(audioExplorationCoverageFromArray.songCoverage[0]?.songName, "Array Song");
+const audioExplorationCoverageMarkdown = formatAudioExplorationCoverageMarkdown(audioExplorationCoverage, {
+  title: "Neon Coverage Fixture",
+});
+assert.match(audioExplorationCoverageMarkdown, /# Neon Coverage Fixture/u);
+assert.match(audioExplorationCoverageMarkdown, /## Song Coverage/u);
+assert.ok(audioExplorationCoverageMarkdown.includes("| Yakety Yak (Dark) | 2 | 2 | 1 | 1.02 | -0.1 | true | false | lead |"));
+assert.match(audioExplorationCoverageMarkdown, /## Part Coverage/u);
+assert.match(audioExplorationCoverageMarkdown, /deterministic guardrails/u);
+assert.doesNotMatch(audioExplorationCoverageMarkdown, /automatically better/u);
+const audioExplorationCoverageNoPartsMarkdown = audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown(audioExplorationCoverage, {
+  includePartCoverage: false,
+});
+assert.match(audioExplorationCoverageNoPartsMarkdown, /## Song Coverage/u);
+assert.doesNotMatch(audioExplorationCoverageNoPartsMarkdown, /## Part Coverage/u);
 
 const pageContent = getRiddleProofPackProfile("page-content-basic");
 assert.ok(pageContent, "page-content-basic profile should be present");
