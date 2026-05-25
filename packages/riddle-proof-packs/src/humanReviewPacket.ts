@@ -74,6 +74,58 @@ const formatTargetMovement = (candidate: Record<string, unknown>): string => {
   return `${track}: rms ${rms}, peak ${peak}, energy ${energy}`;
 };
 
+const formatSectionEnergySummary = (candidate: Record<string, unknown>): string => {
+  const comparison = asRecord(candidate.sectionEnergyComparison);
+  if (!comparison) return "";
+  const floors = comparison.requiredSectionEnergyFloorsPreserved;
+  const guardrails = comparison.guardrailsPreserved;
+  const loudness = formatValue(comparison.averageAbsLoudnessDelta);
+  const energy = formatValue(comparison.averageAbsEnergyDelta);
+  return [
+    `${formatValue(comparison.sectionCount)} section(s)`,
+    `floors ${formatValue(floors)}`,
+    `guardrails ${formatValue(guardrails)}`,
+    `avg |loudness-style Δ| ${loudness}`,
+    `avg |energy Δ| ${energy}`,
+  ].join("; ");
+};
+
+const addSectionEnergyTable = (lines: string[], candidate: Record<string, unknown>) => {
+  const comparison = asRecord(candidate.sectionEnergyComparison);
+  const sections = asArray(comparison?.sections)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  if (!comparison || !sections.length) return;
+
+  lines.push(
+    "",
+    "## Recommended Candidate Section Energy",
+    "",
+    `- role: ${formatCodeValue(comparison.role)}`,
+    `- required_section_energy_floors_preserved: ${formatCodeValue(comparison.requiredSectionEnergyFloorsPreserved)}`,
+    `- guardrails_preserved: ${formatCodeValue(comparison.guardrailsPreserved)}`,
+    `- boundary: ${formatValue(comparison.boundary)}`,
+    "",
+    "| Section | Baseline Energy | Candidate Energy | Delta | Floors | Guardrails |",
+    "| --- | --- | --- | --- | --- | --- |",
+  );
+
+  for (const section of sections) {
+    const baseline = asRecord(section.baseline) ?? {};
+    const after = asRecord(section.candidate) ?? {};
+    const delta = asRecord(section.delta) ?? {};
+    const guardrails = asRecord(section.guardrails) ?? {};
+    lines.push([
+      escapeTableCell(section.label ?? section.name),
+      escapeTableCell(`rms ${formatValue(baseline.rms)}, energy ${formatValue(baseline.totalEnergy)}, loudness-style ${formatValue(baseline.loudnessStyleLufs)}`),
+      escapeTableCell(`rms ${formatValue(after.rms)}, energy ${formatValue(after.totalEnergy)}, loudness-style ${formatValue(after.loudnessStyleLufs)}`),
+      escapeTableCell(`rms ${formatValue(delta.rms)}, energy ${formatValue(delta.totalEnergy)}, loudness-style ${formatValue(delta.loudnessStyleLufs)}`),
+      escapeTableCell(section.requiredEnergyFloorsPreserved),
+      escapeTableCell(asArray(guardrails.violated).length ? asArray(guardrails.violated).map(formatValue).join(", ") : "preserved"),
+    ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+  }
+};
+
 const addCandidateTable = (lines: string[], heading: string, candidates: unknown[]) => {
   const rows = candidates
     .map(asRecord)
@@ -89,12 +141,13 @@ const addCandidateTable = (lines: string[], heading: string, candidates: unknown
   for (const candidate of rows) {
     const failedReceipts = asArray(candidate?.failedReceipts).map(formatValue).join(", ");
     const receiptStatus = failedReceipts || summarizeReceiptStatus(candidate);
+    const sectionSummary = formatSectionEnergySummary(candidate);
     lines.push([
       escapeTableCell(candidate?.label),
       escapeTableCell(formatAction(candidate?.action)),
       escapeTableCell(formatTargetMovement(candidate)),
       escapeTableCell(receiptStatus),
-      escapeTableCell(candidate?.rankingMetric),
+      escapeTableCell(sectionSummary ? `${formatValue(candidate?.rankingMetric)}; ${sectionSummary}` : candidate?.rankingMetric),
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
   }
 };
@@ -191,6 +244,7 @@ export function formatHumanReviewPacketMarkdown(
 
   addCandidateTable(lines, "Supported Candidates", supportedCandidates);
   addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
+  if (candidate) addSectionEnergyTable(lines, candidate);
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 

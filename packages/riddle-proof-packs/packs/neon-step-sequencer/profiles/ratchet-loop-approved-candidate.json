@@ -50,6 +50,14 @@
             ],
             "maxIterations": 6,
             "monitorProfile": "smallSpeaker",
+            "sectionHeuristics": {
+              "enabled": true,
+              "loudnessStyle": "rms_dbfs_estimate",
+              "requiredRmsFloor": 0.0005,
+              "requiredPeakFloor": 0.001,
+              "requiredTotalEnergyFloor": 0.000001,
+              "minHeadroomDb": 0.5
+            },
             "restore": true,
             "applyBest": true,
             "approval": {
@@ -86,6 +94,15 @@
           },
           {
             "path": "humanReviewPacket.ranking.role"
+          },
+          {
+            "path": "humanReviewPacket.ranking.metric"
+          },
+          {
+            "path": "humanReviewPacket.recommendation.candidate.sectionEnergyComparison.requiredSectionEnergyFloorsPreserved"
+          },
+          {
+            "path": "humanReviewPacket.recommendation.candidate.sectionEnergyComparison.guardrailsPreserved"
           }
         ]
       },
@@ -163,6 +180,7 @@
     "required_receipts": [
       "ratchet loop returns ok",
       "a supported claim candidate is selected",
+      "section-by-section energy and loudness-style comparisons are captured",
       "approved candidate application receipt is captured",
       "compact human-review packet is captured",
       "ranking remains review-order only",

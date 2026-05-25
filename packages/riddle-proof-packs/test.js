@@ -10,6 +10,10 @@ import {
   getRiddleProofProfilesByPackId,
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
+  compareAudioSectionEnergy,
+  computeAudioSectionReviewMetric,
+  estimateLoudnessStyleLufs,
+  summarizeAudioSectionEnergy,
   buildNeonApprovedCandidateProfileFromReviewPacket,
   createNeonApprovedCandidateProfileArtifacts,
   getNeonApprovedCandidateFromReviewPacket,
@@ -36,6 +40,10 @@ assert.equal(typeof getRiddleProofProfilesByPackId, "function");
 assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
+assert.equal(typeof compareAudioSectionEnergy, "function");
+assert.equal(typeof computeAudioSectionReviewMetric, "function");
+assert.equal(typeof estimateLoudnessStyleLufs, "function");
+assert.equal(typeof summarizeAudioSectionEnergy, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
 assert.equal(typeof createNeonApprovedCandidateProfileArtifacts, "function");
 assert.equal(typeof getNeonApprovedCandidateFromReviewPacket, "function");
@@ -52,6 +60,112 @@ assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
+
+assert.equal(estimateLoudnessStyleLufs(0.1), -20.69);
+const sectionComparison = compareAudioSectionEnergy(
+  {
+    windows: [
+      {
+        name: "verse",
+        label: "Verse",
+        requiredActive: ["bass", "chord"],
+        mixHealth: { rms: 0.1, peak: 0.5, headroomDb: 6, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "bass", rms: 0.03, peak: 0.1, totalEnergy: 0.002 },
+          { name: "chord", rms: 0.02, peak: 0.08, totalEnergy: 0.001 },
+        ],
+        requiredInstruments: [
+          { name: "bass", rms: 0.03, peak: 0.1, totalEnergy: 0.002 },
+          { name: "chord", rms: 0.02, peak: 0.08, totalEnergy: 0.001 },
+        ],
+      },
+      {
+        name: "chorus",
+        label: "Chorus",
+        requiredActive: ["bass"],
+        mixHealth: { rms: 0.12, peak: 0.6, headroomDb: 4, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "bass", rms: 0.04, peak: 0.11, totalEnergy: 0.003 },
+        ],
+        requiredInstruments: [
+          { name: "bass", rms: 0.04, peak: 0.11, totalEnergy: 0.003 },
+        ],
+      },
+    ],
+  },
+  {
+    windows: [
+      {
+        name: "verse",
+        label: "Verse",
+        requiredActive: ["bass", "chord"],
+        mixHealth: { rms: 0.09, peak: 0.48, headroomDb: 6.2, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "bass", rms: 0.031, peak: 0.1, totalEnergy: 0.0021 },
+          { name: "chord", rms: 0.014, peak: 0.06, totalEnergy: 0.0006 },
+        ],
+        requiredInstruments: [
+          { name: "bass", rms: 0.031, peak: 0.1, totalEnergy: 0.0021 },
+          { name: "chord", rms: 0.014, peak: 0.06, totalEnergy: 0.0006 },
+        ],
+      },
+      {
+        name: "chorus",
+        label: "Chorus",
+        requiredActive: ["bass"],
+        mixHealth: { rms: 0.13, peak: 0.61, headroomDb: 3.8, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "bass", rms: 0.039, peak: 0.11, totalEnergy: 0.0031 },
+        ],
+        requiredInstruments: [
+          { name: "bass", rms: 0.039, peak: 0.11, totalEnergy: 0.0031 },
+        ],
+      },
+    ],
+  },
+);
+assert.equal(sectionComparison.sectionCount, 2);
+assert.equal(sectionComparison.requiredSectionEnergyFloorsPreserved, true);
+assert.equal(sectionComparison.guardrailsPreserved, true);
+assert.equal(sectionComparison.sections[0]?.delta?.rms, -0.01);
+assert.equal(sectionComparison.sections[0]?.delta?.loudnessStyleLufs, -0.92);
+assert.equal(typeof computeAudioSectionReviewMetric(sectionComparison), "number");
+const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
+  kind: "human_review_packet",
+  domain: "audio_mix",
+  status: "candidate_ready_for_listening_review",
+  evidenceRolePattern: "interaction_snapshots",
+  requestedIntent: "turn the chord part down a little",
+  target: { routeState: { selectedSong: "Monkberry Moon Delight (Tab)" } },
+  request: { candidateActionsAreTransient: true },
+  recommendation: {
+    action: "review_before_applying_candidate",
+    reason: "Metric-supported and guardrail-preserving; ranking only orders review.",
+    candidate: {
+      label: "chord -0.10",
+      action: { type: "set_mixer_level", track: "chord", from: 0.4, to: 0.3, delta: -0.1 },
+      rankingMetric: 1.23,
+      receipts: [{ name: "section_energy_floors_preserved", ok: true }],
+      sectionEnergyComparison: sectionComparison,
+    },
+  },
+  supportedCandidates: [{
+    label: "chord -0.10",
+    action: { type: "set_mixer_level", track: "chord", from: 0.4, to: 0.3, delta: -0.1 },
+    rankingMetric: 1.23,
+    receipts: [{ name: "section_energy_floors_preserved", ok: true }],
+    sectionEnergyComparison: sectionComparison,
+  }],
+  rejectedCandidates: [],
+  ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
+  guardrails: { supportedClaimCandidateCount: 1, rejectedCandidateCount: 0 },
+  proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
+});
+assert.match(sectionHeuristicPacketMarkdown, /## Recommended Candidate Section Energy/u);
+assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta/u);
+assert.match(sectionHeuristicPacketMarkdown, /loudness-style/u);
+assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
+assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 
 const pageContent = getRiddleProofPackProfile("page-content-basic");
 assert.ok(pageContent, "page-content-basic profile should be present");
@@ -115,9 +229,13 @@ assert.ok(neonRatchetLoopArgs && typeof neonRatchetLoopArgs === "object");
 assert.equal(Object.hasOwn(neonRatchetLoopArgs, "minImprovement"), false);
 assert.equal(neonRatchetLoopArgs.applyBest, false);
 assert.equal(neonRatchetLoopArgs.intent, "turn the chord part down a little");
+assert.equal(neonRatchetLoopArgs.sectionHeuristics?.enabled, true);
+assert.equal(neonRatchetLoopArgs.sectionHeuristics?.loudnessStyle, "rms_dbfs_estimate");
 const neonRatchetLoopSummaryPaths = neonRatchetLoopProfile.target.setup_actions?.[2]?.return_summary_fields?.map((entry) => entry.path) ?? [];
 assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.status"));
 assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.ranking.role"));
+assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.ranking.metric"));
+assert.ok(neonRatchetLoopSummaryPaths.includes("humanReviewPacket.recommendation.candidate.sectionEnergyComparison.requiredSectionEnergyFloorsPreserved"));
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[4]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.kind");
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[5]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.ranking.role");
 assert.equal(neonRatchetLoopProfile.target.setup_actions?.[6]?.path, "__neonMixProof.ratchetLoop.humanReviewPacket.request.candidateActionsAreTransient");
@@ -131,6 +249,7 @@ assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[2]?.type, "wind
 const neonApprovedCandidateArgs = neonApprovedCandidateProfile.target.setup_actions?.[2]?.args?.[0];
 assert.ok(neonApprovedCandidateArgs && typeof neonApprovedCandidateArgs === "object");
 assert.equal(neonApprovedCandidateArgs.applyBest, true);
+assert.equal(neonApprovedCandidateArgs.sectionHeuristics?.enabled, true);
 assert.equal(neonApprovedCandidateArgs.approval?.mode, "mixing_canon_surrogate");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[4]?.path, "__neonMixProof.approvedCandidateLoop.appliedCandidateReceipt.ok");
 assert.equal(neonApprovedCandidateProfile.target.setup_actions?.[5]?.path, "__neonMixProof.approvedCandidateLoop.humanReviewPacket.status");

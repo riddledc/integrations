@@ -50,6 +50,14 @@
             ],
             "maxIterations": 6,
             "monitorProfile": "smallSpeaker",
+            "sectionHeuristics": {
+              "enabled": true,
+              "loudnessStyle": "rms_dbfs_estimate",
+              "requiredRmsFloor": 0.0005,
+              "requiredPeakFloor": 0.001,
+              "requiredTotalEnergyFloor": 0.000001,
+              "minHeadroomDb": 0.5
+            },
             "restore": true,
             "applyBest": false
           }
@@ -84,6 +92,15 @@
           },
           {
             "path": "humanReviewPacket.ranking.role"
+          },
+          {
+            "path": "humanReviewPacket.ranking.metric"
+          },
+          {
+            "path": "humanReviewPacket.recommendation.candidate.sectionEnergyComparison.requiredSectionEnergyFloorsPreserved"
+          },
+          {
+            "path": "humanReviewPacket.recommendation.candidate.sectionEnergyComparison.guardrailsPreserved"
           }
         ]
       },
@@ -157,6 +174,7 @@
       "baseline proof-window summary is captured",
       "claim candidates are captured",
       "each candidate records claim receipts",
+      "each candidate records section-by-section energy and loudness-style comparisons",
       "best supported claim candidate or human-review status is captured",
       "compact human-review packet is captured",
       "state restoration receipt is captured"

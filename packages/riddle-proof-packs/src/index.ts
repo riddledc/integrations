@@ -15,6 +15,15 @@ export {
 } from "./listPacks";
 export { instantiateRiddleProofProfile } from "./instantiateProfile";
 export {
+  compareAudioSectionEnergy,
+  computeAudioSectionReviewMetric,
+  estimateLoudnessStyleLufs,
+  summarizeAudioSectionEnergy,
+  type AudioSectionEnergyComparison,
+  type AudioSectionEnergySummary,
+  type AudioSectionHeuristicOptions,
+} from "./audioMixHeuristics";
+export {
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
