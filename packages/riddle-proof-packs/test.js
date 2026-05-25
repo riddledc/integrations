@@ -14,6 +14,7 @@ import {
   computeAudioSectionReviewMetric,
   estimateLoudnessStyleLufs,
   summarizeAudioSectionEnergy,
+  createMixingCanonSurrogateReview,
   buildNeonApprovedCandidateProfileFromReviewPacket,
   createNeonApprovedCandidateProfileArtifacts,
   getNeonApprovedCandidateFromReviewPacket,
@@ -35,6 +36,7 @@ import {
 } from "./dist/index.js";
 
 const audioHeuristicsSubpath = await import("@riddledc/riddle-proof-packs/audio-mix-heuristics");
+const audioReviewSubpath = await import("@riddledc/riddle-proof-packs/audio-mix-review");
 
 assert.equal(typeof getRiddleProofPackProfile, "function");
 assert.equal(typeof listRiddleProofPackProfiles, "function");
@@ -46,6 +48,7 @@ assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
+assert.equal(typeof createMixingCanonSurrogateReview, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
 assert.equal(typeof createNeonApprovedCandidateProfileArtifacts, "function");
 assert.equal(typeof getNeonApprovedCandidateFromReviewPacket, "function");
@@ -66,6 +69,7 @@ assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function"
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
+assert.equal(typeof audioReviewSubpath.createMixingCanonSurrogateReview, "function");
 
 assert.equal(estimateLoudnessStyleLufs(0.1), -20.69);
 const sectionComparison = compareAudioSectionEnergy(
@@ -224,6 +228,101 @@ assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_pre
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
 assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
+
+const mixingCanonPacket = {
+  kind: "human_review_packet",
+  domain: "audio_mix",
+  status: "candidate_ready_for_listening_review",
+  evidenceRolePattern: "interaction_snapshots",
+  requestedIntent: "turn the chord part down a little",
+  target: { routeState: { selectedSong: "Monkberry Moon Delight (Tab)" } },
+  request: {
+    candidateActionsAreTransient: true,
+    claimTarget: {
+      targetTracks: ["chord"],
+      direction: "down",
+      source: "explicit_args",
+    },
+  },
+  recommendation: {
+    action: "review_before_applying_candidate",
+    reason: "Metric-supported and guardrail-preserving; ranking only orders review.",
+    candidate: {
+      label: "chord -0.10",
+      action: { type: "set_mixer_level", track: "chord", from: 0.4, to: 0.3, delta: -0.1 },
+      rankingMetric: 1.23,
+      receipts: [
+        { name: "mixer_edit_accepted", ok: true },
+        { name: "candidate_direction_matches_requested_intent", ok: true },
+        { name: "section_energy_floors_preserved", ok: true },
+        { name: "no_clipping", ok: true },
+      ],
+      failedReceipts: [],
+      guardrails: {
+        mixerEditAccepted: true,
+        candidateTrackMatchesRequestedIntent: true,
+        candidateDirectionMatchesRequestedIntent: true,
+        contractLevelReflected: true,
+        renderedTargetMoved: true,
+        requiredInstrumentsPreserved: true,
+        requiredSectionEnergyFloorsPreserved: true,
+        noClipping: true,
+        headroomPreserved: true,
+        noLowLevelProofWindow: true,
+      },
+      targetMovement: {
+        track: "chord",
+        moved: true,
+        deltas: { rms: -0.006, peak: -0.02, totalEnergy: -0.0004 },
+      },
+      sectionEnergyComparison: sectionComparison,
+    },
+  },
+  supportedCandidates: [],
+  rejectedCandidates: [],
+  ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
+  guardrails: {
+    supportedClaimCandidateCount: 1,
+    rejectedCandidateCount: 0,
+    stateRestoredAfterLoop: true,
+    noPermanentEditUnlessApplyBest: true,
+    approvedCandidateApplied: null,
+  },
+  proofBoundary: "Objective receipts support or reject candidate change claims; musical taste still requires listening review.",
+  caveats: [
+    "This packet does not prove subjective mix quality.",
+    "Ranking orders review; it is not a taste score.",
+  ],
+};
+const mixingCanonReview = createMixingCanonSurrogateReview(mixingCanonPacket, {
+  approvedBy: "codex",
+});
+assert.equal(mixingCanonReview.kind, "mixing_canon_surrogate_review");
+assert.equal(mixingCanonReview.status, "approved_for_development_application");
+assert.equal(mixingCanonReview.ok, true);
+assert.equal(mixingCanonReview.approval?.mode, "mixing_canon_surrogate");
+assert.match(mixingCanonReview.approval?.basis ?? "", /objective receipts/u);
+assert.match(mixingCanonReview.boundary, /does not prove subjective mix quality/u);
+assert.deepEqual(mixingCanonReview.failedChecks, []);
+assert.ok(mixingCanonReview.checks.every((check) => check.ok));
+assert.equal(
+  audioReviewSubpath.createMixingCanonSurrogateReview(mixingCanonPacket).status,
+  "approved_for_development_application",
+);
+
+const unsafeMixingCanonPacket = JSON.parse(JSON.stringify(mixingCanonPacket));
+unsafeMixingCanonPacket.recommendation.candidate.action.to = 0.05;
+unsafeMixingCanonPacket.recommendation.candidate.action.delta = -0.35;
+unsafeMixingCanonPacket.recommendation.candidate.sectionEnergyComparison = sectionComparisonWithViolation;
+unsafeMixingCanonPacket.recommendation.candidate.receipts.push({ name: "no_clipping", ok: false });
+const unsafeMixingCanonReview = createMixingCanonSurrogateReview(unsafeMixingCanonPacket);
+assert.equal(unsafeMixingCanonReview.status, "needs_human_review");
+assert.equal(unsafeMixingCanonReview.approval, null);
+assert.ok(unsafeMixingCanonReview.failedChecks.includes("candidate_delta_is_conservative"));
+assert.ok(unsafeMixingCanonReview.failedChecks.includes("objective_candidate_receipts_pass"));
+assert.ok(unsafeMixingCanonReview.failedChecks.includes("section_energy_guardrails_preserved"));
+assert.match(unsafeMixingCanonReview.caveats.join("\n"), /not a real listener preference/u);
+assert.doesNotMatch(JSON.stringify(unsafeMixingCanonReview), /automatically better/u);
 
 const tinyTrackedInstrumentComparison = compareAudioSectionEnergy(
   {

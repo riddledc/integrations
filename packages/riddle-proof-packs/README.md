@@ -32,6 +32,8 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Formats a compact Markdown handoff with recommendation, objective receipts, ranking role, proof boundary, listening prompts, and caveats.
 - `createHumanReviewPacketArtifacts(proofOrPacket, options)`:
   - Returns `{ packet, json, markdown }` for storing a standalone review packet next to a proof run.
+- `createMixingCanonSurrogateReview(proofOrPacket, options)`:
+  - Reviews a compact audio-mix human-review packet against conservative development-approval rules and returns an explicit `mixing_canon_surrogate` approval only when the candidate is subtle, metric-supported, guardrail-preserving, reversible, and still framed as requiring listening review.
 - `buildNeonApprovedCandidateProfileFromReviewPacket(proofOrPacket, options)`:
   - Builds a Neon approved-candidate profile from a prior human-review packet recommendation, narrowing the approval proof to the already-selected `set_mixer_level` candidate instead of rerunning the full candidate search.
 - `createNeonApprovedCandidateProfileArtifacts(proofOrPacket, options)`:
@@ -64,6 +66,21 @@ import {
 
 That subpath exposes the loudness-style and section-energy helpers without the
 Node-oriented profile, artifact, or CLI helpers.
+
+Browser or agent code that needs the conservative development approval helper
+can import the review subpath:
+
+```ts
+import {
+  createMixingCanonSurrogateReview,
+} from "@riddledc/riddle-proof-packs/audio-mix-review";
+```
+
+The review helper can approve a candidate for development application, but it
+does not approve subjective taste. It returns `needs_human_review` unless the
+packet is already a supported listening-review candidate with objective receipts,
+section-energy guardrails, state restoration, review-order-only ranking, and an
+explicit proof/taste boundary.
 
 ## Proof claims and evidence roles
 
@@ -210,6 +227,32 @@ await fs.promises.writeFile("approved-candidate-profile.json", `${JSON.stringify
 ```
 
 This still proves the applied candidate and preserves the listening-review caveat. It only narrows the candidate generator to the packet recommendation so local ratchet batches do not pay for a duplicate broad search.
+
+When an agent is allowed to stand in for a human during development, make that
+surrogate approval explicit and evidence-backed:
+
+```ts
+import {
+  buildNeonApprovedCandidateProfileFromReviewPacket,
+  createMixingCanonSurrogateReview,
+} from "@riddledc/riddle-proof-packs";
+
+const surrogate = createMixingCanonSurrogateReview(packet, {
+  approvedBy: "codex",
+});
+if (!surrogate.ok) {
+  throw new Error(`needs human review: ${surrogate.failedChecks.join(", ")}`);
+}
+
+const approvedProfile = buildNeonApprovedCandidateProfileFromReviewPacket(packet, {
+  approval: surrogate.approval,
+});
+```
+
+This approval mode is intentionally narrow: subtle level edits only, objective
+receipts first, no clipping/headroom/low-level violations, state restored, and
+ranking used only for review order. It keeps local development moving without
+turning metrics into a claim that the mix is better.
 
 ### Durable candidate patch handoff
 

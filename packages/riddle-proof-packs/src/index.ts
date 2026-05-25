@@ -24,6 +24,12 @@ export {
   type AudioSectionHeuristicOptions,
 } from "./audioMixHeuristics";
 export {
+  createMixingCanonSurrogateReview,
+  type MixingCanonSurrogateReview,
+  type MixingCanonSurrogateReviewCheck,
+  type MixingCanonSurrogateReviewOptions,
+} from "./audioMixReview";
+export {
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
