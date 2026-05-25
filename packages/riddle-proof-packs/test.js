@@ -219,6 +219,60 @@ assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_pre
 assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 
+const tinyTrackedInstrumentComparison = compareAudioSectionEnergy(
+  {
+    windows: [{
+      name: "intro",
+      label: "Intro",
+      requiredActive: ["guitar"],
+      mixHealth: { rms: 0.11149, peak: 0.5, headroomDb: 6, clipping: false, lowLevel: false },
+      activeInstruments: [
+        { name: "guitar", rms: 0.040712, peak: 0.1, totalEnergy: 0.000312 },
+      ],
+      requiredInstruments: [
+        { name: "guitar", rms: 0.040712, peak: 0.1, totalEnergy: 0.000312 },
+      ],
+    }],
+  },
+  {
+    windows: [{
+      name: "intro",
+      label: "Intro",
+      requiredActive: ["guitar"],
+      mixHealth: { rms: 0.10601, peak: 0.48, headroomDb: 6.2, clipping: false, lowLevel: false },
+      activeInstruments: [
+        { name: "guitar", rms: 0.037625, peak: 0.09, totalEnergy: 0.000274 },
+      ],
+      requiredInstruments: [
+        { name: "guitar", rms: 0.037625, peak: 0.09, totalEnergy: 0.000274 },
+      ],
+    }],
+  },
+  { trackedInstruments: ["guitar"] },
+);
+const tinyTrackedInstrumentMarkdown = formatHumanReviewPacketMarkdown({
+  kind: "human_review_packet",
+  status: "candidate_ready_for_listening_review",
+  recommendation: {
+    action: "review_before_applying_candidate",
+    candidate: {
+      label: "guitar -0.05",
+      action: { type: "set_mixer_level", track: "guitar", from: 0.65, to: 0.6, delta: -0.05 },
+      sectionEnergyComparison: tinyTrackedInstrumentComparison,
+    },
+  },
+  supportedCandidates: [{
+    label: "guitar -0.05",
+    action: { type: "set_mixer_level", track: "guitar", from: 0.65, to: 0.6, delta: -0.05 },
+    targetMovement: { track: "guitar", deltas: { rms: -0.003087, peak: -0.01, totalEnergy: -0.000038 } },
+    sectionEnergyComparison: tinyTrackedInstrumentComparison,
+  }],
+  proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
+});
+assert.match(tinyTrackedInstrumentMarkdown, /energy -0\.000038/u);
+assert.match(tinyTrackedInstrumentMarkdown, /energy 0\.000312 -> 0\.000274 \(-0\.000038\)/u);
+assert.doesNotMatch(tinyTrackedInstrumentMarkdown, /energy 0\.0003 -> 0\.0003 \(0\)/u);
+
 const pageContent = getRiddleProofPackProfile("page-content-basic");
 assert.ok(pageContent, "page-content-basic profile should be present");
 assert.equal(pageContent?.name, "page-content-basic");
