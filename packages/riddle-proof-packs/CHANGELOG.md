@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.6.0
+
+### Minor Changes
+
+- 5d6e125: Add audio section-energy and loudness-style heuristics for Neon ratchet review packets.
+
 ## 0.5.2
 
 ### Patch Changes
