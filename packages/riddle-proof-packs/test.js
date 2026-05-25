@@ -17,6 +17,7 @@ import {
   inferAudioMixRequestedMagnitude,
   estimateLoudnessStyleLufs,
   formatAudioExplorationCoverageMarkdown,
+  formatAudioExplorationReviewWarningsMarkdown,
   resolveAudioMixRequestMagnitude,
   summarizeAudioExplorationCoverage,
   summarizeAudioSectionEnergy,
@@ -56,6 +57,7 @@ assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
 assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
+assert.equal(typeof formatAudioExplorationReviewWarningsMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof summarizeAudioExplorationCoverage, "function");
@@ -83,6 +85,7 @@ assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown, "function");
+assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
@@ -556,6 +559,19 @@ assert.equal(audioExplorationReviewWarnings[0]?.peak, 0.9681);
 assert.equal(audioExplorationReviewWarnings[0]?.clipping, false);
 assert.match(audioExplorationReviewWarnings[0]?.message ?? "", /0\.28 dB headroom/u);
 assert.match(audioExplorationReviewWarnings[0]?.boundary ?? "", /do not prove subjective mix quality/u);
+const audioExplorationReviewWarningsMarkdown = formatAudioExplorationReviewWarningsMarkdown(audioExplorationReviewWarnings, {
+  title: "Neon Review Warnings",
+});
+assert.match(audioExplorationReviewWarningsMarkdown, /^# Neon Review Warnings/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /Role: `non_failing_review_cues`/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /\| low_headroom_margin \| review \| Yakety Yak \(Dark\) \| Hook \| 0\.28 \| 0\.5 \| 0\.9681 \| false \| false \|/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /do not prove subjective mix quality/u);
+assert.doesNotMatch(audioExplorationReviewWarningsMarkdown, /automatically better/u);
+const audioExplorationNoReviewWarningsMarkdown = audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown(audioExplorationCoverage, {
+  minHeadroomDb: -1,
+});
+assert.match(audioExplorationNoReviewWarningsMarkdown, /Warning count: `0`/u);
+assert.match(audioExplorationNoReviewWarningsMarkdown, /\| none \| review \| none \| none \| not captured \| not captured \| not captured \| false \| false \|/u);
 assert.deepEqual(audioHeuristicsSubpath.collectAudioExplorationReviewWarnings(audioExplorationCoverage, {
   minHeadroomDb: -1,
 }), []);

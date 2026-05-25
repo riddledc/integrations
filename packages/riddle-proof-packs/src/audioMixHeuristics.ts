@@ -89,6 +89,11 @@ export interface AudioExplorationReviewWarningOptions {
   minHeadroomDb?: number;
 }
 
+export interface AudioExplorationReviewWarningMarkdownOptions extends AudioExplorationReviewWarningOptions {
+  title?: string;
+  includeBoundary?: boolean;
+}
+
 export interface AudioExplorationReviewWarning {
   version: "riddle-proof.audio-exploration-review-warning.v1";
   kind: "low_headroom_margin";
@@ -600,6 +605,66 @@ export function collectAudioExplorationReviewWarnings(
   }
 
   return warnings;
+}
+
+const isAudioExplorationReviewWarning = (input: unknown): input is AudioExplorationReviewWarning => {
+  const record = asRecord(input);
+  return record.version === "riddle-proof.audio-exploration-review-warning.v1"
+    && record.kind === "low_headroom_margin"
+    && record.severity === "review";
+};
+
+const reviewWarningsFromInput = (
+  warningsOrInput: unknown,
+  options: AudioExplorationReviewWarningOptions,
+): AudioExplorationReviewWarning[] => (
+  Array.isArray(warningsOrInput) && warningsOrInput.every(isAudioExplorationReviewWarning)
+    ? warningsOrInput
+    : collectAudioExplorationReviewWarnings(warningsOrInput, options)
+);
+
+export function formatAudioExplorationReviewWarningsMarkdown(
+  warningsOrInput: unknown,
+  options: AudioExplorationReviewWarningMarkdownOptions = {},
+): string {
+  const warnings = reviewWarningsFromInput(warningsOrInput, options);
+  const lines = [
+    `# ${options.title ?? "Audio Exploration Review Warnings"}`,
+    "",
+    "- Role: `non_failing_review_cues`",
+    `- Warning count: \`${warnings.length}\``,
+    "",
+    "These are non-failing review cues from objective audio/app metrics. They do not prove subjective mix quality.",
+    "",
+    "## Warnings",
+    "",
+    "| Kind | Severity | Song | Part | Min Headroom dB | Threshold dB | Peak | Clipping | Low Level |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  ];
+
+  if (warnings.length) {
+    for (const warning of warnings) {
+      lines.push(coverageTableRow([
+        warning.kind,
+        warning.severity,
+        warning.songName,
+        warning.partLabel,
+        warning.minHeadroomDb,
+        warning.thresholdDb,
+        warning.peak,
+        warning.clipping,
+        warning.lowLevel,
+      ]));
+    }
+  } else {
+    lines.push("| none | review | none | none | not captured | not captured | not captured | false | false |");
+  }
+
+  if (options.includeBoundary ?? true) {
+    lines.push("", "## Boundary", "", AUDIO_EXPLORATION_REVIEW_WARNING_BOUNDARY);
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 const coverageFormatValue = (value: unknown): string => {
