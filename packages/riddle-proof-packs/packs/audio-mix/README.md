@@ -28,3 +28,16 @@ The useful baseline is:
 4. Assert no silence, no clipping, and required track energy.
 5. Preserve a compact summary plus the full metrics artifact.
 6. Classify failures as product behavior, profile calibration, app-contract gap, runtime environment, or human-review boundary.
+
+## Narrow mixing heuristics
+
+For claim-candidate loops, use section heuristics as review aids:
+
+- compute a loudness-style value from rendered RMS when a full LUFS implementation is not available
+- compare each baseline section with its candidate section
+- report baseline energy, candidate energy, and delta
+- report tracked-instrument energy movement for the requested or focused tracks
+- preserve required section energy floors for instruments that must remain active
+- reject candidates that violate clipping, headroom, or low-level guardrails
+
+These heuristics support wording such as `metric-supported`, `guardrail-preserving`, and `ranked for review`. They do not prove that a candidate sounds better.

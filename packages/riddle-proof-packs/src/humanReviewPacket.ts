@@ -90,6 +90,23 @@ const formatSectionEnergySummary = (candidate: Record<string, unknown>): string 
   ].join("; ");
 };
 
+const formatTrackedInstrumentEnergy = (section: Record<string, unknown>): string => {
+  const entries = asArray(section.trackedInstruments)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  if (!entries.length) return "not captured";
+  return entries.map((entry) => {
+    const baseline = asRecord(entry.baseline) ?? {};
+    const candidate = asRecord(entry.candidate) ?? {};
+    const delta = asRecord(entry.delta) ?? {};
+    return [
+      formatValue(entry.name),
+      `rms ${formatValue(baseline.rms)} -> ${formatValue(candidate.rms)} (${formatValue(delta.rms)})`,
+      `energy ${formatValue(baseline.totalEnergy)} -> ${formatValue(candidate.totalEnergy)} (${formatValue(delta.totalEnergy)})`,
+    ].join(": ");
+  }).join("; ");
+};
+
 const candidateLabel = (candidate: Record<string, unknown>): string => (
   formatValue(candidate.label ?? formatAction(candidate.action))
 );
@@ -121,8 +138,8 @@ const addSectionEnergyTable = (
     `- guardrails_preserved: ${formatCodeValue(comparison.guardrailsPreserved)}`,
     `- boundary: ${formatValue(comparison.boundary)}`,
     "",
-    "| Section | Baseline Energy | Candidate Energy | Delta | Floors | Guardrails |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Section | Baseline Energy | Candidate Energy | Delta | Tracked Instruments | Floors | Guardrails |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   );
 
   for (const section of sections) {
@@ -135,6 +152,7 @@ const addSectionEnergyTable = (
       escapeTableCell(`rms ${formatValue(baseline.rms)}, energy ${formatValue(baseline.totalEnergy)}, loudness-style ${formatValue(baseline.loudnessStyleLufs)}`),
       escapeTableCell(`rms ${formatValue(after.rms)}, energy ${formatValue(after.totalEnergy)}, loudness-style ${formatValue(after.loudnessStyleLufs)}`),
       escapeTableCell(`rms ${formatValue(delta.rms)}, energy ${formatValue(delta.totalEnergy)}, loudness-style ${formatValue(delta.loudnessStyleLufs)}`),
+      escapeTableCell(formatTrackedInstrumentEnergy(section)),
       escapeTableCell(section.requiredEnergyFloorsPreserved),
       escapeTableCell(asArray(guardrails.violated).length ? asArray(guardrails.violated).map(formatValue).join(", ") : "preserved"),
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));

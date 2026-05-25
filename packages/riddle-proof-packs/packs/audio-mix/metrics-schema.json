@@ -17,7 +17,17 @@
     "mixHealth.lowLevel": "Boolean low-level/silence guardrail.",
     "instrumentMetrics.*.rms": "Per-instrument energy receipt when available.",
     "instrumentMetrics.*.peak": "Per-instrument peak receipt when available.",
-    "monitorMetrics": "Optional translated-listening monitor, such as smallSpeaker."
+    "monitorMetrics": "Optional translated-listening monitor, such as smallSpeaker.",
+    "sectionEnergyComparison.version": "Stable comparison receipt version, currently riddle-proof.audio-section-heuristics.v1.",
+    "sectionEnergyComparison.role": "Must be metric_supported_review_order; this is a review aid, not a taste score.",
+    "sectionEnergyComparison.sections[].baseline": "Per-section baseline RMS, peak, total energy, loudness-style estimate, headroom, clipping, and low-level flags.",
+    "sectionEnergyComparison.sections[].candidate": "Per-section candidate RMS, peak, total energy, loudness-style estimate, headroom, clipping, and low-level flags.",
+    "sectionEnergyComparison.sections[].delta": "Candidate minus baseline deltas for RMS, peak, total energy, loudness-style estimate, and headroom.",
+    "sectionEnergyComparison.sections[].trackedInstruments": "Optional requested/focused instrument energy movement for each section.",
+    "sectionEnergyComparison.sections[].requiredEnergyFloorsPreserved": "Boolean guardrail for required active instruments in that section.",
+    "sectionEnergyComparison.requiredSectionEnergyFloorsPreserved": "Boolean summary for required active instrument floors across sections.",
+    "sectionEnergyComparison.guardrailsPreserved": "Boolean summary for clipping, headroom, and low-level guardrails.",
+    "sectionEnergyComparison.boundary": "Proof/taste boundary statement for the heuristic receipt."
   },
   "classification": {
     "product_regression": "The app rendered objective audio evidence that violates the stated claim.",
