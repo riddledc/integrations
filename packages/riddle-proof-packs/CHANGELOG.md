@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.6.3
+
+### Patch Changes
+
+- 335eb97: Preserve tiny audio metric values in human-review Markdown instead of rounding them to zero.
+
 ## 0.6.2
 
 ### Patch Changes
