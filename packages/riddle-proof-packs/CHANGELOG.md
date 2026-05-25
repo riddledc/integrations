@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.6.1
+
+### Patch Changes
+
+- ef0898a: Show section-energy details for every human-review packet candidate with baseline, candidate, delta, floor, and guardrail columns.
+
 ## 0.6.0
 
 ### Minor Changes
