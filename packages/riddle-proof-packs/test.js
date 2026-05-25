@@ -30,12 +30,16 @@ import {
   createDurableCandidatePatchPlan,
   createDurableCandidatePatchPlanArtifacts,
   buildNeonDurableCurrentTargetProfile,
+  buildNeonUiMixerControlProfile,
   createNeonDurableCurrentTargetArtifacts,
+  createNeonUiMixerControlArtifacts,
   formatDurableCandidatePatchPlanMarkdown,
   formatNeonDurableCurrentTargetSummaryMarkdown,
+  formatNeonUiMixerControlSummaryMarkdown,
   normalizeNeonDurableMixOverride,
   readActiveNeonDurableMixOverrides,
   routeForNeonDurableOverride,
+  summarizeNeonUiMixerControlRun,
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
@@ -74,11 +78,15 @@ assert.equal(typeof createDurableCandidatePatchPlan, "function");
 assert.equal(typeof createDurableCandidatePatchPlanArtifacts, "function");
 assert.equal(typeof buildNeonDurableCurrentTargetProfile, "function");
 assert.equal(typeof createNeonDurableCurrentTargetArtifacts, "function");
+assert.equal(typeof buildNeonUiMixerControlProfile, "function");
+assert.equal(typeof createNeonUiMixerControlArtifacts, "function");
 assert.equal(typeof formatDurableCandidatePatchPlanMarkdown, "function");
 assert.equal(typeof formatNeonDurableCurrentTargetSummaryMarkdown, "function");
+assert.equal(typeof formatNeonUiMixerControlSummaryMarkdown, "function");
 assert.equal(typeof normalizeNeonDurableMixOverride, "function");
 assert.equal(typeof readActiveNeonDurableMixOverrides, "function");
 assert.equal(typeof routeForNeonDurableOverride, "function");
+assert.equal(typeof summarizeNeonUiMixerControlRun, "function");
 assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
@@ -735,7 +743,7 @@ assert.ok(packEnabledProfiles.length >= 1);
 assert.ok(RIDDLE_PROOF_PACK_MANIFEST.length >= allProfiles.length);
 
 const neonProfiles = getRiddleProofProfilesByPackId("neon_step_sequencer");
-assert.equal(neonProfiles.length, 11);
+assert.equal(neonProfiles.length, 12);
 assert.ok(neonProfiles.every((entry) => entry.packPublicName === "Neon Step Sequencer Pack"));
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ratchet-loop-mix-level-search"),
@@ -748,6 +756,10 @@ assert.ok(
 assert.ok(
   neonProfiles.some((entry) => entry.name === "neon-step-sequencer-durable-current-target"),
   "Neon durable current-target profile should be present",
+);
+assert.ok(
+  neonProfiles.some((entry) => entry.name === "neon-step-sequencer-ui-mixer-control"),
+  "Neon UI mixer-control profile should be present",
 );
 
 const authManifest = getRiddleProofPackProfileManifest("auth-smoke");
@@ -908,6 +920,145 @@ const neonDurableCurrentTargetProfile = instantiateRiddleProofProfile(
 assert.equal(neonDurableCurrentTargetProfile.metadata?.evidence_role_pattern, "current_target");
 assert.equal(neonDurableCurrentTargetProfile.metadata?.override_id, "monkberry-moon-delight-tab-chord-minus-01-approved-candidate");
 assert.equal(neonDurableCurrentTargetProfile.target.setup_actions?.[1]?.label, "verify-durable-current-target");
+
+const neonUiMixerControlProfile = instantiateRiddleProofProfile(
+  "neon-step-sequencer-ui-mixer-control",
+  { url: "http://127.0.0.1:5173" },
+);
+assert.equal(neonUiMixerControlProfile.name, "neon-step-sequencer-ui-mixer-control");
+assert.equal(neonUiMixerControlProfile.target.url, "http://127.0.0.1:5173");
+assert.equal(neonUiMixerControlProfile.metadata?.evidence_role_pattern, "interaction_snapshots");
+assert.equal(neonUiMixerControlProfile.metadata?.track, "guitar");
+assert.equal(neonUiMixerControlProfile.metadata?.target_level, 0.5);
+assert.ok(
+  neonUiMixerControlProfile.target.setup_actions?.some((action) => action.label === "apply-ui-mixer-level-control"),
+  "Neon UI mixer-control profile should apply the real browser control",
+);
+assert.ok(
+  neonUiMixerControlProfile.target.setup_actions?.some((action) => action.path === "__neonUiMixerControl.receipt.proofApiEditUsed"),
+  "Neon UI mixer-control profile should assert the proof API edit helper was not used",
+);
+assert.ok(
+  neonUiMixerControlProfile.target.setup_actions?.some((action) => action.label === "restore-ui-mixer-level-control"),
+  "Neon UI mixer-control profile should restore the original level",
+);
+assert.doesNotMatch(
+  JSON.stringify(neonUiMixerControlProfile.target.setup_actions),
+  /setMixerLevelForProof/u,
+);
+const customNeonUiMixerControlProfile = buildNeonUiMixerControlProfile({
+  url: "http://127.0.0.1:5173",
+  route: "/neon-lab/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
+  track: "bass",
+  targetLevel: 0.47,
+  bars: 2,
+  monitorProfile: "phone",
+});
+assert.equal(customNeonUiMixerControlProfile.target.url, "http://127.0.0.1:5173");
+assert.equal(customNeonUiMixerControlProfile.checks?.[0]?.expected_path, "/neon-lab/games/drum-sequencer");
+const customUiControlApplyAction = customNeonUiMixerControlProfile.target.setup_actions?.find((action) => action.label === "apply-ui-mixer-level-control");
+assert.deepEqual(customUiControlApplyAction?.args?.[0], { track: "bass", targetLevel: 0.47 });
+const customUiControlRenderAction = customNeonUiMixerControlProfile.target.setup_actions?.find((action) => action.label === "render-post-ui-control-metrics");
+assert.equal(customUiControlRenderAction?.args?.[0]?.bars, 2);
+assert.equal(customUiControlRenderAction?.args?.[0]?.monitorProfile, "phone");
+assert.equal(customNeonUiMixerControlProfile.metadata?.purpose, "UI-only proof that the real Neon mixer level slider updates contract state and preserves deterministic render guardrails.");
+
+const neonUiMixerControlProfileResult = {
+  status: "passed",
+  checks: [{
+    type: "setup_actions_succeeded",
+    evidence: {
+      setup_summary: {
+        viewports: [{
+          window_eval: [
+            {
+              label: "apply-ui-mixer-level-control",
+              return_stored_to: "__neonUiMixerControl.receipt",
+              returned: {
+                ok: true,
+                track: "guitar",
+                targetLevel: 0.5,
+                beforeContractLevel: 0.53,
+                beforeInputLevel: 0.53,
+                beforeReadoutLevel: 0.53,
+                afterContractLevel: 0.5,
+                afterInputLevel: 0.5,
+                afterReadoutLevel: 0.5,
+                levelDelta: -0.03,
+                proofApiEditUsed: false,
+                findings: [],
+              },
+            },
+            {
+              label: "classify-ui-mixer-control-guardrails",
+              return_stored_to: "__neonUiMixerControl.summary",
+              returned: {
+                ok: true,
+                status: "ui_mixer_control_ready",
+                guardrails: {
+                  renderOk: true,
+                  clipping: false,
+                  lowLevel: false,
+                  peak: 0.4347,
+                  rms: 0.0635,
+                  headroomDb: 7.24,
+                },
+                findings: [],
+              },
+            },
+            {
+              label: "restore-ui-mixer-level-control",
+              return_stored_to: "__neonUiMixerControl.restore",
+              returned: {
+                ok: true,
+                restoreLevel: 0.53,
+                restoredLevel: 0.53,
+                proofApiEditUsed: false,
+                findings: [],
+              },
+            },
+          ],
+          window_call: [{
+            label: "render-post-ui-control-metrics",
+            return_stored_to: "__neonUiMixerControl.render",
+            returned: {
+              ok: true,
+              mixHealth: {
+                peak: 0.4347,
+                rms: 0.0635,
+                headroomDb: 7.24,
+                clipping: false,
+                lowLevel: false,
+              },
+            },
+          }],
+        }],
+      },
+    },
+  }],
+};
+const neonUiMixerControlSummary = summarizeNeonUiMixerControlRun(neonUiMixerControlProfileResult);
+assert.equal(neonUiMixerControlSummary.version, "riddle-proof.neon-ui-mixer-control-summary.v1");
+assert.equal(neonUiMixerControlSummary.status, "ui_mixer_control_ready");
+assert.equal(neonUiMixerControlSummary.ok, true);
+assert.equal(neonUiMixerControlSummary.track, "guitar");
+assert.equal(neonUiMixerControlSummary.beforeContractLevel, 0.53);
+assert.equal(neonUiMixerControlSummary.afterContractLevel, 0.5);
+assert.equal(neonUiMixerControlSummary.levelDelta, -0.03);
+assert.equal(neonUiMixerControlSummary.proofApiEditUsed, false);
+assert.equal(neonUiMixerControlSummary.guardrails?.headroomDb, 7.24);
+assert.equal(neonUiMixerControlSummary.restore?.ok, true);
+assert.match(neonUiMixerControlSummary.boundary, /does not prove subjective mix taste/u);
+const neonUiMixerControlMarkdown = formatNeonUiMixerControlSummaryMarkdown(neonUiMixerControlSummary);
+assert.match(neonUiMixerControlMarkdown, /^# Neon UI Mixer Control Proof/u);
+assert.match(neonUiMixerControlMarkdown, /contract_before: `0\.53`/u);
+assert.match(neonUiMixerControlMarkdown, /proof_api_edit_used: `false`/u);
+assert.match(neonUiMixerControlMarkdown, /headroom_db: `7\.24`/u);
+assert.match(neonUiMixerControlMarkdown, /does not prove subjective mix taste/u);
+assert.doesNotMatch(neonUiMixerControlMarkdown, /automatically better/u);
+const neonUiMixerControlArtifacts = createNeonUiMixerControlArtifacts(neonUiMixerControlProfileResult);
+assert.equal(JSON.parse(neonUiMixerControlArtifacts.json).status, "ui_mixer_control_ready");
+assert.deepEqual(neonUiMixerControlArtifacts.summary, neonUiMixerControlSummary);
 
 const neonExplorationProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-explore-songs-and-mixes",

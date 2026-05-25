@@ -106,3 +106,12 @@ export {
   type NeonDurableMixOverride,
   type NeonDurableMixOverrideTarget,
 } from "./neonDurableCurrentTarget";
+export {
+  buildNeonUiMixerControlProfile,
+  createNeonUiMixerControlArtifacts,
+  formatNeonUiMixerControlSummaryMarkdown,
+  summarizeNeonUiMixerControlRun,
+  type NeonUiMixerControlArtifacts,
+  type NeonUiMixerControlProfileOptions,
+  type NeonUiMixerControlRunSummary,
+} from "./neonUiMixerControl";

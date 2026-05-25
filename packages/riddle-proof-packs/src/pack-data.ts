@@ -21,6 +21,7 @@ import pageContentBasicProfile from "../packs/page-content-basic/profile.json";
 import routeInventoryBasicProfile from "../packs/route-inventory-basic/profile.json";
 import spaRouteExitStateHygieneProfile from "../packs/spa-route-exit-state-hygiene/profile.json";
 import terminalResultPartialEvidenceProfile from "../packs/terminal-result-partial-evidence/profile.json";
+import { buildNeonUiMixerControlProfile } from "./neonUiMixerControl";
 
 interface PackMetadata {
   packId: string | undefined;
@@ -88,6 +89,9 @@ const rawProfiles = {
   "neon-step-sequencer-ratchet-loop-mix-level-search": neonRatchetLoopMixLevelSearchProfile,
   "neon-step-sequencer-ratchet-loop-approved-candidate": neonRatchetLoopApprovedCandidateProfile,
   "neon-step-sequencer-durable-current-target": neonDurableCurrentTargetProfile,
+  "neon-step-sequencer-ui-mixer-control": buildNeonUiMixerControlProfile({
+    name: "neon-step-sequencer-ui-mixer-control",
+  }),
 };
 
 const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
@@ -102,6 +106,7 @@ const sourcePathOverrides: Readonly<Record<string, string>> = Object.freeze({
   "neon-step-sequencer-ratchet-loop-mix-level-search": "packs/neon-step-sequencer/profiles/ratchet-loop-mix-level-search.json",
   "neon-step-sequencer-ratchet-loop-approved-candidate": "packs/neon-step-sequencer/profiles/ratchet-loop-approved-candidate.json",
   "neon-step-sequencer-durable-current-target": "packs/neon-step-sequencer/profiles/durable-current-target.json",
+  "neon-step-sequencer-ui-mixer-control": "generated:src/neonUiMixerControl.ts",
 });
 
 export const RIDDLE_PROOF_PACK_PROFILES: Readonly<Record<string, RiddleProofProfile>> = Object.freeze(

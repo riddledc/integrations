@@ -52,6 +52,10 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
   - Reads active durable mix override entries from an app/config document and normalizes bounded mixer levels.
 - `createNeonDurableCurrentTargetArtifacts({ override, profileResult }, options)`:
   - Returns `{ summary, json, markdown }` for the final durable current-target proof receipt.
+- `buildNeonUiMixerControlProfile(options)`:
+  - Builds a Neon interaction proof that moves a real browser mixer slider, checks proof-contract/readout/render guardrails, and restores the slider without using the proof API edit helper.
+- `createNeonUiMixerControlArtifacts(profileResult, options)`:
+  - Returns `{ summary, json, markdown }` for the UI mixer-control proof receipt.
 
 Browser apps that only need the pure audio review heuristics should import the
 browser-safe subpath instead of the root package:
@@ -135,7 +139,7 @@ Each proof pack sample report should state:
 - Which evidence-role pattern it uses (`current_target`, `reference_candidate`, or `interaction_snapshots`).
 - What the pack does **not** prove.
 
-Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runtime exports.
+Profiles are stored under `packs/<slug>/profile.json` or generated from typed helper builders when the profile needs target-specific options, then mirrored into the runtime exports.
 
 ## Bundled profiles
 
@@ -160,6 +164,7 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 - `neon-step-sequencer-ratchet-loop-mix-level-search`
 - `neon-step-sequencer-ratchet-loop-approved-candidate`
 - `neon-step-sequencer-durable-current-target`
+- `neon-step-sequencer-ui-mixer-control`
 
 ## Audio and Neon ratchet packs
 
