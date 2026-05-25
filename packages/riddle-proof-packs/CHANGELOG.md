@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.1
+
+### Patch Changes
+
+- 22556b1: Add reusable audio exploration review warnings, intent-matrix summaries, execution-mode/surrogate-review matrix metadata, and Markdown formatting so bounded app/audio sweeps can surface non-failing review cues and batched claim-candidate handoffs without treating metrics as subjective mix quality.
+
 ## 0.8.0
 
 ### Minor Changes
