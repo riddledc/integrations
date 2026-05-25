@@ -51,6 +51,20 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
 - `createNeonDurableCurrentTargetArtifacts({ override, profileResult }, options)`:
   - Returns `{ summary, json, markdown }` for the final durable current-target proof receipt.
 
+Browser apps that only need the pure audio review heuristics should import the
+browser-safe subpath instead of the root package:
+
+```ts
+import {
+  compareAudioSectionEnergy,
+  computeAudioSectionReviewMetric,
+  estimateLoudnessStyleLufs,
+} from "@riddledc/riddle-proof-packs/audio-mix-heuristics";
+```
+
+That subpath exposes the loudness-style and section-energy helpers without the
+Node-oriented profile, artifact, or CLI helpers.
+
 ## Proof claims and evidence roles
 
 Riddle Proof proves claims about a running browser/app target. A before/after change proof is one pattern built from smaller proof claims, not the core proof primitive.

@@ -34,6 +34,8 @@ import {
   RIDDLE_PROOF_PACK_PROFILES,
 } from "./dist/index.js";
 
+const audioHeuristicsSubpath = await import("@riddledc/riddle-proof-packs/audio-mix-heuristics");
+
 assert.equal(typeof getRiddleProofPackProfile, "function");
 assert.equal(typeof listRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofProfilesByPackId, "function");
@@ -60,6 +62,10 @@ assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
+assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
+assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
+assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
+assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
 
 assert.equal(estimateLoudnessStyleLufs(0.1), -20.69);
 const sectionComparison = compareAudioSectionEnergy(
