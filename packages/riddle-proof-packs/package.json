@@ -18,6 +18,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./audio-mix-heuristics": {
+      "types": "./dist/audioMixHeuristics.d.ts",
+      "import": "./dist/audioMixHeuristics.js",
+      "require": "./dist/audioMixHeuristics.cjs"
     }
   },
   "files": [
@@ -36,7 +41,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/reviewPacketCli.ts src/durableCandidatePlanCli.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/audioMixHeuristics.ts src/reviewPacketCli.ts src/durableCandidatePlanCli.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js"
