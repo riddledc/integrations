@@ -187,6 +187,13 @@ The deep profile still proves only objective receipts: catalog coverage within b
 
 Bounded sweeps can also emit non-failing review warnings for objective signals that are close to a guardrail. For example, `collectAudioExplorationReviewWarnings()` reports a `low_headroom_margin` warning when a sampled part is below the configured review margin but has not necessarily failed the proof. Use `formatAudioExplorationReviewWarningsMarkdown()` when an app or agent needs consistent handoff copy. Treat these warnings as listening/review cues, not as automated taste decisions.
 
+When a workflow tests several small mix intents against the same running target,
+use `summarizeAudioMixIntentMatrix()` and `formatAudioMixIntentMatrixMarkdown()`
+to produce a compact matrix handoff. The matrix format is for review ordering:
+it can show that `bass -0.05`, `guitar -0.02`, and `chord -0.035` each had
+objective receipts, guardrails, finding counts, and warning counts. It must not
+claim that any candidate sounds better or should be applied automatically.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.

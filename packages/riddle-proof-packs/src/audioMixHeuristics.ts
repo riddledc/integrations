@@ -109,6 +109,45 @@ export interface AudioExplorationReviewWarning {
   boundary: string;
 }
 
+export interface AudioMixIntentMatrixRun {
+  id: string | null;
+  intent: string | null;
+  status: string | null;
+  outputDir: string | null;
+  recommendation: string | null;
+  recommendationAction: Record<string, unknown> | null;
+  supportedClaimCandidateCount: number | null;
+  rejectedCandidateCount: number | null;
+  reviewWarningCount: number;
+  findingCount: number;
+  rankingRole: string | null;
+  rankingMetricDelta: number | null;
+  boundary: string | null;
+}
+
+export interface AudioMixIntentMatrixSummary {
+  version: "riddle-proof.audio-mix-intent-matrix.v1";
+  role: "claim_candidate_review_matrix";
+  status: string | null;
+  ok: boolean;
+  target: Record<string, unknown> | null;
+  intentSet: Record<string, unknown> | null;
+  ratchetMaxIterations: number | null;
+  sharedGates: Record<string, unknown> | null;
+  intentCount: number;
+  supportedIntentCount: number;
+  findingCount: number;
+  reviewWarningCount: number;
+  intents: AudioMixIntentMatrixRun[];
+  nextAction: string | null;
+  boundary: string;
+}
+
+export interface AudioMixIntentMatrixMarkdownOptions {
+  title?: string;
+  includeBoundary?: boolean;
+}
+
 export type AudioMixRequestedMagnitude = "subtle";
 export type AudioMixRequestMagnitudeSource = "explicit_args" | "intent_text" | "unconstrained";
 
@@ -181,6 +220,7 @@ export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagni
 };
 
 const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective candidate support before review-order ranking; it does not prove subjective mix quality.";
+const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
   const number = Number(value);
@@ -662,6 +702,162 @@ export function formatAudioExplorationReviewWarningsMarkdown(
 
   if (options.includeBoundary ?? true) {
     lines.push("", "## Boundary", "", AUDIO_EXPLORATION_REVIEW_WARNING_BOUNDARY);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+const isAudioMixIntentMatrixSummary = (input: unknown): input is AudioMixIntentMatrixSummary => {
+  const record = asRecord(input);
+  return record.version === "riddle-proof.audio-mix-intent-matrix.v1"
+    && record.role === "claim_candidate_review_matrix"
+    && Array.isArray(record.intents);
+};
+
+const countFromValue = (value: unknown): number => {
+  const number = asNumber(value);
+  if (number !== null) return Math.max(0, Math.trunc(number));
+  return Array.isArray(value) ? value.length : 0;
+};
+
+const nullableRecord = (value: unknown): Record<string, unknown> | null => {
+  const record = asRecord(value);
+  return Object.keys(record).length ? record : null;
+};
+
+const normalizeIntentMatrixRun = (entry: unknown): AudioMixIntentMatrixRun => {
+  const record = asRecord(entry);
+  const guardrails = asRecord(record.guardrails);
+  const ranking = asRecord(record.ranking);
+  const recommendation = asRecord(record.recommendation);
+  const candidate = asRecord(recommendation.candidate);
+  const recommendationAction = nullableRecord(record.recommendationAction)
+    ?? nullableRecord(candidate.action)
+    ?? nullableRecord(record.action);
+  const reviewWarningCount = record.reviewWarningCount !== undefined
+    ? countFromValue(record.reviewWarningCount)
+    : countFromValue(record.reviewWarnings);
+  const findingCount = record.findingCount !== undefined
+    ? countFromValue(record.findingCount)
+    : countFromValue(record.findings);
+
+  return {
+    id: asStringOrNull(record.id),
+    intent: asStringOrNull(record.intent) ?? asStringOrNull(record.requestedIntent),
+    status: asStringOrNull(record.status),
+    outputDir: asStringOrNull(record.outputDir),
+    recommendation: asStringOrNull(record.recommendation)
+      ?? asStringOrNull(candidate.label)
+      ?? asStringOrNull(recommendation.label),
+    recommendationAction,
+    supportedClaimCandidateCount: asNumber(record.supportedClaimCandidateCount)
+      ?? asNumber(guardrails.supportedClaimCandidateCount),
+    rejectedCandidateCount: asNumber(record.rejectedCandidateCount)
+      ?? asNumber(guardrails.rejectedCandidateCount),
+    reviewWarningCount,
+    findingCount,
+    rankingRole: asStringOrNull(record.rankingRole) ?? asStringOrNull(ranking.role),
+    rankingMetricDelta: asNumber(record.rankingMetricDelta) ?? asNumber(ranking.rankingMetricDelta),
+    boundary: asStringOrNull(record.boundary),
+  };
+};
+
+export function summarizeAudioMixIntentMatrix(input: unknown): AudioMixIntentMatrixSummary {
+  if (isAudioMixIntentMatrixSummary(input)) return input;
+
+  const record = asRecord(input);
+  const rawIntents = Array.isArray(record.intents)
+    ? record.intents
+    : (Array.isArray(record.intentRuns) ? record.intentRuns : []);
+  const intents = rawIntents.map(normalizeIntentMatrixRun);
+  const findingCount = intents.reduce((total, entry) => total + entry.findingCount, 0);
+  const reviewWarningCount = intents.reduce((total, entry) => total + entry.reviewWarningCount, 0);
+  const supportedIntentCount = intents.filter((entry) => (
+    (entry.supportedClaimCandidateCount ?? 0) > 0 && entry.findingCount === 0
+  )).length;
+  const explicitOk = typeof record.ok === "boolean" ? record.ok : null;
+  const ok = explicitOk ?? (
+    intents.length > 0
+    && findingCount === 0
+    && intents.every((entry) => (entry.supportedClaimCandidateCount ?? 0) > 0)
+  );
+
+  return {
+    version: "riddle-proof.audio-mix-intent-matrix.v1",
+    role: "claim_candidate_review_matrix",
+    status: asStringOrNull(record.status) ?? (ok ? "intent_matrix_ready_for_review" : "intent_matrix_findings_present"),
+    ok,
+    target: nullableRecord(record.target),
+    intentSet: nullableRecord(record.intentSet),
+    ratchetMaxIterations: asNumber(record.ratchetMaxIterations),
+    sharedGates: nullableRecord(record.sharedGates),
+    intentCount: intents.length,
+    supportedIntentCount,
+    findingCount,
+    reviewWarningCount,
+    intents,
+    nextAction: asStringOrNull(record.nextAction),
+    boundary: asStringOrNull(record.boundary) ?? AUDIO_MIX_INTENT_MATRIX_BOUNDARY,
+  };
+}
+
+const formatAudioMixIntentMatrixAction = (action: Record<string, unknown> | null): string | null => {
+  if (!action) return null;
+  const type = coverageFormatValue(action.type);
+  const track = coverageFormatValue(action.track);
+  const from = coverageFormatValue(action.from);
+  const to = coverageFormatValue(action.to);
+  const delta = coverageFormatValue(action.delta);
+  if ([type, track, from, to, delta].every((value) => value === "not captured")) {
+    return null;
+  }
+  return `${type} ${track}: ${from} -> ${to} (${delta})`;
+};
+
+export function formatAudioMixIntentMatrixMarkdown(
+  summaryOrInput: unknown,
+  options: AudioMixIntentMatrixMarkdownOptions = {},
+): string {
+  const summary = summarizeAudioMixIntentMatrix(summaryOrInput);
+  const lines = [
+    `# ${options.title ?? "Audio Mix Intent Matrix"}`,
+    "",
+    "- Role: `claim_candidate_review_matrix`",
+    `- Status: \`${coverageFormatValue(summary.status)}\``,
+    `- Intent count: \`${summary.intentCount}\``,
+    `- Supported intent count: \`${summary.supportedIntentCount}\``,
+    `- Finding count: \`${summary.findingCount}\``,
+    `- Review warning count: \`${summary.reviewWarningCount}\``,
+    "",
+    "Intent matrices rank metric-supported candidates for review. They do not prove subjective mix quality, do not prove that a candidate sounds better, and do not apply candidates automatically.",
+    "",
+    "## Intent Runs",
+    "",
+    "| Intent | Status | Recommendation | Action | Supported | Rejected | Review Warnings | Findings | Ranking Role | Ranking Delta |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  ];
+
+  if (summary.intents.length) {
+    for (const entry of summary.intents) {
+      lines.push(coverageTableRow([
+        entry.intent,
+        entry.status,
+        entry.recommendation,
+        formatAudioMixIntentMatrixAction(entry.recommendationAction),
+        entry.supportedClaimCandidateCount,
+        entry.rejectedCandidateCount,
+        entry.reviewWarningCount,
+        entry.findingCount,
+        entry.rankingRole,
+        entry.rankingMetricDelta,
+      ]));
+    }
+  } else {
+    lines.push("| none | not captured | not captured | not captured | 0 | 0 | 0 | 0 | not captured | not captured |");
+  }
+
+  if (options.includeBoundary ?? true) {
+    lines.push("", "## Boundary", "", summary.boundary);
   }
 
   return `${lines.join("\n")}\n`;
