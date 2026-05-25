@@ -244,6 +244,64 @@ const addAllCandidateSectionEnergyTables = (
   }
 };
 
+const candidateHasActiveLaneReceipt = (candidate: unknown): candidate is Record<string, unknown> => {
+  const record = asRecord(candidate);
+  return Boolean(asRecord(record?.activeLaneReceipt));
+};
+
+const formatMissingActiveWindows = (receipt: Record<string, unknown>): string => {
+  const missing = asArray(receipt.missingWindows)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+    .map((windowSummary) => {
+      const label = windowSummary.label ?? windowSummary.name ?? "window";
+      const missingTracks = asArray(windowSummary.missingRequiredActive).map(formatValue).join(", ");
+      return `${formatValue(label)}: ${missingTracks || "none"}`;
+    });
+  return missing.length ? missing.join("; ") : "none";
+};
+
+const formatActiveLaneWindowCoverage = (receipt: Record<string, unknown>): string => (
+  `${formatValue(receipt.requiredWindowCount)} / ${formatValue(receipt.windowCount)}`
+);
+
+const addActiveLaneReceiptTable = (
+  lines: string[],
+  supportedCandidates: unknown[],
+  rejectedCandidates: unknown[],
+) => {
+  const supportedRows = supportedCandidates
+    .filter(candidateHasActiveLaneReceipt)
+    .map((candidate) => ({ group: "Supported", candidate }));
+  const rejectedRows = rejectedCandidates
+    .filter(candidateHasActiveLaneReceipt)
+    .map((candidate) => ({ group: "Rejected", candidate }));
+  const rows = [...supportedRows, ...rejectedRows];
+  if (!rows.length) return;
+
+  lines.push(
+    "",
+    "## Active Lane Receipts",
+    "",
+    "These receipts show whether declared required lanes stayed measurable in each proof window. They support deterministic guardrails only; they do not prove subjective mix quality.",
+    "",
+    "| Group | Candidate | Status | Windows | Required Tracks | Missing Required Active |",
+    "| --- | --- | --- | --- | --- | --- |",
+  );
+
+  for (const { group, candidate } of rows) {
+    const receipt = asRecord(candidate.activeLaneReceipt) ?? {};
+    lines.push([
+      escapeTableCell(group),
+      escapeTableCell(candidateLabel(candidate)),
+      escapeTableCell(receipt.status),
+      escapeTableCell(formatActiveLaneWindowCoverage(receipt)),
+      escapeTableCell(asArray(receipt.requiredTracks).map(formatValue).join(", ") || "none declared"),
+      escapeTableCell(formatMissingActiveWindows(receipt)),
+    ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+  }
+};
+
 const addCandidateTable = (lines: string[], heading: string, candidates: unknown[]) => {
   const rows = candidates
     .map(asRecord)
@@ -372,6 +430,7 @@ export function formatHumanReviewPacketMarkdown(
   addCandidateTable(lines, "Supported Candidates", supportedCandidates);
   addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
   addAllCandidateSectionEnergyTables(lines, supportedCandidates, rejectedCandidates);
+  addActiveLaneReceiptTable(lines, supportedCandidates, rejectedCandidates);
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 
