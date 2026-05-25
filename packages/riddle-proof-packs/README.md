@@ -185,6 +185,8 @@ Neon uses two exploration speeds:
 
 The deep profile still proves only objective receipts: catalog coverage within bounds, active-lane/proof-window agreement, clipping/headroom, browser health, and state restoration. It does not prove subjective mix taste or that a candidate sounds better.
 
+Bounded sweeps can also emit non-failing review warnings for objective signals that are close to a guardrail. For example, `collectAudioExplorationReviewWarnings()` reports a `low_headroom_margin` warning when a sampled part is below the configured review margin but has not necessarily failed the proof. Treat these warnings as listening/review cues, not as automated taste decisions.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.

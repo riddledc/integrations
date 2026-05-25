@@ -11,6 +11,7 @@ import {
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
   audioMixCandidateMagnitudeMatchesRequest,
+  collectAudioExplorationReviewWarnings,
   compareAudioSectionEnergy,
   computeAudioSectionReviewMetric,
   inferAudioMixRequestedMagnitude,
@@ -51,6 +52,7 @@ assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
+assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
 assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
@@ -77,6 +79,7 @@ assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
+assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown, "function");
@@ -513,6 +516,49 @@ assert.ok(audioExplorationCoverageMarkdown.includes("| Yakety Yak (Dark) | 2 | 2
 assert.match(audioExplorationCoverageMarkdown, /## Part Coverage/u);
 assert.match(audioExplorationCoverageMarkdown, /deterministic guardrails/u);
 assert.doesNotMatch(audioExplorationCoverageMarkdown, /automatically better/u);
+const audioExplorationReviewWarnings = collectAudioExplorationReviewWarnings({
+  entries: [
+    {
+      songName: "Yakety Yak (Dark)",
+      partLabel: "Hook",
+      status: "passed",
+      summary: {
+        windows: [{
+          requiredActive: ["kick", "bass", "chord"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.96812, rms: 0.1338, headroomDb: 0.281, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+    {
+      songName: "Monkberry Moon Delight (Tab)",
+      partLabel: "Intro Bed",
+      status: "passed",
+      summary: {
+        windows: [{
+          requiredActive: ["bass", "chord", "guitar"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.7567, rms: 0.1004, headroomDb: 2.42, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+  ],
+});
+assert.equal(audioExplorationReviewWarnings.length, 1);
+assert.equal(audioExplorationReviewWarnings[0]?.version, "riddle-proof.audio-exploration-review-warning.v1");
+assert.equal(audioExplorationReviewWarnings[0]?.kind, "low_headroom_margin");
+assert.equal(audioExplorationReviewWarnings[0]?.severity, "review");
+assert.equal(audioExplorationReviewWarnings[0]?.songName, "Yakety Yak (Dark)");
+assert.equal(audioExplorationReviewWarnings[0]?.partLabel, "Hook");
+assert.equal(audioExplorationReviewWarnings[0]?.minHeadroomDb, 0.28);
+assert.equal(audioExplorationReviewWarnings[0]?.thresholdDb, 0.5);
+assert.equal(audioExplorationReviewWarnings[0]?.peak, 0.9681);
+assert.equal(audioExplorationReviewWarnings[0]?.clipping, false);
+assert.match(audioExplorationReviewWarnings[0]?.message ?? "", /0\.28 dB headroom/u);
+assert.match(audioExplorationReviewWarnings[0]?.boundary ?? "", /do not prove subjective mix quality/u);
+assert.deepEqual(audioHeuristicsSubpath.collectAudioExplorationReviewWarnings(audioExplorationCoverage, {
+  minHeadroomDb: -1,
+}), []);
 const audioExplorationCoverageNoPartsMarkdown = audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown(audioExplorationCoverage, {
   includePartCoverage: false,
 });

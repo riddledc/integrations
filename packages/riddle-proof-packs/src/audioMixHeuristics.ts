@@ -85,6 +85,25 @@ export interface AudioExplorationCoverageMarkdownOptions {
   includePartCoverage?: boolean;
 }
 
+export interface AudioExplorationReviewWarningOptions {
+  minHeadroomDb?: number;
+}
+
+export interface AudioExplorationReviewWarning {
+  version: "riddle-proof.audio-exploration-review-warning.v1";
+  kind: "low_headroom_margin";
+  severity: "review";
+  songName: string | null;
+  partLabel: string | null;
+  minHeadroomDb: number;
+  thresholdDb: number;
+  peak: number | null;
+  clipping: boolean;
+  lowLevel: boolean;
+  message: string;
+  boundary: string;
+}
+
 export type AudioMixRequestedMagnitude = "subtle";
 export type AudioMixRequestMagnitudeSource = "explicit_args" | "intent_text" | "unconstrained";
 
@@ -216,6 +235,7 @@ const uniqueTextValues = (values: unknown[]): string[] => Array.from(new Set(
 ));
 
 const AUDIO_EXPLORATION_COVERAGE_BOUNDARY = "Audio/app coverage receipts report deterministic guardrails such as clipping, low-level windows, headroom, and missing active lanes; they do not prove subjective mix quality.";
+const AUDIO_EXPLORATION_REVIEW_WARNING_BOUNDARY = "Audio/app review warnings are non-failing cues from objective metrics; they do not prove subjective mix quality.";
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -545,6 +565,41 @@ export function summarizeAudioExplorationCoverage(input: unknown): AudioExplorat
     coverageEntries,
     boundary: AUDIO_EXPLORATION_COVERAGE_BOUNDARY,
   };
+}
+
+export function collectAudioExplorationReviewWarnings(
+  summaryOrInput: unknown,
+  options: AudioExplorationReviewWarningOptions = {},
+): AudioExplorationReviewWarning[] {
+  const summary = isAudioExplorationCoverageSummary(summaryOrInput)
+    ? summaryOrInput
+    : summarizeAudioExplorationCoverage(summaryOrInput);
+  const minHeadroomDb = optionWithDefault(options.minHeadroomDb, DEFAULT_SECTION_HEURISTICS.minHeadroomDb);
+  const warnings: AudioExplorationReviewWarning[] = [];
+
+  for (const entry of summary.coverageEntries) {
+    const observedHeadroom = asNumber(entry.mixHealth.minHeadroomDb);
+    if (observedHeadroom === null || observedHeadroom >= minHeadroomDb) continue;
+    const minHeadroom = roundMetric(observedHeadroom, 4);
+    if (minHeadroom === null) continue;
+
+    warnings.push({
+      version: "riddle-proof.audio-exploration-review-warning.v1",
+      kind: "low_headroom_margin",
+      severity: "review",
+      songName: entry.songName,
+      partLabel: entry.partLabel,
+      minHeadroomDb: minHeadroom,
+      thresholdDb: roundMetric(minHeadroomDb, 4) ?? minHeadroomDb,
+      peak: roundMetric(entry.mixHealth.peak, 4),
+      clipping: entry.mixHealth.clipping,
+      lowLevel: entry.mixHealth.lowLevel,
+      message: `${entry.songName ?? "Unknown song"} / ${entry.partLabel ?? "unknown part"} has ${observedHeadroom.toFixed(2)} dB headroom, below the ${minHeadroomDb.toFixed(2)} dB review margin.`,
+      boundary: AUDIO_EXPLORATION_REVIEW_WARNING_BOUNDARY,
+    });
+  }
+
+  return warnings;
 }
 
 const coverageFormatValue = (value: unknown): string => {
