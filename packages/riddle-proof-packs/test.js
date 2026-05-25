@@ -10,9 +10,12 @@ import {
   getRiddleProofProfilesByPackId,
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
+  audioMixCandidateMagnitudeMatchesRequest,
   compareAudioSectionEnergy,
   computeAudioSectionReviewMetric,
+  inferAudioMixRequestedMagnitude,
   estimateLoudnessStyleLufs,
+  resolveAudioMixRequestMagnitude,
   summarizeAudioSectionEnergy,
   createMixingCanonSurrogateReview,
   buildNeonApprovedCandidateProfileFromReviewPacket,
@@ -45,8 +48,11 @@ assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
+assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
+assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
+assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
 assert.equal(typeof createMixingCanonSurrogateReview, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
@@ -66,10 +72,50 @@ assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
+assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
+assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
 assert.equal(typeof audioReviewSubpath.createMixingCanonSurrogateReview, "function");
+
+assert.equal(inferAudioMixRequestedMagnitude("turn the bass down a little"), "subtle");
+assert.equal(inferAudioMixRequestedMagnitude("make the guitar slightly quieter"), "subtle");
+assert.equal(inferAudioMixRequestedMagnitude("turn the chord down"), null);
+const subtleMagnitudeRequest = resolveAudioMixRequestMagnitude({
+  intent: "turn the bass part down a little",
+});
+assert.equal(subtleMagnitudeRequest.version, "riddle-proof.audio-mix-request-magnitude.v1");
+assert.equal(subtleMagnitudeRequest.magnitude, "subtle");
+assert.equal(subtleMagnitudeRequest.maxAbsDelta, 0.12);
+assert.equal(subtleMagnitudeRequest.maxAbsLevelDelta, 0.12);
+assert.equal(subtleMagnitudeRequest.magnitudeSource, "intent_text");
+assert.match(subtleMagnitudeRequest.boundary, /does not prove subjective mix quality/u);
+assert.equal(
+  audioMixCandidateMagnitudeMatchesRequest({ action: { delta: -0.1 } }, subtleMagnitudeRequest).matches,
+  true,
+);
+const oversizedMagnitudeCandidate = audioMixCandidateMagnitudeMatchesRequest(
+  { action: { delta: -0.18 } },
+  subtleMagnitudeRequest,
+);
+assert.equal(oversizedMagnitudeCandidate.matches, false);
+assert.equal(oversizedMagnitudeCandidate.failureReason, "candidate_delta_exceeds_requested_magnitude");
+assert.equal(oversizedMagnitudeCandidate.requestedMagnitude, "subtle");
+assert.equal(oversizedMagnitudeCandidate.maxAbsDelta, 0.12);
+assert.equal(oversizedMagnitudeCandidate.candidateAbsDelta, 0.18);
+assert.equal(oversizedMagnitudeCandidate.source, "intent_text");
+const explicitMagnitudeRequest = resolveAudioMixRequestMagnitude({
+  intent: "turn the bass down",
+  maxAbsLevelDelta: 0.08,
+});
+assert.equal(explicitMagnitudeRequest.magnitude, null);
+assert.equal(explicitMagnitudeRequest.maxAbsDelta, 0.08);
+assert.equal(explicitMagnitudeRequest.magnitudeSource, "explicit_args");
+assert.equal(
+  audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest({ action: { from: 0.6, to: 0.51 } }, explicitMagnitudeRequest).matches,
+  false,
+);
 
 assert.equal(estimateLoudnessStyleLufs(0.1), -20.69);
 const sectionComparison = compareAudioSectionEnergy(
