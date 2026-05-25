@@ -3,6 +3,7 @@ export interface AudioSectionHeuristicOptions {
   requiredPeakFloor?: number;
   requiredTotalEnergyFloor?: number;
   minHeadroomDb?: number;
+  trackedInstruments?: string[];
 }
 
 export interface AudioSectionEnergySummary {
@@ -25,11 +26,12 @@ export interface AudioSectionEnergyComparison {
   violationCount: number;
   averageAbsLoudnessDelta: number | null;
   averageAbsEnergyDelta: number | null;
-  floors: Required<AudioSectionHeuristicOptions>;
+  floors: Required<Omit<AudioSectionHeuristicOptions, "trackedInstruments">>;
+  trackedInstruments: string[];
   boundary: string;
 }
 
-const DEFAULT_SECTION_HEURISTICS: Required<AudioSectionHeuristicOptions> = {
+const DEFAULT_SECTION_HEURISTICS: Required<Omit<AudioSectionHeuristicOptions, "trackedInstruments">> = {
   requiredRmsFloor: 0.0005,
   requiredPeakFloor: 0.001,
   requiredTotalEnergyFloor: 0.000001,
@@ -50,7 +52,9 @@ const optionWithDefault = (
   return Number.isFinite(number) ? number : fallback;
 };
 
-const normalizeOptions = (options: AudioSectionHeuristicOptions = {}): Required<AudioSectionHeuristicOptions> => ({
+const normalizeOptions = (
+  options: AudioSectionHeuristicOptions = {},
+): Required<Omit<AudioSectionHeuristicOptions, "trackedInstruments">> => ({
   requiredRmsFloor: optionWithDefault(options.requiredRmsFloor, DEFAULT_SECTION_HEURISTICS.requiredRmsFloor),
   requiredPeakFloor: optionWithDefault(options.requiredPeakFloor, DEFAULT_SECTION_HEURISTICS.requiredPeakFloor),
   requiredTotalEnergyFloor: optionWithDefault(
@@ -61,6 +65,10 @@ const normalizeOptions = (options: AudioSectionHeuristicOptions = {}): Required<
 });
 
 const asArray = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+
+const normalizeTrackedInstruments = (value: unknown): string[] => Array.from(new Set(asArray(value)
+  .map((entry) => String(entry ?? "").trim())
+  .filter(Boolean)));
 
 const asRecord = (value: unknown): Record<string, unknown> => (
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -147,7 +155,7 @@ const delta = (candidate: unknown, baseline: unknown, digits = 6): number | null
 const requiredFloorReceipts = (
   baselineSection: Record<string, unknown>,
   candidateSection: Record<string, unknown>,
-  floors: Required<AudioSectionHeuristicOptions>,
+  floors: Required<Omit<AudioSectionHeuristicOptions, "trackedInstruments">>,
 ) => {
   const baselineInstruments = instrumentMap(baselineSection);
   const candidateInstruments = instrumentMap(candidateSection);
@@ -188,12 +196,47 @@ const requiredFloorReceipts = (
   });
 };
 
+const instrumentEnergyReceipts = (
+  baselineSection: Record<string, unknown>,
+  candidateSection: Record<string, unknown>,
+  trackedInstruments: string[],
+) => {
+  if (!trackedInstruments.length) return [];
+  const baselineInstruments = instrumentMap(baselineSection);
+  const candidateInstruments = instrumentMap(candidateSection);
+  return trackedInstruments.map((name) => {
+    const baseline = baselineInstruments.get(name) ?? {};
+    const candidate = candidateInstruments.get(name) ?? {};
+    const before = {
+      rms: roundMetric(baseline.rms),
+      peak: roundMetric(baseline.peak),
+      totalEnergy: roundMetric(baseline.totalEnergy),
+    };
+    const after = {
+      rms: roundMetric(candidate.rms),
+      peak: roundMetric(candidate.peak),
+      totalEnergy: roundMetric(candidate.totalEnergy),
+    };
+    return {
+      name,
+      baseline: before,
+      candidate: after,
+      delta: {
+        rms: delta(after.rms, before.rms),
+        peak: delta(after.peak, before.peak),
+        totalEnergy: delta(after.totalEnergy, before.totalEnergy),
+      },
+    };
+  });
+};
+
 export function compareAudioSectionEnergy(
   baselineSummary: unknown,
   candidateSummary: unknown,
   options: AudioSectionHeuristicOptions = {},
 ): AudioSectionEnergyComparison {
   const floors = normalizeOptions(options);
+  const trackedInstruments = normalizeTrackedInstruments(options.trackedInstruments);
   const baselineSections = asArray(asRecord(baselineSummary).windows).map(asRecord);
   const candidateSections = asArray(asRecord(candidateSummary).windows).map(asRecord);
   const sections = baselineSections.map((baselineSection, index) => {
@@ -221,6 +264,7 @@ export function compareAudioSectionEnergy(
         loudnessStyleLufs: delta(candidate.loudnessStyleLufs, baseline.loudnessStyleLufs, 2),
         headroomDb: delta(candidate.headroomDb, baseline.headroomDb, 2),
       },
+      trackedInstruments: instrumentEnergyReceipts(baselineSection, candidateSection, trackedInstruments),
       requiredEnergyFloors,
       requiredEnergyFloorsPreserved,
       guardrails: {
@@ -261,6 +305,7 @@ export function compareAudioSectionEnergy(
       ? roundMetric(energyDeltas.reduce((total, value) => total + value, 0) / energyDeltas.length)
       : null,
     floors,
+    trackedInstruments,
     boundary: "Loudness-style and section-energy metrics rank candidates for review; they do not prove subjective mix quality.",
   };
 }

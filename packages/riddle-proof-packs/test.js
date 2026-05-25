@@ -123,12 +123,16 @@ const sectionComparison = compareAudioSectionEnergy(
       },
     ],
   },
+  { trackedInstruments: ["chord"] },
 );
 assert.equal(sectionComparison.sectionCount, 2);
 assert.equal(sectionComparison.requiredSectionEnergyFloorsPreserved, true);
 assert.equal(sectionComparison.guardrailsPreserved, true);
 assert.equal(sectionComparison.sections[0]?.delta?.rms, -0.01);
 assert.equal(sectionComparison.sections[0]?.delta?.loudnessStyleLufs, -0.92);
+assert.deepEqual(sectionComparison.trackedInstruments, ["chord"]);
+assert.equal(sectionComparison.sections[0]?.trackedInstruments?.[0]?.name, "chord");
+assert.equal(sectionComparison.sections[0]?.trackedInstruments?.[0]?.delta?.totalEnergy, -0.0004);
 assert.equal(typeof computeAudioSectionReviewMetric(sectionComparison), "number");
 const sectionComparisonWithViolation = compareAudioSectionEnergy(
   {
@@ -207,7 +211,8 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
 assert.match(sectionHeuristicPacketMarkdown, /## Candidate Section Energy Details/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Supported: chord -0\.10/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Rejected: chord -0\.30/u);
-assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta/u);
+assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta \| Tracked Instruments/u);
+assert.match(sectionHeuristicPacketMarkdown, /chord: rms 0\.02 -> 0\.014 \(-0\.006\): energy 0\.001 -> 0\.0006 \(-0\.0004\)/u);
 assert.match(sectionHeuristicPacketMarkdown, /loudness-style/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
