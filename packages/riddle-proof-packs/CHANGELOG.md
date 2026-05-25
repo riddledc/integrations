@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.7.0
+
+### Minor Changes
+
+- 326b614: Add a reusable mixing-canon surrogate review helper for conservative audio-mix development approvals. The helper reviews human-review packets for subtle mixer-level edits, objective receipt success, section-energy guardrails, state restoration, review-order-only ranking, and explicit proof/taste boundaries before returning a `mixing_canon_surrogate` approval.
+
 ## 0.6.4
 
 ### Patch Changes
