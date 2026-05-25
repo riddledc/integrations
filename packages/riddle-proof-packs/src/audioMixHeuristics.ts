@@ -125,15 +125,25 @@ export interface AudioMixIntentMatrixRun {
   boundary: string | null;
 }
 
+export interface AudioMixIntentMatrixSurrogateReviewSummary {
+  status: string | null;
+  approvedCount: number | null;
+  needsHumanReviewCount: number | null;
+  recommendedDevelopmentCandidate: string | null;
+  recommendationRole: string | null;
+}
+
 export interface AudioMixIntentMatrixSummary {
   version: "riddle-proof.audio-mix-intent-matrix.v1";
   role: "claim_candidate_review_matrix";
   status: string | null;
   ok: boolean;
+  executionMode: string | null;
   target: Record<string, unknown> | null;
   intentSet: Record<string, unknown> | null;
   ratchetMaxIterations: number | null;
   sharedGates: Record<string, unknown> | null;
+  mixingCanonSurrogateReview: AudioMixIntentMatrixSurrogateReviewSummary | null;
   intentCount: number;
   supportedIntentCount: number;
   findingCount: number;
@@ -725,6 +735,29 @@ const nullableRecord = (value: unknown): Record<string, unknown> | null => {
   return Object.keys(record).length ? record : null;
 };
 
+const labelFromCandidateValue = (value: unknown): string | null => {
+  const direct = asStringOrNull(value);
+  if (direct) return direct;
+  const record = asRecord(value);
+  return asStringOrNull(record.label)
+    ?? asStringOrNull(asRecord(record.candidate).label)
+    ?? asStringOrNull(asRecord(record.recommendation).label);
+};
+
+const normalizeIntentMatrixSurrogateReview = (
+  value: unknown,
+): AudioMixIntentMatrixSurrogateReviewSummary | null => {
+  const record = asRecord(value);
+  if (!Object.keys(record).length) return null;
+  return {
+    status: asStringOrNull(record.status),
+    approvedCount: asNumber(record.approvedCount),
+    needsHumanReviewCount: asNumber(record.needsHumanReviewCount),
+    recommendedDevelopmentCandidate: labelFromCandidateValue(record.recommendedDevelopmentCandidate),
+    recommendationRole: asStringOrNull(record.recommendationRole),
+  };
+};
+
 const normalizeIntentMatrixRun = (entry: unknown): AudioMixIntentMatrixRun => {
   const record = asRecord(entry);
   const guardrails = asRecord(record.guardrails);
@@ -763,7 +796,13 @@ const normalizeIntentMatrixRun = (entry: unknown): AudioMixIntentMatrixRun => {
 };
 
 export function summarizeAudioMixIntentMatrix(input: unknown): AudioMixIntentMatrixSummary {
-  if (isAudioMixIntentMatrixSummary(input)) return input;
+  if (isAudioMixIntentMatrixSummary(input)) {
+    return {
+      ...input,
+      executionMode: input.executionMode ?? null,
+      mixingCanonSurrogateReview: input.mixingCanonSurrogateReview ?? null,
+    };
+  }
 
   const record = asRecord(input);
   const rawIntents = Array.isArray(record.intents)
@@ -787,10 +826,14 @@ export function summarizeAudioMixIntentMatrix(input: unknown): AudioMixIntentMat
     role: "claim_candidate_review_matrix",
     status: asStringOrNull(record.status) ?? (ok ? "intent_matrix_ready_for_review" : "intent_matrix_findings_present"),
     ok,
+    executionMode: asStringOrNull(record.executionMode) ?? asStringOrNull(record.execution_mode),
     target: nullableRecord(record.target),
     intentSet: nullableRecord(record.intentSet),
     ratchetMaxIterations: asNumber(record.ratchetMaxIterations),
     sharedGates: nullableRecord(record.sharedGates),
+    mixingCanonSurrogateReview: normalizeIntentMatrixSurrogateReview(
+      record.mixingCanonSurrogateReview ?? record.surrogateReview,
+    ),
     intentCount: intents.length,
     supportedIntentCount,
     findingCount,
@@ -824,6 +867,7 @@ export function formatAudioMixIntentMatrixMarkdown(
     "",
     "- Role: `claim_candidate_review_matrix`",
     `- Status: \`${coverageFormatValue(summary.status)}\``,
+    `- Execution mode: \`${coverageFormatValue(summary.executionMode)}\``,
     `- Intent count: \`${summary.intentCount}\``,
     `- Supported intent count: \`${summary.supportedIntentCount}\``,
     `- Finding count: \`${summary.findingCount}\``,
@@ -854,6 +898,22 @@ export function formatAudioMixIntentMatrixMarkdown(
     }
   } else {
     lines.push("| none | not captured | not captured | not captured | 0 | 0 | 0 | 0 | not captured | not captured |");
+  }
+
+  if (summary.mixingCanonSurrogateReview) {
+    const review = summary.mixingCanonSurrogateReview;
+    lines.push(
+      "",
+      "## Mixing Canon Surrogate Review",
+      "",
+      `- Status: \`${coverageFormatValue(review.status)}\``,
+      `- Approved count: \`${coverageFormatValue(review.approvedCount)}\``,
+      `- Needs human review count: \`${coverageFormatValue(review.needsHumanReviewCount)}\``,
+      `- Recommended development candidate: \`${coverageFormatValue(review.recommendedDevelopmentCandidate)}\``,
+      `- Recommendation role: \`${coverageFormatValue(review.recommendationRole)}\``,
+      "",
+      "A surrogate review can keep development moving after objective receipts pass. It is not a listener preference and does not prove subjective mix quality.",
+    );
   }
 
   if (options.includeBoundary ?? true) {

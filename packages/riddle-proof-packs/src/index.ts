@@ -39,6 +39,7 @@ export {
   type AudioExplorationReviewWarningMarkdownOptions,
   type AudioExplorationReviewWarningOptions,
   type AudioExplorationSongCoverage,
+  type AudioMixIntentMatrixSurrogateReviewSummary,
   type AudioMixCandidateMagnitudeMatch,
   type AudioMixIntentMatrixMarkdownOptions,
   type AudioMixIntentMatrixRun,

@@ -584,6 +584,7 @@ assert.deepEqual(audioHeuristicsSubpath.collectAudioExplorationReviewWarnings(au
 const audioIntentMatrixSummary = summarizeAudioMixIntentMatrix({
   status: "intent_matrix_ready_for_review",
   ok: true,
+  executionMode: "single_browser_intents",
   target: {
     url: "https://riddlenode.com",
     route: "/neon-lab/games/drum-sequencer",
@@ -594,6 +595,15 @@ const audioIntentMatrixSummary = summarizeAudioMixIntentMatrix({
   ratchetMaxIterations: 3,
   sharedGates: {
     status: "local_gate_ready",
+  },
+  mixingCanonSurrogateReview: {
+    status: "approved_for_development_review",
+    approvedCount: 2,
+    needsHumanReviewCount: 0,
+    recommendedDevelopmentCandidate: {
+      label: "bass -0.05",
+    },
+    recommendationRole: "most_conservative_surrogate_approved_candidate_for_development_review",
   },
   intents: [
     {
@@ -638,19 +648,27 @@ const audioIntentMatrixSummary = summarizeAudioMixIntentMatrix({
 });
 assert.equal(audioIntentMatrixSummary.version, "riddle-proof.audio-mix-intent-matrix.v1");
 assert.equal(audioIntentMatrixSummary.role, "claim_candidate_review_matrix");
+assert.equal(audioIntentMatrixSummary.executionMode, "single_browser_intents");
 assert.equal(audioIntentMatrixSummary.intentCount, 2);
 assert.equal(audioIntentMatrixSummary.supportedIntentCount, 2);
 assert.equal(audioIntentMatrixSummary.findingCount, 0);
 assert.equal(audioIntentMatrixSummary.reviewWarningCount, 0);
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.status, "approved_for_development_review");
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.approvedCount, 2);
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.recommendedDevelopmentCandidate, "bass -0.05");
 assert.match(audioIntentMatrixSummary.boundary, /do not prove subjective mix quality/u);
 const audioIntentMatrixMarkdown = formatAudioMixIntentMatrixMarkdown(audioIntentMatrixSummary, {
   title: "Neon Intent Matrix",
 });
 assert.match(audioIntentMatrixMarkdown, /^# Neon Intent Matrix/u);
 assert.match(audioIntentMatrixMarkdown, /Role: `claim_candidate_review_matrix`/u);
+assert.match(audioIntentMatrixMarkdown, /Execution mode: `single_browser_intents`/u);
 assert.match(audioIntentMatrixMarkdown, /Intent count: `2`/u);
 assert.match(audioIntentMatrixMarkdown, /\| turn the bass part down a little \| preliminary_candidate_ready \| bass -0\.05 \| set_mixer_level bass: 0\.62 -> 0\.57 \(-0\.05\) \| 3 \| 0 \| 0 \| 0 \| review_order_only \| 0\.1716 \|/u);
 assert.match(audioIntentMatrixMarkdown, /\| turn the chord part down a little \| preliminary_candidate_ready \| chord -0\.035 \| set_mixer_level chord: 0\.16 -> 0\.125 \(-0\.035\) \| 2 \| 1 \| 0 \| 0 \| review_order_only \| -0\.0067 \|/u);
+assert.match(audioIntentMatrixMarkdown, /Mixing Canon Surrogate Review/u);
+assert.match(audioIntentMatrixMarkdown, /Recommended development candidate: `bass -0\.05`/u);
+assert.match(audioIntentMatrixMarkdown, /not a listener preference/u);
 assert.match(audioIntentMatrixMarkdown, /do not prove subjective mix quality/u);
 assert.match(audioIntentMatrixMarkdown, /do not prove that a candidate sounds better/u);
 assert.doesNotMatch(audioIntentMatrixMarkdown, /automatically better/u);

@@ -194,6 +194,13 @@ it can show that `bass -0.05`, `guitar -0.02`, and `chord -0.035` each had
 objective receipts, guardrails, finding counts, and warning counts. It must not
 claim that any candidate sounds better or should be applied automatically.
 
+The same summary can record whether the workflow used separate proof launches or
+one browser/profile call, for example `executionMode: "single_browser_intents"`.
+If a conservative mixing-canon surrogate reviewed the packets, include
+`mixingCanonSurrogateReview` so the Markdown can show approval counts and the
+recommended development candidate while still saying that surrogate approval is
+not a listener preference.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
