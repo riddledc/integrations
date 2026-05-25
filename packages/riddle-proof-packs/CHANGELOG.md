@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.3
+
+### Patch Changes
+
+- 564da6b: Render active-lane receipts in reusable human-review packet Markdown so required-lane preservation is visible alongside candidate and section-energy receipts without treating the result as subjective mix-quality proof.
+
 ## 0.8.2
 
 ### Patch Changes
