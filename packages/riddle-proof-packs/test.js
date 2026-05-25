@@ -130,6 +130,42 @@ assert.equal(sectionComparison.guardrailsPreserved, true);
 assert.equal(sectionComparison.sections[0]?.delta?.rms, -0.01);
 assert.equal(sectionComparison.sections[0]?.delta?.loudnessStyleLufs, -0.92);
 assert.equal(typeof computeAudioSectionReviewMetric(sectionComparison), "number");
+const sectionComparisonWithViolation = compareAudioSectionEnergy(
+  {
+    windows: [
+      {
+        name: "verse",
+        label: "Verse",
+        requiredActive: ["chord"],
+        mixHealth: { rms: 0.1, peak: 0.5, headroomDb: 6, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "chord", rms: 0.02, peak: 0.08, totalEnergy: 0.001 },
+        ],
+        requiredInstruments: [
+          { name: "chord", rms: 0.02, peak: 0.08, totalEnergy: 0.001 },
+        ],
+      },
+    ],
+  },
+  {
+    windows: [
+      {
+        name: "verse",
+        label: "Verse",
+        requiredActive: ["chord"],
+        mixHealth: { rms: 0.06, peak: 0.98, headroomDb: 0.2, clipping: true, lowLevel: false },
+        activeInstruments: [
+          { name: "chord", rms: 0, peak: 0, totalEnergy: 0 },
+        ],
+        requiredInstruments: [
+          { name: "chord", rms: 0, peak: 0, totalEnergy: 0 },
+        ],
+      },
+    ],
+  },
+);
+assert.equal(sectionComparisonWithViolation.requiredSectionEnergyFloorsPreserved, false);
+assert.equal(sectionComparisonWithViolation.guardrailsPreserved, false);
 const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
   kind: "human_review_packet",
   domain: "audio_mix",
@@ -156,15 +192,26 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
     receipts: [{ name: "section_energy_floors_preserved", ok: true }],
     sectionEnergyComparison: sectionComparison,
   }],
-  rejectedCandidates: [],
+  rejectedCandidates: [{
+    label: "chord -0.30",
+    action: { type: "set_mixer_level", track: "chord", from: 0.4, to: 0.1, delta: -0.3 },
+    rankingMetric: 1002.4,
+    receipts: [{ name: "section_energy_floors_preserved", ok: false }],
+    failedReceipts: ["section_energy_floors_preserved", "headroom_guardrail_preserved"],
+    sectionEnergyComparison: sectionComparisonWithViolation,
+  }],
   ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
-  guardrails: { supportedClaimCandidateCount: 1, rejectedCandidateCount: 0 },
+  guardrails: { supportedClaimCandidateCount: 1, rejectedCandidateCount: 1 },
   proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
 });
-assert.match(sectionHeuristicPacketMarkdown, /## Recommended Candidate Section Energy/u);
+assert.match(sectionHeuristicPacketMarkdown, /## Candidate Section Energy Details/u);
+assert.match(sectionHeuristicPacketMarkdown, /### Supported: chord -0\.10/u);
+assert.match(sectionHeuristicPacketMarkdown, /### Rejected: chord -0\.30/u);
 assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta/u);
 assert.match(sectionHeuristicPacketMarkdown, /loudness-style/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
+assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
+assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 
 const pageContent = getRiddleProofPackProfile("page-content-basic");

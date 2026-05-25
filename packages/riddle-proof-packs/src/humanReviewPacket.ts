@@ -90,7 +90,21 @@ const formatSectionEnergySummary = (candidate: Record<string, unknown>): string 
   ].join("; ");
 };
 
-const addSectionEnergyTable = (lines: string[], candidate: Record<string, unknown>) => {
+const candidateLabel = (candidate: Record<string, unknown>): string => (
+  formatValue(candidate.label ?? formatAction(candidate.action))
+);
+
+const candidateHasSectionEnergy = (candidate: unknown): candidate is Record<string, unknown> => {
+  const record = asRecord(candidate);
+  const comparison = asRecord(record?.sectionEnergyComparison);
+  return Boolean(comparison && asArray(comparison.sections).length);
+};
+
+const addSectionEnergyTable = (
+  lines: string[],
+  candidate: Record<string, unknown>,
+  heading: string,
+) => {
   const comparison = asRecord(candidate.sectionEnergyComparison);
   const sections = asArray(comparison?.sections)
     .map(asRecord)
@@ -99,8 +113,9 @@ const addSectionEnergyTable = (lines: string[], candidate: Record<string, unknow
 
   lines.push(
     "",
-    "## Recommended Candidate Section Energy",
+    heading,
     "",
+    `- candidate: ${formatCodeValue(candidateLabel(candidate))}`,
     `- role: ${formatCodeValue(comparison.role)}`,
     `- required_section_energy_floors_preserved: ${formatCodeValue(comparison.requiredSectionEnergyFloorsPreserved)}`,
     `- guardrails_preserved: ${formatCodeValue(comparison.guardrailsPreserved)}`,
@@ -123,6 +138,32 @@ const addSectionEnergyTable = (lines: string[], candidate: Record<string, unknow
       escapeTableCell(section.requiredEnergyFloorsPreserved),
       escapeTableCell(asArray(guardrails.violated).length ? asArray(guardrails.violated).map(formatValue).join(", ") : "preserved"),
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+  }
+};
+
+const addAllCandidateSectionEnergyTables = (
+  lines: string[],
+  supportedCandidates: unknown[],
+  rejectedCandidates: unknown[],
+) => {
+  const supportedRows = supportedCandidates
+    .filter(candidateHasSectionEnergy)
+    .map((candidate) => ({ group: "Supported", candidate }));
+  const rejectedRows = rejectedCandidates
+    .filter(candidateHasSectionEnergy)
+    .map((candidate) => ({ group: "Rejected", candidate }));
+  const rows = [...supportedRows, ...rejectedRows];
+  if (!rows.length) return;
+
+  lines.push(
+    "",
+    "## Candidate Section Energy Details",
+    "",
+    "These loudness-style and section-energy comparisons are review aids. They rank and reject candidates by objective receipts; they do not prove subjective mix quality.",
+  );
+
+  for (const { group, candidate } of rows) {
+    addSectionEnergyTable(lines, candidate, `### ${group}: ${candidateLabel(candidate)}`);
   }
 };
 
@@ -244,7 +285,7 @@ export function formatHumanReviewPacketMarkdown(
 
   addCandidateTable(lines, "Supported Candidates", supportedCandidates);
   addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
-  if (candidate) addSectionEnergyTable(lines, candidate);
+  addAllCandidateSectionEnergyTables(lines, supportedCandidates, rejectedCandidates);
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 
