@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.2
+
+### Patch Changes
+
+- 125c431: Add a reusable Neon UI mixer-control proof helper and manifest profile for driving the real browser mixer slider, checking contract/readout/render guardrails, and restoring state without treating the result as subjective mix quality.
+
 ## 0.8.1
 
 ### Patch Changes
