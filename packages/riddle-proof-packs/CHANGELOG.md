@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.0
+
+### Minor Changes
+
+- 0203ec5: Add reusable audio exploration coverage summaries for deterministic song and part guardrail receipts.
+
 ## 0.7.3
 
 ### Patch Changes
