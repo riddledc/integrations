@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.6.4
+
+### Patch Changes
+
+- 134bd8a: Add a browser-safe audio mix heuristics subpath for section-energy and loudness-style review helpers.
+
 ## 0.6.3
 
 ### Patch Changes
