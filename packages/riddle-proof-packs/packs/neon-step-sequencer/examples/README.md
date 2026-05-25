@@ -1,8 +1,8 @@
 # Neon Step Sequencer example runs
 
-These examples are local Playwright runner outputs captured against LilArcade Neon Step Sequencer on May 24, 2026. They are included to show how this pack records atomic proof claims with explicit evidence-role patterns.
+These examples are Playwright runner outputs captured against LilArcade Neon Step Sequencer. Runs 001-008 are local runs captured on May 24, 2026. Runs 009-011 are production/current-target runs captured after the ratchet became part of the deploy workflow. They are included to show how this pack records atomic proof claims with explicit evidence-role patterns.
 
-The raw `profile-result.json` files are real runner outputs. They intentionally keep enough evidence to audit the verdict, but the summaries are the preferred place to start. Runs 006, 007, and 008 also include standalone handoff artifacts generated from proof output.
+The raw `profile-result.json` files are real runner outputs where included. They intentionally keep enough evidence to audit the verdict, but the summaries are the preferred place to start. Runs 006, 007, and 008 also include standalone handoff artifacts generated from proof output. Run 011 is a curated batch receipt: it keeps compact aggregate artifacts rather than the full 53-file local output.
 
 ## Runs
 
@@ -18,6 +18,7 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 | `run-008-durable-mix-patch-handoff` | `current_target` | passed | An applied packet becomes a durable candidate patch plan for `chord: 0.28`, then a current-target proof verifies the running app sees that durable level without clipping. |
 | `run-009-deep-exploration-production` | `current_target` | passed | A deployed deep exploration sweep samples the current six-song Neon catalog bounds, finds no deterministic guardrail failures, and restores app state. |
 | `run-010-durable-current-target-production` | `current_target` | passed | A deployed durable current-target proof verifies `chord: 0.18` across contract levels, mix-profile source levels, visible mixer text, and bounded render guardrails. |
+| `run-011-post-deploy-batch-production` | `current_target` | passed | A deployed post-deploy batch combines fast mix health, mobile layout, playback sync, bounded deep exploration, and durable current-target proof after the guitar `0.55` override promotion. |
 
 ## What these examples do not prove
 
@@ -32,3 +33,4 @@ The raw `profile-result.json` files are real runner outputs. They intentionally 
 - The durable handoff run does not prove the mix is better. It proves the approved candidate was eligible for scoped source/config application and that the app saw the durable result afterward.
 - The deep exploration run does not prove taste or exhaustive catalog coverage. It proves deterministic guardrails inside its current configured bounds and records state restoration.
 - The durable current-target production run does not prove taste or approval correctness. It proves the running app agrees with the durable override receipts after promotion.
+- The post-deploy batch run does not prove taste or broad release quality. It proves a bounded deployed target remained clean across the configured deterministic app/audio guardrails.

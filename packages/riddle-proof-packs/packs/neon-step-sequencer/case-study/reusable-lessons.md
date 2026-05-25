@@ -37,3 +37,7 @@ A ratchet loop should be domain-neutral: propose a claim candidate, apply its ac
 ## Use two speeds before deploy
 
 Keep the default proof loop small enough to run often, then use a deeper local sweep when a round is otherwise clean. The fast profile protects iteration speed; the deep profile batches deterministic findings such as proof-window overclaims, missing active lanes, clipping/headroom failures, source readiness gaps, stale state, and restoration failures before deployment.
+
+## Batch post-deploy proof after durable edits
+
+Once a candidate becomes durable source/config state, run a deployed post-deploy batch instead of immediately starting another creative loop. A good batch combines fast mix health, responsive layout, playback interaction, bounded catalog exploration, and durable current-target proof. That gives a clean handoff point: the app is live, the deterministic receipts are current, and the next creative question can start from known deployed state.

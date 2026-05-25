@@ -1,0 +1,102 @@
+{
+  "version": "lilarcade.neon-durable-current-target-summary.v1",
+  "status": "ready_for_promotion_review",
+  "ok": true,
+  "deterministicOk": true,
+  "allowFindings": false,
+  "overrideCount": 2,
+  "findingCount": 0,
+  "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target",
+  "results": [
+    {
+      "version": "riddle-proof.neon-durable-current-target-summary.v1",
+      "ok": true,
+      "status": "passed",
+      "overrideId": "monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate",
+      "target": {
+        "song": "Monkberry Moon Delight (Tab)",
+        "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+        "route": null,
+        "instrument": null,
+        "songSlug": null
+      },
+      "expectedMixerLevels": {
+        "chord": 0.16
+      },
+      "selectedSong": "Monkberry Moon Delight (Tab)",
+      "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+      "observations": [
+        {
+          "track": "chord",
+          "expectedLevel": 0.16,
+          "actualLevel": 0.16,
+          "profileLevel": 0.16,
+          "visibleToken": "0.16X",
+          "contractMatches": true,
+          "profileMatches": true,
+          "visibleMatches": true
+        }
+      ],
+      "mixHealth": {
+        "rms": 0.1004,
+        "peak": 0.7546,
+        "clipping": false,
+        "headroomDb": 2.45,
+        "lowLevel": false
+      },
+      "findings": [],
+      "boundary": "Current-target durable override audit only; this does not prove subjective mix taste.",
+      "exitCode": 0,
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate",
+      "generatedProfilePath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/generated-profile.json",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/profile-result.json",
+      "error": null
+    },
+    {
+      "version": "riddle-proof.neon-durable-current-target-summary.v1",
+      "ok": true,
+      "status": "passed",
+      "overrideId": "monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate",
+      "target": {
+        "song": "Monkberry Moon Delight (Tab)",
+        "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+        "route": null,
+        "instrument": null,
+        "songSlug": null
+      },
+      "expectedMixerLevels": {
+        "guitar": 0.55
+      },
+      "selectedSong": "Monkberry Moon Delight (Tab)",
+      "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+      "observations": [
+        {
+          "track": "guitar",
+          "expectedLevel": 0.55,
+          "actualLevel": 0.55,
+          "profileLevel": 0.55,
+          "visibleToken": "0.55X",
+          "contractMatches": true,
+          "profileMatches": true,
+          "visibleMatches": true
+        }
+      ],
+      "mixHealth": {
+        "rms": 0.0999,
+        "peak": 0.7522,
+        "clipping": false,
+        "headroomDb": 2.47,
+        "lowLevel": false
+      },
+      "findings": [],
+      "boundary": "Current-target durable override audit only; this does not prove subjective mix taste.",
+      "exitCode": 0,
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate",
+      "generatedProfilePath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/generated-profile.json",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/profile-result.json",
+      "error": null
+    }
+  ],
+  "findings": [],
+  "boundary": "This command proves deterministic current-target receipts for durable mix overrides. It does not prove subjective mix taste."
+}

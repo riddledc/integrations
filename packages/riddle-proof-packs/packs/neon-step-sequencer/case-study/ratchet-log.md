@@ -449,6 +449,164 @@ Next sharper question:
 
 Can this durable handoff become the default follow-on step after approved packets for more creative strategies than `mix-level-search`?
 
+## Run 009 - Production deep exploration
+
+Claim:
+
+A slower current-target exploration sweep can sample the deployed Neon catalog bounds, catch deterministic proof-window/audio guardrail failures before release, and restore app state.
+
+Profile:
+
+`profiles/deep-explore-songs-and-mixes.json`
+
+Evidence to capture:
+
+- deployed route and selected song state
+- bounded song/part/window coverage
+- per-window source and mix-health receipts
+- clipping/headroom/low-level guardrails
+- state restoration receipt
+
+Possible outcomes:
+
+- `passed`: configured deployed bounds are clean and state restoration holds.
+- `product_regression`: a sampled song/part clips, loses required active lanes, or fails render guardrails.
+- `profile_calibration`: a proof window overclaims required activity for the sampled section.
+- `runtime_environment_blocked`: deployed app/browser/source loading fails before useful evidence.
+
+Observed status:
+
+Passed on May 24, 2026 against production with `local-playwright`.
+
+Observed evidence:
+
+- available songs `6`
+- proof-capable songs `6`
+- skipped songs `0`
+- sampled songs `6`
+- sampled parts `19`
+- sampled windows `22`
+- findings `0`
+- restoration ok `true`
+
+Failure classification:
+
+None in the final production run. Earlier local runs exposed proof-window overclaim and clipping findings that were fixed in user-controlled app/profile layers.
+
+Smallest layer changed:
+
+App proof-window selection, song fixture levels, and proof-pack profile/docs. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can durable override promotion use the same current-target discipline after an approved candidate becomes source/config state?
+
+## Run 010 - Production durable current-target
+
+Claim:
+
+The deployed app should expose the approved durable mix override through contract levels, source override state, visible mixer text, and bounded render guardrails.
+
+Profile:
+
+`profiles/durable-current-target.json`
+
+Evidence to capture:
+
+- active durable override metadata
+- selected song and mix profile id
+- contract mixer level
+- source/config override level
+- visible mixer text token
+- bounded render mix health
+
+Possible outcomes:
+
+- `ready_for_promotion_review`: every active durable override is visible and deterministic render guardrails pass.
+- `product_regression`: the running app disagrees with source/config state, visible controls, or render guardrails.
+- `proof_insufficient`: the app cannot expose enough override state to audit the claim.
+
+Observed status:
+
+Passed on May 25, 2026 against production with `local-playwright`.
+
+Observed evidence:
+
+- active overrides `2`
+- deterministic findings `0`
+- chord override level `0.16`, peak `0.7546`, RMS `0.1004`, clipping `false`, headroom `2.45 dB`, low-level `false`
+- guitar override level `0.55`, peak `0.7522`, RMS `0.0999`, clipping `false`, headroom `2.47 dB`, low-level `false`
+
+Failure classification:
+
+None. This was a passing production `current_target` audit.
+
+Smallest layer changed:
+
+App source override plus reusable durable current-target profile/helper. Riddle Proof core did not need a change.
+
+Next sharper question:
+
+Can the deploy workflow batch deterministic post-deploy proof so the next creative loop starts from known live state?
+
+## Run 011 - Production post-deploy batch
+
+Claim:
+
+After promoting approved durable Neon mix overrides, a post-deploy batch can prove deterministic app/audio guardrails across the running target without requiring another source change.
+
+Batch preset:
+
+`post-deploy`
+
+Evidence to capture:
+
+- profile sync
+- fast mix-health proof
+- mobile trainer layout proof
+- playback sync proof
+- bounded deep exploration sweep
+- active durable override proof
+- compact batch summary
+
+Possible outcomes:
+
+- `post_deploy_ready`: deterministic deployed guardrails and durable override receipts are clean inside configured bounds.
+- `product_regression`: deployed app/audio behavior violates a sampled guardrail.
+- `profile_calibration`: the configured bounds or windows need adjustment.
+- `runtime_environment_blocked`: deployed target or browser runtime fails before useful evidence.
+
+Observed status:
+
+Passed on May 25, 2026 against `https://main.dlwavl00q582x.amplifyapp.com`.
+
+Observed evidence:
+
+- batch status `post_deploy_ready`
+- fast mix health passed
+- mobile trainer layout passed
+- playback sync passed
+- deep exploration passed
+- durable current-target passed
+- sampled songs `6`
+- sampled parts `19`
+- sampled windows `22`
+- deterministic findings `0`
+- restoration ok `true`
+- active durable overrides `2`
+
+Failure classification:
+
+None. This was a passing deployed `current_target` batch. It proves deterministic app/audio guardrails and durable override visibility, not listener preference.
+
+Smallest layer changed:
+
+No product source change was required. The pack recorded a compact aggregate example so future operators can use the same post-deploy batch as a handoff point.
+
+Next sharper question:
+
+Can the next creative strategy use this clean deployed state as its baseline while staying bounded and reviewable?
+
 ## Project note
 
 The ratchet is not a pass. The ratchet is the next sharper question.
