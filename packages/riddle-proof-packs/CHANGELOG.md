@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.7.2
+
+### Patch Changes
+
+- 4667a69: Add browser-safe audio mix request-magnitude helpers for claim-candidate loops. The new helpers infer subtle natural-language requests such as "a little" or "slightly", resolve a bounded max absolute mixer-level delta, and evaluate candidate deltas as claim-translation evidence without treating metrics as subjective mix quality.
+
 ## 0.7.1
 
 ### Patch Changes
