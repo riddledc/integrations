@@ -391,6 +391,10 @@ const reviewPacketMarkdown = formatHumanReviewPacketMarkdown(extractedReviewPack
 assert.match(reviewPacketMarkdown, /^# Neon Human Review Packet/u);
 assert.match(reviewPacketMarkdown, /candidate_ready_for_listening_review/u);
 assert.match(reviewPacketMarkdown, /review_order_only/u);
+assert.match(reviewPacketMarkdown, /## Supported Candidates/u);
+assert.match(reviewPacketMarkdown, /\| Candidate \| Action \| Target Movement \| Receipts \| Ranking \|/u);
+assert.match(reviewPacketMarkdown, /chord: rms -0\.0012, peak -0\.0088/u);
+assert.match(reviewPacketMarkdown, /pass \(6\)/u);
 assert.match(reviewPacketMarkdown, /musical taste still requires listening review/u);
 assert.match(reviewPacketMarkdown, /does not prove subjective mix quality/u);
 assert.doesNotMatch(reviewPacketMarkdown, /automatically better/u);
@@ -418,6 +422,8 @@ const appliedPacketMarkdown = formatHumanReviewPacketMarkdown(extractedAppliedPa
 assert.match(appliedPacketMarkdown, /candidate_applied_for_listening_review/u);
 assert.match(appliedPacketMarkdown, /approved_candidate_applied: `true`/u);
 assert.match(appliedPacketMarkdown, /approval_mode: `mixing_canon_surrogate`/u);
+assert.match(appliedPacketMarkdown, /## Supported Candidates/u);
+assert.match(appliedPacketMarkdown, /set_mixer_level chord: 0\.38 -> 0\.28 \(-0\.1\)/u);
 assert.match(appliedPacketMarkdown, /musical taste still requires listening review/u);
 assert.doesNotMatch(appliedPacketMarkdown, /automatically better/u);
 const bundledAppliedPacketMarkdown = readFileSync(

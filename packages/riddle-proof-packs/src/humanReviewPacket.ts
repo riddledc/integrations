@@ -42,6 +42,8 @@ const formatValue = (value: unknown): string => {
 
 const formatCodeValue = (value: unknown): string => `\`${formatValue(value)}\``;
 
+const escapeTableCell = (value: unknown): string => formatValue(value).replace(/\|/gu, "\\|");
+
 const formatAction = (action: unknown): string => {
   const record = asRecord(action);
   if (!record) return "not captured";
@@ -51,6 +53,50 @@ const formatAction = (action: unknown): string => {
   const to = formatValue(record.to);
   const delta = record.delta === null || record.delta === undefined ? "" : ` (${formatValue(record.delta)})`;
   return `${type} ${track}: ${from} -> ${to}${delta}`;
+};
+
+const summarizeReceiptStatus = (candidate: Record<string, unknown>): string => {
+  const receipts = asArray(candidate.receipts).map(asRecord).filter(Boolean);
+  if (!receipts.length) return "not captured";
+  const failed = receipts.filter((receipt) => receipt?.ok !== true);
+  if (!failed.length) return `pass (${receipts.length})`;
+  return `fail (${failed.map((receipt) => formatValue(receipt?.name)).join(", ")})`;
+};
+
+const formatTargetMovement = (candidate: Record<string, unknown>): string => {
+  const movement = asRecord(candidate.targetMovement);
+  const deltas = asRecord(movement?.deltas);
+  if (!movement || !deltas) return "not captured";
+  const track = formatValue(movement.track);
+  const rms = formatValue(deltas.rms);
+  const peak = formatValue(deltas.peak);
+  const energy = formatValue(deltas.totalEnergy);
+  return `${track}: rms ${rms}, peak ${peak}, energy ${energy}`;
+};
+
+const addCandidateTable = (lines: string[], heading: string, candidates: unknown[]) => {
+  const rows = candidates
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  if (!rows.length) return;
+  lines.push(
+    "",
+    `## ${heading}`,
+    "",
+    "| Candidate | Action | Target Movement | Receipts | Ranking |",
+    "| --- | --- | --- | --- | --- |",
+  );
+  for (const candidate of rows) {
+    const failedReceipts = asArray(candidate?.failedReceipts).map(formatValue).join(", ");
+    const receiptStatus = failedReceipts || summarizeReceiptStatus(candidate);
+    lines.push([
+      escapeTableCell(candidate?.label),
+      escapeTableCell(formatAction(candidate?.action)),
+      escapeTableCell(formatTargetMovement(candidate)),
+      escapeTableCell(receiptStatus),
+      escapeTableCell(candidate?.rankingMetric),
+    ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+  }
 };
 
 const addOptionalList = (lines: string[], heading: string, values: unknown) => {
@@ -141,23 +187,15 @@ export function formatHumanReviewPacketMarkdown(
     `- baseline: ${formatCodeValue(ranking.baselineCandidateRankingMetric)}`,
     `- best: ${formatCodeValue(ranking.bestCandidateRankingMetric)}`,
     `- delta: ${formatCodeValue(ranking.rankingMetricDelta)}`,
-    "",
-    "## Boundary",
-    "",
-    formatValue(packet.proofBoundary),
   ];
+
+  addCandidateTable(lines, "Supported Candidates", supportedCandidates);
+  addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
+
+  lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 
   addOptionalList(lines, "Listening Prompts", packet.listenerPrompts);
   addOptionalList(lines, "Caveats", packet.caveats);
-
-  if (rejectedCandidates.length) {
-    lines.push("", "## Rejected Candidates", "");
-    for (const entry of rejectedCandidates) {
-      const rejected = asRecord(entry) ?? {};
-      const failedReceipts = asArray(rejected.failedReceipts).map(formatValue).join(", ") || "not captured";
-      lines.push(`- ${formatCodeValue(rejected.label)}: ${failedReceipts}`);
-    }
-  }
 
   return `${lines.join("\n")}\n`;
 }
