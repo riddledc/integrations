@@ -277,6 +277,17 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
     rankingMetric: 1.23,
     receipts: [{ name: "section_energy_floors_preserved", ok: true }],
     sectionEnergyComparison: sectionComparison,
+    activeLaneReceipt: {
+      version: "neon-step-sequencer.active-lane-receipt.v1",
+      ok: true,
+      status: "active_lanes_preserved",
+      windowCount: 1,
+      requiredWindowCount: 1,
+      requiredTracks: ["bass", "chord"],
+      missingRequiredActiveCount: 0,
+      missingWindows: [],
+      boundary: "Active-lane preservation proves declared required lanes stayed measurable in proof windows; it does not prove subjective mix quality.",
+    },
   }],
   rejectedCandidates: [{
     label: "chord -0.30",
@@ -285,6 +296,22 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
     receipts: [{ name: "section_energy_floors_preserved", ok: false }],
     failedReceipts: ["section_energy_floors_preserved", "headroom_guardrail_preserved"],
     sectionEnergyComparison: sectionComparisonWithViolation,
+    activeLaneReceipt: {
+      version: "neon-step-sequencer.active-lane-receipt.v1",
+      ok: false,
+      status: "missing_required_active_lanes",
+      windowCount: 1,
+      requiredWindowCount: 1,
+      requiredTracks: ["bass", "chord"],
+      missingRequiredActiveCount: 1,
+      missingWindows: [
+        {
+          label: "Verse",
+          missingRequiredActive: ["chord"],
+        },
+      ],
+      boundary: "Active-lane preservation proves declared required lanes stayed measurable in proof windows; it does not prove subjective mix quality.",
+    },
   }],
   ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
   guardrails: { supportedClaimCandidateCount: 1, rejectedCandidateCount: 1 },
@@ -303,6 +330,10 @@ assert.match(sectionHeuristicPacketMarkdown, /headroom 0\.2 dB \(floor 0\.5 dB\)
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
 assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
+assert.match(sectionHeuristicPacketMarkdown, /## Active Lane Receipts/u);
+assert.match(sectionHeuristicPacketMarkdown, /declared required lanes stayed measurable/u);
+assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| none/u);
+assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| Verse: chord/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 
 const mixingCanonPacket = {

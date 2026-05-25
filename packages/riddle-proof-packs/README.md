@@ -210,6 +210,8 @@ not a listener preference.
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
 
+When candidates include `sectionEnergyComparison`, the Markdown includes per-section baseline/candidate/delta tables. When candidates include `activeLaneReceipt`, the Markdown includes an `Active Lane Receipts` table so required-lane preservation is visible without digging through raw JSON. Both are deterministic review aids; neither proves subjective mix quality.
+
 From the CLI:
 
 ```sh
