@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.6.2
+
+### Patch Changes
+
+- c82a9f0: Add tracked-instrument section energy receipts to audio mix heuristics and human-review Markdown.
+
 ## 0.6.1
 
 ### Patch Changes
