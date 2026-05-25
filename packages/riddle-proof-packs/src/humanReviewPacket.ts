@@ -101,6 +101,55 @@ const formatSectionEnergySummary = (candidate: Record<string, unknown>): string 
   ].join("; ");
 };
 
+const uniqueValues = (values: unknown[]): string[] => (
+  [...new Set(values.map(formatValue).filter((value) => value && value !== "not captured"))]
+);
+
+const formatSectionGuardrailSummary = (section: Record<string, unknown>): string => {
+  const guardrails = asRecord(section.guardrails);
+  if (!guardrails) return "not captured";
+  const headroom = Number(guardrails.headroomDb);
+  const minHeadroom = Number(guardrails.minHeadroomDb);
+  const violations = uniqueValues(asArray(guardrails.violated));
+  return [
+    `clip ${guardrails.clipping ? "violated" : "ok"}`,
+    `low-level ${guardrails.lowLevel ? "violated" : "ok"}`,
+    `headroom ${Number.isFinite(headroom) ? `${formatNumber(headroom)} dB` : "not captured"}`
+      + (Number.isFinite(minHeadroom) ? ` (floor ${formatNumber(minHeadroom)} dB)` : ""),
+    `violations ${violations.length ? violations.join(", ") : "none"}`,
+  ].join("; ");
+};
+
+const formatCandidateGuardrailSummary = (candidate: Record<string, unknown>): string => {
+  const comparison = asRecord(candidate.sectionEnergyComparison);
+  const sections = asArray(comparison?.sections)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  if (!comparison || !sections.length) return "not captured";
+
+  const guards = sections
+    .map((section) => asRecord(section.guardrails))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const headrooms = guards
+    .map((guardrail) => Number(guardrail.headroomDb))
+    .filter(Number.isFinite);
+  const floorFromComparison = Number(asRecord(comparison.floors)?.minHeadroomDb);
+  const floorFromSections = guards
+    .map((guardrail) => Number(guardrail.minHeadroomDb))
+    .filter(Number.isFinite);
+  const headroomFloor = Number.isFinite(floorFromComparison)
+    ? floorFromComparison
+    : (floorFromSections.length ? Math.min(...floorFromSections) : null);
+  const violations = uniqueValues(guards.flatMap((guardrail) => asArray(guardrail.violated)));
+  return [
+    `clip ${guards.some((guardrail) => guardrail.clipping === true) ? "violated" : "ok"}`,
+    `low-level ${guards.some((guardrail) => guardrail.lowLevel === true) ? "violated" : "ok"}`,
+    `min headroom ${headrooms.length ? `${formatNumber(Math.min(...headrooms))} dB` : "not captured"}`
+      + (headroomFloor !== null ? ` (floor ${formatNumber(headroomFloor)} dB)` : ""),
+    `violations ${violations.length ? violations.join(", ") : "none"}`,
+  ].join("; ");
+};
+
 const formatTrackedInstrumentEnergy = (section: Record<string, unknown>): string => {
   const entries = asArray(section.trackedInstruments)
     .map(asRecord)
@@ -157,7 +206,6 @@ const addSectionEnergyTable = (
     const baseline = asRecord(section.baseline) ?? {};
     const after = asRecord(section.candidate) ?? {};
     const delta = asRecord(section.delta) ?? {};
-    const guardrails = asRecord(section.guardrails) ?? {};
     lines.push([
       escapeTableCell(section.label ?? section.name),
       escapeTableCell(`rms ${formatValue(baseline.rms)}, energy ${formatValue(baseline.totalEnergy)}, loudness-style ${formatValue(baseline.loudnessStyleLufs)}`),
@@ -165,7 +213,7 @@ const addSectionEnergyTable = (
       escapeTableCell(`rms ${formatValue(delta.rms)}, energy ${formatValue(delta.totalEnergy)}, loudness-style ${formatValue(delta.loudnessStyleLufs)}`),
       escapeTableCell(formatTrackedInstrumentEnergy(section)),
       escapeTableCell(section.requiredEnergyFloorsPreserved),
-      escapeTableCell(asArray(guardrails.violated).length ? asArray(guardrails.violated).map(formatValue).join(", ") : "preserved"),
+      escapeTableCell(formatSectionGuardrailSummary(section)),
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
   }
 };
@@ -201,24 +249,33 @@ const addCandidateTable = (lines: string[], heading: string, candidates: unknown
     .map(asRecord)
     .filter((entry): entry is Record<string, unknown> => Boolean(entry));
   if (!rows.length) return;
+  const includeGuardrailColumn = rows.some((candidate) => Boolean(asRecord(candidate.sectionEnergyComparison)));
   lines.push(
     "",
     `## ${heading}`,
     "",
-    "| Candidate | Action | Target Movement | Receipts | Ranking |",
-    "| --- | --- | --- | --- | --- |",
+    includeGuardrailColumn
+      ? "| Candidate | Action | Target Movement | Receipts | Guardrails | Ranking |"
+      : "| Candidate | Action | Target Movement | Receipts | Ranking |",
+    includeGuardrailColumn
+      ? "| --- | --- | --- | --- | --- | --- |"
+      : "| --- | --- | --- | --- | --- |",
   );
   for (const candidate of rows) {
     const failedReceipts = asArray(candidate?.failedReceipts).map(formatValue).join(", ");
     const receiptStatus = failedReceipts || summarizeReceiptStatus(candidate);
     const sectionSummary = formatSectionEnergySummary(candidate);
-    lines.push([
+    const cells = [
       escapeTableCell(candidate?.label),
       escapeTableCell(formatAction(candidate?.action)),
       escapeTableCell(formatTargetMovement(candidate)),
       escapeTableCell(receiptStatus),
       escapeTableCell(sectionSummary ? `${formatValue(candidate?.rankingMetric)}; ${sectionSummary}` : candidate?.rankingMetric),
-    ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+    ];
+    if (includeGuardrailColumn) {
+      cells.splice(4, 0, escapeTableCell(formatCandidateGuardrailSummary(candidate)));
+    }
+    lines.push(cells.join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
   }
 };
 

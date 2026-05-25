@@ -267,9 +267,13 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
 assert.match(sectionHeuristicPacketMarkdown, /## Candidate Section Energy Details/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Supported: chord -0\.10/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Rejected: chord -0\.30/u);
+assert.match(sectionHeuristicPacketMarkdown, /Target Movement \| Receipts \| Guardrails \| Ranking/u);
 assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta \| Tracked Instruments/u);
 assert.match(sectionHeuristicPacketMarkdown, /chord: rms 0\.02 -> 0\.014 \(-0\.006\): energy 0\.001 -> 0\.0006 \(-0\.0004\)/u);
 assert.match(sectionHeuristicPacketMarkdown, /loudness-style/u);
+assert.match(sectionHeuristicPacketMarkdown, /clip ok; low-level ok; min headroom 3\.8 dB \(floor 0\.5 dB\); violations none/u);
+assert.match(sectionHeuristicPacketMarkdown, /clip violated; low-level ok; min headroom 0\.2 dB \(floor 0\.5 dB\); violations clipping, headroom/u);
+assert.match(sectionHeuristicPacketMarkdown, /headroom 0\.2 dB \(floor 0\.5 dB\); violations clipping, headroom/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
 assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
