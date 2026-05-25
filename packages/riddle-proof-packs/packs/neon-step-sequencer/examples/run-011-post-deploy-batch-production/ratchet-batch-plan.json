@@ -1,0 +1,60 @@
+{
+  "version": "lilarcade.neon-ratchet-batch-plan.v1",
+  "target": {
+    "url": "https://main.dlwavl00q582x.amplifyapp.com",
+    "route": "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass"
+  },
+  "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525",
+  "preset": {
+    "name": "post-deploy",
+    "description": "Post-deploy audit: deterministic gates, bounded catalog sweep, and active durable override proof."
+  },
+  "steps": [
+    {
+      "id": "profile-sync",
+      "kind": "profile_sync",
+      "command": "/home/ec2-user/.nvm/versions/node/v20.20.0/bin/node",
+      "args": [
+        "scripts/syncNeonRiddleProfiles.mjs",
+        "--check"
+      ]
+    },
+    {
+      "id": "fast-mix-health",
+      "kind": "profile_run",
+      "profile": ".riddle-proof/profiles/neon-fast-mix-health.json",
+      "outputSubdir": "fast-mix-health"
+    },
+    {
+      "id": "mobile-trainer-layout",
+      "kind": "profile_run",
+      "profile": ".riddle-proof/profiles/neon-mobile-trainer-layout.json",
+      "outputSubdir": "mobile-trainer-layout"
+    },
+    {
+      "id": "playback-sync",
+      "kind": "profile_run",
+      "profile": ".riddle-proof/profiles/neon-playback-sync.json",
+      "outputSubdir": "playback-sync"
+    },
+    {
+      "id": "deep-exploration",
+      "kind": "deep_exploration",
+      "profile": ".riddle-proof/profiles/neon-deep-explore-songs-and-mixes.json",
+      "outputSubdir": "deep-exploration",
+      "bounds": {
+        "maxSongs": 6,
+        "maxPartsPerSong": 4,
+        "maxWindowsPerPart": 2
+      }
+    },
+    {
+      "id": "durable-current-target",
+      "kind": "durable_current_target",
+      "profile": ".riddle-proof/profiles/neon-durable-current-target.json",
+      "outputSubdir": "durable-current-target",
+      "verifiesActiveDurableOverrides": true
+    }
+  ],
+  "boundary": "Objective proof batch only; this does not prove subjective mix taste."
+}

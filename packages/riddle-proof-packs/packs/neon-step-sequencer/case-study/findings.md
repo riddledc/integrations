@@ -156,6 +156,28 @@ Pack summary guidance first; Riddle Proof core only if a general display primiti
 - rerun: passed on May 24, 2026 against `https://lilarcade.com`.
 - next sharper question: can the same two-speed pattern be exposed for non-audio rich apps without embedding Neon-specific assumptions in the core framework?
 
+### Run 010 proved durable overrides on the deployed current target
+
+- run: `run-010-durable-current-target-production`
+- claim: the deployed app sees approved durable mix overrides through app contract state, source/config override state, visible mixer text, and bounded render guardrails.
+- observed evidence: `2` active overrides; `0` findings; chord override level `0.16` with peak `0.7546`, RMS `0.1004`, clipping `false`, and headroom `2.45 dB`; guitar override level `0.55` with peak `0.7522`, RMS `0.0999`, clipping `false`, and headroom `2.47 dB`.
+- classification: none; passing production `current_target` audit.
+- smallest layer changed: app source override plus reusable durable current-target profile/helper.
+- change made: promoted the approved guitar candidate as durable source/config state and proved the running app agreed with it after deploy.
+- rerun: passed on May 25, 2026 against `https://main.dlwavl00q582x.amplifyapp.com`.
+- next sharper question: can post-deploy proof batch deterministic checks so the next creative loop starts from clean live state?
+
+### Run 011 made post-deploy proof a batch handoff
+
+- run: `run-011-post-deploy-batch-production`
+- claim: after promoting approved durable Neon mix overrides, a post-deploy batch can prove deterministic app/audio guardrails across the running target without requiring another source change.
+- observed evidence: batch status `post_deploy_ready`; fast mix health, mobile trainer layout, playback sync, deep exploration, and durable current-target all passed; the bounded sweep sampled `6` songs, `19` parts, and `22` windows; deterministic findings `0`; restoration ok `true`; active durable overrides `2`.
+- classification: none; passing production `current_target` batch.
+- smallest layer changed: proof-pack example docs only; no product source change was needed.
+- change made: captured a compact aggregate batch receipt so future operators can reuse the post-deploy gate without copying the full raw artifact tree.
+- rerun: passed on May 25, 2026 against `https://main.dlwavl00q582x.amplifyapp.com`.
+- next sharper question: can the next candidate strategy use this clean deployed state as the baseline for another bounded, reviewable loop?
+
 ### Local runner shutdown needs a small ergonomics follow-up
 
 - run: `run-002-mix-change`, `run-003-full-matrix`, `run-004-ratchet-loop-mix-level-search`

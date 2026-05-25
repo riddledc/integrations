@@ -1,0 +1,546 @@
+{
+  "version": "lilarcade.neon-ratchet-batch-summary.v1",
+  "status": "post_deploy_ready",
+  "ok": true,
+  "deterministicOk": true,
+  "allowFindings": false,
+  "target": {
+    "url": "https://main.dlwavl00q582x.amplifyapp.com",
+    "route": "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass"
+  },
+  "preset": {
+    "name": "post-deploy",
+    "description": "Post-deploy audit: deterministic gates, bounded catalog sweep, and active durable override proof."
+  },
+  "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525",
+  "coverage": {
+    "availableSongCount": 6,
+    "proofCapableSongCount": 6,
+    "skippedSongCount": 0,
+    "sampledSongCount": 6,
+    "sampledPartCount": 19,
+    "sampledWindowCount": 22,
+    "entryCount": 19,
+    "findingCount": 0,
+    "restorationOk": true
+  },
+  "elapsedMs": 167210,
+  "steps": [
+    {
+      "id": "profile-sync",
+      "kind": "profile_sync",
+      "ok": true,
+      "profileCount": 11,
+      "changes": [],
+      "errors": [],
+      "error": null,
+      "elapsedMs": 21,
+      "stepLabel": "profile-sync"
+    },
+    {
+      "id": "fast-mix-health",
+      "kind": "profile_run",
+      "ok": true,
+      "exitCode": 0,
+      "signal": null,
+      "profilePath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/.riddle-proof/profiles/neon-fast-mix-health.json",
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/fast-mix-health",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/fast-mix-health/profile-result.json",
+      "profile": {
+        "profileName": "lilarcade-neon-fast-mix-health",
+        "status": "passed",
+        "checkCount": 7
+      },
+      "error": null,
+      "elapsedMs": 8298,
+      "stepLabel": "fast-mix-health"
+    },
+    {
+      "id": "mobile-trainer-layout",
+      "kind": "profile_run",
+      "ok": true,
+      "exitCode": 0,
+      "signal": null,
+      "profilePath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/.riddle-proof/profiles/neon-mobile-trainer-layout.json",
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/mobile-trainer-layout",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/mobile-trainer-layout/profile-result.json",
+      "profile": {
+        "profileName": "lilarcade-neon-mobile-trainer-layout",
+        "status": "passed",
+        "checkCount": 5
+      },
+      "error": null,
+      "elapsedMs": 3608,
+      "stepLabel": "mobile-trainer-layout"
+    },
+    {
+      "id": "playback-sync",
+      "kind": "profile_run",
+      "ok": true,
+      "exitCode": 0,
+      "signal": null,
+      "profilePath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/.riddle-proof/profiles/neon-playback-sync.json",
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/playback-sync",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/playback-sync/profile-result.json",
+      "profile": {
+        "profileName": "lilarcade-neon-playback-sync",
+        "status": "passed",
+        "checkCount": 5
+      },
+      "error": null,
+      "elapsedMs": 14229,
+      "stepLabel": "playback-sync"
+    },
+    {
+      "id": "deep-exploration",
+      "kind": "deep_exploration",
+      "ok": true,
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/deep-exploration",
+      "profileResultPath": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/deep-exploration/profile-result.json",
+      "profile": {
+        "status": "passed"
+      },
+      "coverage": {
+        "availableSongCount": 6,
+        "proofCapableSongCount": 6,
+        "skippedSongCount": 0,
+        "sampledSongCount": 6,
+        "sampledPartCount": 19,
+        "sampledWindowCount": 22
+      },
+      "entryCount": 19,
+      "findingCount": 0,
+      "restorationOk": true,
+      "error": null,
+      "elapsedMs": 127639,
+      "stepLabel": "deep-exploration"
+    },
+    {
+      "id": "durable-current-target",
+      "kind": "durable_current_target",
+      "ok": true,
+      "status": "ready_for_promotion_review",
+      "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target",
+      "overrideCount": 2,
+      "findingCount": 0,
+      "results": [
+        {
+          "overrideId": "monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate",
+          "ok": true,
+          "status": "passed",
+          "selectedSong": "Monkberry Moon Delight (Tab)",
+          "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+          "expectedMixerLevels": {
+            "chord": 0.16
+          },
+          "mixHealth": {
+            "rms": 0.1004,
+            "peak": 0.7546,
+            "clipping": false,
+            "headroomDb": 2.45,
+            "lowLevel": false
+          }
+        },
+        {
+          "overrideId": "monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate",
+          "ok": true,
+          "status": "passed",
+          "selectedSong": "Monkberry Moon Delight (Tab)",
+          "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+          "expectedMixerLevels": {
+            "guitar": 0.55
+          },
+          "mixHealth": {
+            "rms": 0.0999,
+            "peak": 0.7522,
+            "clipping": false,
+            "headroomDb": 2.47,
+            "lowLevel": false
+          }
+        }
+      ],
+      "planComparison": null,
+      "boundary": "This command proves deterministic current-target receipts for durable mix overrides. It does not prove subjective mix taste.",
+      "error": null,
+      "elapsedMs": 13415,
+      "stepLabel": "durable-current-target"
+    }
+  ],
+  "humanReviewPacket": null,
+  "mixingCanonSurrogateReview": null,
+  "approvedCandidatePacket": null,
+  "durableMixPatchPlan": null,
+  "durableCurrentTarget": {
+    "id": "durable-current-target",
+    "kind": "durable_current_target",
+    "ok": true,
+    "status": "ready_for_promotion_review",
+    "outputDir": "/home/ec2-user/riddle-worktrees/lilarcade-neon-mixing-heuristics-v1/test-results/riddle-proof/neon-post-deploy-sweep-20260525/durable-current-target",
+    "overrideCount": 2,
+    "findingCount": 0,
+    "results": [
+      {
+        "overrideId": "monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate",
+        "ok": true,
+        "status": "passed",
+        "selectedSong": "Monkberry Moon Delight (Tab)",
+        "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+        "expectedMixerLevels": {
+          "chord": 0.16
+        },
+        "mixHealth": {
+          "rms": 0.1004,
+          "peak": 0.7546,
+          "clipping": false,
+          "headroomDb": 2.45,
+          "lowLevel": false
+        }
+      },
+      {
+        "overrideId": "monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate",
+        "ok": true,
+        "status": "passed",
+        "selectedSong": "Monkberry Moon Delight (Tab)",
+        "mixProfileId": "monkberry-moon-delight-eq-lane-mix-v7",
+        "expectedMixerLevels": {
+          "guitar": 0.55
+        },
+        "mixHealth": {
+          "rms": 0.0999,
+          "peak": 0.7522,
+          "clipping": false,
+          "headroomDb": 2.47,
+          "lowLevel": false
+        }
+      }
+    ],
+    "planComparison": null,
+    "boundary": "This command proves deterministic current-target receipts for durable mix overrides. It does not prove subjective mix taste.",
+    "error": null,
+    "elapsedMs": 13415,
+    "stepLabel": "durable-current-target"
+  },
+  "findings": [],
+  "nextAction": "Post-deploy audit passed; durable overrides and bounded catalog guardrails are clean on the running target.",
+  "boundary": "This batch proves deterministic app/audio guardrails and captures review packets. It does not prove subjective mix taste.",
+  "artifactIndex": [
+    {
+      "label": "Batch plan",
+      "kind": "JSON plan",
+      "path": "ratchet-batch-plan.json",
+      "whyItMatters": "Records the configured preset, target, and ordered proof steps for this local batch."
+    },
+    {
+      "label": "Batch summary",
+      "kind": "JSON summary",
+      "path": "ratchet-batch-summary.json",
+      "whyItMatters": "Structured rollup of step status, findings, review packet details, and next action."
+    },
+    {
+      "label": "Batch summary markdown",
+      "kind": "Markdown summary",
+      "path": "ratchet-batch-summary.md",
+      "whyItMatters": "Human-readable local gate summary for deciding whether to continue, promote, or inspect findings."
+    },
+    {
+      "label": "fast-mix-health profile result",
+      "kind": "JSON profile result",
+      "path": "fast-mix-health/profile-result.json",
+      "whyItMatters": "Structured Riddle Proof result for the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health proof",
+      "kind": "JSON proof",
+      "path": "fast-mix-health/proof.json",
+      "whyItMatters": "Proof receipt for the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health summary",
+      "kind": "Markdown summary",
+      "path": "fast-mix-health/summary.md",
+      "whyItMatters": "Human-readable proof summary for the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health console",
+      "kind": "JSON console log",
+      "path": "fast-mix-health/console.json",
+      "whyItMatters": "Browser console evidence for the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health artifact manifest",
+      "kind": "JSON artifact manifest",
+      "path": "fast-mix-health/artifact-manifest.json",
+      "whyItMatters": "Runner artifact manifest for the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health screenshot",
+      "kind": "Screenshot",
+      "path": "fast-mix-health/screenshots/lilarcade-neon-fast-mix-health-desktop-neon-fast-mix-health.png",
+      "whyItMatters": "Visual evidence captured during the fast-mix-health batch step."
+    },
+    {
+      "label": "fast-mix-health screenshot",
+      "kind": "Screenshot",
+      "path": "fast-mix-health/screenshots/lilarcade-neon-fast-mix-health-desktop.png",
+      "whyItMatters": "Visual evidence captured during the fast-mix-health batch step."
+    },
+    {
+      "label": "mobile-trainer-layout profile result",
+      "kind": "JSON profile result",
+      "path": "mobile-trainer-layout/profile-result.json",
+      "whyItMatters": "Structured Riddle Proof result for the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout proof",
+      "kind": "JSON proof",
+      "path": "mobile-trainer-layout/proof.json",
+      "whyItMatters": "Proof receipt for the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout summary",
+      "kind": "Markdown summary",
+      "path": "mobile-trainer-layout/summary.md",
+      "whyItMatters": "Human-readable proof summary for the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout console",
+      "kind": "JSON console log",
+      "path": "mobile-trainer-layout/console.json",
+      "whyItMatters": "Browser console evidence for the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout artifact manifest",
+      "kind": "JSON artifact manifest",
+      "path": "mobile-trainer-layout/artifact-manifest.json",
+      "whyItMatters": "Runner artifact manifest for the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout screenshot",
+      "kind": "Screenshot",
+      "path": "mobile-trainer-layout/screenshots/lilarcade-neon-mobile-trainer-layout-ipad-mini-neon-mobile-trainer-layout.png",
+      "whyItMatters": "Visual evidence captured during the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout screenshot",
+      "kind": "Screenshot",
+      "path": "mobile-trainer-layout/screenshots/lilarcade-neon-mobile-trainer-layout-ipad-mini.png",
+      "whyItMatters": "Visual evidence captured during the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout screenshot",
+      "kind": "Screenshot",
+      "path": "mobile-trainer-layout/screenshots/lilarcade-neon-mobile-trainer-layout-phone-neon-mobile-trainer-layout.png",
+      "whyItMatters": "Visual evidence captured during the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "mobile-trainer-layout screenshot",
+      "kind": "Screenshot",
+      "path": "mobile-trainer-layout/screenshots/lilarcade-neon-mobile-trainer-layout-phone.png",
+      "whyItMatters": "Visual evidence captured during the mobile-trainer-layout batch step."
+    },
+    {
+      "label": "playback-sync profile result",
+      "kind": "JSON profile result",
+      "path": "playback-sync/profile-result.json",
+      "whyItMatters": "Structured Riddle Proof result for the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync proof",
+      "kind": "JSON proof",
+      "path": "playback-sync/proof.json",
+      "whyItMatters": "Proof receipt for the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync summary",
+      "kind": "Markdown summary",
+      "path": "playback-sync/summary.md",
+      "whyItMatters": "Human-readable proof summary for the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync console",
+      "kind": "JSON console log",
+      "path": "playback-sync/console.json",
+      "whyItMatters": "Browser console evidence for the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync artifact manifest",
+      "kind": "JSON artifact manifest",
+      "path": "playback-sync/artifact-manifest.json",
+      "whyItMatters": "Runner artifact manifest for the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync screenshot",
+      "kind": "Screenshot",
+      "path": "playback-sync/screenshots/lilarcade-neon-playback-sync-desktop-neon-playback-sync.png",
+      "whyItMatters": "Visual evidence captured during the playback-sync batch step."
+    },
+    {
+      "label": "playback-sync screenshot",
+      "kind": "Screenshot",
+      "path": "playback-sync/screenshots/lilarcade-neon-playback-sync-desktop.png",
+      "whyItMatters": "Visual evidence captured during the playback-sync batch step."
+    },
+    {
+      "label": "deep-exploration profile result",
+      "kind": "JSON profile result",
+      "path": "deep-exploration/profile-result.json",
+      "whyItMatters": "Structured Riddle Proof result for the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration proof",
+      "kind": "JSON proof",
+      "path": "deep-exploration/proof.json",
+      "whyItMatters": "Proof receipt for the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration summary",
+      "kind": "Markdown summary",
+      "path": "deep-exploration/summary.md",
+      "whyItMatters": "Human-readable proof summary for the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration console",
+      "kind": "JSON console log",
+      "path": "deep-exploration/console.json",
+      "whyItMatters": "Browser console evidence for the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration artifact manifest",
+      "kind": "JSON artifact manifest",
+      "path": "deep-exploration/artifact-manifest.json",
+      "whyItMatters": "Runner artifact manifest for the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration screenshot",
+      "kind": "Screenshot",
+      "path": "deep-exploration/screenshots/lilarcade-neon-deep-explore-songs-and-mixes-local-bounds-desktop-neon-deep-explore-songs-and-mixes.png",
+      "whyItMatters": "Visual evidence captured during the deep-exploration batch step."
+    },
+    {
+      "label": "deep-exploration screenshot",
+      "kind": "Screenshot",
+      "path": "deep-exploration/screenshots/lilarcade-neon-deep-explore-songs-and-mixes-local-bounds-desktop.png",
+      "whyItMatters": "Visual evidence captured during the deep-exploration batch step."
+    },
+    {
+      "label": "durable-current-target aggregate summary",
+      "kind": "JSON summary",
+      "path": "durable-current-target/durable-current-target-summary.json",
+      "whyItMatters": "Structured current-target audit summary for active durable mix overrides."
+    },
+    {
+      "label": "durable-current-target aggregate report",
+      "kind": "Markdown summary",
+      "path": "durable-current-target/durable-current-target-summary.md",
+      "whyItMatters": "Human-readable current-target audit summary for active durable mix overrides."
+    },
+    {
+      "label": "durable-current-target artifact-manifest",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/artifact-manifest.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target console",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/console.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target dom-summary",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/dom-summary.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target generated-profile",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/generated-profile.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target profile-result",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/profile-result.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target proof",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/proof.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target summary",
+      "kind": "Markdown summary",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/summary.md",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target artifact-manifest",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/artifact-manifest.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target console",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/console.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target dom-summary",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/dom-summary.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target generated-profile",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/generated-profile.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target profile-result",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/profile-result.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target proof",
+      "kind": "JSON proof artifact",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/proof.json",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target summary",
+      "kind": "Markdown summary",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/summary.md",
+      "whyItMatters": "Per-override current-target proof receipt for an active durable mix override."
+    },
+    {
+      "label": "durable-current-target screenshot",
+      "kind": "Screenshot",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop-neon-durable-current-target.png",
+      "whyItMatters": "Visual evidence captured during the durable-current-target batch step."
+    },
+    {
+      "label": "durable-current-target screenshot",
+      "kind": "Screenshot",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-chord-008-to-016-preservation-candidate/screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png",
+      "whyItMatters": "Visual evidence captured during the durable-current-target batch step."
+    },
+    {
+      "label": "durable-current-target screenshot",
+      "kind": "Screenshot",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop-neon-durable-current-target.png",
+      "whyItMatters": "Visual evidence captured during the durable-current-target batch step."
+    },
+    {
+      "label": "durable-current-target screenshot",
+      "kind": "Screenshot",
+      "path": "durable-current-target/monkberry-moon-delight-tab-monkberry-moon-delight-tab-guitar-06-to-055-approved-candidate/screenshots/lilarcade-neon-durable-current-target-monkberry-moon-delight-tab-monkberry-moon-desktop.png",
+      "whyItMatters": "Visual evidence captured during the durable-current-target batch step."
+    }
+  ]
+}

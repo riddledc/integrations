@@ -69,6 +69,7 @@ The `examples/` directory contains local Playwright proof results captured again
 - `run-008-durable-mix-patch-handoff`: passing durable handoff example where the applied packet became a scoped source/config plan for `chord: 0.28`, followed by a `current_target` proof showing the running app saw the durable level without clipping or low-level windows.
 - `run-009-deep-exploration-production`: passing `current_target` deep exploration proof against deployed LilArcade after the local ratchet fixed proof-window overclaim and hot preset clipping findings.
 - `run-010-durable-current-target-production`: passing deployed `current_target` proof where the running app sees the approved durable `chord: 0.18` override in contract levels, mix-profile source levels, visible mixer text, and render guardrails.
+- `run-011-post-deploy-batch-production`: passing deployed post-deploy batch after the guitar `0.55` durable override promotion, covering fast mix health, mobile trainer layout, playback sync, six-song deep exploration, and active durable override proof with `0` deterministic findings.
 
 ## Naming note
 
