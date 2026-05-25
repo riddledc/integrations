@@ -11,13 +11,17 @@ import {
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
   audioMixCandidateMagnitudeMatchesRequest,
+  collectAudioExplorationReviewWarnings,
   compareAudioSectionEnergy,
   computeAudioSectionReviewMetric,
   inferAudioMixRequestedMagnitude,
   estimateLoudnessStyleLufs,
   formatAudioExplorationCoverageMarkdown,
+  formatAudioExplorationReviewWarningsMarkdown,
+  formatAudioMixIntentMatrixMarkdown,
   resolveAudioMixRequestMagnitude,
   summarizeAudioExplorationCoverage,
+  summarizeAudioMixIntentMatrix,
   summarizeAudioSectionEnergy,
   createMixingCanonSurrogateReview,
   buildNeonApprovedCandidateProfileFromReviewPacket,
@@ -51,12 +55,16 @@ assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
+assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
 assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
+assert.equal(typeof formatAudioExplorationReviewWarningsMarkdown, "function");
+assert.equal(typeof formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof summarizeAudioExplorationCoverage, "function");
+assert.equal(typeof summarizeAudioMixIntentMatrix, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
 assert.equal(typeof createMixingCanonSurrogateReview, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
@@ -77,11 +85,15 @@ assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
+assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown, "function");
+assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown, "function");
+assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
+assert.equal(typeof audioHeuristicsSubpath.summarizeAudioMixIntentMatrix, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
 assert.equal(typeof audioReviewSubpath.createMixingCanonSurrogateReview, "function");
 
@@ -513,6 +525,184 @@ assert.ok(audioExplorationCoverageMarkdown.includes("| Yakety Yak (Dark) | 2 | 2
 assert.match(audioExplorationCoverageMarkdown, /## Part Coverage/u);
 assert.match(audioExplorationCoverageMarkdown, /deterministic guardrails/u);
 assert.doesNotMatch(audioExplorationCoverageMarkdown, /automatically better/u);
+const audioExplorationReviewWarnings = collectAudioExplorationReviewWarnings({
+  entries: [
+    {
+      songName: "Yakety Yak (Dark)",
+      partLabel: "Hook",
+      status: "passed",
+      summary: {
+        windows: [{
+          requiredActive: ["kick", "bass", "chord"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.96812, rms: 0.1338, headroomDb: 0.281, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+    {
+      songName: "Monkberry Moon Delight (Tab)",
+      partLabel: "Intro Bed",
+      status: "passed",
+      summary: {
+        windows: [{
+          requiredActive: ["bass", "chord", "guitar"],
+          missingRequiredActive: [],
+          mixHealth: { peak: 0.7567, rms: 0.1004, headroomDb: 2.42, clipping: false, lowLevel: false },
+        }],
+      },
+    },
+  ],
+});
+assert.equal(audioExplorationReviewWarnings.length, 1);
+assert.equal(audioExplorationReviewWarnings[0]?.version, "riddle-proof.audio-exploration-review-warning.v1");
+assert.equal(audioExplorationReviewWarnings[0]?.kind, "low_headroom_margin");
+assert.equal(audioExplorationReviewWarnings[0]?.severity, "review");
+assert.equal(audioExplorationReviewWarnings[0]?.songName, "Yakety Yak (Dark)");
+assert.equal(audioExplorationReviewWarnings[0]?.partLabel, "Hook");
+assert.equal(audioExplorationReviewWarnings[0]?.minHeadroomDb, 0.28);
+assert.equal(audioExplorationReviewWarnings[0]?.thresholdDb, 0.5);
+assert.equal(audioExplorationReviewWarnings[0]?.peak, 0.9681);
+assert.equal(audioExplorationReviewWarnings[0]?.clipping, false);
+assert.match(audioExplorationReviewWarnings[0]?.message ?? "", /0\.28 dB headroom/u);
+assert.match(audioExplorationReviewWarnings[0]?.boundary ?? "", /do not prove subjective mix quality/u);
+const audioExplorationReviewWarningsMarkdown = formatAudioExplorationReviewWarningsMarkdown(audioExplorationReviewWarnings, {
+  title: "Neon Review Warnings",
+});
+assert.match(audioExplorationReviewWarningsMarkdown, /^# Neon Review Warnings/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /Role: `non_failing_review_cues`/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /\| low_headroom_margin \| review \| Yakety Yak \(Dark\) \| Hook \| 0\.28 \| 0\.5 \| 0\.9681 \| false \| false \|/u);
+assert.match(audioExplorationReviewWarningsMarkdown, /do not prove subjective mix quality/u);
+assert.doesNotMatch(audioExplorationReviewWarningsMarkdown, /automatically better/u);
+const audioExplorationNoReviewWarningsMarkdown = audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown(audioExplorationCoverage, {
+  minHeadroomDb: -1,
+});
+assert.match(audioExplorationNoReviewWarningsMarkdown, /Warning count: `0`/u);
+assert.match(audioExplorationNoReviewWarningsMarkdown, /\| none \| review \| none \| none \| not captured \| not captured \| not captured \| false \| false \|/u);
+assert.deepEqual(audioHeuristicsSubpath.collectAudioExplorationReviewWarnings(audioExplorationCoverage, {
+  minHeadroomDb: -1,
+}), []);
+const audioIntentMatrixSummary = summarizeAudioMixIntentMatrix({
+  status: "intent_matrix_ready_for_review",
+  ok: true,
+  executionMode: "single_browser_intents",
+  target: {
+    url: "https://riddlenode.com",
+    route: "/neon-lab/games/drum-sequencer",
+  },
+  intentSet: {
+    name: "subtle-down",
+  },
+  ratchetMaxIterations: 3,
+  sharedGates: {
+    status: "local_gate_ready",
+  },
+  mixingCanonSurrogateReview: {
+    status: "approved_for_development_review",
+    approvedCount: 2,
+    needsHumanReviewCount: 0,
+    recommendedDevelopmentCandidate: {
+      label: "bass -0.05",
+    },
+    recommendationRole: "most_conservative_surrogate_approved_candidate_for_development_review",
+  },
+  intents: [
+    {
+      id: "bass-down-little",
+      intent: "turn the bass part down a little",
+      status: "preliminary_candidate_ready",
+      recommendation: "bass -0.05",
+      recommendationAction: {
+        type: "set_mixer_level",
+        track: "bass",
+        from: 0.62,
+        to: 0.57,
+        delta: -0.05,
+      },
+      supportedClaimCandidateCount: 3,
+      rejectedCandidateCount: 0,
+      reviewWarningCount: 0,
+      findingCount: 0,
+      rankingRole: "review_order_only",
+      rankingMetricDelta: 0.1716,
+    },
+    {
+      id: "chord-down-little",
+      intent: "turn the chord part down a little",
+      status: "preliminary_candidate_ready",
+      recommendation: "chord -0.035",
+      recommendationAction: {
+        type: "set_mixer_level",
+        track: "chord",
+        from: 0.16,
+        to: 0.125,
+        delta: -0.035,
+      },
+      supportedClaimCandidateCount: 2,
+      rejectedCandidateCount: 1,
+      reviewWarningCount: 0,
+      findingCount: 0,
+      rankingRole: "review_order_only",
+      rankingMetricDelta: -0.0067,
+    },
+  ],
+});
+assert.equal(audioIntentMatrixSummary.version, "riddle-proof.audio-mix-intent-matrix.v1");
+assert.equal(audioIntentMatrixSummary.role, "claim_candidate_review_matrix");
+assert.equal(audioIntentMatrixSummary.executionMode, "single_browser_intents");
+assert.equal(audioIntentMatrixSummary.intentCount, 2);
+assert.equal(audioIntentMatrixSummary.supportedIntentCount, 2);
+assert.equal(audioIntentMatrixSummary.findingCount, 0);
+assert.equal(audioIntentMatrixSummary.reviewWarningCount, 0);
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.status, "approved_for_development_review");
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.approvedCount, 2);
+assert.equal(audioIntentMatrixSummary.mixingCanonSurrogateReview?.recommendedDevelopmentCandidate, "bass -0.05");
+assert.match(audioIntentMatrixSummary.boundary, /do not prove subjective mix quality/u);
+const audioIntentMatrixMarkdown = formatAudioMixIntentMatrixMarkdown(audioIntentMatrixSummary, {
+  title: "Neon Intent Matrix",
+});
+assert.match(audioIntentMatrixMarkdown, /^# Neon Intent Matrix/u);
+assert.match(audioIntentMatrixMarkdown, /Role: `claim_candidate_review_matrix`/u);
+assert.match(audioIntentMatrixMarkdown, /Execution mode: `single_browser_intents`/u);
+assert.match(audioIntentMatrixMarkdown, /Intent count: `2`/u);
+assert.match(audioIntentMatrixMarkdown, /\| turn the bass part down a little \| preliminary_candidate_ready \| bass -0\.05 \| set_mixer_level bass: 0\.62 -> 0\.57 \(-0\.05\) \| 3 \| 0 \| 0 \| 0 \| review_order_only \| 0\.1716 \|/u);
+assert.match(audioIntentMatrixMarkdown, /\| turn the chord part down a little \| preliminary_candidate_ready \| chord -0\.035 \| set_mixer_level chord: 0\.16 -> 0\.125 \(-0\.035\) \| 2 \| 1 \| 0 \| 0 \| review_order_only \| -0\.0067 \|/u);
+assert.match(audioIntentMatrixMarkdown, /Mixing Canon Surrogate Review/u);
+assert.match(audioIntentMatrixMarkdown, /Recommended development candidate: `bass -0\.05`/u);
+assert.match(audioIntentMatrixMarkdown, /not a listener preference/u);
+assert.match(audioIntentMatrixMarkdown, /do not prove subjective mix quality/u);
+assert.match(audioIntentMatrixMarkdown, /do not prove that a candidate sounds better/u);
+assert.doesNotMatch(audioIntentMatrixMarkdown, /automatically better/u);
+const nestedIntentMatrixSummary = audioHeuristicsSubpath.summarizeAudioMixIntentMatrix({
+  intents: [{
+    requestedIntent: "turn the guitar part down a little",
+    findings: [{ message: "control did not move" }],
+    reviewWarnings: [{ kind: "low_headroom_margin" }],
+    guardrails: {
+      supportedClaimCandidateCount: 0,
+      rejectedCandidateCount: 3,
+    },
+    ranking: {
+      role: "review_order_only",
+    },
+    recommendation: {
+      candidate: {
+        label: "guitar -0.02",
+        action: {
+          type: "set_mixer_level",
+          track: "guitar",
+          from: 0.55,
+          to: 0.53,
+          delta: -0.02,
+        },
+      },
+    },
+  }],
+});
+assert.equal(nestedIntentMatrixSummary.ok, false);
+assert.equal(nestedIntentMatrixSummary.findingCount, 1);
+assert.equal(nestedIntentMatrixSummary.reviewWarningCount, 1);
+assert.equal(nestedIntentMatrixSummary.intents[0]?.recommendation, "guitar -0.02");
+assert.equal(nestedIntentMatrixSummary.intents[0]?.recommendationAction?.track, "guitar");
 const audioExplorationCoverageNoPartsMarkdown = audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown(audioExplorationCoverage, {
   includePartCoverage: false,
 });
