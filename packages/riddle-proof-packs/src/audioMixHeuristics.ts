@@ -31,12 +31,78 @@ export interface AudioSectionEnergyComparison {
   boundary: string;
 }
 
+export type AudioMixRequestedMagnitude = "subtle";
+export type AudioMixRequestMagnitudeSource = "explicit_args" | "intent_text" | "unconstrained";
+
+export interface AudioMixMagnitudePolicy {
+  maxAbsLevelDelta: number;
+  aliases: string[];
+}
+
+export interface AudioMixRequestMagnitudeOptions {
+  intent?: unknown;
+  claim?: unknown;
+  magnitude?: unknown;
+  requestedMagnitude?: unknown;
+  maxAbsDelta?: unknown;
+  maxAbsLevelDelta?: unknown;
+  policies?: Partial<Record<AudioMixRequestedMagnitude, Partial<AudioMixMagnitudePolicy>>>;
+}
+
+export interface AudioMixResolvedRequestMagnitude {
+  version: "riddle-proof.audio-mix-request-magnitude.v1";
+  magnitude: AudioMixRequestedMagnitude | null;
+  maxAbsDelta: number | null;
+  maxAbsLevelDelta: number | null;
+  magnitudeSource: AudioMixRequestMagnitudeSource;
+  source: AudioMixRequestMagnitudeSource;
+  requestedText: string | null;
+  boundary: string;
+}
+
+export interface AudioMixCandidateMagnitudeMatch {
+  version: "riddle-proof.audio-mix-candidate-magnitude-match.v1";
+  matches: boolean;
+  magnitude: AudioMixRequestedMagnitude | null;
+  requestedMagnitude: AudioMixRequestedMagnitude | null;
+  maxAbsDelta: number | null;
+  maxAbsLevelDelta: number | null;
+  candidateDelta: number | null;
+  candidateAbsDelta: number | null;
+  source: AudioMixRequestMagnitudeSource;
+  failureReason: "candidate_delta_exceeds_requested_magnitude" | "candidate_delta_missing" | null;
+  boundary: string;
+}
+
 const DEFAULT_SECTION_HEURISTICS: Required<Omit<AudioSectionHeuristicOptions, "trackedInstruments">> = {
   requiredRmsFloor: 0.0005,
   requiredPeakFloor: 0.001,
   requiredTotalEnergyFloor: 0.000001,
   minHeadroomDb: 0.5,
 };
+
+export const AUDIO_MIX_SUBTLE_MAX_ABS_LEVEL_DELTA = 0.12;
+
+export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagnitude, AudioMixMagnitudePolicy> = {
+  subtle: {
+    maxAbsLevelDelta: AUDIO_MIX_SUBTLE_MAX_ABS_LEVEL_DELTA,
+    aliases: [
+      "a little",
+      "little",
+      "slightly",
+      "subtle",
+      "subtly",
+      "small",
+      "tiny",
+      "a bit",
+      "bit",
+      "touch",
+      "hair",
+    ],
+  },
+};
+
+const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective candidate support before review-order ranking; it does not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
   const number = Number(value);
@@ -75,6 +141,140 @@ const asRecord = (value: unknown): Record<string, unknown> => (
     ? value as Record<string, unknown>
     : {}
 );
+
+const asNumber = (value: unknown): number | null => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const lowerText = (value: unknown): string => (
+  typeof value === "string" ? value.toLowerCase().trim() : ""
+);
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const textMentionsPhrase = (text: string, phrase: string): boolean => {
+  if (!text || !phrase) return false;
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(phrase.toLowerCase())}([^a-z0-9]|$)`, "u").test(text);
+};
+
+const mergeMagnitudePolicies = (
+  overrides: AudioMixRequestMagnitudeOptions["policies"] = {},
+): Record<AudioMixRequestedMagnitude, AudioMixMagnitudePolicy> => ({
+  subtle: {
+    maxAbsLevelDelta: asNumber(overrides.subtle?.maxAbsLevelDelta)
+      ?? DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES.subtle.maxAbsLevelDelta,
+    aliases: [
+      ...DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES.subtle.aliases,
+      ...asArray(overrides.subtle?.aliases).map(String),
+    ].map((entry) => entry.trim()).filter(Boolean),
+  },
+});
+
+export function normalizeAudioMixRequestedMagnitude(
+  value: unknown,
+  policies: AudioMixRequestMagnitudeOptions["policies"] = {},
+): AudioMixRequestedMagnitude | null {
+  const text = lowerText(value);
+  if (!text) return null;
+  const mergedPolicies = mergeMagnitudePolicies(policies);
+  for (const [magnitude, policy] of Object.entries(mergedPolicies) as Array<[AudioMixRequestedMagnitude, AudioMixMagnitudePolicy]>) {
+    if (text === magnitude || policy.aliases.some((alias) => text === alias.toLowerCase())) {
+      return magnitude;
+    }
+  }
+  return null;
+}
+
+export function inferAudioMixRequestedMagnitude(
+  text: unknown,
+  policies: AudioMixRequestMagnitudeOptions["policies"] = {},
+): AudioMixRequestedMagnitude | null {
+  const normalized = lowerText(text);
+  if (!normalized) return null;
+  const mergedPolicies = mergeMagnitudePolicies(policies);
+  for (const [magnitude, policy] of Object.entries(mergedPolicies) as Array<[AudioMixRequestedMagnitude, AudioMixMagnitudePolicy]>) {
+    if (policy.aliases.some((alias) => textMentionsPhrase(normalized, alias))) {
+      return magnitude;
+    }
+  }
+  return null;
+}
+
+export function resolveAudioMixRequestMagnitude(
+  options: AudioMixRequestMagnitudeOptions = {},
+): AudioMixResolvedRequestMagnitude {
+  const requestedText = lowerText(options.intent ?? options.claim);
+  const policies = mergeMagnitudePolicies(options.policies);
+  const explicitMagnitude = normalizeAudioMixRequestedMagnitude(
+    options.magnitude ?? options.requestedMagnitude,
+    policies,
+  );
+  const inferredMagnitude = explicitMagnitude ?? inferAudioMixRequestedMagnitude(requestedText, policies);
+  const explicitMaxAbsDelta = asNumber(options.maxAbsLevelDelta ?? options.maxAbsDelta);
+  const hasExplicitMaxAbsDelta = explicitMaxAbsDelta !== null && explicitMaxAbsDelta > 0;
+  const maxAbsLevelDelta = hasExplicitMaxAbsDelta
+    ? explicitMaxAbsDelta
+    : (inferredMagnitude ? policies[inferredMagnitude].maxAbsLevelDelta : null);
+  const roundedMaxAbsLevelDelta = roundMetric(maxAbsLevelDelta, 4);
+  const magnitudeSource: AudioMixRequestMagnitudeSource = explicitMagnitude || hasExplicitMaxAbsDelta
+    ? "explicit_args"
+    : (inferredMagnitude ? "intent_text" : "unconstrained");
+
+  return {
+    version: "riddle-proof.audio-mix-request-magnitude.v1",
+    magnitude: inferredMagnitude,
+    maxAbsDelta: roundedMaxAbsLevelDelta,
+    maxAbsLevelDelta: roundedMaxAbsLevelDelta,
+    magnitudeSource,
+    source: magnitudeSource,
+    requestedText: requestedText || null,
+    boundary: AUDIO_MIX_MAGNITUDE_BOUNDARY,
+  };
+}
+
+const candidateDelta = (candidateOrDelta: unknown): number | null => {
+  const direct = asNumber(candidateOrDelta);
+  if (direct !== null) return direct;
+  const candidate = asRecord(candidateOrDelta);
+  const action = asRecord(candidate.action);
+  const explicitDelta = asNumber(action.delta ?? candidate.delta);
+  if (explicitDelta !== null) return explicitDelta;
+  const from = asNumber(action.from ?? candidate.from);
+  const to = asNumber(action.to ?? candidate.to);
+  return from !== null && to !== null ? to - from : null;
+};
+
+export function audioMixCandidateMagnitudeMatchesRequest(
+  candidateOrDelta: unknown,
+  request: Partial<AudioMixResolvedRequestMagnitude> | null | undefined = {},
+): AudioMixCandidateMagnitudeMatch {
+  const delta = candidateDelta(candidateOrDelta);
+  const maxAbsDelta = asNumber(request?.maxAbsDelta ?? request?.maxAbsLevelDelta);
+  const hasMagnitudeConstraint = maxAbsDelta !== null && maxAbsDelta > 0;
+  const absDelta = delta === null ? null : Math.abs(delta);
+  const missingConstrainedDelta = hasMagnitudeConstraint && delta === null;
+  const exceedsMagnitude = hasMagnitudeConstraint
+    && absDelta !== null
+    && absDelta > maxAbsDelta + 0.000001;
+  const source = request?.magnitudeSource ?? request?.source ?? "unconstrained";
+
+  return {
+    version: "riddle-proof.audio-mix-candidate-magnitude-match.v1",
+    matches: !missingConstrainedDelta && !exceedsMagnitude,
+    magnitude: request?.magnitude ?? null,
+    requestedMagnitude: request?.magnitude ?? null,
+    maxAbsDelta: hasMagnitudeConstraint ? roundMetric(maxAbsDelta, 4) : null,
+    maxAbsLevelDelta: hasMagnitudeConstraint ? roundMetric(maxAbsDelta, 4) : null,
+    candidateDelta: roundMetric(delta, 4),
+    candidateAbsDelta: roundMetric(absDelta, 4),
+    source,
+    failureReason: missingConstrainedDelta
+      ? "candidate_delta_missing"
+      : (exceedsMagnitude ? "candidate_delta_exceeds_requested_magnitude" : null),
+    boundary: AUDIO_MIX_MAGNITUDE_BOUNDARY,
+  };
+}
 
 const metricNumber = (metrics: Record<string, unknown>, key: string): number => {
   const number = Number(metrics[key]);

@@ -58,14 +58,23 @@ browser-safe subpath instead of the root package:
 
 ```ts
 import {
+  audioMixCandidateMagnitudeMatchesRequest,
   compareAudioSectionEnergy,
   computeAudioSectionReviewMetric,
   estimateLoudnessStyleLufs,
+  resolveAudioMixRequestMagnitude,
 } from "@riddledc/riddle-proof-packs/audio-mix-heuristics";
 ```
 
 That subpath exposes the loudness-style and section-energy helpers without the
 Node-oriented profile, artifact, or CLI helpers.
+
+It also exposes a narrow request-magnitude policy for claim-candidate loops.
+For example, `resolveAudioMixRequestMagnitude({ intent: "turn the bass down a
+little" })` returns `magnitude: "subtle"` and `maxAbsDelta: 0.12`, while
+`audioMixCandidateMagnitudeMatchesRequest(candidate, request)` can reject a
+larger-but-otherwise-safe candidate as a claim-translation mismatch. This is a
+semantic guardrail for the requested change size, not a taste score.
 
 Browser or agent code that needs the conservative development approval helper
 can import the review subpath:
@@ -157,6 +166,15 @@ Profiles are stored under `packs/<slug>/profile.json` and mirrored into the runt
 The `audio-mix` directory contains reusable audio-proof authoring guidance, a profile template, a metrics schema, a ratchet method, and a human-review rubric.
 
 The `neon-step-sequencer` directory contains the first app-specific ratchet lab under the new architecture. Its profiles declare `current_target` or `interaction_snapshots` evidence-role patterns and explicitly state what they do not prove. The ratchet-loop profiles now expect a compact `humanReviewPacket` for listening handoff: supported/rejected candidates, objective guardrails, state restoration, review-order ranking, taste caveats, and, when explicitly requested, an applied-candidate receipt. The case-study files record the claim, evidence, failure classification, smallest layer changed, and next sharper question for each run.
+
+Natural mix requests should become explicit claim constraints before candidate
+ranking. Target, direction, and requested magnitude are separate receipts:
+`bass/down/subtle` is not the same claim as "find the largest guardrail-
+preserving bass cut." The shared audio-mix heuristic helper treats phrases such
+as "a little", "a bit", "slightly", "touch", and "small" as a `subtle`
+magnitude with a default `0.12` max absolute mixer-level delta. Candidates
+outside that bound can still be useful exploration data, but they should be
+rejected for the subtle claim before review-order ranking.
 
 ### Two-speed local ratchet
 
