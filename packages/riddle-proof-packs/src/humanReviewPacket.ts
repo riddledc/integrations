@@ -33,9 +33,20 @@ const getPath = (value: unknown, path: string): unknown => {
   return cursor;
 };
 
+const formatNumber = (value: number): string => {
+  if (!Number.isFinite(value) || Number.isInteger(value)) return String(value);
+  const abs = Math.abs(value);
+  const digits = abs > 0 && abs < 0.001 ? 6 : 4;
+  const rounded = Number(value.toFixed(digits));
+  if (rounded === 0 && value !== 0) {
+    return value.toExponential(2).replace(/\.?0+e/u, "e");
+  }
+  return String(rounded);
+};
+
 const formatValue = (value: unknown): string => {
   if (value === null || value === undefined || value === "") return "not captured";
-  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+  if (typeof value === "number") return formatNumber(value);
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
 };
