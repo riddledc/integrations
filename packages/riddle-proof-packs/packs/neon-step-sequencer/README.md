@@ -31,6 +31,7 @@ This pack is the first app-specific lab for the open Riddle Proof architecture. 
 - `profiles/ratchet-loop-mix-level-search.json`: bounded ratchet loop using the Neon `mix-level-search` strategy.
 - `profiles/ratchet-loop-approved-candidate.json`: bounded ratchet loop that uses an explicit operator-approval surrogate, applies the supported candidate, and keeps the listening-review caveat visible.
 - `profiles/durable-current-target.json`: final current-target audit that checks an approved durable mix override against app contract state, mix-profile source levels, visible mixer text, and basic render guardrails.
+- `generated:src/neonUiMixerControl.ts`: generated interaction proof that drives the real mixer level slider, checks contract/readout/render guardrails, and restores the original level without using the proof API edit helper.
 
 ## Two-speed exploration
 
@@ -54,6 +55,15 @@ The approved-candidate profile is the next handoff pattern after review-packet g
 The durable patch handoff is a separate step after the approved-candidate proof. A follow-on agent can validate the applied `humanReviewPacket`, generate a scoped durable candidate plan, edit the app/config source, and then run a final `current_target` proof. That handoff proves the approved candidate became visible durable state in the running app. It still does not prove the mix is aesthetically better.
 
 The durable current-target profile is that final gate as a reusable profile/helper pattern. It is useful after batching source/config changes because it checks the running target rather than the local patch plan: selected song, mix profile id, contract mixer levels, mix-profile source levels, visible level text, and a bounded render all have to agree.
+
+The UI mixer-control profile is the browser-control gate. It drives the real
+range input for a selected track, checks that app contract state and the visible
+readout reflect the target level, renders post-control audio guardrails, and
+restores the original level. This caught the Neon `0.53` / `0.55` precision
+issue because the proof API could represent a subtle level while the real
+slider could not. The proof still does not say the candidate sounds better; it
+says the actual UI control path is deterministic, metric-supported, and
+reversible enough for review.
 
 ## Example evidence
 
