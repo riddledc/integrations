@@ -31,6 +31,60 @@ export interface AudioSectionEnergyComparison {
   boundary: string;
 }
 
+export interface AudioExplorationMixHealthSummary {
+  peak: number | null;
+  rms: number | null;
+  minHeadroomDb: number | null;
+  clipping: boolean;
+  lowLevel: boolean;
+}
+
+export interface AudioExplorationCoverageEntry {
+  songName: string | null;
+  partLabel: string | null;
+  status: string | null;
+  windowCount: number;
+  findingCount: number;
+  requiredActive: string[];
+  missingRequiredActive: string[];
+  mixHealth: AudioExplorationMixHealthSummary;
+}
+
+export interface AudioExplorationSongCoverage {
+  songName: string;
+  partCount: number;
+  windowCount: number;
+  findingCount: number;
+  clipping: boolean;
+  lowLevel: boolean;
+  peak: number | null;
+  minHeadroomDb: number | null;
+  missingRequiredActive: string[];
+  parts: Array<{
+    label: string;
+    status: string | null;
+    windowCount: number;
+    findingCount: number;
+    mixHealth: AudioExplorationMixHealthSummary;
+    missingRequiredActive: string[];
+  }>;
+}
+
+export interface AudioExplorationCoverageSummary {
+  version: "riddle-proof.audio-exploration-coverage.v1";
+  role: "deterministic_audio_app_coverage";
+  entryCount: number;
+  findingCount: number;
+  songCoverage: AudioExplorationSongCoverage[];
+  coverageEntries: AudioExplorationCoverageEntry[];
+  boundary: string;
+}
+
+export interface AudioExplorationCoverageMarkdownOptions {
+  title?: string;
+  includePartCoverage?: boolean;
+}
+
 export type AudioMixRequestedMagnitude = "subtle";
 export type AudioMixRequestMagnitudeSource = "explicit_args" | "intent_text" | "unconstrained";
 
@@ -147,9 +201,21 @@ const asNumber = (value: unknown): number | null => {
   return Number.isFinite(number) ? number : null;
 };
 
+const asStringOrNull = (value: unknown): string | null => (
+  typeof value === "string" && value.trim() ? value.trim() : null
+);
+
 const lowerText = (value: unknown): string => (
   typeof value === "string" ? value.toLowerCase().trim() : ""
 );
+
+const uniqueTextValues = (values: unknown[]): string[] => Array.from(new Set(
+  values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean),
+));
+
+const AUDIO_EXPLORATION_COVERAGE_BOUNDARY = "Audio/app coverage receipts report deterministic guardrails such as clipping, low-level windows, headroom, and missing active lanes; they do not prove subjective mix quality.";
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -343,6 +409,237 @@ export function summarizeAudioSectionEnergy(section: unknown): AudioSectionEnerg
     clipping: Boolean(mixHealth.clipping),
     lowLevel: Boolean(mixHealth.lowLevel),
   };
+}
+
+const countNumber = (value: unknown, fallback = 0): number => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+};
+
+const explorationEntries = (input: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(input)) return input.map(asRecord);
+  return asArray(asRecord(input).entries).map(asRecord);
+};
+
+const explorationEntryWindows = (entry: Record<string, unknown>): Record<string, unknown>[] => {
+  const summaryWindows = asArray(asRecord(entry.summary).windows);
+  const directWindows = asArray(entry.windows);
+  return (summaryWindows.length ? summaryWindows : directWindows).map(asRecord);
+};
+
+const compactAudioExplorationMixHealth = (
+  windows: Record<string, unknown>[],
+  fallbackMixHealth: unknown = null,
+): AudioExplorationMixHealthSummary => {
+  const health = windows
+    .map((window) => asRecord(window.mixHealth))
+    .filter((entry) => Object.keys(entry).length);
+  const fallback = asRecord(fallbackMixHealth);
+  if (!health.length && Object.keys(fallback).length) health.push(fallback);
+
+  const peaks = health.map((entry) => asNumber(entry.peak)).filter((value): value is number => value !== null);
+  const rmsValues = health.map((entry) => asNumber(entry.rms)).filter((value): value is number => value !== null);
+  const headrooms = health
+    .map((entry) => asNumber(entry.minHeadroomDb ?? entry.headroomDb))
+    .filter((value): value is number => value !== null);
+
+  return {
+    peak: peaks.length ? roundMetric(Math.max(...peaks)) : null,
+    rms: rmsValues.length ? roundMetric(Math.max(...rmsValues)) : null,
+    minHeadroomDb: headrooms.length ? roundMetric(Math.min(...headrooms), 2) : null,
+    clipping: health.some((entry) => entry.clipping === true),
+    lowLevel: health.some((entry) => entry.lowLevel === true),
+  };
+};
+
+const summarizeAudioExplorationEntry = (entry: Record<string, unknown>): AudioExplorationCoverageEntry => {
+  const windows = explorationEntryWindows(entry);
+  const summary = asRecord(entry.summary);
+  const fallbackFindingCount = asArray(entry.findings).length;
+  const windowCount = countNumber(entry.windowCount ?? summary.windowCount, windows.length);
+  return {
+    songName: asStringOrNull(entry.songName ?? entry.song ?? entry.selectedSong),
+    partLabel: asStringOrNull(entry.partLabel ?? entry.part ?? entry.label ?? entry.name),
+    status: asStringOrNull(entry.status),
+    windowCount,
+    findingCount: countNumber(entry.findingCount ?? summary.findingCount, fallbackFindingCount),
+    requiredActive: uniqueTextValues([
+      ...windows.flatMap((window) => asArray(window.requiredActive)),
+      ...asArray(entry.requiredActive),
+    ]),
+    missingRequiredActive: uniqueTextValues([
+      ...windows.flatMap((window) => asArray(window.missingRequiredActive)),
+      ...asArray(entry.missingRequiredActive),
+    ]),
+    mixHealth: compactAudioExplorationMixHealth(windows, entry.mixHealth),
+  };
+};
+
+const summarizeAudioExplorationSongs = (
+  coverageEntries: AudioExplorationCoverageEntry[],
+): AudioExplorationSongCoverage[] => {
+  const bySong = new Map<string, AudioExplorationSongCoverage>();
+  for (const entry of coverageEntries) {
+    const songName = entry.songName ?? "Unknown song";
+    const current = bySong.get(songName) ?? {
+      songName,
+      partCount: 0,
+      windowCount: 0,
+      findingCount: 0,
+      clipping: false,
+      lowLevel: false,
+      peak: null,
+      minHeadroomDb: null,
+      missingRequiredActive: [],
+      parts: [],
+    };
+
+    current.partCount += 1;
+    current.windowCount += entry.windowCount;
+    current.findingCount += entry.findingCount;
+    current.clipping = current.clipping || entry.mixHealth.clipping;
+    current.lowLevel = current.lowLevel || entry.mixHealth.lowLevel;
+    current.peak = current.peak === null
+      ? entry.mixHealth.peak
+      : Math.max(current.peak, entry.mixHealth.peak ?? current.peak);
+    current.minHeadroomDb = current.minHeadroomDb === null
+      ? entry.mixHealth.minHeadroomDb
+      : Math.min(current.minHeadroomDb, entry.mixHealth.minHeadroomDb ?? current.minHeadroomDb);
+    current.missingRequiredActive = uniqueTextValues([
+      ...current.missingRequiredActive,
+      ...entry.missingRequiredActive,
+    ]);
+    current.parts.push({
+      label: entry.partLabel ?? "Unknown part",
+      status: entry.status,
+      windowCount: entry.windowCount,
+      findingCount: entry.findingCount,
+      mixHealth: entry.mixHealth,
+      missingRequiredActive: entry.missingRequiredActive,
+    });
+
+    bySong.set(songName, current);
+  }
+
+  return Array.from(bySong.values()).map((entry) => ({
+    ...entry,
+    peak: roundMetric(entry.peak),
+    minHeadroomDb: roundMetric(entry.minHeadroomDb, 2),
+  }));
+};
+
+export function summarizeAudioExplorationCoverage(input: unknown): AudioExplorationCoverageSummary {
+  const entries = explorationEntries(input);
+  const coverageEntries = entries.map(summarizeAudioExplorationEntry);
+  const explicitFindingCount = asNumber(asRecord(input).findingCount);
+  const findingCount = explicitFindingCount !== null
+    ? explicitFindingCount
+    : coverageEntries.reduce((total, entry) => total + entry.findingCount, 0);
+
+  return {
+    version: "riddle-proof.audio-exploration-coverage.v1",
+    role: "deterministic_audio_app_coverage",
+    entryCount: coverageEntries.length,
+    findingCount,
+    songCoverage: summarizeAudioExplorationSongs(coverageEntries),
+    coverageEntries,
+    boundary: AUDIO_EXPLORATION_COVERAGE_BOUNDARY,
+  };
+}
+
+const coverageFormatValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === "") return "not captured";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
+  return String(value);
+};
+
+const coverageTableCell = (value: unknown): string => coverageFormatValue(value).replace(/\|/gu, "\\|");
+
+const coverageTableRow = (values: unknown[]): string => (
+  values.map(coverageTableCell).join(" | ").replace(/^/u, "| ").replace(/$/u, " |")
+);
+
+const isAudioExplorationCoverageSummary = (input: unknown): input is AudioExplorationCoverageSummary => {
+  const record = asRecord(input);
+  return record.version === "riddle-proof.audio-exploration-coverage.v1"
+    && Array.isArray(record.songCoverage)
+    && Array.isArray(record.coverageEntries);
+};
+
+export function formatAudioExplorationCoverageMarkdown(
+  summaryOrInput: unknown,
+  options: AudioExplorationCoverageMarkdownOptions = {},
+): string {
+  const summary = isAudioExplorationCoverageSummary(summaryOrInput)
+    ? summaryOrInput
+    : summarizeAudioExplorationCoverage(summaryOrInput);
+  const includePartCoverage = options.includePartCoverage ?? true;
+  const lines = [
+    `# ${options.title ?? "Audio Exploration Coverage"}`,
+    "",
+    `- Role: \`${summary.role}\``,
+    `- Entry count: \`${summary.entryCount}\``,
+    `- Finding count: \`${summary.findingCount}\``,
+    "",
+  ];
+
+  lines.push(
+    "## Song Coverage",
+    "",
+    "| Song | Parts | Windows | Findings | Peak | Min Headroom dB | Clipping | Low Level | Missing Active |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  );
+  if (summary.songCoverage.length) {
+    for (const entry of summary.songCoverage) {
+      lines.push(coverageTableRow([
+        entry.songName,
+        entry.partCount,
+        entry.windowCount,
+        entry.findingCount,
+        entry.peak,
+        entry.minHeadroomDb,
+        entry.clipping,
+        entry.lowLevel,
+        entry.missingRequiredActive.length ? entry.missingRequiredActive.join(", ") : "none",
+      ]));
+    }
+  } else {
+    lines.push("| none | 0 | 0 | 0 | not captured | not captured | false | false | none |");
+  }
+  lines.push("");
+
+  if (includePartCoverage) {
+    lines.push(
+      "## Part Coverage",
+      "",
+      "| Song | Part | Status | Windows | Findings | Peak | Min Headroom dB | Clipping | Low Level | Missing Active |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    );
+    if (summary.coverageEntries.length) {
+      for (const entry of summary.coverageEntries) {
+        lines.push(coverageTableRow([
+          entry.songName,
+          entry.partLabel,
+          entry.status,
+          entry.windowCount,
+          entry.findingCount,
+          entry.mixHealth.peak,
+          entry.mixHealth.minHeadroomDb,
+          entry.mixHealth.clipping,
+          entry.mixHealth.lowLevel,
+          entry.missingRequiredActive.length ? entry.missingRequiredActive.join(", ") : "none",
+        ]));
+      }
+    } else {
+      lines.push("| none | none | not captured | 0 | 0 | not captured | not captured | false | false | none |");
+    }
+    lines.push("");
+  }
+
+  lines.push("## Boundary", "", summary.boundary);
+
+  return `${lines.join("\n")}\n`;
 }
 
 const delta = (candidate: unknown, baseline: unknown, digits = 6): number | null => {
