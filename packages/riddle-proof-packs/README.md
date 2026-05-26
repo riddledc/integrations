@@ -206,6 +206,13 @@ If a conservative mixing-canon surrogate reviewed the packets, include
 recommended development candidate while still saying that surrogate approval is
 not a listener preference.
 
+Use `selectAudioMixIntentSet()` when the same intent set needs both a fast smoke
+lane and a fuller matrix lane. For example, a smoke run can select only
+`guitar-down-little` to verify that the target, proof contract, and candidate
+loop are working before a later run selects the full intent set. Selection is a
+bounded workflow receipt: it scopes which objective claim-candidate loops ran,
+reports unknown ids without throwing, and does not prove subjective mix quality.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.

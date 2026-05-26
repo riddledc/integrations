@@ -20,6 +20,7 @@ import {
   formatAudioExplorationReviewWarningsMarkdown,
   formatAudioMixIntentMatrixMarkdown,
   resolveAudioMixRequestMagnitude,
+  selectAudioMixIntentSet,
   summarizeAudioExplorationCoverage,
   summarizeAudioMixIntentMatrix,
   summarizeAudioSectionEnergy,
@@ -67,6 +68,7 @@ assert.equal(typeof formatAudioExplorationReviewWarningsMarkdown, "function");
 assert.equal(typeof formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
+assert.equal(typeof selectAudioMixIntentSet, "function");
 assert.equal(typeof summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof summarizeAudioMixIntentMatrix, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
@@ -100,6 +102,7 @@ assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdow
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
+assert.equal(typeof audioHeuristicsSubpath.selectAudioMixIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioMixIntentMatrix, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
@@ -142,6 +145,67 @@ assert.equal(
   audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest({ action: { from: 0.6, to: 0.51 } }, explicitMagnitudeRequest).matches,
   false,
 );
+
+const audioMixIntentSet = {
+  name: "Neon subtle-down smoke",
+  description: "Bounded review-order intents for fast audio mix proof loops.",
+  intents: [
+    {
+      id: "guitar-down-little",
+      intent: "turn the guitar part down a little",
+      focusTracks: ["guitar"],
+      targetTracks: ["guitar"],
+      direction: "down",
+      metadata: {
+        section: "hook",
+      },
+    },
+    {
+      id: "bass-down-little",
+      intent: "turn the bass part down a little",
+      focusTrack: "bass",
+      targetTrack: "bass",
+      direction: "down",
+    },
+  ],
+};
+const allAudioMixIntentSelection = selectAudioMixIntentSet(audioMixIntentSet);
+assert.equal(allAudioMixIntentSelection.version, "riddle-proof.audio-mix-intent-selection.v1");
+assert.equal(allAudioMixIntentSelection.role, "bounded_intent_selection");
+assert.equal(allAudioMixIntentSelection.status, "intent_selection_ready");
+assert.equal(allAudioMixIntentSelection.ok, true);
+assert.equal(allAudioMixIntentSelection.intentSet.name, "Neon subtle-down smoke");
+assert.equal(allAudioMixIntentSelection.totalIntentCount, 2);
+assert.equal(allAudioMixIntentSelection.selectedIntentCount, 2);
+assert.deepEqual(allAudioMixIntentSelection.selectedIntentIds, ["guitar-down-little", "bass-down-little"]);
+assert.match(allAudioMixIntentSelection.boundary, /does not prove subjective mix quality/u);
+const guitarOnlySelection = audioHeuristicsSubpath.selectAudioMixIntentSet(audioMixIntentSet, {
+  intentIds: ["guitar-down-little"],
+});
+assert.equal(guitarOnlySelection.ok, true);
+assert.equal(guitarOnlySelection.selectedIntentCount, 1);
+assert.equal(guitarOnlySelection.intents[0]?.intent, "turn the guitar part down a little");
+assert.deepEqual(guitarOnlySelection.intents[0]?.focusTracks, ["guitar"]);
+assert.deepEqual(guitarOnlySelection.intents[0]?.targetTracks, ["guitar"]);
+assert.equal(guitarOnlySelection.intents[0]?.direction, "down");
+assert.deepEqual(guitarOnlySelection.intents[0]?.metadata, { section: "hook" });
+const unknownIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
+  intentIds: ["guitar-down-little", "drums-down-little"],
+});
+assert.equal(unknownIntentSelection.ok, false);
+assert.equal(unknownIntentSelection.status, "unknown_intent_ids");
+assert.deepEqual(unknownIntentSelection.requestedIntentIds, ["guitar-down-little", "drums-down-little"]);
+assert.deepEqual(unknownIntentSelection.selectedIntentIds, ["guitar-down-little"]);
+assert.deepEqual(unknownIntentSelection.unknownIntentIds, ["drums-down-little"]);
+const limitedIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
+  maxIntents: 1,
+});
+assert.equal(limitedIntentSelection.ok, true);
+assert.deepEqual(limitedIntentSelection.selectedIntentIds, ["guitar-down-little"]);
+assert.equal(limitedIntentSelection.selectedIntentCount, 1);
+const emptyIntentSelection = selectAudioMixIntentSet({ intents: [] });
+assert.equal(emptyIntentSelection.ok, false);
+assert.equal(emptyIntentSelection.status, "empty_intent_selection");
 
 assert.equal(estimateLoudnessStyleLufs(0.1), -20.69);
 const sectionComparison = compareAudioSectionEnergy(
