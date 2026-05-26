@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.26
+
+### Patch Changes
+
+- 66350d2: Add human-review packet evidence-completeness diagnostics so review packets report whether recommendation evidence includes target movement, section energy, loudness consequences, active-lane receipts, restoration, and proof/taste boundary text.
+
 ## 0.8.25
 
 ### Patch Changes
