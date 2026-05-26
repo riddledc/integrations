@@ -4,6 +4,7 @@ export interface MixingCanonSurrogateReviewOptions {
   approvedBy?: string;
   maxAbsLevelDelta?: number;
   requireSectionEnergyComparison?: boolean;
+  requireLoudnessConsequenceComparison?: boolean;
 }
 
 export interface MixingCanonSurrogateReviewCheck {
@@ -153,6 +154,52 @@ const sectionEnergyCheck = (
   };
 };
 
+const candidateReviewWarningCheck = (
+  candidate: Record<string, unknown>,
+): MixingCanonSurrogateReviewCheck => {
+  const warnings = asArray(candidate.reviewWarnings);
+  return {
+    name: "recommended_candidate_has_no_review_warnings",
+    ok: warnings.length === 0,
+    severity: "required",
+    evidence: {
+      reviewWarningCount: warnings.length,
+      warningKinds: warnings.map(asRecord).map((warning) => warning.kind).filter(Boolean),
+      warningCandidates: warnings.map(asRecord).map((warning) => warning.candidate).filter(Boolean),
+    },
+  };
+};
+
+const loudnessConsequenceCheck = (
+  candidate: Record<string, unknown>,
+  requireLoudnessConsequenceComparison: boolean,
+): MixingCanonSurrogateReviewCheck => {
+  const comparison = asRecord(candidate.loudnessConsequenceComparison);
+  const hasComparison = Object.keys(comparison).length > 0;
+  const reviewWarningCount = asNumber(comparison.reviewWarningCount);
+  const failCount = asNumber(comparison.failCount);
+  const ok = hasComparison
+    ? comparison.status === "loudness_consequences_within_expected_range"
+      && (reviewWarningCount ?? 0) === 0
+      && (failCount ?? 0) === 0
+    : !requireLoudnessConsequenceComparison;
+  return {
+    name: "recommended_candidate_loudness_within_expected_range",
+    ok,
+    severity: "required",
+    evidence: {
+      requiredLoudnessConsequenceComparison: requireLoudnessConsequenceComparison,
+      hasComparison,
+      status: comparison.status ?? null,
+      loudnessMetric: comparison.loudnessMetric ?? null,
+      standardsCompliantLufs: comparison.standardsCompliantLufs ?? null,
+      reviewWarningCount: hasComparison ? (reviewWarningCount ?? 0) : null,
+      failCount: hasComparison ? (failCount ?? 0) : null,
+      boundary: comparison.boundary ?? null,
+    },
+  };
+};
+
 const tasteBoundaryPresent = (packet: HumanReviewPacket): boolean => {
   const text = [
     packet.proofBoundary,
@@ -189,6 +236,7 @@ export function createMixingCanonSurrogateReview(
   const receipts = receiptPassCount(candidate);
   const guardrails = asRecord(packet.guardrails);
   const sectionRequired = options.requireSectionEnergyComparison ?? true;
+  const loudnessRequired = options.requireLoudnessConsequenceComparison ?? false;
   const maxAbsLevelDelta = options.maxAbsLevelDelta ?? DEFAULT_MAX_ABS_LEVEL_DELTA;
   const direction = requestedDirection(packet);
   const absDelta = action.delta === null ? null : Math.abs(action.delta);
@@ -236,6 +284,8 @@ export function createMixingCanonSurrogateReview(
       },
     },
     sectionEnergyCheck(candidate, sectionRequired),
+    candidateReviewWarningCheck(candidate),
+    loudnessConsequenceCheck(candidate, loudnessRequired),
     {
       name: "packet_guardrails_preserved",
       ok: Boolean(guardrails.supportedClaimCandidateCount)

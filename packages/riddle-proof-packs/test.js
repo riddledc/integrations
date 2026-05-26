@@ -654,6 +654,8 @@ const mixingCanonPacket = {
         deltas: { rms: -0.006, peak: -0.02, totalEnergy: -0.0004 },
       },
       sectionEnergyComparison: sectionComparison,
+      loudnessConsequenceComparison: smallLoudnessConsequence,
+      reviewWarnings: [],
     },
   },
   supportedCandidates: [],
@@ -701,6 +703,53 @@ assert.ok(unsafeMixingCanonReview.failedChecks.includes("objective_candidate_rec
 assert.ok(unsafeMixingCanonReview.failedChecks.includes("section_energy_guardrails_preserved"));
 assert.match(unsafeMixingCanonReview.caveats.join("\n"), /not a real listener preference/u);
 assert.doesNotMatch(JSON.stringify(unsafeMixingCanonReview), /automatically better/u);
+
+const warningBearingMixingCanonPacket = JSON.parse(JSON.stringify(mixingCanonPacket));
+warningBearingMixingCanonPacket.recommendation.candidate.reviewWarnings = [{
+  kind: "loudness_consequence_requires_review",
+  severity: "review",
+  candidate: "chord -0.10",
+  section: "Hook",
+}];
+warningBearingMixingCanonPacket.recommendation.candidate.loudnessConsequenceComparison = oversizedLoudnessConsequence;
+const warningBearingMixingCanonReview = createMixingCanonSurrogateReview(warningBearingMixingCanonPacket, {
+  requireLoudnessConsequenceComparison: true,
+});
+assert.equal(warningBearingMixingCanonReview.status, "needs_human_review");
+assert.equal(warningBearingMixingCanonReview.approval, null);
+assert.ok(warningBearingMixingCanonReview.failedChecks.includes("recommended_candidate_has_no_review_warnings"));
+assert.ok(warningBearingMixingCanonReview.failedChecks.includes("recommended_candidate_loudness_within_expected_range"));
+assert.match(JSON.stringify(warningBearingMixingCanonReview.checks), /loudness_consequence_review_warning/u);
+assert.doesNotMatch(JSON.stringify(warningBearingMixingCanonReview), /sounds better/u);
+
+const rejectedCandidateWarningPacket = JSON.parse(JSON.stringify(mixingCanonPacket));
+rejectedCandidateWarningPacket.reviewWarnings = [{
+  kind: "loudness_consequence_requires_review",
+  severity: "review",
+  candidate: "chord oversized probe",
+}];
+rejectedCandidateWarningPacket.rejectedCandidates = [{
+  label: "chord oversized probe",
+  reviewWarnings: rejectedCandidateWarningPacket.reviewWarnings,
+  loudnessConsequenceComparison: oversizedLoudnessConsequence,
+}];
+const rejectedCandidateWarningReview = createMixingCanonSurrogateReview(rejectedCandidateWarningPacket, {
+  requireLoudnessConsequenceComparison: true,
+});
+assert.equal(rejectedCandidateWarningReview.status, "approved_for_development_application");
+assert.deepEqual(rejectedCandidateWarningReview.failedChecks, []);
+
+const noLoudnessMixingCanonPacket = JSON.parse(JSON.stringify(mixingCanonPacket));
+delete noLoudnessMixingCanonPacket.recommendation.candidate.loudnessConsequenceComparison;
+assert.equal(
+  createMixingCanonSurrogateReview(noLoudnessMixingCanonPacket).status,
+  "approved_for_development_application",
+);
+const requiredLoudnessReview = createMixingCanonSurrogateReview(noLoudnessMixingCanonPacket, {
+  requireLoudnessConsequenceComparison: true,
+});
+assert.equal(requiredLoudnessReview.status, "needs_human_review");
+assert.ok(requiredLoudnessReview.failedChecks.includes("recommended_candidate_loudness_within_expected_range"));
 
 const tinyTrackedInstrumentComparison = compareAudioSectionEnergy(
   {
