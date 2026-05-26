@@ -11,6 +11,7 @@ import {
   getRiddleProofPackProfileManifest,
   instantiateRiddleProofProfile,
   audioMixCandidateMagnitudeMatchesRequest,
+  buildAudioMixLevelIntentSet,
   collectAudioExplorationReviewWarnings,
   compareAudioSectionEnergy,
   computeAudioSectionReviewMetric,
@@ -59,6 +60,7 @@ assert.equal(typeof getRiddleProofProfilesByPackId, "function");
 assert.equal(typeof getPackEnabledRiddleProofPackProfiles, "function");
 assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
+assert.equal(typeof buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
@@ -97,6 +99,7 @@ assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
+assert.equal(typeof audioHeuristicsSubpath.buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "function");
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
@@ -172,6 +175,37 @@ const audioMixIntentSet = {
     },
   ],
 };
+const subtleDownIntentSet = buildAudioMixLevelIntentSet({
+  name: "Neon subtle-down smoke",
+  description: "Bounded review-order intents for fast audio mix proof loops.",
+  tracks: ["bass", "guitar", "chord"],
+  directions: ["down"],
+});
+assert.equal(subtleDownIntentSet.name, "Neon subtle-down smoke");
+assert.equal(subtleDownIntentSet.description, "Bounded review-order intents for fast audio mix proof loops.");
+assert.deepEqual(subtleDownIntentSet.intents.map((intent) => intent.id), [
+  "bass-down-little",
+  "guitar-down-little",
+  "chord-down-little",
+]);
+assert.equal(subtleDownIntentSet.intents[1]?.intent, "turn the guitar part down a little");
+assert.deepEqual(subtleDownIntentSet.intents[1]?.focusTracks, ["guitar"]);
+assert.deepEqual(subtleDownIntentSet.intents[1]?.targetTracks, ["guitar"]);
+assert.equal(subtleDownIntentSet.intents[1]?.direction, "down");
+assert.equal(subtleDownIntentSet.intents[1]?.metadata.pattern, "level_change");
+assert.equal(subtleDownIntentSet.intents[1]?.metadata.requestedMagnitude, "subtle");
+const subtleUpDownIntentSet = audioHeuristicsSubpath.buildAudioMixLevelIntentSet({
+  tracks: [{ id: "rhythm-synth", track: "rhythmSynth", label: "rhythm synth" }],
+  directions: ["up", "down", "sideways"],
+  magnitudeWord: "a touch",
+  magnitudeId: "touch",
+});
+assert.deepEqual(subtleUpDownIntentSet.intents.map((intent) => intent.id), [
+  "rhythm-synth-up-touch",
+  "rhythm-synth-down-touch",
+]);
+assert.equal(subtleUpDownIntentSet.intents[0]?.intent, "turn the rhythm synth part up a touch");
+assert.deepEqual(subtleUpDownIntentSet.intents[0]?.targetTracks, ["rhythmSynth"]);
 const allAudioMixIntentSelection = selectAudioMixIntentSet(audioMixIntentSet);
 assert.equal(allAudioMixIntentSelection.version, "riddle-proof.audio-mix-intent-selection.v1");
 assert.equal(allAudioMixIntentSelection.role, "bounded_intent_selection");

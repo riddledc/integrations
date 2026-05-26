@@ -124,6 +124,30 @@ export interface AudioMixIntentSet {
   intents: AudioMixIntentDefinition[];
 }
 
+export type AudioMixLevelIntentDirection = "down" | "up";
+
+export interface AudioMixLevelIntentTrackInput {
+  id?: unknown;
+  track?: unknown;
+  label?: unknown;
+  focusTrack?: unknown;
+  focusTracks?: unknown;
+  targetTrack?: unknown;
+  targetTracks?: unknown;
+  metadata?: unknown;
+}
+
+export interface AudioMixLevelIntentSetOptions {
+  name?: unknown;
+  description?: unknown;
+  tracks?: unknown;
+  directions?: unknown;
+  magnitudeWord?: unknown;
+  magnitudeId?: unknown;
+  requestedMagnitude?: unknown;
+  metadata?: unknown;
+}
+
 export interface AudioMixIntentSelectionOptions {
   intentIds?: unknown;
   maxIntents?: unknown;
@@ -340,6 +364,13 @@ const asPositiveIntegerOrNull = (value: unknown): number | null => {
 const lowerText = (value: unknown): string => (
   typeof value === "string" ? value.toLowerCase().trim() : ""
 );
+
+const slugText = (value: unknown): string => String(value ?? "")
+  .toLowerCase()
+  .trim()
+  .replace(/['"]/g, "")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
 
 const uniqueTextValues = (values: unknown[]): string[] => Array.from(new Set(
   values
@@ -816,6 +847,76 @@ const normalizeAudioMixIntentSet = (input: unknown): AudioMixIntentSet => {
       .filter((entry): entry is AudioMixIntentDefinition => entry !== null),
   };
 };
+
+const normalizeLevelIntentDirections = (input: unknown): AudioMixLevelIntentDirection[] => {
+  const values = normalizeTextList(input).length ? normalizeTextList(input) : ["down"];
+  const normalized = values
+    .map((entry) => lowerText(entry))
+    .filter((entry): entry is AudioMixLevelIntentDirection => entry === "down" || entry === "up");
+  return normalized.length ? Array.from(new Set(normalized)) : ["down"];
+};
+
+const normalizeLevelIntentTracks = (input: unknown): Array<{
+  id: string;
+  label: string;
+  focusTracks: string[];
+  targetTracks: string[];
+  metadata: Record<string, unknown>;
+}> => (Array.isArray(input) ? input : [input])
+  .map((entry) => {
+    const record = asRecord(entry);
+    const direct = asStringOrNull(entry);
+    const track = asStringOrNull(record.track) ?? direct;
+    const id = slugText(record.id ?? track);
+    if (!id || !track) return null;
+    const targetTracks = normalizeTextList(record.targetTracks ?? record.targetTrack ?? track);
+    const focusTracks = normalizeTextList(record.focusTracks ?? record.focusTrack ?? targetTracks);
+    return {
+      id,
+      label: asStringOrNull(record.label) ?? track,
+      focusTracks,
+      targetTracks,
+      metadata: nullableRecord(record.metadata) ?? {},
+    };
+  })
+  .filter((entry): entry is {
+    id: string;
+    label: string;
+    focusTracks: string[];
+    targetTracks: string[];
+    metadata: Record<string, unknown>;
+  } => entry !== null);
+
+export function buildAudioMixLevelIntentSet(
+  options: AudioMixLevelIntentSetOptions = {},
+): AudioMixIntentSet {
+  const tracks = normalizeLevelIntentTracks(options.tracks);
+  const directions = normalizeLevelIntentDirections(options.directions);
+  const magnitudeWord = asStringOrNull(options.magnitudeWord) ?? "a little";
+  const magnitudeId = slugText(options.magnitudeId ?? (lowerText(magnitudeWord) === "a little" ? "little" : magnitudeWord));
+  const requestedMagnitude = asStringOrNull(options.requestedMagnitude) ?? "subtle";
+  const sharedMetadata = nullableRecord(options.metadata) ?? {};
+
+  return {
+    name: asStringOrNull(options.name) ?? `audio-mix-${directions.join("-")}-${magnitudeId}`,
+    description: asStringOrNull(options.description)
+      ?? `Bounded ${magnitudeWord} audio mix level intents for objective claim-candidate review.`,
+    intents: directions.flatMap((direction) => tracks.map((track) => ({
+      id: `${track.id}-${direction}-${magnitudeId}`,
+      intent: `turn the ${track.label} part ${direction} ${magnitudeWord}`,
+      focusTracks: track.focusTracks,
+      targetTracks: track.targetTracks,
+      direction,
+      metadata: {
+        ...sharedMetadata,
+        ...track.metadata,
+        pattern: "level_change",
+        requestedMagnitude,
+        magnitudeWord,
+      },
+    }))),
+  };
+}
 
 export function selectAudioMixIntentSet(
   intentSetInput: unknown,

@@ -216,6 +216,12 @@ Use `formatAudioMixIntentSelectionMarkdown()` next to the JSON receipt when a
 human or agent needs to inspect requested ids, selected ids, unknown ids, and the
 selected intent table without opening the raw plan.
 
+Use `buildAudioMixLevelIntentSet()` for standard bounded level-change requests,
+for example bass/guitar/chord `down a little` smoke and matrix lanes. Apps still
+own the track list and target route, but the proof-pack helper owns the
+repeatable intent ids, claim wording, focus/target tracks, direction, and subtle
+magnitude metadata.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
