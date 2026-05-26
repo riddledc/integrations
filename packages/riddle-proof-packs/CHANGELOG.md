@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.7
+
+### Patch Changes
+
+- 742097a: Show audio mix intent metadata in selection Markdown packets.
+
 ## 0.8.6
 
 ### Patch Changes
