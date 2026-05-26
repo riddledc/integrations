@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.11
+
+### Patch Changes
+
+- 599e956: Preserve explicit candidate lists on audio mix intent definitions so matrix runners can exercise targeted review-warning probes.
+
 ## 0.8.10
 
 ### Patch Changes
