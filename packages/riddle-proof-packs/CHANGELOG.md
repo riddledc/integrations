@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.19
+
+### Patch Changes
+
+- 1e220e6: Add reusable Neon UI mixer-control matrix summary and Markdown helpers.
+
 ## 0.8.18
 
 ### Patch Changes
