@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.18
+
+### Patch Changes
+
+- 4f39929: Add a reusable audio-mix loudness review warning collector for compact human-review packets.
+
 ## 0.8.17
 
 ### Patch Changes
