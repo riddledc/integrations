@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.9
+
+### Patch Changes
+
+- f2c031b: Add intent-aware loudness consequence receipts for audio mix review packets, using the existing RMS-derived loudness-style proxy as an objective review signal rather than a taste score.
+
 ## 0.8.8
 
 ### Patch Changes
