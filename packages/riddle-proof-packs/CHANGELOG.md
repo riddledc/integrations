@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.10
+
+### Patch Changes
+
+- 5ae8b19: Tighten audio mix boundary wording to avoid "sounds better" phrasing in intent-matrix and Neon pack docs.
+
 ## 0.8.9
 
 ### Patch Changes
