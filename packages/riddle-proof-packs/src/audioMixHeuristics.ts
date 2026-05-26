@@ -89,6 +89,24 @@ export interface AudioMixLoudnessConsequenceComparison {
   boundary: string;
 }
 
+export interface AudioMixLoudnessReviewWarningOptions {
+  candidate?: unknown;
+  candidateLabel?: unknown;
+}
+
+export interface AudioMixLoudnessReviewWarning {
+  version: "riddle-proof.audio-mix-loudness-review-warning.v1";
+  kind: "loudness_consequence_requires_review";
+  severity: "review";
+  candidate: string | null;
+  section: string | null;
+  loudnessDelta: number | null;
+  expectedDeltaRange: AudioMixLoudnessExpectedDeltaRange | null;
+  status: AudioMixSectionLoudnessConsequenceStatus | null;
+  reason: string | null;
+  boundary: string;
+}
+
 export interface AudioExplorationMixHealthSummary {
   peak: number | null;
   rms: number | null;
@@ -2062,6 +2080,38 @@ export function compareAudioSectionLoudnessConsequences(
     sections,
     boundary: AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY,
   };
+}
+
+export function collectAudioMixLoudnessReviewWarnings(
+  loudnessConsequenceComparison: unknown,
+  options: AudioMixLoudnessReviewWarningOptions = {},
+): AudioMixLoudnessReviewWarning[] {
+  const comparison = asRecord(loudnessConsequenceComparison);
+  if (!comparison.reviewWarningCount) return [];
+
+  const candidate = asRecord(options.candidate);
+  const candidateLabel = asStringOrNull(options.candidateLabel)
+    ?? asStringOrNull(candidate.label)
+    ?? null;
+  const boundary = asStringOrNull(comparison.boundary) ?? AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY;
+
+  return asArray(comparison.sections)
+    .map(asRecord)
+    .filter((section) => section.warning === true)
+    .map((section) => ({
+      version: "riddle-proof.audio-mix-loudness-review-warning.v1",
+      kind: "loudness_consequence_requires_review",
+      severity: "review",
+      candidate: candidateLabel,
+      section: asStringOrNull(section.label) ?? asStringOrNull(section.name),
+      loudnessDelta: roundMetric(section.loudnessDelta, 2),
+      expectedDeltaRange: Object.keys(asRecord(section.expectedDeltaRange)).length
+        ? asRecord(section.expectedDeltaRange) as unknown as AudioMixLoudnessExpectedDeltaRange
+        : null,
+      status: asStringOrNull(section.status) as AudioMixSectionLoudnessConsequenceStatus | null,
+      reason: asStringOrNull(section.reason),
+      boundary,
+    }));
 }
 
 export function computeAudioSectionReviewMetric(comparison: unknown): number {

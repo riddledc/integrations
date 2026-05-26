@@ -27,7 +27,18 @@
     "sectionEnergyComparison.sections[].requiredEnergyFloorsPreserved": "Boolean guardrail for required active instruments in that section.",
     "sectionEnergyComparison.requiredSectionEnergyFloorsPreserved": "Boolean summary for required active instrument floors across sections.",
     "sectionEnergyComparison.guardrailsPreserved": "Boolean summary for clipping, headroom, and low-level guardrails.",
-    "sectionEnergyComparison.boundary": "Proof/taste boundary statement for the heuristic receipt."
+    "sectionEnergyComparison.boundary": "Proof/taste boundary statement for the heuristic receipt.",
+    "loudnessConsequenceComparison.version": "Stable loudness consequence receipt version, currently riddle-proof.audio-mix-loudness-consequence.v1.",
+    "loudnessConsequenceComparison.loudnessMetric": "Metric name. Use rms_loudness_style_lufs_proxy unless a standards-compliant LUFS implementation is actually used.",
+    "loudnessConsequenceComparison.standardsCompliantLufs": "False for the current RMS-derived loudness-style proxy.",
+    "loudnessConsequenceComparison.sections[].baselineLoudness": "Baseline section loudness value for the proof window.",
+    "loudnessConsequenceComparison.sections[].candidateLoudness": "Candidate section loudness value for the proof window.",
+    "loudnessConsequenceComparison.sections[].loudnessDelta": "Candidate minus baseline loudness delta.",
+    "loudnessConsequenceComparison.sections[].expectedDeltaRange": "Intent-aware expected delta range derived from request magnitude, direction, or explicit configuration.",
+    "loudnessConsequenceComparison.sections[].status": "within_expected_range, loudness_shift_requires_review, missing_loudness, or existing_guardrail_violation.",
+    "loudnessConsequenceComparison.reviewWarningCount": "Count of sections whose loudness shift should be reviewed. This is a review signal, not a taste score.",
+    "reviewWarnings[].kind": "For loudness consequence warnings, use loudness_consequence_requires_review.",
+    "reviewWarnings[].boundary": "Proof/taste boundary statement. Loudness warnings do not prove subjective mix quality."
   },
   "classification": {
     "product_regression": "The app rendered objective audio evidence that violates the stated claim.",

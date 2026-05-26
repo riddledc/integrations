@@ -41,3 +41,19 @@ For claim-candidate loops, use section heuristics as review aids:
 - reject candidates that violate clipping, headroom, or low-level guardrails
 
 These heuristics support wording such as `metric-supported`, `guardrail-preserving`, and `ranked for review`. They do not prove subjective mix quality or choose listener preference.
+
+## Intent-aware loudness consequences
+
+For requests that include magnitude language such as `a little`, `slightly`, or `subtle`, add a loudness consequence receipt after the section-energy comparison:
+
+- compare each section's baseline loudness-style value with the candidate loudness-style value
+- record the loudness delta and the expected delta range for the requested magnitude and direction
+- emit review warnings when a candidate moves whole-section loudness more than expected
+- keep loudness warnings as review signals unless an existing clipping, headroom, low-level, or section-energy guardrail already failed
+- preserve the metric name `rms_loudness_style_lufs_proxy` when true LUFS is not available
+
+The reusable helper `collectAudioMixLoudnessReviewWarnings` converts warning sections into compact review-warning rows for human-review packets. These rows can change review order or force listening review, but they must not be described as proof that a candidate sounds better.
+
+Boundary language:
+
+> Loudness metrics are objective review signals. They can show that a candidate made a section much louder or quieter than expected, but they do not prove subjective mix quality.

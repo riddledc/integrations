@@ -13,6 +13,7 @@ import {
   audioMixCandidateMagnitudeMatchesRequest,
   buildAudioMixLevelIntentSet,
   collectAudioExplorationReviewWarnings,
+  collectAudioMixLoudnessReviewWarnings,
   compareAudioSectionEnergy,
   compareAudioSectionLoudnessConsequences,
   computeAudioSectionReviewMetric,
@@ -68,6 +69,7 @@ assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
 assert.equal(typeof compareAudioSectionLoudnessConsequences, "function");
+assert.equal(typeof collectAudioMixLoudnessReviewWarnings, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
@@ -108,6 +110,7 @@ assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof collectHumanReviewPacketDiagnostics, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionLoudnessConsequences, "function");
+assert.equal(typeof audioHeuristicsSubpath.collectAudioMixLoudnessReviewWarnings, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof audioHeuristicsSubpath.buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings, "function");
@@ -579,6 +582,26 @@ assert.equal(oversizedLoudnessConsequence.failCount, 0);
 assert.equal(oversizedLoudnessConsequence.sections[0]?.status, "loudness_shift_requires_review");
 assert.equal(oversizedLoudnessConsequence.sections[0]?.severity, "review");
 assert.equal(oversizedLoudnessConsequence.sections[0]?.reason, "loudness_delta_outside_expected_range");
+const oversizedLoudnessWarnings = collectAudioMixLoudnessReviewWarnings(oversizedLoudnessConsequence, {
+  candidate: { label: "guitar oversized subtle-down probe" },
+});
+assert.equal(oversizedLoudnessWarnings.length, 1);
+assert.equal(oversizedLoudnessWarnings[0]?.version, "riddle-proof.audio-mix-loudness-review-warning.v1");
+assert.equal(oversizedLoudnessWarnings[0]?.kind, "loudness_consequence_requires_review");
+assert.equal(oversizedLoudnessWarnings[0]?.severity, "review");
+assert.equal(oversizedLoudnessWarnings[0]?.candidate, "guitar oversized subtle-down probe");
+assert.equal(oversizedLoudnessWarnings[0]?.section, "Hook");
+assert.equal(oversizedLoudnessWarnings[0]?.loudnessDelta, oversizedLoudnessConsequence.sections[0]?.loudnessDelta);
+assert.equal(oversizedLoudnessWarnings[0]?.expectedDeltaRange?.source, "requested_magnitude");
+assert.equal(oversizedLoudnessWarnings[0]?.status, "loudness_shift_requires_review");
+assert.equal(oversizedLoudnessWarnings[0]?.reason, "loudness_delta_outside_expected_range");
+assert.match(oversizedLoudnessWarnings[0]?.boundary, /do not prove subjective mix quality/u);
+assert.deepEqual(
+  audioHeuristicsSubpath.collectAudioMixLoudnessReviewWarnings(smallLoudnessConsequence, {
+    candidateLabel: "guitar -0.02",
+  }),
+  [],
+);
 const largerExplicitLoudnessConsequence = compareAudioSectionLoudnessConsequences(oversizedLoudnessShiftComparison, {
   direction: "down",
   maxAbsLevelDelta: 0.3,
