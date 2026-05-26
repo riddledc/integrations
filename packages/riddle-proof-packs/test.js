@@ -43,10 +43,12 @@ import {
   createNeonUiMixerControlArtifacts,
   formatDurableCandidatePatchPlanMarkdown,
   formatNeonDurableCurrentTargetSummaryMarkdown,
+  formatNeonUiMixerControlMatrixMarkdown,
   formatNeonUiMixerControlSummaryMarkdown,
   normalizeNeonDurableMixOverride,
   readActiveNeonDurableMixOverrides,
   routeForNeonDurableOverride,
+  summarizeNeonUiMixerControlMatrix,
   summarizeNeonUiMixerControlRun,
   createHumanReviewPacketArtifacts,
   collectHumanReviewPacketDiagnostics,
@@ -98,10 +100,12 @@ assert.equal(typeof buildNeonUiMixerControlProfile, "function");
 assert.equal(typeof createNeonUiMixerControlArtifacts, "function");
 assert.equal(typeof formatDurableCandidatePatchPlanMarkdown, "function");
 assert.equal(typeof formatNeonDurableCurrentTargetSummaryMarkdown, "function");
+assert.equal(typeof formatNeonUiMixerControlMatrixMarkdown, "function");
 assert.equal(typeof formatNeonUiMixerControlSummaryMarkdown, "function");
 assert.equal(typeof normalizeNeonDurableMixOverride, "function");
 assert.equal(typeof readActiveNeonDurableMixOverrides, "function");
 assert.equal(typeof routeForNeonDurableOverride, "function");
+assert.equal(typeof summarizeNeonUiMixerControlMatrix, "function");
 assert.equal(typeof summarizeNeonUiMixerControlRun, "function");
 assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
@@ -1611,6 +1615,50 @@ assert.doesNotMatch(neonUiMixerControlMarkdown, /automatically better/u);
 const neonUiMixerControlArtifacts = createNeonUiMixerControlArtifacts(neonUiMixerControlProfileResult);
 assert.equal(JSON.parse(neonUiMixerControlArtifacts.json).status, "ui_mixer_control_ready");
 assert.deepEqual(neonUiMixerControlArtifacts.summary, neonUiMixerControlSummary);
+const neonUiMixerControlMatrix = summarizeNeonUiMixerControlMatrix([
+  {
+    ...neonUiMixerControlSummary,
+    outputDir: "/tmp/neon-ui-matrix/guitar/desktop",
+    viewport: "desktop",
+  },
+  {
+    ok: false,
+    status: "matrix_cell_proof_failed",
+    track: "guitar",
+    viewport: "phone",
+    outputDir: "/tmp/neon-ui-matrix/guitar/phone",
+    findingCount: 1,
+    findings: ["guitar_phone_proof_failed"],
+    error: "phone layout failed",
+  },
+], {
+  allowFindings: false,
+  outputDir: "/tmp/neon-ui-matrix",
+  elapsedMs: 1234,
+  tracks: ["guitar"],
+  targetLevel: 0.5,
+  minAbsLevelDelta: 0.05,
+  matrixConcurrency: 2,
+  viewportCount: 2,
+  trackCount: 1,
+});
+assert.equal(neonUiMixerControlMatrix.version, "riddle-proof.neon-ui-mixer-control-matrix.v1");
+assert.equal(neonUiMixerControlMatrix.ok, false);
+assert.equal(neonUiMixerControlMatrix.status, "deterministic_findings_present");
+assert.equal(neonUiMixerControlMatrix.cellCount, 2);
+assert.equal(neonUiMixerControlMatrix.findingCount, 1);
+assert.equal(neonUiMixerControlMatrix.viewports[0]?.markdownPath, "/tmp/neon-ui-matrix/guitar/desktop/ui-mixer-control-summary.md");
+assert.equal(neonUiMixerControlMatrix.viewports[1]?.error, "phone layout failed");
+const neonUiMixerControlMatrixMarkdown = formatNeonUiMixerControlMatrixMarkdown(neonUiMixerControlMatrix);
+assert.match(neonUiMixerControlMatrixMarkdown, /^# Neon UI Mixer Control Viewport Matrix/u);
+assert.match(neonUiMixerControlMatrixMarkdown, /matrix_concurrency: `2`/u);
+assert.match(neonUiMixerControlMatrixMarkdown, /guitar_phone_proof_failed/u);
+assert.match(neonUiMixerControlMatrixMarkdown, /does not prove subjective mix taste/u);
+assert.doesNotMatch(neonUiMixerControlMatrixMarkdown, /sounds better/u);
+assert.equal(
+  summarizeNeonUiMixerControlMatrix([neonUiMixerControlMatrix.viewports[1]], { allowFindings: true }).ok,
+  true,
+);
 
 const neonExplorationProfile = instantiateRiddleProofProfile(
   "neon-step-sequencer-explore-songs-and-mixes",

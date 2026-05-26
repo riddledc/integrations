@@ -144,9 +144,14 @@ export {
 export {
   buildNeonUiMixerControlProfile,
   createNeonUiMixerControlArtifacts,
+  formatNeonUiMixerControlMatrixMarkdown,
   formatNeonUiMixerControlSummaryMarkdown,
+  summarizeNeonUiMixerControlMatrix,
   summarizeNeonUiMixerControlRun,
   type NeonUiMixerControlArtifacts,
+  type NeonUiMixerControlMatrixOptions,
+  type NeonUiMixerControlMatrixRow,
+  type NeonUiMixerControlMatrixSummary,
   type NeonUiMixerControlProfileOptions,
   type NeonUiMixerControlRunSummary,
 } from "./neonUiMixerControl";

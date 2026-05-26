@@ -65,6 +65,11 @@ API could represent a subtle level while the real slider could not. The proof
 still does not choose listener preference; it says the actual UI control path is
 deterministic, metric-supported, and reversible enough for review.
 
+The reusable matrix summary helper rolls those UI-control receipts across
+tracks and device-shaped viewports. Use it for fast RiddleNode control gates
+when the question is whether the real browser controls, layout, restoration,
+and render guardrails are reliable enough before another candidate loop.
+
 ## Example evidence
 
 The `examples/` directory contains local Playwright proof results captured against LilArcade Neon Step Sequencer on May 24, 2026:
