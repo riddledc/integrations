@@ -22,8 +22,10 @@ import {
   formatAudioExplorationReviewWarningsMarkdown,
   formatAudioMixIntentSelectionMarkdown,
   formatAudioMixIntentMatrixMarkdown,
+  formatAudioMixProofWindowSelectionMarkdown,
   resolveAudioMixRequestMagnitude,
   resolveAudioMixIntentRouteAlignment,
+  selectAudioMixProofWindows,
   selectAudioMixIntentSet,
   summarizeAudioExplorationCoverage,
   summarizeAudioMixIntentMatrix,
@@ -73,9 +75,11 @@ assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
 assert.equal(typeof formatAudioExplorationReviewWarningsMarkdown, "function");
 assert.equal(typeof formatAudioMixIntentSelectionMarkdown, "function");
 assert.equal(typeof formatAudioMixIntentMatrixMarkdown, "function");
+assert.equal(typeof formatAudioMixProofWindowSelectionMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof selectAudioMixIntentSet, "function");
+assert.equal(typeof selectAudioMixProofWindows, "function");
 assert.equal(typeof summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof summarizeAudioMixIntentMatrix, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
@@ -306,6 +310,59 @@ assert.equal(multiIntentRouteAlignment.routeAdjustment.fromInstrument, "bass");
 assert.equal(multiIntentRouteAlignment.routeAdjustment.toInstrument, null);
 assert.equal(multiIntentRouteAlignment.inferredInstrument, null);
 assert.equal(multiIntentRouteAlignment.selectedIntentCount, 2);
+const monkberryProofWindows = [
+  {
+    name: "introBed",
+    label: "Intro Bed",
+    bars: 1,
+    requiredActive: ["bass", "chord", "guitar"],
+  },
+  {
+    name: "vocalEntry",
+    label: "Vocal Entry",
+    bars: 3,
+    requiredActive: ["rhythmSynth"],
+  },
+];
+const fullProofWindowSelection = selectAudioMixProofWindows(monkberryProofWindows);
+assert.equal(fullProofWindowSelection.version, "riddle-proof.audio-mix-proof-window-selection.v1");
+assert.equal(fullProofWindowSelection.role, "full_profile_window_set");
+assert.equal(fullProofWindowSelection.status, "proof_window_selection_ready");
+assert.equal(fullProofWindowSelection.ok, true);
+assert.deepEqual(fullProofWindowSelection.selectedNames, ["introBed", "vocalEntry"]);
+assert.equal(fullProofWindowSelection.selectedProofWindowCount, 2);
+assert.equal(fullProofWindowSelection.windows?.length, 2);
+assert.match(fullProofWindowSelection.boundary, /does not prove subjective mix quality/u);
+const focusedProofWindowSelection = audioHeuristicsSubpath.selectAudioMixProofWindows({
+  proofWindows: monkberryProofWindows,
+}, {
+  proofWindow: "Intro Bed",
+});
+assert.equal(focusedProofWindowSelection.role, "focused_smoke_window");
+assert.equal(focusedProofWindowSelection.status, "proof_window_selection_ready");
+assert.equal(focusedProofWindowSelection.ok, true);
+assert.deepEqual(focusedProofWindowSelection.selectedNames, ["introBed"]);
+assert.equal(focusedProofWindowSelection.windows?.[0]?.bars, 1);
+assert.match(focusedProofWindowSelection.boundary, /Run the full window set before promotion or broad review/u);
+const focusedProofWindowMarkdown = formatAudioMixProofWindowSelectionMarkdown(focusedProofWindowSelection, {
+  title: "Neon Proof Window Scope",
+});
+assert.match(focusedProofWindowMarkdown, /^# Neon Proof Window Scope/u);
+assert.match(focusedProofWindowMarkdown, /Scope role: `focused_smoke_window`/u);
+assert.match(focusedProofWindowMarkdown, /\| introBed \| Intro Bed \| 1 \| bass, chord, guitar \|/u);
+assert.match(focusedProofWindowMarkdown, /does not prove subjective mix quality/u);
+assert.doesNotMatch(focusedProofWindowMarkdown, /sounds better/u);
+const unknownProofWindowSelection = selectAudioMixProofWindows(monkberryProofWindows, {
+  proofWindow: "bridge",
+});
+assert.equal(unknownProofWindowSelection.ok, false);
+assert.equal(unknownProofWindowSelection.status, "unknown_proof_window");
+assert.deepEqual(unknownProofWindowSelection.unknownProofWindowNames, ["bridge"]);
+const emptyProofWindowSelection = selectAudioMixProofWindows([], {
+  proofWindow: "introBed",
+});
+assert.equal(emptyProofWindowSelection.ok, false);
+assert.equal(emptyProofWindowSelection.status, "empty_proof_window_set");
 const unknownIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
   intentIds: ["guitar-down-little", "drums-down-little"],
 });

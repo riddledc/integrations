@@ -228,6 +228,17 @@ from a broader route template. The receipt keeps compatibility fields such as
 `routeAdjustment` object so reviewers can distinguish an explicit route from a
 default route that was aligned to the selected claim target.
 
+Use `selectAudioMixProofWindows()` when the same target needs both a fast
+focused smoke lane and a fuller review lane. A smoke run can request one known
+proof window such as `introBed` so agents can iterate quickly, while a later
+matrix or promotion run omits the option and uses the full profile window set.
+The receipt records `focused_smoke_window` versus `full_profile_window_set`,
+selected window names, unknown window requests, and boundary language that says
+focused smoke does not replace broad review or prove subjective mix quality.
+Use `formatAudioMixProofWindowSelectionMarkdown()` next to the JSON receipt when
+a human or agent needs to inspect the proof-window scope without opening the
+raw plan.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
