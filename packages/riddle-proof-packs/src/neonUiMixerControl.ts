@@ -523,6 +523,13 @@ const escapeTableCell = (value: unknown): string => (
   formatValue(value).replace(/\|/gu, "\\|")
 );
 
+const formatElapsed = (value: unknown): string => {
+  const ms = safeNumber(value);
+  if (ms === null) return "not captured";
+  if (ms < 1000) return `${formatValue(ms)} ms`;
+  return `${formatValue(ms / 1000)} s`;
+};
+
 const matrixRow = (summary: unknown): NeonUiMixerControlMatrixRow => {
   const record = asRecord(summary);
   const outputDir = safeString(record.outputDir);
@@ -593,6 +600,7 @@ export function formatNeonUiMixerControlMatrixMarkdown(
     `- cell_count: \`${summary.cellCount}\``,
     `- finding_count: \`${summary.findingCount}\``,
     `- matrix_concurrency: \`${formatValue(summary.matrixConcurrency)}\``,
+    `- elapsed: \`${formatElapsed(summary.elapsedMs)}\``,
     `- track: \`${formatValue(summary.track)}\``,
     `- target_level: \`${formatValue(summary.targetLevel)}\``,
     "",
