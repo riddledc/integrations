@@ -194,7 +194,7 @@
       "post-action clipping guardrail"
     ],
     "does_not_prove": [
-      "that the change sounds better",
+      "subjective mix quality or listener preference",
       "that every mix control affects every render window",
       "cross-device control reachability"
     ]

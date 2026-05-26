@@ -974,7 +974,8 @@ assert.match(audioIntentMatrixMarkdown, /Mixing Canon Surrogate Review/u);
 assert.match(audioIntentMatrixMarkdown, /Recommended development candidate: `bass -0\.05`/u);
 assert.match(audioIntentMatrixMarkdown, /not a listener preference/u);
 assert.match(audioIntentMatrixMarkdown, /do not prove subjective mix quality/u);
-assert.match(audioIntentMatrixMarkdown, /do not prove that a candidate sounds better/u);
+assert.match(audioIntentMatrixMarkdown, /do not choose listener preference/u);
+assert.doesNotMatch(audioIntentMatrixMarkdown, /sounds better/u);
 assert.doesNotMatch(audioIntentMatrixMarkdown, /automatically better/u);
 const nestedIntentMatrixSummary = audioHeuristicsSubpath.summarizeAudioMixIntentMatrix({
   intents: [{
