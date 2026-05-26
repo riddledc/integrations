@@ -47,6 +47,56 @@ export interface NeonUiMixerControlRunSummary {
   boundary: string;
 }
 
+export interface NeonUiMixerControlMatrixRow {
+  viewport: string | null;
+  ok: boolean;
+  status: string | null;
+  track: string | null;
+  targetLevel: number | null;
+  beforeContractLevel: number | null;
+  afterContractLevel: number | null;
+  levelDelta: number | null;
+  absLevelDelta: number | null;
+  proofApiEditUsed: boolean | null;
+  findingCount: number;
+  findings: string[];
+  error: string | null;
+  outputDir: string | null;
+  markdownPath: string | null;
+}
+
+export interface NeonUiMixerControlMatrixOptions {
+  allowFindings?: unknown;
+  outputDir?: unknown;
+  elapsedMs?: unknown;
+  tracks?: unknown;
+  targetLevel?: unknown;
+  minAbsLevelDelta?: unknown;
+  matrixConcurrency?: unknown;
+  viewportCount?: unknown;
+  trackCount?: unknown;
+}
+
+export interface NeonUiMixerControlMatrixSummary {
+  version: "riddle-proof.neon-ui-mixer-control-matrix.v1";
+  ok: boolean;
+  status: "ui_mixer_control_matrix_ready" | "deterministic_findings_present";
+  allowFindings: boolean;
+  outputDir: string | null;
+  elapsedMs: number | null;
+  track: string | null;
+  tracks: string[];
+  targetLevel: number | null;
+  minAbsLevelDelta: number | null;
+  matrixConcurrency: number | null;
+  viewportCount: number;
+  trackCount: number;
+  cellCount: number;
+  findingCount: number;
+  viewports: NeonUiMixerControlMatrixRow[];
+  boundary: string;
+}
+
 export interface NeonUiMixerControlArtifacts {
   summary: NeonUiMixerControlRunSummary;
   json: string;
@@ -64,6 +114,7 @@ const DEFAULT_VIEWPORTS = Object.freeze([
 const DEFAULT_ROUTE = "/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=guitar";
 const DEFAULT_WAIT_FOR_SELECTOR = ".drum-sequencer h1";
 const BOUNDARY = "This proof exercises the real UI mixer slider and deterministic audio guardrails. It does not prove subjective mix taste.";
+const MATRIX_BOUNDARY = "This matrix exercises real UI mixer sliders and deterministic audio/layout guardrails across requested tracks and device-shaped browser surfaces. It does not prove subjective mix taste.";
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
@@ -92,6 +143,14 @@ const safeFindingList = (...values: unknown[]): string[] => {
     }
   }
   return Array.from(new Set(findings));
+};
+
+const safeTextList = (value: unknown): string[] => {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  if (!Array.isArray(value)) return [];
+  return Array.from(new Set(value
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean)));
 };
 
 const expectedPathForRoute = (route: string): string => {
@@ -459,6 +518,109 @@ const formatValue = (value: unknown): string => {
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(4)));
   return String(value);
 };
+
+const escapeTableCell = (value: unknown): string => (
+  formatValue(value).replace(/\|/gu, "\\|")
+);
+
+const matrixRow = (summary: unknown): NeonUiMixerControlMatrixRow => {
+  const record = asRecord(summary);
+  const outputDir = safeString(record.outputDir);
+  return {
+    viewport: safeString(record.viewport),
+    ok: record.ok === true,
+    status: safeString(record.status),
+    track: safeString(record.track),
+    targetLevel: safeNumber(record.targetLevel),
+    beforeContractLevel: safeNumber(record.beforeContractLevel),
+    afterContractLevel: safeNumber(record.afterContractLevel),
+    levelDelta: safeNumber(record.levelDelta),
+    absLevelDelta: safeNumber(record.absLevelDelta),
+    proofApiEditUsed: typeof record.proofApiEditUsed === "boolean" ? record.proofApiEditUsed : null,
+    findingCount: Math.max(0, Math.trunc(safeNumber(record.findingCount) ?? 0)),
+    findings: safeTextList(record.findings),
+    error: safeString(record.error),
+    outputDir,
+    markdownPath: outputDir ? `${outputDir.replace(/\/+$/u, "")}/ui-mixer-control-summary.md` : null,
+  };
+};
+
+export function summarizeNeonUiMixerControlMatrix(
+  summaries: unknown[] = [],
+  options: NeonUiMixerControlMatrixOptions = {},
+): NeonUiMixerControlMatrixSummary {
+  const rows = summaries.map(matrixRow);
+  const tracks = safeTextList(options.tracks);
+  const allowFindings = options.allowFindings === true;
+  const findingCount = rows.reduce((total, row) => total + row.findingCount, 0);
+  const deterministicOk = rows.every((row) => row.ok);
+  const resolvedTracks = tracks.length ? tracks : Array.from(new Set(rows.map((row) => row.track).filter(Boolean) as string[]));
+  const viewportCount = Math.max(0, Math.trunc(safeNumber(options.viewportCount) ?? new Set(rows.map((row) => row.viewport).filter(Boolean)).size));
+  const trackCount = Math.max(0, Math.trunc(safeNumber(options.trackCount) ?? resolvedTracks.length));
+
+  return {
+    version: "riddle-proof.neon-ui-mixer-control-matrix.v1",
+    ok: deterministicOk || allowFindings,
+    status: deterministicOk ? "ui_mixer_control_matrix_ready" : "deterministic_findings_present",
+    allowFindings,
+    outputDir: safeString(options.outputDir),
+    elapsedMs: safeNumber(options.elapsedMs),
+    track: resolvedTracks.length === 1 ? resolvedTracks[0] ?? null : null,
+    tracks: resolvedTracks,
+    targetLevel: safeNumber(options.targetLevel),
+    minAbsLevelDelta: safeNumber(options.minAbsLevelDelta),
+    matrixConcurrency: safeNumber(options.matrixConcurrency),
+    viewportCount,
+    trackCount,
+    cellCount: rows.length,
+    findingCount,
+    viewports: rows,
+    boundary: MATRIX_BOUNDARY,
+  };
+}
+
+export function formatNeonUiMixerControlMatrixMarkdown(
+  summary: NeonUiMixerControlMatrixSummary,
+  options: { title?: string } = {},
+): string {
+  const lines = [
+    `# ${options.title ?? "Neon UI Mixer Control Viewport Matrix"}`,
+    "",
+    `- status: \`${summary.status}\``,
+    `- ok: \`${summary.ok}\``,
+    `- viewport_count: \`${summary.viewportCount}\``,
+    `- track_count: \`${summary.trackCount}\``,
+    `- cell_count: \`${summary.cellCount}\``,
+    `- finding_count: \`${summary.findingCount}\``,
+    `- matrix_concurrency: \`${formatValue(summary.matrixConcurrency)}\``,
+    `- track: \`${formatValue(summary.track)}\``,
+    `- target_level: \`${formatValue(summary.targetLevel)}\``,
+    "",
+    MATRIX_BOUNDARY,
+    "",
+    "## Viewports",
+    "",
+    "| Track | Viewport | OK | Status | Before | After | Delta | Proof API Edit | Findings |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+  ];
+
+  for (const row of summary.viewports) {
+    lines.push(`| ${[
+      row.track,
+      row.viewport,
+      row.ok,
+      row.status,
+      row.beforeContractLevel,
+      row.afterContractLevel,
+      row.levelDelta,
+      row.proofApiEditUsed,
+      row.findings.length ? row.findings.join(", ") : "none",
+    ].map(escapeTableCell).join(" | ")} |`);
+  }
+
+  lines.push("", "## Boundary", "", summary.boundary);
+  return `${lines.join("\n")}\n`;
+}
 
 export function formatNeonUiMixerControlSummaryMarkdown(
   summary: NeonUiMixerControlRunSummary,
