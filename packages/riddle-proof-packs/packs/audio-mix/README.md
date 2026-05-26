@@ -40,4 +40,4 @@ For claim-candidate loops, use section heuristics as review aids:
 - preserve required section energy floors for instruments that must remain active
 - reject candidates that violate clipping, headroom, or low-level guardrails
 
-These heuristics support wording such as `metric-supported`, `guardrail-preserving`, and `ranked for review`. They do not prove that a candidate sounds better.
+These heuristics support wording such as `metric-supported`, `guardrail-preserving`, and `ranked for review`. They do not prove subjective mix quality or choose listener preference.

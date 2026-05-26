@@ -1348,7 +1348,7 @@ export function formatAudioMixIntentMatrixMarkdown(
     `- Finding count: \`${summary.findingCount}\``,
     `- Review warning count: \`${summary.reviewWarningCount}\``,
     "",
-    "Intent matrices rank metric-supported candidates for review. They do not prove subjective mix quality, do not prove that a candidate sounds better, and do not apply candidates automatically.",
+    "Intent matrices rank metric-supported candidates for review. They do not prove subjective mix quality, do not choose listener preference, and do not apply candidates automatically.",
     "",
     "## Intent Runs",
     "",

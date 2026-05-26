@@ -61,9 +61,9 @@ range input for a selected track, checks that app contract state and the visible
 readout reflect the target level, renders post-control audio guardrails, and
 restores the original level. This caught the Neon `0.53` / `0.55` precision
 issue because the proof API could represent a subtle level while the real
-slider could not. The proof still does not say the candidate sounds better; it
-says the actual UI control path is deterministic, metric-supported, and
-reversible enough for review.
+slider could not. The proof still does not choose listener preference; it says
+the actual UI control path is deterministic, metric-supported, and reversible
+enough for review.
 
 ## Example evidence
 
