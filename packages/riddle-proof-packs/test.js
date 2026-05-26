@@ -48,6 +48,7 @@ import {
   routeForNeonDurableOverride,
   summarizeNeonUiMixerControlRun,
   createHumanReviewPacketArtifacts,
+  collectHumanReviewPacketDiagnostics,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
   requireHumanReviewPacket,
@@ -104,6 +105,7 @@ assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
+assert.equal(typeof collectHumanReviewPacketDiagnostics, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionLoudnessConsequences, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
@@ -735,6 +737,43 @@ assert.doesNotMatch(failedReceiptPacketMarkdown, /Does the supported candidate/u
 assert.doesNotMatch(failedReceiptPacketMarkdown, /A supported candidate proves/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /Keep or apply the candidate/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /sounds better/u);
+const failedReceiptDiagnostics = collectHumanReviewPacketDiagnostics({
+  kind: "human_review_packet",
+  status: "needs_followup",
+  rejectedCandidates: [{
+    label: "guitar -0.02",
+    classification: "profile_calibration",
+    receipts: [
+      { name: "required_instruments_preserved", ok: false },
+      { name: "mixer_edit_accepted", ok: true },
+    ],
+    failedReceipts: ["section_energy_floors_preserved"],
+    activeLaneReceipt: {
+      status: "missing_required_active_lanes",
+      missingWindows: [{
+        label: "Intro Bed Missing Lead Vocal Probe",
+        missingRequiredActive: ["leadVocal"],
+      }],
+    },
+  }],
+});
+assert.equal(failedReceiptDiagnostics.version, "riddle-proof.human-review-packet-diagnostics.v1");
+assert.equal(failedReceiptDiagnostics.role, "compact_failed_receipt_rollup");
+assert.equal(failedReceiptDiagnostics.status, "failed_receipts_present");
+assert.equal(failedReceiptDiagnostics.rejectedCandidateCount, 1);
+assert.deepEqual(failedReceiptDiagnostics.rejectedCandidateLabels, ["guitar -0.02"]);
+assert.deepEqual(failedReceiptDiagnostics.failedReceiptKinds, [
+  "section_energy_floors_preserved",
+  "required_instruments_preserved",
+]);
+assert.deepEqual(failedReceiptDiagnostics.candidateClassifications, ["profile_calibration"]);
+assert.deepEqual(failedReceiptDiagnostics.activeLaneStatuses, ["missing_required_active_lanes"]);
+assert.deepEqual(failedReceiptDiagnostics.missingActiveLaneTracks, ["leadVocal"]);
+assert.match(failedReceiptDiagnostics.boundary, /do not prove subjective mix quality/u);
+assert.equal(
+  collectHumanReviewPacketDiagnostics({ kind: "human_review_packet", rejectedCandidates: [] }).status,
+  "no_failed_receipts_captured",
+);
 
 const mixingCanonPacket = {
   kind: "human_review_packet",

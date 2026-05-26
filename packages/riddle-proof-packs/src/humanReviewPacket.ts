@@ -12,6 +12,19 @@ export interface HumanReviewPacketArtifacts {
   markdown: string;
 }
 
+export interface HumanReviewPacketDiagnostics {
+  version: "riddle-proof.human-review-packet-diagnostics.v1";
+  role: "compact_failed_receipt_rollup";
+  status: "failed_receipts_present" | "no_failed_receipts_captured";
+  rejectedCandidateCount: number;
+  rejectedCandidateLabels: string[];
+  failedReceiptKinds: string[];
+  candidateClassifications: string[];
+  activeLaneStatuses: string[];
+  missingActiveLaneTracks: string[];
+  boundary: string;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
 );
@@ -440,6 +453,46 @@ const noSupportedCandidateCaveatList = (packet: HumanReviewPacket): string[] => 
   ...noSupportedCandidateCaveats,
   ...asArray(packet.caveats).filter((entry) => !supportedCandidateCaveatPattern.test(formatValue(entry))),
 ]);
+
+const failedReceiptNamesForCandidate = (candidate: Record<string, unknown>): string[] => uniqueValues([
+  ...asArray(candidate.failedReceipts),
+  ...asArray(candidate.receipts)
+    .map(asRecord)
+    .filter((receipt): receipt is Record<string, unknown> => Boolean(receipt))
+    .filter((receipt) => receipt.ok !== true)
+    .map((receipt) => receipt.name),
+]);
+
+export function collectHumanReviewPacketDiagnostics(
+  packet: Partial<HumanReviewPacket> = {},
+): HumanReviewPacketDiagnostics {
+  const rejectedCandidates = asArray(packet.rejectedCandidates)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const failedReceiptKinds = uniqueValues(rejectedCandidates.flatMap(failedReceiptNamesForCandidate));
+  const activeLaneReceipts = rejectedCandidates
+    .map((candidate) => asRecord(candidate.activeLaneReceipt))
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const missingActiveLaneTracks = uniqueValues(activeLaneReceipts.flatMap((receipt) => (
+    asArray(receipt.missingWindows)
+      .map(asRecord)
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+      .flatMap((windowSummary) => asArray(windowSummary.missingRequiredActive))
+  )));
+
+  return {
+    version: "riddle-proof.human-review-packet-diagnostics.v1",
+    role: "compact_failed_receipt_rollup",
+    status: failedReceiptKinds.length ? "failed_receipts_present" : "no_failed_receipts_captured",
+    rejectedCandidateCount: rejectedCandidates.length,
+    rejectedCandidateLabels: uniqueValues(rejectedCandidates.map((candidate) => candidate.label)),
+    failedReceiptKinds,
+    candidateClassifications: uniqueValues(rejectedCandidates.map((candidate) => candidate.classification)),
+    activeLaneStatuses: uniqueValues(activeLaneReceipts.map((receipt) => receipt.status)),
+    missingActiveLaneTracks,
+    boundary: "Failed receipt diagnostics summarize deterministic follow-up cues. They do not prove subjective mix quality.",
+  };
+}
 
 export function findHumanReviewPacket(value: unknown): HumanReviewPacket | null {
   if (!value || typeof value !== "object") return null;
