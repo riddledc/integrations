@@ -109,6 +109,44 @@ export interface AudioExplorationReviewWarning {
   boundary: string;
 }
 
+export interface AudioMixIntentDefinition {
+  id: string;
+  intent: string;
+  focusTracks: string[];
+  targetTracks: string[];
+  direction: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface AudioMixIntentSet {
+  name: string | null;
+  description: string | null;
+  intents: AudioMixIntentDefinition[];
+}
+
+export interface AudioMixIntentSelectionOptions {
+  intentIds?: unknown;
+  maxIntents?: unknown;
+}
+
+export interface AudioMixIntentSelection {
+  version: "riddle-proof.audio-mix-intent-selection.v1";
+  role: "bounded_intent_selection";
+  status: "intent_selection_ready" | "unknown_intent_ids" | "empty_intent_selection";
+  ok: boolean;
+  intentSet: {
+    name: string | null;
+    description: string | null;
+  };
+  requestedIntentIds: string[];
+  selectedIntentIds: string[];
+  unknownIntentIds: string[];
+  totalIntentCount: number;
+  selectedIntentCount: number;
+  intents: AudioMixIntentDefinition[];
+  boundary: string;
+}
+
 export interface AudioMixIntentMatrixRun {
   id: string | null;
   intent: string | null;
@@ -230,6 +268,7 @@ export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagni
 };
 
 const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective candidate support before review-order ranking; it does not prove subjective mix quality.";
+const AUDIO_MIX_INTENT_SELECTION_BOUNDARY = "Intent selection scopes bounded objective audio-mix claim-candidate loops for smoke or matrix runs; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
@@ -264,6 +303,15 @@ const normalizeTrackedInstruments = (value: unknown): string[] => Array.from(new
   .map((entry) => String(entry ?? "").trim())
   .filter(Boolean)));
 
+const normalizeTextList = (value: unknown): string[] => {
+  if (typeof value === "string") return value.trim() ? [value.trim()] : [];
+  return normalizeTrackedInstruments(value);
+};
+
+const normalizeIntentIds = (value: unknown): string[] => Array.from(new Set(
+  normalizeTextList(value),
+));
+
 const asRecord = (value: unknown): Record<string, unknown> => (
   Boolean(value) && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -278,6 +326,11 @@ const asNumber = (value: unknown): number | null => {
 const asStringOrNull = (value: unknown): string | null => (
   typeof value === "string" && value.trim() ? value.trim() : null
 );
+
+const asPositiveIntegerOrNull = (value: unknown): number | null => {
+  const number = asNumber(value);
+  return number !== null && number > 0 ? Math.trunc(number) : null;
+};
 
 const lowerText = (value: unknown): string => (
   typeof value === "string" ? value.toLowerCase().trim() : ""
@@ -729,6 +782,73 @@ const countFromValue = (value: unknown): number => {
   if (number !== null) return Math.max(0, Math.trunc(number));
   return Array.isArray(value) ? value.length : 0;
 };
+
+const normalizeAudioMixIntentDefinition = (entry: unknown): AudioMixIntentDefinition | null => {
+  const record = asRecord(entry);
+  const id = asStringOrNull(record.id);
+  const intent = asStringOrNull(record.intent ?? record.requestedIntent ?? record.claim);
+  if (!id || !intent) return null;
+  const metadata = nullableRecord(record.metadata) ?? {};
+
+  return {
+    id,
+    intent,
+    focusTracks: normalizeTextList(record.focusTracks ?? record.focusTrack),
+    targetTracks: normalizeTextList(record.targetTracks ?? record.targetTrack),
+    direction: asStringOrNull(record.direction),
+    metadata,
+  };
+};
+
+const normalizeAudioMixIntentSet = (input: unknown): AudioMixIntentSet => {
+  const record = asRecord(input);
+  const rawIntents = Array.isArray(record.intents) ? record.intents : asArray(input);
+  return {
+    name: asStringOrNull(record.name),
+    description: asStringOrNull(record.description),
+    intents: rawIntents
+      .map(normalizeAudioMixIntentDefinition)
+      .filter((entry): entry is AudioMixIntentDefinition => entry !== null),
+  };
+};
+
+export function selectAudioMixIntentSet(
+  intentSetInput: unknown,
+  options: AudioMixIntentSelectionOptions = {},
+): AudioMixIntentSelection {
+  const intentSet = normalizeAudioMixIntentSet(intentSetInput);
+  const requestedIntentIds = normalizeIntentIds(options.intentIds);
+  const maxIntents = asPositiveIntegerOrNull(options.maxIntents);
+  const requestedIntentIdSet = new Set(requestedIntentIds);
+  const selectedBeforeLimit = requestedIntentIds.length
+    ? intentSet.intents.filter((entry) => requestedIntentIdSet.has(entry.id))
+    : intentSet.intents;
+  const intents = maxIntents === null ? selectedBeforeLimit : selectedBeforeLimit.slice(0, maxIntents);
+  const knownIntentIdSet = new Set(intentSet.intents.map((entry) => entry.id));
+  const unknownIntentIds = requestedIntentIds.filter((id) => !knownIntentIdSet.has(id));
+  const selectedIntentIds = intents.map((entry) => entry.id);
+  const status = unknownIntentIds.length
+    ? "unknown_intent_ids"
+    : (selectedIntentIds.length ? "intent_selection_ready" : "empty_intent_selection");
+
+  return {
+    version: "riddle-proof.audio-mix-intent-selection.v1",
+    role: "bounded_intent_selection",
+    status,
+    ok: status === "intent_selection_ready",
+    intentSet: {
+      name: intentSet.name,
+      description: intentSet.description,
+    },
+    requestedIntentIds,
+    selectedIntentIds,
+    unknownIntentIds,
+    totalIntentCount: intentSet.intents.length,
+    selectedIntentCount: intents.length,
+    intents,
+    boundary: AUDIO_MIX_INTENT_SELECTION_BOUNDARY,
+  };
+}
 
 const nullableRecord = (value: unknown): Record<string, unknown> | null => {
   const record = asRecord(value);
