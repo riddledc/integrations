@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.14
+
+### Patch Changes
+
+- 4e778db: Add input-route role and route-adjustment details to audio mix intent route-alignment receipts so default route alignment is distinguishable from explicit user target routes.
+
 ## 0.8.13
 
 ### Patch Changes
