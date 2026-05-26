@@ -173,6 +173,7 @@ export interface AudioMixIntentDefinition {
   focusTracks: string[];
   targetTracks: string[];
   direction: string | null;
+  candidates: Record<string, unknown>[];
   metadata: Record<string, unknown>;
 }
 
@@ -926,6 +927,7 @@ const normalizeAudioMixIntentDefinition = (entry: unknown): AudioMixIntentDefini
     focusTracks: normalizeTextList(record.focusTracks ?? record.focusTrack),
     targetTracks: normalizeTextList(record.targetTracks ?? record.targetTrack),
     direction: asStringOrNull(record.direction),
+    candidates: asArray(record.candidates).map(asRecord).filter((candidate) => Object.keys(candidate).length > 0),
     metadata,
   };
 };
@@ -1001,6 +1003,7 @@ export function buildAudioMixLevelIntentSet(
       focusTracks: track.focusTracks,
       targetTracks: track.targetTracks,
       direction,
+      candidates: [],
       metadata: {
         ...sharedMetadata,
         ...track.metadata,
