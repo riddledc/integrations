@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.20
+
+### Patch Changes
+
+- 40b1016: Add a top-level recommendation impact summary to human review packet Markdown.
+
 ## 0.8.19
 
 ### Patch Changes
