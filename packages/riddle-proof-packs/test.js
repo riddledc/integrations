@@ -167,6 +167,9 @@ const audioMixIntentSet = {
       focusTracks: ["guitar"],
       targetTracks: ["guitar"],
       direction: "down",
+      candidates: [
+        { track: "guitar", value: 0.35, label: "guitar oversized warning probe" },
+      ],
       metadata: {
         section: "hook",
       },
@@ -247,6 +250,9 @@ assert.equal(guitarOnlySelection.intents[0]?.intent, "turn the guitar part down 
 assert.deepEqual(guitarOnlySelection.intents[0]?.focusTracks, ["guitar"]);
 assert.deepEqual(guitarOnlySelection.intents[0]?.targetTracks, ["guitar"]);
 assert.equal(guitarOnlySelection.intents[0]?.direction, "down");
+assert.deepEqual(guitarOnlySelection.intents[0]?.candidates, [
+  { track: "guitar", value: 0.35, label: "guitar oversized warning probe" },
+]);
 assert.deepEqual(guitarOnlySelection.intents[0]?.metadata, { section: "hook" });
 const guitarRouteAlignment = resolveAudioMixIntentRouteAlignment(guitarOnlySelection, {
   route: "/neon-lab/games/drum-sequencer?song=monkberry&instrument=bass",
