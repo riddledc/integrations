@@ -92,6 +92,9 @@ export interface NeonUiMixerControlMatrixSummary {
   viewportCount: number;
   trackCount: number;
   cellCount: number;
+  trackNames: string[];
+  viewportNames: string[];
+  cells: NeonUiMixerControlMatrixRow[];
   findingCount: number;
   viewports: NeonUiMixerControlMatrixRow[];
   boundary: string;
@@ -562,7 +565,8 @@ export function summarizeNeonUiMixerControlMatrix(
   const findingCount = rows.reduce((total, row) => total + row.findingCount, 0);
   const deterministicOk = rows.every((row) => row.ok);
   const resolvedTracks = tracks.length ? tracks : Array.from(new Set(rows.map((row) => row.track).filter(Boolean) as string[]));
-  const viewportCount = Math.max(0, Math.trunc(safeNumber(options.viewportCount) ?? new Set(rows.map((row) => row.viewport).filter(Boolean)).size));
+  const resolvedViewports = Array.from(new Set(rows.map((row) => row.viewport).filter(Boolean) as string[]));
+  const viewportCount = Math.max(0, Math.trunc(safeNumber(options.viewportCount) ?? resolvedViewports.length));
   const trackCount = Math.max(0, Math.trunc(safeNumber(options.trackCount) ?? resolvedTracks.length));
 
   return {
@@ -580,6 +584,9 @@ export function summarizeNeonUiMixerControlMatrix(
     viewportCount,
     trackCount,
     cellCount: rows.length,
+    trackNames: resolvedTracks,
+    viewportNames: resolvedViewports,
+    cells: rows,
     findingCount,
     viewports: rows,
     boundary: MATRIX_BOUNDARY,
@@ -602,17 +609,19 @@ export function formatNeonUiMixerControlMatrixMarkdown(
     `- matrix_concurrency: \`${formatValue(summary.matrixConcurrency)}\``,
     `- elapsed: \`${formatElapsed(summary.elapsedMs)}\``,
     `- track: \`${formatValue(summary.track)}\``,
+    `- tracks: \`${summary.trackNames.length ? summary.trackNames.join(", ") : "not captured"}\``,
+    `- viewports: \`${summary.viewportNames.length ? summary.viewportNames.join(", ") : "not captured"}\``,
     `- target_level: \`${formatValue(summary.targetLevel)}\``,
     "",
     MATRIX_BOUNDARY,
     "",
-    "## Viewports",
+    "## Matrix Cells",
     "",
     "| Track | Viewport | OK | Status | Before | After | Delta | Proof API Edit | Findings |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
 
-  for (const row of summary.viewports) {
+  for (const row of summary.cells ?? summary.viewports) {
     lines.push(`| ${[
       row.track,
       row.viewport,
