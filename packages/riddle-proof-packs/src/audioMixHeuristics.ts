@@ -176,6 +176,33 @@ export interface AudioMixIntentSelection {
   boundary: string;
 }
 
+export type AudioMixIntentRouteAlignmentStatus =
+  | "explicit_route_preserved"
+  | "shared_route_default_preserved"
+  | "route_instrument_aligned_to_single_intent"
+  | "route_instrument_already_aligned";
+
+export interface AudioMixIntentRouteAlignmentOptions extends AudioMixIntentSelectionOptions {
+  route?: unknown;
+  routeExplicit?: unknown;
+  instrumentParam?: unknown;
+}
+
+export interface AudioMixIntentRouteAlignment {
+  version: "riddle-proof.audio-mix-intent-route-alignment.v1";
+  role: "claim_target_route_alignment";
+  status: AudioMixIntentRouteAlignmentStatus;
+  ok: boolean;
+  requestedRoute: string | null;
+  effectiveRoute: string | null;
+  inferredInstrument: string | null;
+  routeExplicit: boolean;
+  instrumentParam: string;
+  selectedIntentCount: number;
+  selectedIntentIds: string[];
+  boundary: string;
+}
+
 export interface AudioMixIntentMatrixRun {
   id: string | null;
   intent: string | null;
@@ -298,6 +325,7 @@ export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagni
 
 const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective candidate support before review-order ranking; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_SELECTION_BOUNDARY = "Intent selection scopes bounded objective audio-mix claim-candidate loops for smoke or matrix runs; it does not prove subjective mix quality.";
+const AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY = "Route alignment keeps a running browser target consistent with a selected objective audio-mix claim; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
@@ -359,6 +387,12 @@ const asStringOrNull = (value: unknown): string | null => (
 const asPositiveIntegerOrNull = (value: unknown): number | null => {
   const number = asNumber(value);
   return number !== null && number > 0 ? Math.trunc(number) : null;
+};
+
+const asBooleanOption = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  const text = typeof value === "string" ? value.toLowerCase().trim() : "";
+  return text === "true" || text === "1" || text === "yes";
 };
 
 const lowerText = (value: unknown): string => (
@@ -962,6 +996,96 @@ const isAudioMixIntentSelection = (input: unknown): input is AudioMixIntentSelec
     && record.role === "bounded_intent_selection"
     && Array.isArray(record.intents);
 };
+
+const singleAudioMixIntentInstrument = (selection: AudioMixIntentSelection): string | null => {
+  if (selection.selectedIntentCount !== 1) return null;
+  const [intent] = selection.intents;
+  return normalizeTextList(intent?.targetTracks)[0]
+    ?? normalizeTextList(intent?.focusTracks)[0]
+    ?? null;
+};
+
+const routeWithIntentInstrument = (
+  route: string | null,
+  instrument: string | null,
+  instrumentParam: string,
+): string | null => {
+  if (!route || !instrument) return route;
+  try {
+    const hasOrigin = /^[a-z][a-z0-9+.-]*:/iu.test(route);
+    const parsed = new URL(route, "https://riddle-proof.local");
+    parsed.searchParams.set(instrumentParam, instrument);
+    return hasOrigin ? parsed.href : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return route;
+  }
+};
+
+export function resolveAudioMixIntentRouteAlignment(
+  selectionOrIntentSet: unknown,
+  options: AudioMixIntentRouteAlignmentOptions = {},
+): AudioMixIntentRouteAlignment {
+  const selection = isAudioMixIntentSelection(selectionOrIntentSet)
+    ? selectionOrIntentSet
+    : selectAudioMixIntentSet(selectionOrIntentSet, options);
+  const requestedRoute = asStringOrNull(options.route);
+  const routeExplicit = asBooleanOption(options.routeExplicit);
+  const instrumentParam = asStringOrNull(options.instrumentParam) ?? "instrument";
+  const inferredInstrument = singleAudioMixIntentInstrument(selection);
+
+  if (routeExplicit) {
+    return {
+      version: "riddle-proof.audio-mix-intent-route-alignment.v1",
+      role: "claim_target_route_alignment",
+      status: "explicit_route_preserved",
+      ok: true,
+      requestedRoute,
+      effectiveRoute: requestedRoute,
+      inferredInstrument,
+      routeExplicit,
+      instrumentParam,
+      selectedIntentCount: selection.selectedIntentCount,
+      selectedIntentIds: selection.selectedIntentIds,
+      boundary: AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY,
+    };
+  }
+
+  if (!requestedRoute || !inferredInstrument) {
+    return {
+      version: "riddle-proof.audio-mix-intent-route-alignment.v1",
+      role: "claim_target_route_alignment",
+      status: "shared_route_default_preserved",
+      ok: true,
+      requestedRoute,
+      effectiveRoute: requestedRoute,
+      inferredInstrument: null,
+      routeExplicit,
+      instrumentParam,
+      selectedIntentCount: selection.selectedIntentCount,
+      selectedIntentIds: selection.selectedIntentIds,
+      boundary: AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY,
+    };
+  }
+
+  const effectiveRoute = routeWithIntentInstrument(requestedRoute, inferredInstrument, instrumentParam);
+
+  return {
+    version: "riddle-proof.audio-mix-intent-route-alignment.v1",
+    role: "claim_target_route_alignment",
+    status: effectiveRoute === requestedRoute
+      ? "route_instrument_already_aligned"
+      : "route_instrument_aligned_to_single_intent",
+    ok: true,
+    requestedRoute,
+    effectiveRoute,
+    inferredInstrument,
+    routeExplicit,
+    instrumentParam,
+    selectedIntentCount: selection.selectedIntentCount,
+    selectedIntentIds: selection.selectedIntentIds,
+    boundary: AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY,
+  };
+}
 
 const formatIntentIdList = (values: string[]): string => (values.length ? values.join(", ") : "none");
 

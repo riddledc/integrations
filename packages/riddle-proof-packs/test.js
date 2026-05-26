@@ -22,6 +22,7 @@ import {
   formatAudioMixIntentSelectionMarkdown,
   formatAudioMixIntentMatrixMarkdown,
   resolveAudioMixRequestMagnitude,
+  resolveAudioMixIntentRouteAlignment,
   selectAudioMixIntentSet,
   summarizeAudioExplorationCoverage,
   summarizeAudioMixIntentMatrix,
@@ -108,6 +109,7 @@ assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationReviewWarningsM
 assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentSelectionMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
+assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixIntentRouteAlignment, "function");
 assert.equal(typeof audioHeuristicsSubpath.selectAudioMixIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioMixIntentMatrix, "function");
@@ -243,6 +245,40 @@ assert.deepEqual(guitarOnlySelection.intents[0]?.focusTracks, ["guitar"]);
 assert.deepEqual(guitarOnlySelection.intents[0]?.targetTracks, ["guitar"]);
 assert.equal(guitarOnlySelection.intents[0]?.direction, "down");
 assert.deepEqual(guitarOnlySelection.intents[0]?.metadata, { section: "hook" });
+const guitarRouteAlignment = resolveAudioMixIntentRouteAlignment(guitarOnlySelection, {
+  route: "/neon-lab/games/drum-sequencer?song=monkberry&instrument=bass",
+});
+assert.equal(guitarRouteAlignment.version, "riddle-proof.audio-mix-intent-route-alignment.v1");
+assert.equal(guitarRouteAlignment.role, "claim_target_route_alignment");
+assert.equal(guitarRouteAlignment.status, "route_instrument_aligned_to_single_intent");
+assert.equal(guitarRouteAlignment.ok, true);
+assert.match(guitarRouteAlignment.requestedRoute, /instrument=bass/u);
+assert.match(guitarRouteAlignment.effectiveRoute, /instrument=guitar/u);
+assert.equal(guitarRouteAlignment.inferredInstrument, "guitar");
+assert.equal(guitarRouteAlignment.routeExplicit, false);
+assert.equal(guitarRouteAlignment.instrumentParam, "instrument");
+assert.deepEqual(guitarRouteAlignment.selectedIntentIds, ["guitar-down-little"]);
+assert.match(guitarRouteAlignment.boundary, /does not prove subjective mix quality/u);
+const explicitGuitarRouteAlignment = audioHeuristicsSubpath.resolveAudioMixIntentRouteAlignment(guitarOnlySelection, {
+  route: "/neon-lab/games/drum-sequencer?song=monkberry&instrument=bass",
+  routeExplicit: true,
+});
+assert.equal(explicitGuitarRouteAlignment.status, "explicit_route_preserved");
+assert.match(explicitGuitarRouteAlignment.effectiveRoute, /instrument=bass/u);
+assert.equal(explicitGuitarRouteAlignment.inferredInstrument, "guitar");
+const customRouteAlignment = resolveAudioMixIntentRouteAlignment(guitarOnlySelection, {
+  route: "/proof?track=bass",
+  instrumentParam: "track",
+});
+assert.equal(customRouteAlignment.status, "route_instrument_aligned_to_single_intent");
+assert.equal(customRouteAlignment.effectiveRoute, "/proof?track=guitar");
+const multiIntentRouteAlignment = resolveAudioMixIntentRouteAlignment(allAudioMixIntentSelection, {
+  route: "/neon-lab/games/drum-sequencer?song=monkberry&instrument=bass",
+});
+assert.equal(multiIntentRouteAlignment.status, "shared_route_default_preserved");
+assert.match(multiIntentRouteAlignment.effectiveRoute, /instrument=bass/u);
+assert.equal(multiIntentRouteAlignment.inferredInstrument, null);
+assert.equal(multiIntentRouteAlignment.selectedIntentCount, 2);
 const unknownIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
   intentIds: ["guitar-down-little", "drums-down-little"],
 });
