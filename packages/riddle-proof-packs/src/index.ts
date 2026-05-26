@@ -90,12 +90,14 @@ export {
   type MixingCanonSurrogateReviewOptions,
 } from "./audioMixReview";
 export {
+  collectHumanReviewPacketDiagnostics,
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
   requireHumanReviewPacket,
   type HumanReviewPacket,
   type HumanReviewPacketArtifacts,
+  type HumanReviewPacketDiagnostics,
   type HumanReviewPacketMarkdownOptions,
 } from "./humanReviewPacket";
 export {
