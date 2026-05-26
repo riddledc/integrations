@@ -965,6 +965,10 @@ const isAudioMixIntentSelection = (input: unknown): input is AudioMixIntentSelec
 
 const formatIntentIdList = (values: string[]): string => (values.length ? values.join(", ") : "none");
 
+const intentMetadataValue = (intent: AudioMixIntentDefinition, key: string): unknown => (
+  asRecord(intent.metadata)[key]
+);
+
 export function formatAudioMixIntentSelectionMarkdown(
   selectionOrIntentSet: unknown,
   options: AudioMixIntentSelectionMarkdownOptions = {},
@@ -989,8 +993,8 @@ export function formatAudioMixIntentSelectionMarkdown(
     "",
     "## Selected Intents",
     "",
-    "| ID | Intent | Focus Tracks | Target Tracks | Direction |",
-    "| --- | --- | --- | --- | --- |",
+    "| ID | Intent | Focus Tracks | Target Tracks | Direction | Pattern | Requested Magnitude | Magnitude Word |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
   ];
 
   if (selection.intents.length) {
@@ -1001,10 +1005,13 @@ export function formatAudioMixIntentSelectionMarkdown(
         formatIntentIdList(intent.focusTracks),
         formatIntentIdList(intent.targetTracks),
         intent.direction,
+        intentMetadataValue(intent, "pattern"),
+        intentMetadataValue(intent, "requestedMagnitude"),
+        intentMetadataValue(intent, "magnitudeWord"),
       ]));
     }
   } else {
-    lines.push("| none | not captured | none | none | not captured |");
+    lines.push("| none | not captured | none | none | not captured | not captured | not captured | not captured |");
   }
 
   if (options.includeBoundary ?? true) {
