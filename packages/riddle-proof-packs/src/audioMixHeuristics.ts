@@ -275,6 +275,40 @@ export interface AudioMixIntentRouteAlignment {
   boundary: string;
 }
 
+export type AudioMixProofWindowSelectionRole =
+  | "full_profile_window_set"
+  | "focused_smoke_window";
+
+export type AudioMixProofWindowSelectionStatus =
+  | "proof_window_selection_ready"
+  | "unknown_proof_window"
+  | "empty_proof_window_set";
+
+export interface AudioMixProofWindowSelectionOptions {
+  proofWindow?: unknown;
+  proofWindowName?: unknown;
+  windowName?: unknown;
+}
+
+export interface AudioMixProofWindowSelectionMarkdownOptions extends AudioMixProofWindowSelectionOptions {
+  title?: string;
+  includeBoundary?: boolean;
+}
+
+export interface AudioMixProofWindowSelection {
+  version: "riddle-proof.audio-mix-proof-window-selection.v1";
+  role: AudioMixProofWindowSelectionRole;
+  status: AudioMixProofWindowSelectionStatus;
+  ok: boolean;
+  requestedProofWindow: string | null;
+  totalProofWindowCount: number;
+  selectedProofWindowCount: number;
+  selectedNames: string[];
+  unknownProofWindowNames: string[];
+  windows: Record<string, unknown>[] | null;
+  boundary: string;
+}
+
 export interface AudioMixIntentMatrixRun {
   id: string | null;
   intent: string | null;
@@ -399,6 +433,8 @@ export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagni
 const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective candidate support before review-order ranking; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_SELECTION_BOUNDARY = "Intent selection scopes bounded objective audio-mix claim-candidate loops for smoke or matrix runs; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY = "Route alignment keeps a running browser target consistent with a selected objective audio-mix claim; it does not prove subjective mix quality.";
+const AUDIO_MIX_PROOF_WINDOW_FULL_BOUNDARY = "The full profile proof-window set is used for broader objective review. It does not prove subjective mix quality.";
+const AUDIO_MIX_PROOF_WINDOW_FOCUSED_BOUNDARY = "Focused proof-window smoke runs reduce iteration cost for a narrow section. Run the full window set before promotion or broad review; focused timing does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
 const AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY = "Loudness metrics are objective review signals. They can show that a candidate made a section much louder or quieter than expected, but they do not prove subjective mix quality.";
 
@@ -1106,6 +1142,172 @@ const instrumentFromRoute = (route: string | null, instrumentParam: string): str
     return null;
   }
 };
+
+const normalizeProofWindowKey = (value: unknown): string => String(value ?? "")
+  .replace(/[^a-z0-9]+/giu, "")
+  .toLowerCase();
+
+const normalizeProofWindowRecords = (input: unknown): Record<string, unknown>[] => {
+  const record = asRecord(input);
+  const rawWindows = Array.isArray(input)
+    ? input
+    : (Array.isArray(record.proofWindows)
+      ? record.proofWindows
+      : (Array.isArray(record.windows) ? record.windows : []));
+  return rawWindows.map(asRecord).filter((entry) => Object.keys(entry).length > 0);
+};
+
+const proofWindowDisplayName = (windowSpec: Record<string, unknown>): string | null => (
+  asStringOrNull(windowSpec.name)
+  ?? asStringOrNull(windowSpec.label)
+  ?? asStringOrNull(windowSpec.id)
+);
+
+const requestedProofWindowName = (options: AudioMixProofWindowSelectionOptions): string | null => (
+  asStringOrNull(options.proofWindow)
+  ?? asStringOrNull(options.proofWindowName)
+  ?? asStringOrNull(options.windowName)
+);
+
+export function selectAudioMixProofWindows(
+  proofWindowsInput: unknown,
+  options: AudioMixProofWindowSelectionOptions = {},
+): AudioMixProofWindowSelection {
+  const proofWindows = normalizeProofWindowRecords(proofWindowsInput);
+  const requested = requestedProofWindowName(options);
+  const role: AudioMixProofWindowSelectionRole = requested
+    ? "focused_smoke_window"
+    : "full_profile_window_set";
+  const boundary = role === "focused_smoke_window"
+    ? AUDIO_MIX_PROOF_WINDOW_FOCUSED_BOUNDARY
+    : AUDIO_MIX_PROOF_WINDOW_FULL_BOUNDARY;
+
+  if (!proofWindows.length) {
+    return {
+      version: "riddle-proof.audio-mix-proof-window-selection.v1",
+      role,
+      status: "empty_proof_window_set",
+      ok: false,
+      requestedProofWindow: requested,
+      totalProofWindowCount: 0,
+      selectedProofWindowCount: 0,
+      selectedNames: [],
+      unknownProofWindowNames: requested ? [requested] : [],
+      windows: [],
+      boundary,
+    };
+  }
+
+  if (!requested) {
+    return {
+      version: "riddle-proof.audio-mix-proof-window-selection.v1",
+      role,
+      status: "proof_window_selection_ready",
+      ok: true,
+      requestedProofWindow: null,
+      totalProofWindowCount: proofWindows.length,
+      selectedProofWindowCount: proofWindows.length,
+      selectedNames: proofWindows.map(proofWindowDisplayName).filter((value): value is string => Boolean(value)),
+      windows: proofWindows,
+      unknownProofWindowNames: [],
+      boundary,
+    };
+  }
+
+  const requestedKey = normalizeProofWindowKey(requested);
+  const selectedWindow = proofWindows.find((windowSpec) => (
+    normalizeProofWindowKey(windowSpec.name) === requestedKey
+    || normalizeProofWindowKey(windowSpec.label) === requestedKey
+    || normalizeProofWindowKey(windowSpec.id) === requestedKey
+  ));
+  if (!selectedWindow) {
+    return {
+      version: "riddle-proof.audio-mix-proof-window-selection.v1",
+      role,
+      status: "unknown_proof_window",
+      ok: false,
+      requestedProofWindow: requested,
+      totalProofWindowCount: proofWindows.length,
+      selectedProofWindowCount: 0,
+      selectedNames: [],
+      unknownProofWindowNames: [requested],
+      windows: [],
+      boundary,
+    };
+  }
+
+  return {
+    version: "riddle-proof.audio-mix-proof-window-selection.v1",
+    role,
+    status: "proof_window_selection_ready",
+    ok: true,
+    requestedProofWindow: requested,
+    totalProofWindowCount: proofWindows.length,
+    selectedProofWindowCount: 1,
+    selectedNames: [proofWindowDisplayName(selectedWindow)].filter((value): value is string => Boolean(value)),
+    windows: [selectedWindow],
+    unknownProofWindowNames: [],
+    boundary,
+  };
+}
+
+const isAudioMixProofWindowSelection = (input: unknown): input is AudioMixProofWindowSelection => {
+  const record = asRecord(input);
+  return record.version === "riddle-proof.audio-mix-proof-window-selection.v1"
+    && typeof record.role === "string"
+    && Array.isArray(record.selectedNames);
+};
+
+export function formatAudioMixProofWindowSelectionMarkdown(
+  selectionOrWindows: unknown,
+  options: AudioMixProofWindowSelectionMarkdownOptions = {},
+): string {
+  const selection = isAudioMixProofWindowSelection(selectionOrWindows)
+    ? selectionOrWindows
+    : selectAudioMixProofWindows(selectionOrWindows, options);
+  const lines = [
+    `# ${options.title ?? "Audio Mix Proof Window Scope"}`,
+    "",
+    "- Role: `proof_window_selection`",
+    `- Status: \`${selection.status}\``,
+    `- OK: \`${selection.ok}\``,
+    `- Scope role: \`${selection.role}\``,
+    `- Requested proof window: \`${coverageFormatValue(selection.requestedProofWindow)}\``,
+    `- Selected proof windows: \`${selection.selectedNames.length ? selection.selectedNames.join(", ") : "none"}\``,
+    `- Total proof window count: \`${selection.totalProofWindowCount}\``,
+    `- Selected proof window count: \`${selection.selectedProofWindowCount}\``,
+    "",
+    "Proof-window selection scopes objective evidence for smoke or matrix runs. It does not prove subjective mix quality.",
+    "",
+    "## Selected Windows",
+    "",
+    "| Name | Label | Bars | Required Active |",
+    "| --- | --- | --- | --- |",
+  ];
+
+  if (selection.windows?.length) {
+    for (const windowSpec of selection.windows) {
+      lines.push(coverageTableRow([
+        windowSpec.name,
+        windowSpec.label,
+        windowSpec.bars,
+        formatIntentIdList(normalizeTextList(windowSpec.requiredActive)),
+      ]));
+    }
+  } else {
+    lines.push("| none | none | not captured | none |");
+  }
+
+  if (selection.unknownProofWindowNames.length) {
+    lines.push("", `Unknown proof windows: \`${selection.unknownProofWindowNames.join(", ")}\``);
+  }
+
+  if (options.includeBoundary ?? true) {
+    lines.push("", "## Boundary", "", selection.boundary);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
 
 export function resolveAudioMixIntentRouteAlignment(
   selectionOrIntentSet: unknown,
