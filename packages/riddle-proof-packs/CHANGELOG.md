@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.22
+
+### Patch Changes
+
+- b0d228a: Show active track names in audio human-review packet active-lane receipts so missing-lane failures are easier to diagnose.
+
 ## 0.8.21
 
 ### Patch Changes
