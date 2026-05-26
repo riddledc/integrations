@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.5
+
+### Patch Changes
+
+- a07aa50: Add Markdown formatting for reusable audio mix intent-selection receipts.
+
 ## 0.8.4
 
 ### Patch Changes
