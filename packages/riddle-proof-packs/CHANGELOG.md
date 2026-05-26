@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.12
+
+### Patch Changes
+
+- c5f6752: Tighten the mixing-canon surrogate review helper so recommended candidates with review warnings or out-of-range loudness consequences require human review instead of surrogate approval.
+
 ## 0.8.11
 
 ### Patch Changes
