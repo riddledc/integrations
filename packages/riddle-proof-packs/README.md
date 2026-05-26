@@ -53,7 +53,7 @@ Reusable starter profile definitions and proof-pack metadata for Riddle Proof.
 - `createNeonDurableCurrentTargetArtifacts({ override, profileResult }, options)`:
   - Returns `{ summary, json, markdown }` for the final durable current-target proof receipt.
 - `buildNeonUiMixerControlProfile(options)`:
-  - Builds a Neon interaction proof that moves a real browser mixer slider, checks proof-contract/readout/render guardrails, and restores the slider without using the proof API edit helper.
+  - Builds a Neon interaction proof that moves a real browser mixer slider by at least the configured `minAbsLevelDelta`, checks proof-contract/readout/render guardrails, and restores the slider without using the proof API edit helper.
 - `createNeonUiMixerControlArtifacts(profileResult, options)`:
   - Returns `{ summary, json, markdown }` for the UI mixer-control proof receipt.
 

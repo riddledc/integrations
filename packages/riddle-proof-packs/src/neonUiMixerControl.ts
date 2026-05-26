@@ -8,6 +8,7 @@ export interface NeonUiMixerControlProfileOptions {
   viewports?: RiddleProofProfile["target"]["viewports"];
   track?: string;
   targetLevel?: number;
+  minAbsLevelDelta?: number;
   bars?: number;
   monitorProfile?: string;
   maxPeak?: number;
@@ -31,6 +32,8 @@ export interface NeonUiMixerControlRunSummary {
   afterInputLevel: number | null;
   afterReadoutLevel: number | null;
   levelDelta: number | null;
+  absLevelDelta: number | null;
+  minAbsLevelDelta: number | null;
   proofApiEditUsed: boolean;
   guardrails: Record<string, unknown> | null;
   restore: {
@@ -103,6 +106,7 @@ const buildUiMixerControlScript = (): string => [
   "const [payload] = args;",
   "const track = String(payload?.track || '');",
   "const targetLevel = Number(payload?.targetLevel);",
+  "const minAbsLevelDelta = Number(payload?.minAbsLevelDelta ?? 0.001);",
   "const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));",
   "const escapeAttr = (value) => String(value).replace(/\\\\/g, '\\\\\\\\').replace(/\"/g, '\\\\\"');",
   "const readNumber = (value) => { const number = Number(value); return Number.isFinite(number) ? number : null; };",
@@ -124,7 +128,8 @@ const buildUiMixerControlScript = (): string => [
   "if (!readout) findings.push('missing_mixer_level_readout');",
   "if (input?.disabled) findings.push('mixer_level_input_disabled');",
   "if (!Number.isFinite(targetLevel)) findings.push('invalid_target_level');",
-  "if (findings.length) { const failed = { ok: false, interactionKind: 'ui_mixer_level_slider', proofApiEditUsed: false, track, targetLevel, beforeContractLevel, beforeInputLevel, beforeReadoutLevel, findings }; window.__neonUiMixerControl = { ...(window.__neonUiMixerControl || {}), receipt: failed }; return failed; }",
+  "if (!Number.isFinite(minAbsLevelDelta) || minAbsLevelDelta < 0) findings.push('invalid_min_abs_level_delta');",
+  "if (findings.length) { const failed = { ok: false, interactionKind: 'ui_mixer_level_slider', proofApiEditUsed: false, track, targetLevel, minAbsLevelDelta, beforeContractLevel, beforeInputLevel, beforeReadoutLevel, findings }; window.__neonUiMixerControl = { ...(window.__neonUiMixerControl || {}), receipt: failed }; return failed; }",
   "const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;",
   "if (setter) setter.call(input, String(targetLevel)); else input.value = String(targetLevel);",
   "input.dispatchEvent(new Event('input', { bubbles: true }));",
@@ -133,15 +138,17 @@ const buildUiMixerControlScript = (): string => [
   "const afterContractLevel = readMixerLevel();",
   "const afterInputLevel = readNumber(input.value);",
   "const afterReadoutLevel = parseReadout(readout.textContent);",
-  "const levelMoved = Number.isFinite(beforeContractLevel) ? Math.abs(Number(afterContractLevel) - Number(beforeContractLevel)) > 0.001 : true;",
+  "const levelDelta = Number.isFinite(beforeContractLevel) && Number.isFinite(afterContractLevel) ? Number((afterContractLevel - beforeContractLevel).toFixed(4)) : null;",
+  "const absLevelDelta = Number.isFinite(levelDelta) ? Number(Math.abs(levelDelta).toFixed(4)) : null;",
+  "const levelMoved = absLevelDelta === null ? true : absLevelDelta >= minAbsLevelDelta;",
   "const contractMatchesTarget = approxEqual(afterContractLevel, targetLevel);",
   "const inputMatchesTarget = approxEqual(afterInputLevel, targetLevel);",
   "const readoutMatchesTarget = approxEqual(afterReadoutLevel, targetLevel);",
-  "if (!levelMoved) findings.push('contract_level_did_not_move');",
+  "if (!levelMoved) findings.push('contract_level_delta_below_minimum');",
   "if (!contractMatchesTarget) findings.push('contract_level_target_mismatch');",
   "if (!inputMatchesTarget) findings.push('slider_value_target_mismatch');",
   "if (!readoutMatchesTarget) findings.push('readout_target_mismatch');",
-  "const receipt = { ok: findings.length === 0, interactionKind: 'ui_mixer_level_slider', proofApiEditUsed: false, track, targetLevel, beforeContractLevel, beforeInputLevel, beforeReadoutLevel, afterContractLevel, afterInputLevel, afterReadoutLevel, levelDelta: Number.isFinite(beforeContractLevel) && Number.isFinite(afterContractLevel) ? Number((afterContractLevel - beforeContractLevel).toFixed(4)) : null, levelMoved, contractMatchesTarget, inputMatchesTarget, readoutMatchesTarget, findings };",
+  "const receipt = { ok: findings.length === 0, interactionKind: 'ui_mixer_level_slider', proofApiEditUsed: false, track, targetLevel, minAbsLevelDelta, beforeContractLevel, beforeInputLevel, beforeReadoutLevel, afterContractLevel, afterInputLevel, afterReadoutLevel, levelDelta, absLevelDelta, levelMoved, contractMatchesTarget, inputMatchesTarget, readoutMatchesTarget, findings };",
   "window.__neonUiMixerControl = { ...(window.__neonUiMixerControl || {}), receipt };",
   "return receipt;",
 ].join(" ");
@@ -189,6 +196,7 @@ export function buildNeonUiMixerControlProfile(
   const route = options.route ?? DEFAULT_ROUTE;
   const track = options.track ?? "guitar";
   const targetLevel = Number(options.targetLevel ?? 0.5);
+  const minAbsLevelDelta = Number(options.minAbsLevelDelta ?? 0.001);
   const bars = Number(options.bars ?? 1);
   const monitorProfile = options.monitorProfile ?? "smallSpeaker";
   const maxPeak = Number(options.maxPeak ?? 0.98);
@@ -213,7 +221,7 @@ export function buildNeonUiMixerControlProfile(
         {
           type: "window_eval",
           label: "apply-ui-mixer-level-control",
-          args: [{ track, targetLevel }],
+          args: [{ track, targetLevel, minAbsLevelDelta }],
           store_return_to: "__neonUiMixerControl.receipt",
           capture_return: true,
           timeout_ms: 15000,
@@ -222,8 +230,10 @@ export function buildNeonUiMixerControlProfile(
             { path: "ok" },
             { path: "track" },
             { path: "targetLevel" },
+            { path: "minAbsLevelDelta" },
             { path: "beforeContractLevel" },
             { path: "afterContractLevel" },
+            { path: "absLevelDelta" },
             { path: "proofApiEditUsed" },
           ],
         },
@@ -370,9 +380,10 @@ export function buildNeonUiMixerControlProfile(
       purpose: "UI-only proof that the real Neon mixer level slider updates contract state and preserves deterministic render guardrails.",
       track,
       target_level: targetLevel,
+      min_abs_level_delta: minAbsLevelDelta,
       required_receipts: [
         "actual range input dispatch",
-        "contract mixer level changed",
+        "contract mixer level changed by the required minimum",
         "visible readout changed",
         "proof API mixer edit helper not used",
         "post-control offline render metrics",
@@ -426,6 +437,8 @@ export function summarizeNeonUiMixerControlRun(profileResult: unknown): NeonUiMi
     afterInputLevel: safeNumber(receiptRecord.afterInputLevel),
     afterReadoutLevel: safeNumber(receiptRecord.afterReadoutLevel),
     levelDelta: safeNumber(receiptRecord.levelDelta),
+    absLevelDelta: safeNumber(receiptRecord.absLevelDelta),
+    minAbsLevelDelta: safeNumber(receiptRecord.minAbsLevelDelta),
     proofApiEditUsed: receiptRecord.proofApiEditUsed === true,
     guardrails: isRecord(guardrailRecord.guardrails) ? guardrailRecord.guardrails : null,
     restore: restore ? {
@@ -462,6 +475,8 @@ export function formatNeonUiMixerControlSummaryMarkdown(
     `- contract_before: \`${formatValue(summary.beforeContractLevel)}\``,
     `- contract_after: \`${formatValue(summary.afterContractLevel)}\``,
     `- level_delta: \`${formatValue(summary.levelDelta)}\``,
+    `- abs_level_delta: \`${formatValue(summary.absLevelDelta)}\``,
+    `- min_abs_level_delta: \`${formatValue(summary.minAbsLevelDelta)}\``,
     `- proof_api_edit_used: \`${formatValue(summary.proofApiEditUsed)}\``,
     "",
     "## Browser UI Receipts",
