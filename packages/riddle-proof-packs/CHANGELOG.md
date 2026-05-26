@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.25
+
+### Patch Changes
+
+- 9aef3e4: Add explicit `cells`, `trackNames`, and `viewportNames` fields to Neon UI mixer control matrix summaries while keeping the legacy `viewports` rows for compatibility.
+
 ## 0.8.24
 
 ### Patch Changes
