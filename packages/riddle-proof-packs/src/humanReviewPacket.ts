@@ -405,6 +405,42 @@ const addOptionalList = (lines: string[], heading: string, values: unknown) => {
   for (const entry of entries) lines.push(`- ${formatValue(entry)}`);
 };
 
+const hasRecommendationCandidate = (candidate: Record<string, unknown>): boolean => (
+  Object.keys(candidate).some((key) => candidate[key] !== null && candidate[key] !== undefined)
+);
+
+const isNoSupportedCandidatePacket = (
+  packet: HumanReviewPacket,
+  recommendation: Record<string, unknown>,
+  candidate: Record<string, unknown>,
+  supportedCandidates: unknown[],
+): boolean => (
+  recommendation.action === "inspect_failed_receipts"
+  || packet.status === "needs_followup"
+  || (!supportedCandidates.length && !hasRecommendationCandidate(candidate))
+);
+
+const noSupportedCandidateFollowUpPrompts = [
+  "Inspect failed receipts before choosing or applying any candidate.",
+  "Check whether the proof window declared the right required active lanes.",
+  "Check whether the app contract and source readiness exposed the needed audio lanes.",
+  "Revise the claim, proof window, or candidate ladder, then rerun proof.",
+];
+
+const noSupportedCandidateCaveats = [
+  "This packet does not prove subjective mix quality.",
+  "No candidate satisfied every objective receipt in this bounded run.",
+  "Failed receipts are deterministic follow-up cues, not taste judgments.",
+  "Do not apply a candidate from this packet without a later supported-candidate proof.",
+];
+
+const supportedCandidateCaveatPattern = /\bsupported candidate\b|keep or apply|apply the candidate/iu;
+
+const noSupportedCandidateCaveatList = (packet: HumanReviewPacket): string[] => uniqueValues([
+  ...noSupportedCandidateCaveats,
+  ...asArray(packet.caveats).filter((entry) => !supportedCandidateCaveatPattern.test(formatValue(entry))),
+]);
+
 export function findHumanReviewPacket(value: unknown): HumanReviewPacket | null {
   if (!value || typeof value !== "object") return null;
   if (isRecord(value) && value.kind === "human_review_packet") return value as HumanReviewPacket;
@@ -446,6 +482,12 @@ export function formatHumanReviewPacketMarkdown(
   const approval = asRecord(request.approval) ?? {};
   const supportedCandidates = asArray(packet.supportedCandidates);
   const rejectedCandidates = asArray(packet.rejectedCandidates);
+  const noSupportedCandidatePacket = isNoSupportedCandidatePacket(
+    packet,
+    recommendation,
+    candidate,
+    supportedCandidates,
+  );
   const selectedSong = (
     getPath(packet, "target.selectedSong.selectedSong")
     ?? getPath(packet, "target.routeState.selectedSong")
@@ -496,8 +538,13 @@ export function formatHumanReviewPacketMarkdown(
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 
-  addOptionalList(lines, "Listening Prompts", packet.listenerPrompts);
-  addOptionalList(lines, "Caveats", packet.caveats);
+  if (noSupportedCandidatePacket) {
+    addOptionalList(lines, "Follow-Up Prompts", noSupportedCandidateFollowUpPrompts);
+    addOptionalList(lines, "Caveats", noSupportedCandidateCaveatList(packet));
+  } else {
+    addOptionalList(lines, "Listening Prompts", packet.listenerPrompts);
+    addOptionalList(lines, "Caveats", packet.caveats);
+  }
 
   return `${lines.join("\n")}\n`;
 }
