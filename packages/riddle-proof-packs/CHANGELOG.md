@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.21
+
+### Patch Changes
+
+- 14425ff: Add a reusable audio-mix review warning scope helper for distinguishing recommendation warnings from matrix-level warnings.
+
 ## 0.8.20
 
 ### Patch Changes
