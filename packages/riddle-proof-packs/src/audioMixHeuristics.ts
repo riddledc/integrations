@@ -129,6 +129,11 @@ export interface AudioMixIntentSelectionOptions {
   maxIntents?: unknown;
 }
 
+export interface AudioMixIntentSelectionMarkdownOptions extends AudioMixIntentSelectionOptions {
+  title?: string;
+  includeBoundary?: boolean;
+}
+
 export interface AudioMixIntentSelection {
   version: "riddle-proof.audio-mix-intent-selection.v1";
   role: "bounded_intent_selection";
@@ -848,6 +853,64 @@ export function selectAudioMixIntentSet(
     intents,
     boundary: AUDIO_MIX_INTENT_SELECTION_BOUNDARY,
   };
+}
+
+const isAudioMixIntentSelection = (input: unknown): input is AudioMixIntentSelection => {
+  const record = asRecord(input);
+  return record.version === "riddle-proof.audio-mix-intent-selection.v1"
+    && record.role === "bounded_intent_selection"
+    && Array.isArray(record.intents);
+};
+
+const formatIntentIdList = (values: string[]): string => (values.length ? values.join(", ") : "none");
+
+export function formatAudioMixIntentSelectionMarkdown(
+  selectionOrIntentSet: unknown,
+  options: AudioMixIntentSelectionMarkdownOptions = {},
+): string {
+  const selection = isAudioMixIntentSelection(selectionOrIntentSet)
+    ? selectionOrIntentSet
+    : selectAudioMixIntentSet(selectionOrIntentSet, options);
+  const lines = [
+    `# ${options.title ?? "Audio Mix Intent Selection"}`,
+    "",
+    "- Role: `bounded_intent_selection`",
+    `- Status: \`${selection.status}\``,
+    `- OK: \`${selection.ok}\``,
+    `- Intent set: \`${coverageFormatValue(selection.intentSet.name)}\``,
+    `- Requested intent ids: \`${formatIntentIdList(selection.requestedIntentIds)}\``,
+    `- Selected intent ids: \`${formatIntentIdList(selection.selectedIntentIds)}\``,
+    `- Unknown intent ids: \`${formatIntentIdList(selection.unknownIntentIds)}\``,
+    `- Total intent count: \`${selection.totalIntentCount}\``,
+    `- Selected intent count: \`${selection.selectedIntentCount}\``,
+    "",
+    "Intent selection scopes bounded objective claim-candidate loops for smoke or matrix runs. It does not prove subjective mix quality and does not rank candidates.",
+    "",
+    "## Selected Intents",
+    "",
+    "| ID | Intent | Focus Tracks | Target Tracks | Direction |",
+    "| --- | --- | --- | --- | --- |",
+  ];
+
+  if (selection.intents.length) {
+    for (const intent of selection.intents) {
+      lines.push(coverageTableRow([
+        intent.id,
+        intent.intent,
+        formatIntentIdList(intent.focusTracks),
+        formatIntentIdList(intent.targetTracks),
+        intent.direction,
+      ]));
+    }
+  } else {
+    lines.push("| none | not captured | none | none | not captured |");
+  }
+
+  if (options.includeBoundary ?? true) {
+    lines.push("", "## Boundary", "", selection.boundary);
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 const nullableRecord = (value: unknown): Record<string, unknown> | null => {

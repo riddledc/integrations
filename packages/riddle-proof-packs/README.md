@@ -212,6 +212,9 @@ lane and a fuller matrix lane. For example, a smoke run can select only
 loop are working before a later run selects the full intent set. Selection is a
 bounded workflow receipt: it scopes which objective claim-candidate loops ran,
 reports unknown ids without throwing, and does not prove subjective mix quality.
+Use `formatAudioMixIntentSelectionMarkdown()` next to the JSON receipt when a
+human or agent needs to inspect requested ids, selected ids, unknown ids, and the
+selected intent table without opening the raw plan.
 
 ### Human-review packet handoff
 

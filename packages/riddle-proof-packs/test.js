@@ -18,6 +18,7 @@ import {
   estimateLoudnessStyleLufs,
   formatAudioExplorationCoverageMarkdown,
   formatAudioExplorationReviewWarningsMarkdown,
+  formatAudioMixIntentSelectionMarkdown,
   formatAudioMixIntentMatrixMarkdown,
   resolveAudioMixRequestMagnitude,
   selectAudioMixIntentSet,
@@ -65,6 +66,7 @@ assert.equal(typeof computeAudioSectionReviewMetric, "function");
 assert.equal(typeof estimateLoudnessStyleLufs, "function");
 assert.equal(typeof formatAudioExplorationCoverageMarkdown, "function");
 assert.equal(typeof formatAudioExplorationReviewWarningsMarkdown, "function");
+assert.equal(typeof formatAudioMixIntentSelectionMarkdown, "function");
 assert.equal(typeof formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof inferAudioMixRequestedMagnitude, "function");
 assert.equal(typeof resolveAudioMixRequestMagnitude, "function");
@@ -100,6 +102,7 @@ assert.equal(typeof audioHeuristicsSubpath.computeAudioSectionReviewMetric, "fun
 assert.equal(typeof audioHeuristicsSubpath.estimateLoudnessStyleLufs, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationCoverageMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioExplorationReviewWarningsMarkdown, "function");
+assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentSelectionMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.formatAudioMixIntentMatrixMarkdown, "function");
 assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixRequestMagnitude, "function");
 assert.equal(typeof audioHeuristicsSubpath.selectAudioMixIntentSet, "function");
@@ -179,6 +182,16 @@ assert.equal(allAudioMixIntentSelection.totalIntentCount, 2);
 assert.equal(allAudioMixIntentSelection.selectedIntentCount, 2);
 assert.deepEqual(allAudioMixIntentSelection.selectedIntentIds, ["guitar-down-little", "bass-down-little"]);
 assert.match(allAudioMixIntentSelection.boundary, /does not prove subjective mix quality/u);
+const allAudioMixIntentSelectionMarkdown = formatAudioMixIntentSelectionMarkdown(allAudioMixIntentSelection, {
+  title: "Neon Intent Selection",
+});
+assert.match(allAudioMixIntentSelectionMarkdown, /^# Neon Intent Selection/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /Role: `bounded_intent_selection`/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /Requested intent ids: `none`/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /Selected intent ids: `guitar-down-little, bass-down-little`/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /\| guitar-down-little \| turn the guitar part down a little \| guitar \| guitar \| down \|/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /does not prove subjective mix quality/u);
+assert.doesNotMatch(allAudioMixIntentSelectionMarkdown, /automatically better/u);
 const guitarOnlySelection = audioHeuristicsSubpath.selectAudioMixIntentSet(audioMixIntentSet, {
   intentIds: ["guitar-down-little"],
 });
@@ -197,6 +210,11 @@ assert.equal(unknownIntentSelection.status, "unknown_intent_ids");
 assert.deepEqual(unknownIntentSelection.requestedIntentIds, ["guitar-down-little", "drums-down-little"]);
 assert.deepEqual(unknownIntentSelection.selectedIntentIds, ["guitar-down-little"]);
 assert.deepEqual(unknownIntentSelection.unknownIntentIds, ["drums-down-little"]);
+const unknownIntentSelectionMarkdown = audioHeuristicsSubpath.formatAudioMixIntentSelectionMarkdown(audioMixIntentSet, {
+  intentIds: ["guitar-down-little", "drums-down-little"],
+});
+assert.match(unknownIntentSelectionMarkdown, /Status: `unknown_intent_ids`/u);
+assert.match(unknownIntentSelectionMarkdown, /Unknown intent ids: `drums-down-little`/u);
 const limitedIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
   maxIntents: 1,
 });
