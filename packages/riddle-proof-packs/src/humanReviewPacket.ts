@@ -438,6 +438,14 @@ const formatActiveLaneWindowCoverage = (receipt: Record<string, unknown>): strin
   `${formatValue(receipt.requiredWindowCount)} / ${formatValue(receipt.windowCount)}`
 );
 
+const formatActiveLaneTracks = (receipt: Record<string, unknown>): string => {
+  const activeTracks = uniqueValues(asArray(receipt.windows)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+    .flatMap((windowSummary) => asArray(windowSummary.activeInstruments)));
+  return activeTracks.length ? activeTracks.join(", ") : "not captured";
+};
+
 const addActiveLaneReceiptTable = (
   lines: string[],
   supportedCandidates: unknown[],
@@ -458,8 +466,8 @@ const addActiveLaneReceiptTable = (
     "",
     "These receipts show whether declared required lanes stayed measurable in each proof window. They support deterministic guardrails only; they do not prove subjective mix quality.",
     "",
-    "| Group | Candidate | Status | Windows | Required Tracks | Missing Required Active |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Group | Candidate | Status | Windows | Required Tracks | Active Tracks | Missing Required Active |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   );
 
   for (const { group, candidate } of rows) {
@@ -470,6 +478,7 @@ const addActiveLaneReceiptTable = (
       escapeTableCell(receipt.status),
       escapeTableCell(formatActiveLaneWindowCoverage(receipt)),
       escapeTableCell(asArray(receipt.requiredTracks).map(formatValue).join(", ") || "none declared"),
+      escapeTableCell(formatActiveLaneTracks(receipt)),
       escapeTableCell(formatMissingActiveWindows(receipt)),
     ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
   }

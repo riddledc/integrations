@@ -674,6 +674,13 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
       requiredTracks: ["bass", "chord"],
       missingRequiredActiveCount: 0,
       missingWindows: [],
+      windows: [
+        {
+          label: "Verse",
+          activeInstruments: ["kick", "bass", "chord"],
+          missingRequiredActive: [],
+        },
+      ],
       boundary: "Active-lane preservation proves declared required lanes stayed measurable in proof windows; it does not prove subjective mix quality.",
     },
   }, {
@@ -702,6 +709,13 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
       missingWindows: [
         {
           label: "Verse",
+          missingRequiredActive: ["chord"],
+        },
+      ],
+      windows: [
+        {
+          label: "Verse",
+          activeInstruments: ["kick", "bass"],
           missingRequiredActive: ["chord"],
         },
       ],
@@ -736,8 +750,9 @@ assert.match(sectionHeuristicPacketMarkdown, /loudness_shift_requires_review \(r
 assert.match(sectionHeuristicPacketMarkdown, /Loudness metrics are objective review signals/u);
 assert.match(sectionHeuristicPacketMarkdown, /## Active Lane Receipts/u);
 assert.match(sectionHeuristicPacketMarkdown, /declared required lanes stayed measurable/u);
-assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| none/u);
-assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| Verse: chord/u);
+assert.match(sectionHeuristicPacketMarkdown, /Required Tracks \| Active Tracks \| Missing Required Active/u);
+assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| kick, bass, chord \| none/u);
+assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| kick, bass \| Verse: chord/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /sounds better/u);
 const failedReceiptPacketMarkdown = formatHumanReviewPacketMarkdown({
@@ -771,6 +786,11 @@ const failedReceiptPacketMarkdown = formatHumanReviewPacketMarkdown({
         label: "Intro Bed Missing Lead Vocal Probe",
         missingRequiredActive: ["leadVocal"],
       }],
+      windows: [{
+        label: "Intro Bed Missing Lead Vocal Probe",
+        activeInstruments: ["kick", "snare", "hat", "bass", "chord", "guitar"],
+        missingRequiredActive: ["leadVocal"],
+      }],
     },
   }],
   ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
@@ -788,7 +808,7 @@ assert.match(failedReceiptPacketMarkdown, /Revise the claim, proof window, or ca
 assert.match(failedReceiptPacketMarkdown, /No candidate satisfied every objective receipt in this bounded run/u);
 assert.match(failedReceiptPacketMarkdown, /Failed receipts are deterministic follow-up cues, not taste judgments/u);
 assert.match(failedReceiptPacketMarkdown, /Do not apply a candidate from this packet without a later supported-candidate proof/u);
-assert.match(failedReceiptPacketMarkdown, /Rejected \| guitar -0\.02 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord, guitar, leadVocal \| Intro Bed Missing Lead Vocal Probe: leadVocal/u);
+assert.match(failedReceiptPacketMarkdown, /Rejected \| guitar -0\.02 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord, guitar, leadVocal \| kick, snare, hat, bass, chord, guitar \| Intro Bed Missing Lead Vocal Probe: leadVocal/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /## Listening Prompts/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /Does the supported candidate/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /A supported candidate proves/u);
