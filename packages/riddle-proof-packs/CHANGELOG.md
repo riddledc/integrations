@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.6
+
+### Patch Changes
+
+- e66b24b: Add a reusable audio mix level intent-set builder for bounded smoke and matrix proof loops.
+
 ## 0.8.5
 
 ### Patch Changes
