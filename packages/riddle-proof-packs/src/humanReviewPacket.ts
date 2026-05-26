@@ -484,6 +484,81 @@ const addActiveLaneReceiptTable = (
   }
 };
 
+const restorationReceiptFromPacket = (packet: HumanReviewPacket): Record<string, unknown> | null => (
+  asRecord(packet.restorationReceipt)
+  ?? asRecord(packet.stateRestorationReceipt)
+  ?? asRecord(packet.restoration)
+);
+
+const restorationTrackRows = (receipt: Record<string, unknown>): Array<{
+  name: string;
+  expected: unknown;
+  observed: unknown;
+  delta: number | null;
+  ok: boolean | null;
+}> => {
+  const expectedLevels = asRecord(receipt.expectedLevels) ?? {};
+  const observedLevels = asRecord(receipt.observedLevels) ?? {};
+  const tracks = uniqueValues([
+    ...Object.keys(expectedLevels),
+    ...Object.keys(observedLevels),
+  ]);
+
+  return tracks.map((name) => {
+    const expected = expectedLevels[name];
+    const observed = observedLevels[name];
+    const expectedNumber = Number(expected);
+    const observedNumber = Number(observed);
+    const hasNumbers = Number.isFinite(expectedNumber) && Number.isFinite(observedNumber);
+    const delta = hasNumbers ? Number((observedNumber - expectedNumber).toFixed(6)) : null;
+    return {
+      name,
+      expected,
+      observed,
+      delta,
+      ok: hasNumbers ? Math.abs(observedNumber - expectedNumber) <= 0.000001 : null,
+    };
+  });
+};
+
+const addRestorationReceiptTable = (
+  lines: string[],
+  packet: HumanReviewPacket,
+) => {
+  const receipt = restorationReceiptFromPacket(packet);
+  if (!receipt) return;
+  const rows = restorationTrackRows(receipt);
+
+  lines.push(
+    "",
+    "## State Restoration Receipt",
+    "",
+    "This receipt shows whether transient candidate edits left the app state clean after the proof loop. It is a deterministic stale-state guardrail; it does not prove subjective mix quality.",
+    "",
+    `- receipt: ${formatCodeValue(receipt.name)}`,
+    `- ok: ${formatCodeValue(receipt.ok)}`,
+    `- boundary: ${formatValue(receipt.boundary)}`,
+  );
+
+  if (!rows.length) return;
+
+  lines.push(
+    "",
+    "| State Key | Expected | Observed | Delta | OK |",
+    "| --- | --- | --- | --- | --- |",
+  );
+
+  for (const row of rows) {
+    lines.push([
+      escapeTableCell(row.name),
+      escapeTableCell(row.expected),
+      escapeTableCell(row.observed),
+      escapeTableCell(row.delta),
+      escapeTableCell(row.ok),
+    ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+  }
+};
+
 const addCandidateTable = (lines: string[], heading: string, candidates: unknown[]) => {
   const rows = candidates
     .map(asRecord)
@@ -701,6 +776,7 @@ export function formatHumanReviewPacketMarkdown(
   addAllCandidateSectionEnergyTables(lines, supportedCandidates, rejectedCandidates);
   addAllCandidateLoudnessConsequenceTables(lines, supportedCandidates, rejectedCandidates);
   addActiveLaneReceiptTable(lines, supportedCandidates, rejectedCandidates);
+  addRestorationReceiptTable(lines, packet);
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 
