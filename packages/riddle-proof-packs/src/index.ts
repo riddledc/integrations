@@ -17,6 +17,7 @@ export { instantiateRiddleProofProfile } from "./instantiateProfile";
 export {
   compareAudioSectionEnergy,
   audioMixCandidateMagnitudeMatchesRequest,
+  buildAudioMixLevelIntentSet,
   computeAudioSectionReviewMetric,
   collectAudioExplorationReviewWarnings,
   DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES,
@@ -42,6 +43,9 @@ export {
   type AudioExplorationReviewWarningOptions,
   type AudioExplorationSongCoverage,
   type AudioMixIntentDefinition,
+  type AudioMixLevelIntentDirection,
+  type AudioMixLevelIntentSetOptions,
+  type AudioMixLevelIntentTrackInput,
   type AudioMixIntentSelection,
   type AudioMixIntentSelectionMarkdownOptions,
   type AudioMixIntentSelectionOptions,
