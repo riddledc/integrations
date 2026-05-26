@@ -681,6 +681,60 @@ assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| activ
 assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| Verse: chord/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /sounds better/u);
+const failedReceiptPacketMarkdown = formatHumanReviewPacketMarkdown({
+  kind: "human_review_packet",
+  domain: "audio_mix",
+  status: "needs_followup",
+  evidenceRolePattern: "interaction_snapshots",
+  requestedIntent: "turn the guitar part down a little",
+  target: { routeState: { selectedSong: "Monkberry Moon Delight (Tab)" } },
+  request: { candidateActionsAreTransient: true },
+  recommendation: {
+    action: "inspect_failed_receipts",
+    reason: "No candidate satisfied the declared proof-window receipts.",
+  },
+  supportedCandidates: [],
+  rejectedCandidates: [{
+    label: "guitar -0.02",
+    action: { type: "set_mixer_level", track: "guitar", from: 0.55, to: 0.53, delta: -0.02 },
+    rankingMetric: 9.41,
+    receipts: [{ name: "required_active_lanes_preserved", ok: false }],
+    failedReceipts: ["required_active_lanes_preserved"],
+    activeLaneReceipt: {
+      version: "neon-step-sequencer.active-lane-receipt.v1",
+      ok: false,
+      status: "missing_required_active_lanes",
+      windowCount: 1,
+      requiredWindowCount: 1,
+      requiredTracks: ["bass", "chord", "guitar", "leadVocal"],
+      missingRequiredActiveCount: 1,
+      missingWindows: [{
+        label: "Intro Bed Missing Lead Vocal Probe",
+        missingRequiredActive: ["leadVocal"],
+      }],
+    },
+  }],
+  ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
+  guardrails: { supportedClaimCandidateCount: 0, rejectedCandidateCount: 1 },
+  proofBoundary: "Objective receipts support or reject candidate change claims; musical taste still requires listening review.",
+  listenerPrompts: ["Does the supported candidate match the requested musical intent?"],
+  caveats: [
+    "A supported candidate proves objective receipts and guardrails only.",
+    "Keep or apply the candidate only after listening review.",
+  ],
+});
+assert.match(failedReceiptPacketMarkdown, /## Follow-Up Prompts/u);
+assert.match(failedReceiptPacketMarkdown, /Inspect failed receipts before choosing or applying any candidate/u);
+assert.match(failedReceiptPacketMarkdown, /Revise the claim, proof window, or candidate ladder, then rerun proof/u);
+assert.match(failedReceiptPacketMarkdown, /No candidate satisfied every objective receipt in this bounded run/u);
+assert.match(failedReceiptPacketMarkdown, /Failed receipts are deterministic follow-up cues, not taste judgments/u);
+assert.match(failedReceiptPacketMarkdown, /Do not apply a candidate from this packet without a later supported-candidate proof/u);
+assert.match(failedReceiptPacketMarkdown, /Rejected \| guitar -0\.02 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord, guitar, leadVocal \| Intro Bed Missing Lead Vocal Probe: leadVocal/u);
+assert.doesNotMatch(failedReceiptPacketMarkdown, /## Listening Prompts/u);
+assert.doesNotMatch(failedReceiptPacketMarkdown, /Does the supported candidate/u);
+assert.doesNotMatch(failedReceiptPacketMarkdown, /A supported candidate proves/u);
+assert.doesNotMatch(failedReceiptPacketMarkdown, /Keep or apply the candidate/u);
+assert.doesNotMatch(failedReceiptPacketMarkdown, /sounds better/u);
 
 const mixingCanonPacket = {
   kind: "human_review_packet",
