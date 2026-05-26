@@ -163,6 +163,105 @@ const formatCandidateGuardrailSummary = (candidate: Record<string, unknown>): st
   ].join("; ");
 };
 
+const impactDetailScore = (candidate: Record<string, unknown>): number => (
+  [
+    asRecord(candidate.targetMovement),
+    asRecord(candidate.sectionEnergyComparison),
+    asRecord(candidate.loudnessConsequenceComparison),
+    asRecord(candidate.activeLaneReceipt),
+    asArray(candidate.reviewWarnings).length ? candidate.reviewWarnings : null,
+    asArray(candidate.receipts).length ? candidate.receipts : null,
+  ].filter(Boolean).length
+);
+
+const candidateHasImpactDetails = (candidate: Record<string, unknown>): boolean => (
+  impactDetailScore(candidate) > 0
+);
+
+const matchingCandidateLabel = (candidate: Record<string, unknown>): string | null => {
+  const label = candidate.label;
+  return label === null || label === undefined || label === "" ? null : formatValue(label);
+};
+
+const resolveRecommendationImpactCandidate = (
+  candidate: Record<string, unknown>,
+  supportedCandidates: unknown[],
+): Record<string, unknown> => {
+  const label = matchingCandidateLabel(candidate);
+  const supported = supportedCandidates
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const fallback = label
+    ? supported.find((entry) => matchingCandidateLabel(entry) === label)
+    : (supported.length === 1 ? supported[0] : null);
+  if (!fallback) return candidateHasImpactDetails(candidate) ? candidate : (supported.length === 1 ? supported[0] : candidate);
+
+  return {
+    ...fallback,
+    ...candidate,
+    targetMovement: candidate.targetMovement ?? fallback.targetMovement,
+    sectionEnergyComparison: candidate.sectionEnergyComparison ?? fallback.sectionEnergyComparison,
+    loudnessConsequenceComparison: candidate.loudnessConsequenceComparison ?? fallback.loudnessConsequenceComparison,
+    activeLaneReceipt: candidate.activeLaneReceipt ?? fallback.activeLaneReceipt,
+    reviewWarnings: candidate.reviewWarnings ?? fallback.reviewWarnings,
+    receipts: candidate.receipts ?? fallback.receipts,
+    rankingMetric: candidate.rankingMetric ?? fallback.rankingMetric,
+  };
+};
+
+const formatLoudnessImpactSummary = (candidate: Record<string, unknown>): string => {
+  const comparison = asRecord(candidate.loudnessConsequenceComparison);
+  if (!comparison) return "not captured";
+  const sections = asArray(comparison.sections)
+    .map(asRecord)
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry));
+  const loudnessDeltas = sections
+    .map((section) => Number(section.loudnessDelta))
+    .filter(Number.isFinite)
+    .map(Math.abs);
+  const maxAbsDelta = loudnessDeltas.length ? Math.max(...loudnessDeltas) : null;
+  return [
+    `status ${formatValue(comparison.status)}`,
+    `warnings ${formatValue(comparison.reviewWarningCount)}`,
+    `max |section loudness Δ| ${maxAbsDelta === null ? "not captured" : `${formatNumber(maxAbsDelta)} dB`}`,
+    `metric ${formatValue(comparison.loudnessMetric)}`,
+  ].join("; ");
+};
+
+const formatActiveLaneImpactSummary = (candidate: Record<string, unknown>): string => {
+  const receipt = asRecord(candidate.activeLaneReceipt);
+  if (!receipt) return "not captured";
+  return [
+    `status ${formatValue(receipt.status)}`,
+    `windows ${formatActiveLaneWindowCoverage(receipt)}`,
+    `required ${asArray(receipt.requiredTracks).map(formatValue).join(", ") || "none declared"}`,
+    `missing ${formatValue(receipt.missingRequiredActiveCount ?? 0)}`,
+  ].join("; ");
+};
+
+const addRecommendationImpactSummary = (
+  lines: string[],
+  candidate: Record<string, unknown>,
+  supportedCandidates: unknown[],
+) => {
+  const impactCandidate = resolveRecommendationImpactCandidate(candidate, supportedCandidates);
+  if (!candidateHasImpactDetails(impactCandidate)) return;
+  const reviewWarnings = asArray(impactCandidate.reviewWarnings);
+  lines.push(
+    "",
+    "## Recommendation Impact",
+    "",
+    `- target_movement: ${formatValue(formatTargetMovement(impactCandidate))}`,
+    `- section_energy: ${formatValue(formatSectionEnergySummary(impactCandidate))}`,
+    `- loudness_consequences: ${formatValue(formatLoudnessImpactSummary(impactCandidate))}`,
+    `- guardrails: ${formatValue(formatCandidateGuardrailSummary(impactCandidate))}`,
+    `- active_lanes: ${formatValue(formatActiveLaneImpactSummary(impactCandidate))}`,
+    `- candidate_review_warnings: ${formatCodeValue(reviewWarnings.length)}`,
+    "",
+    "These are objective review signals for the recommended candidate. They help explain what changed and what stayed guarded; they do not prove subjective mix quality.",
+  );
+};
+
 const formatTrackedInstrumentEnergy = (section: Record<string, unknown>): string => {
   const entries = asArray(section.trackedInstruments)
     .map(asRecord)
@@ -561,6 +660,11 @@ export function formatHumanReviewPacketMarkdown(
     `- candidate: ${formatCodeValue(candidate.label)}`,
     `- candidate_action: ${formatCodeValue(formatAction(candidate.action))}`,
     `- reason: ${formatValue(recommendation.reason)}`,
+  ];
+
+  addRecommendationImpactSummary(lines, candidate, supportedCandidates);
+
+  lines.push(
     "",
     "## Objective Receipts",
     "",
@@ -581,7 +685,7 @@ export function formatHumanReviewPacketMarkdown(
     `- baseline: ${formatCodeValue(ranking.baselineCandidateRankingMetric)}`,
     `- best: ${formatCodeValue(ranking.bestCandidateRankingMetric)}`,
     `- delta: ${formatCodeValue(ranking.rankingMetricDelta)}`,
-  ];
+  );
 
   addCandidateTable(lines, "Supported Candidates", supportedCandidates);
   addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
