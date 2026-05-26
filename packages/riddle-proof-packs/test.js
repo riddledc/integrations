@@ -723,6 +723,13 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
     },
   }],
   ranking: { metric: "guardrail_preserving_section_energy_review_order", role: "review_order_only" },
+  restorationReceipt: {
+    name: "state_restored_after_claim_candidate_loop",
+    ok: true,
+    expectedLevels: { chord: 0.4, guitar: 0.6 },
+    observedLevels: { chord: 0.4, guitar: 0.6 },
+    boundary: "State restoration proves transient proof edits left declared app state clean; it does not prove subjective mix quality.",
+  },
   guardrails: { supportedClaimCandidateCount: 1, rejectedCandidateCount: 1 },
   proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
 });
@@ -753,6 +760,11 @@ assert.match(sectionHeuristicPacketMarkdown, /declared required lanes stayed mea
 assert.match(sectionHeuristicPacketMarkdown, /Required Tracks \| Active Tracks \| Missing Required Active/u);
 assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| kick, bass, chord \| none/u);
 assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| kick, bass \| Verse: chord/u);
+assert.match(sectionHeuristicPacketMarkdown, /## State Restoration Receipt/u);
+assert.match(sectionHeuristicPacketMarkdown, /deterministic stale-state guardrail/u);
+assert.match(sectionHeuristicPacketMarkdown, /state_restored_after_claim_candidate_loop/u);
+assert.match(sectionHeuristicPacketMarkdown, /chord \| 0\.4 \| 0\.4 \| 0 \| true/u);
+assert.match(sectionHeuristicPacketMarkdown, /guitar \| 0\.6 \| 0\.6 \| 0 \| true/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /sounds better/u);
 const failedReceiptPacketMarkdown = formatHumanReviewPacketMarkdown({
