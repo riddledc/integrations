@@ -13,6 +13,17 @@
 - candidate_action: `set_mixer_level chord: 0.38 -> 0.28 (-0.1)`
 - reason: All objective claim receipts passed for this candidate; ranking only orders listening review.
 
+## Recommendation Impact
+
+- target_movement: chord: rms -0.0012, peak -0.0088, energy -0.000003
+- section_energy: not captured
+- loudness_consequences: not captured
+- guardrails: not captured
+- active_lanes: not captured
+- candidate_review_warnings: `0`
+
+These are objective review signals for the recommended candidate. They help explain what changed and what stayed guarded; they do not prove subjective mix quality.
+
 ## Objective Receipts
 
 - supported_candidates: `6`

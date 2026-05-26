@@ -687,6 +687,10 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
   proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
 });
 assert.match(sectionHeuristicPacketMarkdown, /## Candidate Section Energy Details/u);
+assert.match(sectionHeuristicPacketMarkdown, /## Recommendation Impact/u);
+assert.match(sectionHeuristicPacketMarkdown, /section_energy: 2 section\(s\); floors true; guardrails true; avg \|loudness-style Δ\| 0\.81; avg \|energy Δ\| 0\.0002/u);
+assert.match(sectionHeuristicPacketMarkdown, /loudness_consequences: status loudness_consequences_within_expected_range; warnings 0; max \|section loudness Δ\| 0\.45 dB; metric rms_loudness_style_lufs_proxy/u);
+assert.match(sectionHeuristicPacketMarkdown, /objective review signals for the recommended candidate/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Supported: chord -0\.10/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Supported: guitar -0\.30/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Rejected: chord -0\.30/u);
@@ -997,6 +1001,8 @@ const tinyTrackedInstrumentMarkdown = formatHumanReviewPacketMarkdown({
   proofBoundary: "Objective metrics rank candidates for review; musical taste still requires listening review.",
 });
 assert.match(tinyTrackedInstrumentMarkdown, /energy -0\.000038/u);
+assert.match(tinyTrackedInstrumentMarkdown, /## Recommendation Impact/u);
+assert.match(tinyTrackedInstrumentMarkdown, /target_movement: guitar: rms -0\.0031, peak -0\.01, energy -0\.000038/u);
 assert.match(tinyTrackedInstrumentMarkdown, /energy 0\.000312 -> 0\.000274 \(-0\.000038\)/u);
 assert.doesNotMatch(tinyTrackedInstrumentMarkdown, /energy 0\.0003 -> 0\.0003 \(0\)/u);
 
