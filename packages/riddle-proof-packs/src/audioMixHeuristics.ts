@@ -107,6 +107,30 @@ export interface AudioMixLoudnessReviewWarning {
   boundary: string;
 }
 
+export type AudioMixReviewWarningScope =
+  | "no_review_warnings"
+  | "recommended_candidate_has_review_warnings"
+  | "warnings_belong_to_rejected_or_non_recommended_candidates"
+  | "review_warning_scope_not_captured";
+
+export interface AudioMixReviewWarningScopeOptions {
+  recommendedCandidate?: unknown;
+  candidate?: unknown;
+  candidateLabel?: unknown;
+  reviewWarnings?: unknown;
+}
+
+export interface AudioMixReviewWarningScopeSummary {
+  version: "riddle-proof.audio-mix-review-warning-scope.v1";
+  role: "recommended_candidate_warning_scope";
+  matrixReviewWarningCount: number;
+  recommendedCandidateReviewWarningCount: number;
+  nonRecommendedCandidateReviewWarningCount: number;
+  reviewWarningScope: AudioMixReviewWarningScope;
+  recommendedCandidate: string | null;
+  boundary: string;
+}
+
 export interface AudioExplorationMixHealthSummary {
   peak: number | null;
   rms: number | null;
@@ -455,6 +479,7 @@ const AUDIO_MIX_PROOF_WINDOW_FULL_BOUNDARY = "The full profile proof-window set 
 const AUDIO_MIX_PROOF_WINDOW_FOCUSED_BOUNDARY = "Focused proof-window smoke runs reduce iteration cost for a narrow section. Run the full window set before promotion or broad review; focused timing does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
 const AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY = "Loudness metrics are objective review signals. They can show that a candidate made a section much louder or quieter than expected, but they do not prove subjective mix quality.";
+const AUDIO_MIX_REVIEW_WARNING_SCOPE_BOUNDARY = "Review-warning scope distinguishes warnings on the recommended candidate from warnings on rejected or non-recommended candidates. It is an objective review aid and does not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
   const number = Number(value);
@@ -1497,6 +1522,52 @@ const labelFromCandidateValue = (value: unknown): string | null => {
     ?? asStringOrNull(asRecord(record.candidate).label)
     ?? asStringOrNull(asRecord(record.recommendation).label);
 };
+
+const labelFromReviewWarningCandidate = (value: unknown): string | null => {
+  const record = asRecord(value);
+  return labelFromCandidateValue(record.candidate);
+};
+
+export function summarizeAudioMixReviewWarningScope(
+  warningsOrInput: unknown,
+  options: AudioMixReviewWarningScopeOptions = {},
+): AudioMixReviewWarningScopeSummary {
+  const input = asRecord(warningsOrInput);
+  const reviewWarnings = Array.isArray(warningsOrInput)
+    ? warningsOrInput
+    : asArray(options.reviewWarnings ?? input.reviewWarnings);
+  const recommendedCandidate = labelFromCandidateValue(
+    options.candidateLabel
+      ?? options.recommendedCandidate
+      ?? options.candidate
+      ?? input.recommendedDevelopmentCandidate
+      ?? input.recommendedCandidate
+      ?? input.recommendation,
+  );
+  const recommendedCandidateReviewWarningCount = recommendedCandidate
+    ? reviewWarnings.filter((warning) => labelFromReviewWarningCandidate(warning) === recommendedCandidate).length
+    : 0;
+  const matrixReviewWarningCount = reviewWarnings.length;
+  const nonRecommendedCandidateReviewWarningCount = matrixReviewWarningCount - recommendedCandidateReviewWarningCount;
+  const reviewWarningScope: AudioMixReviewWarningScope = !matrixReviewWarningCount
+    ? "no_review_warnings"
+    : (recommendedCandidateReviewWarningCount
+      ? "recommended_candidate_has_review_warnings"
+      : (nonRecommendedCandidateReviewWarningCount
+        ? "warnings_belong_to_rejected_or_non_recommended_candidates"
+        : "review_warning_scope_not_captured"));
+
+  return {
+    version: "riddle-proof.audio-mix-review-warning-scope.v1",
+    role: "recommended_candidate_warning_scope",
+    matrixReviewWarningCount,
+    recommendedCandidateReviewWarningCount,
+    nonRecommendedCandidateReviewWarningCount,
+    reviewWarningScope,
+    recommendedCandidate,
+    boundary: AUDIO_MIX_REVIEW_WARNING_SCOPE_BOUNDARY,
+  };
+}
 
 const normalizeIntentMatrixSurrogateReview = (
   value: unknown,
