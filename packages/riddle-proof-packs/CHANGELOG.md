@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.16
+
+### Patch Changes
+
+- 30fe88a: Clarify human review packet Markdown for no-supported-candidate audio ratchet runs with follow-up prompts and failed-receipt caveats.
+
 ## 0.8.15
 
 ### Patch Changes
