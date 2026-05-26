@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.4
+
+### Patch Changes
+
+- 8f44d73: Add reusable audio mix intent selection helpers for fast smoke lanes and fuller intent-matrix runs.
+
 ## 0.8.3
 
 ### Patch Changes
