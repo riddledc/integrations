@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.17
+
+### Patch Changes
+
+- a87803c: Add reusable human review packet diagnostics for compact failed-receipt rollups.
+
 ## 0.8.16
 
 ### Patch Changes
