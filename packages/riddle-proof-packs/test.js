@@ -1704,6 +1704,7 @@ assert.equal(neonUiMixerControlMatrix.viewports[1]?.error, "phone layout failed"
 const neonUiMixerControlMatrixMarkdown = formatNeonUiMixerControlMatrixMarkdown(neonUiMixerControlMatrix);
 assert.match(neonUiMixerControlMatrixMarkdown, /^# Neon UI Mixer Control Viewport Matrix/u);
 assert.match(neonUiMixerControlMatrixMarkdown, /matrix_concurrency: `2`/u);
+assert.match(neonUiMixerControlMatrixMarkdown, /elapsed: `1\.234 s`/u);
 assert.match(neonUiMixerControlMatrixMarkdown, /guitar_phone_proof_failed/u);
 assert.match(neonUiMixerControlMatrixMarkdown, /does not prove subjective mix taste/u);
 assert.doesNotMatch(neonUiMixerControlMatrixMarkdown, /sounds better/u);
