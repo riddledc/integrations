@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.15
+
+### Patch Changes
+
+- 7864678: Add reusable audio-mix proof-window selection receipts for focused smoke lanes and full profile-window review lanes.
+
 ## 0.8.14
 
 ### Patch Changes
