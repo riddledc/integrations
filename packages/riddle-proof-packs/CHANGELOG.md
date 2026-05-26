@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.23
+
+### Patch Changes
+
+- 8d8308e: Include elapsed timing in Neon UI mixer-control matrix Markdown reports.
+
 ## 0.8.22
 
 ### Patch Changes
