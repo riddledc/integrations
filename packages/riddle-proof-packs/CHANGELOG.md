@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.13
+
+### Patch Changes
+
+- 2b4d5fa: Add a configurable minimum absolute level movement receipt to the Neon UI mixer-control proof profile so browser-control probes can reject no-op or too-small slider interactions.
+
 ## 0.8.12
 
 ### Patch Changes
