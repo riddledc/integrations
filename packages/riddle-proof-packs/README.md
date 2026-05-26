@@ -243,7 +243,9 @@ raw plan.
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.
 
-When candidates include `sectionEnergyComparison`, the Markdown includes per-section baseline/candidate/delta tables. When candidates include `activeLaneReceipt`, the Markdown includes an `Active Lane Receipts` table so required-lane preservation is visible without digging through raw JSON. Both are deterministic review aids; neither proves subjective mix quality.
+When candidates include `sectionEnergyComparison`, the Markdown includes per-section baseline/candidate/delta tables. When candidates include `loudnessConsequenceComparison`, the Markdown includes intent-aware loudness consequence rows. When candidates include `activeLaneReceipt`, the Markdown includes an `Active Lane Receipts` table so required-lane preservation is visible without digging through raw JSON. These are deterministic review aids; they do not prove subjective mix quality.
+
+The packet formatter also emits `Packet Diagnostics`. The evidence-completeness status says whether the recommended candidate actually captured the expected review layers: target movement, section energy, loudness consequences, active-lane receipt, state restoration, and proof/taste boundary language. Use `collectHumanReviewPacketEvidenceCompleteness()` when an agent needs the same audit in JSON.
 
 From the CLI:
 

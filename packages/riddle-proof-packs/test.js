@@ -52,6 +52,7 @@ import {
   summarizeNeonUiMixerControlMatrix,
   summarizeNeonUiMixerControlRun,
   createHumanReviewPacketArtifacts,
+  collectHumanReviewPacketEvidenceCompleteness,
   collectHumanReviewPacketDiagnostics,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
@@ -113,6 +114,7 @@ assert.equal(typeof findHumanReviewPacket, "function");
 assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
+assert.equal(typeof collectHumanReviewPacketEvidenceCompleteness, "function");
 assert.equal(typeof collectHumanReviewPacketDiagnostics, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionLoudnessConsequences, "function");
@@ -758,6 +760,11 @@ assert.match(sectionHeuristicPacketMarkdown, /Loudness metrics are objective rev
 assert.match(sectionHeuristicPacketMarkdown, /## Active Lane Receipts/u);
 assert.match(sectionHeuristicPacketMarkdown, /declared required lanes stayed measurable/u);
 assert.match(sectionHeuristicPacketMarkdown, /Required Tracks \| Active Tracks \| Missing Required Active/u);
+assert.match(sectionHeuristicPacketMarkdown, /## Packet Diagnostics/u);
+assert.match(sectionHeuristicPacketMarkdown, /evidence_completeness: `recommendation_evidence_gaps_present`/u);
+assert.match(sectionHeuristicPacketMarkdown, /evidence_gaps: `target_movement_missing`/u);
+assert.match(sectionHeuristicPacketMarkdown, /failed_receipts: `section_energy_floors_preserved, headroom_guardrail_preserved`/u);
+assert.match(sectionHeuristicPacketMarkdown, /missing_active_lane_tracks: `chord`/u);
 assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| kick, bass, chord \| none/u);
 assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| kick, bass \| Verse: chord/u);
 assert.match(sectionHeuristicPacketMarkdown, /## State Restoration Receipt/u);
@@ -820,6 +827,8 @@ assert.match(failedReceiptPacketMarkdown, /Revise the claim, proof window, or ca
 assert.match(failedReceiptPacketMarkdown, /No candidate satisfied every objective receipt in this bounded run/u);
 assert.match(failedReceiptPacketMarkdown, /Failed receipts are deterministic follow-up cues, not taste judgments/u);
 assert.match(failedReceiptPacketMarkdown, /Do not apply a candidate from this packet without a later supported-candidate proof/u);
+assert.match(failedReceiptPacketMarkdown, /evidence_completeness: `no_supported_candidate`/u);
+assert.match(failedReceiptPacketMarkdown, /evidence_gaps: `no_supported_candidate`/u);
 assert.match(failedReceiptPacketMarkdown, /Rejected \| guitar -0\.02 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord, guitar, leadVocal \| kick, snare, hat, bass, chord, guitar \| Intro Bed Missing Lead Vocal Probe: leadVocal/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /## Listening Prompts/u);
 assert.doesNotMatch(failedReceiptPacketMarkdown, /Does the supported candidate/u);
@@ -858,11 +867,56 @@ assert.deepEqual(failedReceiptDiagnostics.failedReceiptKinds, [
 assert.deepEqual(failedReceiptDiagnostics.candidateClassifications, ["profile_calibration"]);
 assert.deepEqual(failedReceiptDiagnostics.activeLaneStatuses, ["missing_required_active_lanes"]);
 assert.deepEqual(failedReceiptDiagnostics.missingActiveLaneTracks, ["leadVocal"]);
+assert.equal(failedReceiptDiagnostics.evidenceCompleteness.status, "no_supported_candidate");
+assert.deepEqual(failedReceiptDiagnostics.evidenceGaps, ["no_supported_candidate"]);
 assert.match(failedReceiptDiagnostics.boundary, /do not prove subjective mix quality/u);
 assert.equal(
   collectHumanReviewPacketDiagnostics({ kind: "human_review_packet", rejectedCandidates: [] }).status,
   "no_failed_receipts_captured",
 );
+const completeEvidenceDiagnostics = collectHumanReviewPacketEvidenceCompleteness({
+  kind: "human_review_packet",
+  status: "candidate_ready_for_listening_review",
+  proofBoundary: "Objective receipts support claim candidates; this does not prove subjective mix quality.",
+  recommendation: {
+    action: "review_before_applying_candidate",
+    candidate: {
+      label: "guitar -0.02",
+      targetMovement: { track: "guitar", deltas: { rms: -0.001 } },
+      sectionEnergyComparison: { sectionCount: 1 },
+      loudnessConsequenceComparison: { status: "loudness_consequences_within_expected_range" },
+      activeLaneReceipt: { status: "active_lanes_preserved" },
+    },
+  },
+  supportedCandidates: [],
+  guardrails: { stateRestoredAfterLoop: true },
+});
+assert.equal(completeEvidenceDiagnostics.version, "riddle-proof.human-review-packet-evidence-completeness.v1");
+assert.equal(completeEvidenceDiagnostics.status, "recommendation_evidence_complete");
+assert.deepEqual(completeEvidenceDiagnostics.evidenceGaps, []);
+assert.equal(completeEvidenceDiagnostics.sectionEnergyComparisonCaptured, true);
+assert.equal(completeEvidenceDiagnostics.loudnessConsequenceComparisonCaptured, true);
+assert.equal(completeEvidenceDiagnostics.activeLaneReceiptCaptured, true);
+assert.match(completeEvidenceDiagnostics.boundary, /does not prove subjective mix quality/u);
+const thinEvidenceDiagnostics = collectHumanReviewPacketEvidenceCompleteness({
+  kind: "human_review_packet",
+  status: "candidate_ready_for_listening_review",
+  proofBoundary: "Objective receipts support claim candidates; this does not prove subjective mix quality.",
+  recommendation: {
+    action: "review_before_applying_candidate",
+    candidate: {
+      label: "guitar -0.02",
+      targetMovement: { track: "guitar", deltas: { rms: -0.001 } },
+    },
+  },
+  guardrails: { stateRestoredAfterLoop: true },
+});
+assert.equal(thinEvidenceDiagnostics.status, "recommendation_evidence_gaps_present");
+assert.deepEqual(thinEvidenceDiagnostics.evidenceGaps, [
+  "section_energy_comparison_missing",
+  "loudness_consequence_comparison_missing",
+  "active_lane_receipt_missing",
+]);
 
 const mixingCanonPacket = {
   kind: "human_review_packet",

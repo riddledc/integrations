@@ -55,6 +55,15 @@ These are objective review signals for the recommended candidate. They help expl
 | bass +0.12 | set_mixer_level bass: 0.62 -> 0.74 (0.12) | bass: rms 0.0112, peak 0.0356, energy 0.000264 | pass (6) | 31.7991 |
 | bass +0.20 | set_mixer_level bass: 0.62 -> 0.82 (0.2) | bass: rms 0.0187, peak 0.0594, energy 0.000466 | pass (6) | 35.2559 |
 
+## Packet Diagnostics
+
+- evidence_completeness: `recommendation_evidence_gaps_present`
+- evidence_gaps: `section_energy_comparison_missing, loudness_consequence_comparison_missing, active_lane_receipt_missing`
+- failed_receipts: `none`
+- rejected_candidates: `none`
+- missing_active_lane_tracks: `none`
+- boundary: Evidence completeness only says which objective review layers were captured. It does not prove subjective mix quality.
+
 ## Boundary
 
 Objective receipts support or reject candidate change claims; musical taste still requires listening review.

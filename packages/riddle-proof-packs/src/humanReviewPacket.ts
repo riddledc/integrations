@@ -12,6 +12,26 @@ export interface HumanReviewPacketArtifacts {
   markdown: string;
 }
 
+export type HumanReviewPacketEvidenceCompletenessStatus =
+  | "recommendation_evidence_complete"
+  | "recommendation_evidence_gaps_present"
+  | "no_supported_candidate";
+
+export interface HumanReviewPacketEvidenceCompleteness {
+  version: "riddle-proof.human-review-packet-evidence-completeness.v1";
+  role: "review_packet_evidence_layer_audit";
+  status: HumanReviewPacketEvidenceCompletenessStatus;
+  recommendationCandidateCaptured: boolean;
+  targetMovementCaptured: boolean;
+  sectionEnergyComparisonCaptured: boolean;
+  loudnessConsequenceComparisonCaptured: boolean;
+  activeLaneReceiptCaptured: boolean;
+  stateRestorationCaptured: boolean;
+  proofTasteBoundaryCaptured: boolean;
+  evidenceGaps: string[];
+  boundary: string;
+}
+
 export interface HumanReviewPacketDiagnostics {
   version: "riddle-proof.human-review-packet-diagnostics.v1";
   role: "compact_failed_receipt_rollup";
@@ -22,6 +42,8 @@ export interface HumanReviewPacketDiagnostics {
   candidateClassifications: string[];
   activeLaneStatuses: string[];
   missingActiveLaneTracks: string[];
+  evidenceCompleteness: HumanReviewPacketEvidenceCompleteness;
+  evidenceGaps: string[];
   boundary: string;
 }
 
@@ -605,6 +627,11 @@ const hasRecommendationCandidate = (candidate: Record<string, unknown>): boolean
   Object.keys(candidate).some((key) => candidate[key] !== null && candidate[key] !== undefined)
 );
 
+const hasCapturedRecord = (value: unknown): boolean => {
+  const record = asRecord(value);
+  return Boolean(record && Object.keys(record).length);
+};
+
 const isNoSupportedCandidatePacket = (
   packet: HumanReviewPacket,
   recommendation: Record<string, unknown>,
@@ -646,6 +673,75 @@ const failedReceiptNamesForCandidate = (candidate: Record<string, unknown>): str
     .map((receipt) => receipt.name),
 ]);
 
+const packetTasteBoundaryCaptured = (packet: Partial<HumanReviewPacket>): boolean => {
+  const text = [
+    packet.proofBoundary,
+    ...asArray(packet.caveats),
+    ...asArray(packet.listenerPrompts),
+  ].map(formatValue).join("\n").toLowerCase();
+  return (
+    text.includes("does not prove subjective")
+    || text.includes("musical taste still requires")
+    || text.includes("not prove subjective mix quality")
+    || text.includes("listener preference")
+  );
+};
+
+export function collectHumanReviewPacketEvidenceCompleteness(
+  packet: Partial<HumanReviewPacket> = {},
+): HumanReviewPacketEvidenceCompleteness {
+  const recommendation = asRecord(packet.recommendation) ?? {};
+  const candidate = asRecord(recommendation.candidate) ?? {};
+  const supportedCandidates = asArray(packet.supportedCandidates);
+  const guardrails = asRecord(packet.guardrails) ?? {};
+  const noSupportedCandidatePacket = isNoSupportedCandidatePacket(
+    packet as HumanReviewPacket,
+    recommendation,
+    candidate,
+    supportedCandidates,
+  );
+  const impactCandidate = resolveRecommendationImpactCandidate(candidate, supportedCandidates);
+  const recommendationCandidateCaptured = hasRecommendationCandidate(candidate);
+  const targetMovementCaptured = hasCapturedRecord(impactCandidate.targetMovement);
+  const sectionEnergyComparisonCaptured = hasCapturedRecord(impactCandidate.sectionEnergyComparison);
+  const loudnessConsequenceComparisonCaptured = hasCapturedRecord(impactCandidate.loudnessConsequenceComparison);
+  const activeLaneReceiptCaptured = hasCapturedRecord(impactCandidate.activeLaneReceipt);
+  const stateRestorationCaptured = hasCapturedRecord(packet.restorationReceipt)
+    || hasCapturedRecord(packet.stateRestorationReceipt)
+    || hasCapturedRecord(packet.restoration)
+    || typeof guardrails.stateRestoredAfterLoop === "boolean";
+  const proofTasteBoundaryCaptured = packetTasteBoundaryCaptured(packet);
+  const evidenceGaps = noSupportedCandidatePacket
+    ? ["no_supported_candidate"]
+    : [
+      recommendationCandidateCaptured ? null : "recommendation_candidate_missing",
+      targetMovementCaptured ? null : "target_movement_missing",
+      sectionEnergyComparisonCaptured ? null : "section_energy_comparison_missing",
+      loudnessConsequenceComparisonCaptured ? null : "loudness_consequence_comparison_missing",
+      activeLaneReceiptCaptured ? null : "active_lane_receipt_missing",
+      stateRestorationCaptured ? null : "state_restoration_missing",
+      proofTasteBoundaryCaptured ? null : "proof_taste_boundary_missing",
+    ].filter((entry): entry is string => Boolean(entry));
+  const status: HumanReviewPacketEvidenceCompletenessStatus = noSupportedCandidatePacket
+    ? "no_supported_candidate"
+    : (evidenceGaps.length ? "recommendation_evidence_gaps_present" : "recommendation_evidence_complete");
+
+  return {
+    version: "riddle-proof.human-review-packet-evidence-completeness.v1",
+    role: "review_packet_evidence_layer_audit",
+    status,
+    recommendationCandidateCaptured,
+    targetMovementCaptured,
+    sectionEnergyComparisonCaptured,
+    loudnessConsequenceComparisonCaptured,
+    activeLaneReceiptCaptured,
+    stateRestorationCaptured,
+    proofTasteBoundaryCaptured,
+    evidenceGaps,
+    boundary: "Evidence completeness only says which objective review layers were captured. It does not prove subjective mix quality.",
+  };
+}
+
 export function collectHumanReviewPacketDiagnostics(
   packet: Partial<HumanReviewPacket> = {},
 ): HumanReviewPacketDiagnostics {
@@ -662,6 +758,7 @@ export function collectHumanReviewPacketDiagnostics(
       .filter((entry): entry is Record<string, unknown> => Boolean(entry))
       .flatMap((windowSummary) => asArray(windowSummary.missingRequiredActive))
   )));
+  const evidenceCompleteness = collectHumanReviewPacketEvidenceCompleteness(packet);
 
   return {
     version: "riddle-proof.human-review-packet-diagnostics.v1",
@@ -673,6 +770,8 @@ export function collectHumanReviewPacketDiagnostics(
     candidateClassifications: uniqueValues(rejectedCandidates.map((candidate) => candidate.classification)),
     activeLaneStatuses: uniqueValues(activeLaneReceipts.map((receipt) => receipt.status)),
     missingActiveLaneTracks,
+    evidenceCompleteness,
+    evidenceGaps: evidenceCompleteness.evidenceGaps,
     boundary: "Failed receipt diagnostics summarize deterministic follow-up cues. They do not prove subjective mix quality.",
   };
 }
@@ -718,6 +817,8 @@ export function formatHumanReviewPacketMarkdown(
   const approval = asRecord(request.approval) ?? {};
   const supportedCandidates = asArray(packet.supportedCandidates);
   const rejectedCandidates = asArray(packet.rejectedCandidates);
+  const packetDiagnostics = collectHumanReviewPacketDiagnostics(packet);
+  const evidenceCompleteness = packetDiagnostics.evidenceCompleteness;
   const noSupportedCandidatePacket = isNoSupportedCandidatePacket(
     packet,
     recommendation,
@@ -777,6 +878,18 @@ export function formatHumanReviewPacketMarkdown(
   addAllCandidateLoudnessConsequenceTables(lines, supportedCandidates, rejectedCandidates);
   addActiveLaneReceiptTable(lines, supportedCandidates, rejectedCandidates);
   addRestorationReceiptTable(lines, packet);
+
+  lines.push(
+    "",
+    "## Packet Diagnostics",
+    "",
+    `- evidence_completeness: ${formatCodeValue(evidenceCompleteness.status)}`,
+    `- evidence_gaps: ${formatCodeValue(evidenceCompleteness.evidenceGaps.join(", ") || "none")}`,
+    `- failed_receipts: ${formatCodeValue(packetDiagnostics.failedReceiptKinds.join(", ") || "none")}`,
+    `- rejected_candidates: ${formatCodeValue(packetDiagnostics.rejectedCandidateLabels.join(", ") || "none")}`,
+    `- missing_active_lane_tracks: ${formatCodeValue(packetDiagnostics.missingActiveLaneTracks.join(", ") || "none")}`,
+    `- boundary: ${formatValue(evidenceCompleteness.boundary)}`,
+  );
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));
 

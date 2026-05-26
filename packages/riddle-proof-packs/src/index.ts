@@ -97,11 +97,14 @@ export {
   type MixingCanonSurrogateReviewOptions,
 } from "./audioMixReview";
 export {
+  collectHumanReviewPacketEvidenceCompleteness,
   collectHumanReviewPacketDiagnostics,
   createHumanReviewPacketArtifacts,
   findHumanReviewPacket,
   formatHumanReviewPacketMarkdown,
   requireHumanReviewPacket,
+  type HumanReviewPacketEvidenceCompleteness,
+  type HumanReviewPacketEvidenceCompletenessStatus,
   type HumanReviewPacket,
   type HumanReviewPacketArtifacts,
   type HumanReviewPacketDiagnostics,
