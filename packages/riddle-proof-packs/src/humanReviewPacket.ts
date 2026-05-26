@@ -177,6 +177,12 @@ const candidateHasSectionEnergy = (candidate: unknown): candidate is Record<stri
   return Boolean(comparison && asArray(comparison.sections).length);
 };
 
+const candidateHasLoudnessConsequences = (candidate: unknown): candidate is Record<string, unknown> => {
+  const record = asRecord(candidate);
+  const comparison = asRecord(record?.loudnessConsequenceComparison);
+  return Boolean(comparison && asArray(comparison.sections).length);
+};
+
 const addSectionEnergyTable = (
   lines: string[],
   candidate: Record<string, unknown>,
@@ -241,6 +247,61 @@ const addAllCandidateSectionEnergyTables = (
 
   for (const { group, candidate } of rows) {
     addSectionEnergyTable(lines, candidate, `### ${group}: ${candidateLabel(candidate)}`);
+  }
+};
+
+const formatExpectedLoudnessRange = (range: Record<string, unknown>): string => {
+  const min = range.minDeltaDb;
+  const max = range.maxDeltaDb;
+  const source = range.source;
+  const magnitude = range.magnitude;
+  const direction = range.direction;
+  return [
+    `${formatValue(min)} to ${formatValue(max)} dB`,
+    `source ${formatValue(source)}`,
+    `magnitude ${formatValue(magnitude)}`,
+    `direction ${formatValue(direction)}`,
+  ].join("; ");
+};
+
+const addAllCandidateLoudnessConsequenceTables = (
+  lines: string[],
+  supportedCandidates: unknown[],
+  rejectedCandidates: unknown[],
+) => {
+  const supportedRows = supportedCandidates
+    .filter(candidateHasLoudnessConsequences)
+    .map((candidate) => ({ group: "Supported", candidate }));
+  const rejectedRows = rejectedCandidates
+    .filter(candidateHasLoudnessConsequences)
+    .map((candidate) => ({ group: "Rejected", candidate }));
+  const rows = [...supportedRows, ...rejectedRows];
+  if (!rows.length) return;
+
+  lines.push(
+    "",
+    "## Candidate Loudness Consequences",
+    "",
+    "Loudness metrics are objective review signals. They can show that a candidate made a section much louder or quieter than expected, but they do not prove subjective mix quality.",
+    "",
+    "| Group | Candidate | Section | Baseline Loudness | Candidate Loudness | Delta | Expected Delta Range | Status |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+  );
+
+  for (const { group, candidate } of rows) {
+    const comparison = asRecord(candidate.loudnessConsequenceComparison) ?? {};
+    for (const section of asArray(comparison.sections).map(asRecord).filter((entry): entry is Record<string, unknown> => Boolean(entry))) {
+      lines.push([
+        escapeTableCell(group),
+        escapeTableCell(candidateLabel(candidate)),
+        escapeTableCell(section.label ?? section.name),
+        escapeTableCell(`${formatValue(section.baselineLoudness)} dB`),
+        escapeTableCell(`${formatValue(section.candidateLoudness)} dB`),
+        escapeTableCell(`${formatValue(section.loudnessDelta)} dB`),
+        escapeTableCell(formatExpectedLoudnessRange(asRecord(section.expectedDeltaRange) ?? {})),
+        escapeTableCell(`${formatValue(section.status)} (${formatValue(section.severity)})`),
+      ].join(" | ").replace(/^/u, "| ").replace(/$/u, " |"));
+    }
   }
 };
 
@@ -430,6 +491,7 @@ export function formatHumanReviewPacketMarkdown(
   addCandidateTable(lines, "Supported Candidates", supportedCandidates);
   addCandidateTable(lines, "Rejected Candidates", rejectedCandidates);
   addAllCandidateSectionEnergyTables(lines, supportedCandidates, rejectedCandidates);
+  addAllCandidateLoudnessConsequenceTables(lines, supportedCandidates, rejectedCandidates);
   addActiveLaneReceiptTable(lines, supportedCandidates, rejectedCandidates);
 
   lines.push("", "## Boundary", "", formatValue(packet.proofBoundary));

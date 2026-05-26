@@ -31,6 +31,64 @@ export interface AudioSectionEnergyComparison {
   boundary: string;
 }
 
+export type AudioMixLoudnessConsequenceStatus =
+  | "loudness_consequences_within_expected_range"
+  | "loudness_consequence_review_warning"
+  | "loudness_consequence_guardrail_failure";
+
+export type AudioMixSectionLoudnessConsequenceStatus =
+  | "within_expected_range"
+  | "loudness_shift_requires_review"
+  | "missing_loudness"
+  | "existing_guardrail_violation";
+
+export interface AudioMixLoudnessConsequenceOptions extends AudioMixRequestMagnitudeOptions {
+  request?: Partial<AudioMixResolvedRequestMagnitude> | null;
+  direction?: unknown;
+  expectedMaxAbsLoudnessDeltaDb?: unknown;
+  maxAbsLoudnessDeltaDb?: unknown;
+  directionMismatchToleranceDb?: unknown;
+  failOnExistingGuardrailViolation?: unknown;
+}
+
+export interface AudioMixLoudnessExpectedDeltaRange {
+  minDeltaDb: number | null;
+  maxDeltaDb: number | null;
+  maxAbsDeltaDb: number | null;
+  direction: string | null;
+  magnitude: AudioMixRequestedMagnitude | null;
+  source: "explicit_loudness_delta" | "explicit_level_delta" | "requested_magnitude" | "unconstrained";
+}
+
+export interface AudioMixSectionLoudnessConsequence {
+  name: string | null;
+  label: string | null;
+  baselineLoudness: number | null;
+  candidateLoudness: number | null;
+  loudnessDelta: number | null;
+  expectedDeltaRange: AudioMixLoudnessExpectedDeltaRange;
+  status: AudioMixSectionLoudnessConsequenceStatus;
+  severity: "ok" | "review" | "fail";
+  warning: boolean;
+  failed: boolean;
+  reason: string | null;
+  existingGuardrailViolations: string[];
+}
+
+export interface AudioMixLoudnessConsequenceComparison {
+  version: "riddle-proof.audio-mix-loudness-consequence.v1";
+  role: "intent_aware_loudness_review_signal";
+  loudnessMetric: "rms_loudness_style_lufs_proxy";
+  standardsCompliantLufs: false;
+  status: AudioMixLoudnessConsequenceStatus;
+  ok: boolean;
+  sectionCount: number;
+  reviewWarningCount: number;
+  failCount: number;
+  sections: AudioMixSectionLoudnessConsequence[];
+  boundary: string;
+}
+
 export interface AudioExplorationMixHealthSummary {
   peak: number | null;
   rms: number | null;
@@ -303,6 +361,7 @@ const DEFAULT_SECTION_HEURISTICS: Required<Omit<AudioSectionHeuristicOptions, "t
 };
 
 export const AUDIO_MIX_SUBTLE_MAX_ABS_LEVEL_DELTA = 0.12;
+export const AUDIO_MIX_SUBTLE_MAX_ABS_SECTION_LOUDNESS_DELTA_DB = 1.5;
 
 export const DEFAULT_AUDIO_MIX_MAGNITUDE_POLICIES: Record<AudioMixRequestedMagnitude, AudioMixMagnitudePolicy> = {
   subtle: {
@@ -327,6 +386,7 @@ const AUDIO_MIX_MAGNITUDE_BOUNDARY = "Requested magnitude constrains objective c
 const AUDIO_MIX_INTENT_SELECTION_BOUNDARY = "Intent selection scopes bounded objective audio-mix claim-candidate loops for smoke or matrix runs; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_ROUTE_ALIGNMENT_BOUNDARY = "Route alignment keeps a running browser target consistent with a selected objective audio-mix claim; it does not prove subjective mix quality.";
 const AUDIO_MIX_INTENT_MATRIX_BOUNDARY = "Intent matrices batch objective claim-candidate receipts and guardrails. They rank candidates for review; they do not prove subjective mix quality.";
+const AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY = "Loudness metrics are objective review signals. They can show that a candidate made a section much louder or quieter than expected, but they do not prove subjective mix quality.";
 
 const roundMetric = (value: unknown, digits = 6): number | null => {
   const number = Number(value);
@@ -1595,6 +1655,151 @@ export function compareAudioSectionEnergy(
     floors,
     trackedInstruments,
     boundary: "Loudness-style and section-energy metrics rank candidates for review; they do not prove subjective mix quality.",
+  };
+}
+
+const resolveLoudnessRequest = (
+  options: AudioMixLoudnessConsequenceOptions,
+): Partial<AudioMixResolvedRequestMagnitude> => {
+  if (options.request && typeof options.request === "object") return options.request;
+  return resolveAudioMixRequestMagnitude(options);
+};
+
+const scaledLoudnessDeltaFromLevelDelta = (levelDelta: number): number => (
+  roundMetric(Math.max(
+    AUDIO_MIX_SUBTLE_MAX_ABS_SECTION_LOUDNESS_DELTA_DB,
+    Math.abs(levelDelta) * 18,
+  ), 2) ?? AUDIO_MIX_SUBTLE_MAX_ABS_SECTION_LOUDNESS_DELTA_DB
+);
+
+const resolveAudioMixLoudnessExpectedDeltaRange = (
+  options: AudioMixLoudnessConsequenceOptions = {},
+): AudioMixLoudnessExpectedDeltaRange => {
+  const request = resolveLoudnessRequest(options);
+  const direction = lowerText(options.direction);
+  const normalizedDirection = direction === "up" || direction === "down" ? direction : null;
+  const explicitMaxAbsDb = asNumber(options.expectedMaxAbsLoudnessDeltaDb ?? options.maxAbsLoudnessDeltaDb);
+  const requestMaxAbsLevelDelta = asNumber(request.maxAbsLevelDelta ?? request.maxAbsDelta);
+  const optionMaxAbsLevelDelta = asNumber(options.maxAbsLevelDelta ?? options.maxAbsDelta);
+  const maxAbsLevelDelta = optionMaxAbsLevelDelta ?? requestMaxAbsLevelDelta;
+  let maxAbsDeltaDb: number | null = null;
+  let source: AudioMixLoudnessExpectedDeltaRange["source"] = "unconstrained";
+
+  if (explicitMaxAbsDb !== null && explicitMaxAbsDb > 0) {
+    maxAbsDeltaDb = roundMetric(explicitMaxAbsDb, 2);
+    source = "explicit_loudness_delta";
+  } else if (
+    maxAbsLevelDelta !== null
+    && maxAbsLevelDelta > AUDIO_MIX_SUBTLE_MAX_ABS_LEVEL_DELTA
+  ) {
+    maxAbsDeltaDb = scaledLoudnessDeltaFromLevelDelta(maxAbsLevelDelta);
+    source = "explicit_level_delta";
+  } else if (request.magnitude === "subtle") {
+    maxAbsDeltaDb = AUDIO_MIX_SUBTLE_MAX_ABS_SECTION_LOUDNESS_DELTA_DB;
+    source = "requested_magnitude";
+  } else if (maxAbsLevelDelta !== null && maxAbsLevelDelta > 0) {
+    maxAbsDeltaDb = scaledLoudnessDeltaFromLevelDelta(maxAbsLevelDelta);
+    source = "explicit_level_delta";
+  }
+
+  if (maxAbsDeltaDb === null) {
+    return {
+      minDeltaDb: null,
+      maxDeltaDb: null,
+      maxAbsDeltaDb: null,
+      direction: normalizedDirection,
+      magnitude: request.magnitude ?? null,
+      source,
+    };
+  }
+
+  const tolerance = Math.max(0, optionWithDefault(
+    options.directionMismatchToleranceDb,
+    0.25,
+  ));
+  const directionToleranceDb = roundMetric(tolerance, 2) ?? 0;
+  const resolvedMaxAbsDeltaDb = maxAbsDeltaDb;
+  return {
+    minDeltaDb: normalizedDirection === "up" ? -directionToleranceDb : -resolvedMaxAbsDeltaDb,
+    maxDeltaDb: normalizedDirection === "down" ? directionToleranceDb : resolvedMaxAbsDeltaDb,
+    maxAbsDeltaDb: resolvedMaxAbsDeltaDb,
+    direction: normalizedDirection,
+    magnitude: request.magnitude ?? null,
+    source,
+  };
+};
+
+export function compareAudioSectionLoudnessConsequences(
+  sectionEnergyComparison: unknown,
+  options: AudioMixLoudnessConsequenceOptions = {},
+): AudioMixLoudnessConsequenceComparison {
+  const comparison = asRecord(sectionEnergyComparison);
+  const expectedDeltaRange = resolveAudioMixLoudnessExpectedDeltaRange(options);
+  const failOnExistingGuardrailViolation = options.failOnExistingGuardrailViolation === false ? false : true;
+  const sections = asArray(comparison.sections).map(asRecord).map((section): AudioMixSectionLoudnessConsequence => {
+    const baseline = asRecord(section.baseline);
+    const candidate = asRecord(section.candidate);
+    const deltaRecord = asRecord(section.delta);
+    const guardrails = asRecord(section.guardrails);
+    const existingGuardrailViolations = asArray(guardrails.violated)
+      .map((entry) => String(entry ?? "").trim())
+      .filter(Boolean);
+    const baselineLoudness = roundMetric(baseline.loudnessStyleLufs, 2);
+    const candidateLoudness = roundMetric(candidate.loudnessStyleLufs, 2);
+    const loudnessDelta = roundMetric(deltaRecord.loudnessStyleLufs, 2);
+    const missingLoudness = baselineLoudness === null || candidateLoudness === null || loudnessDelta === null;
+    const belowMin = expectedDeltaRange.minDeltaDb !== null
+      && loudnessDelta !== null
+      && loudnessDelta < expectedDeltaRange.minDeltaDb - 0.000001;
+    const aboveMax = expectedDeltaRange.maxDeltaDb !== null
+      && loudnessDelta !== null
+      && loudnessDelta > expectedDeltaRange.maxDeltaDb + 0.000001;
+    const existingGuardrailFailure = failOnExistingGuardrailViolation && existingGuardrailViolations.length > 0;
+    const warning = missingLoudness || belowMin || aboveMax;
+    const failed = existingGuardrailFailure;
+    const status: AudioMixSectionLoudnessConsequenceStatus = failed
+      ? "existing_guardrail_violation"
+      : (missingLoudness
+        ? "missing_loudness"
+        : (warning ? "loudness_shift_requires_review" : "within_expected_range"));
+
+    return {
+      name: asStringOrNull(section.name),
+      label: asStringOrNull(section.label),
+      baselineLoudness,
+      candidateLoudness,
+      loudnessDelta,
+      expectedDeltaRange,
+      status,
+      severity: failed ? "fail" : (warning ? "review" : "ok"),
+      warning,
+      failed,
+      reason: failed
+        ? "existing_guardrail_violation"
+        : (missingLoudness
+          ? "missing_loudness"
+          : (warning ? "loudness_delta_outside_expected_range" : null)),
+      existingGuardrailViolations,
+    };
+  });
+  const reviewWarningCount = sections.filter((section) => section.warning).length;
+  const failCount = sections.filter((section) => section.failed).length;
+  const status: AudioMixLoudnessConsequenceStatus = failCount
+    ? "loudness_consequence_guardrail_failure"
+    : (reviewWarningCount ? "loudness_consequence_review_warning" : "loudness_consequences_within_expected_range");
+
+  return {
+    version: "riddle-proof.audio-mix-loudness-consequence.v1",
+    role: "intent_aware_loudness_review_signal",
+    loudnessMetric: "rms_loudness_style_lufs_proxy",
+    standardsCompliantLufs: false,
+    status,
+    ok: failCount === 0,
+    sectionCount: sections.length,
+    reviewWarningCount,
+    failCount,
+    sections,
+    boundary: AUDIO_MIX_LOUDNESS_CONSEQUENCE_BOUNDARY,
   };
 }
 

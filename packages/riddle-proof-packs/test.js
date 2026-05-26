@@ -14,6 +14,7 @@ import {
   buildAudioMixLevelIntentSet,
   collectAudioExplorationReviewWarnings,
   compareAudioSectionEnergy,
+  compareAudioSectionLoudnessConsequences,
   computeAudioSectionReviewMetric,
   inferAudioMixRequestedMagnitude,
   estimateLoudnessStyleLufs,
@@ -63,6 +64,7 @@ assert.equal(typeof getRiddleProofPackProfileManifest, "function");
 assert.equal(typeof instantiateRiddleProofProfile, "function");
 assert.equal(typeof buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof compareAudioSectionEnergy, "function");
+assert.equal(typeof compareAudioSectionLoudnessConsequences, "function");
 assert.equal(typeof audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof collectAudioExplorationReviewWarnings, "function");
 assert.equal(typeof computeAudioSectionReviewMetric, "function");
@@ -99,6 +101,7 @@ assert.equal(typeof requireHumanReviewPacket, "function");
 assert.equal(typeof formatHumanReviewPacketMarkdown, "function");
 assert.equal(typeof createHumanReviewPacketArtifacts, "function");
 assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionEnergy, "function");
+assert.equal(typeof audioHeuristicsSubpath.compareAudioSectionLoudnessConsequences, "function");
 assert.equal(typeof audioHeuristicsSubpath.audioMixCandidateMagnitudeMatchesRequest, "function");
 assert.equal(typeof audioHeuristicsSubpath.buildAudioMixLevelIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.collectAudioExplorationReviewWarnings, "function");
@@ -411,6 +414,94 @@ const sectionComparisonWithViolation = compareAudioSectionEnergy(
 );
 assert.equal(sectionComparisonWithViolation.requiredSectionEnergyFloorsPreserved, false);
 assert.equal(sectionComparisonWithViolation.guardrailsPreserved, false);
+const loudnessBaseline = {
+  windows: [
+    {
+      name: "hook",
+      label: "Hook",
+      requiredActive: ["guitar"],
+      mixHealth: { rms: 0.1, peak: 0.5, headroomDb: 6, clipping: false, lowLevel: false },
+      activeInstruments: [
+        { name: "guitar", rms: 0.03, peak: 0.1, totalEnergy: 0.002 },
+      ],
+      requiredInstruments: [
+        { name: "guitar", rms: 0.03, peak: 0.1, totalEnergy: 0.002 },
+      ],
+    },
+  ],
+};
+const smallLoudnessShiftComparison = compareAudioSectionEnergy(
+  loudnessBaseline,
+  {
+    windows: [
+      {
+        name: "hook",
+        label: "Hook",
+        requiredActive: ["guitar"],
+        mixHealth: { rms: 0.095, peak: 0.48, headroomDb: 6.1, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "guitar", rms: 0.027, peak: 0.09, totalEnergy: 0.0017 },
+        ],
+        requiredInstruments: [
+          { name: "guitar", rms: 0.027, peak: 0.09, totalEnergy: 0.0017 },
+        ],
+      },
+    ],
+  },
+  { trackedInstruments: ["guitar"] },
+);
+const smallLoudnessConsequence = compareAudioSectionLoudnessConsequences(smallLoudnessShiftComparison, {
+  intent: "turn the guitar part down a little",
+  direction: "down",
+});
+assert.equal(smallLoudnessConsequence.version, "riddle-proof.audio-mix-loudness-consequence.v1");
+assert.equal(smallLoudnessConsequence.role, "intent_aware_loudness_review_signal");
+assert.equal(smallLoudnessConsequence.loudnessMetric, "rms_loudness_style_lufs_proxy");
+assert.equal(smallLoudnessConsequence.standardsCompliantLufs, false);
+assert.equal(smallLoudnessConsequence.status, "loudness_consequences_within_expected_range");
+assert.equal(smallLoudnessConsequence.reviewWarningCount, 0);
+assert.equal(smallLoudnessConsequence.sections[0]?.expectedDeltaRange?.minDeltaDb, -1.5);
+assert.equal(smallLoudnessConsequence.sections[0]?.expectedDeltaRange?.maxDeltaDb, 0.25);
+assert.match(smallLoudnessConsequence.boundary, /do not prove subjective mix quality/u);
+const oversizedLoudnessShiftComparison = compareAudioSectionEnergy(
+  loudnessBaseline,
+  {
+    windows: [
+      {
+        name: "hook",
+        label: "Hook",
+        requiredActive: ["guitar"],
+        mixHealth: { rms: 0.07, peak: 0.4, headroomDb: 7, clipping: false, lowLevel: false },
+        activeInstruments: [
+          { name: "guitar", rms: 0.02, peak: 0.08, totalEnergy: 0.0011 },
+        ],
+        requiredInstruments: [
+          { name: "guitar", rms: 0.02, peak: 0.08, totalEnergy: 0.0011 },
+        ],
+      },
+    ],
+  },
+  { trackedInstruments: ["guitar"] },
+);
+assert.equal(oversizedLoudnessShiftComparison.requiredSectionEnergyFloorsPreserved, true);
+assert.equal(oversizedLoudnessShiftComparison.guardrailsPreserved, true);
+const oversizedLoudnessConsequence = audioHeuristicsSubpath.compareAudioSectionLoudnessConsequences(oversizedLoudnessShiftComparison, {
+  intent: "turn the guitar part down a little",
+  direction: "down",
+});
+assert.equal(oversizedLoudnessConsequence.status, "loudness_consequence_review_warning");
+assert.equal(oversizedLoudnessConsequence.ok, true);
+assert.equal(oversizedLoudnessConsequence.reviewWarningCount, 1);
+assert.equal(oversizedLoudnessConsequence.failCount, 0);
+assert.equal(oversizedLoudnessConsequence.sections[0]?.status, "loudness_shift_requires_review");
+assert.equal(oversizedLoudnessConsequence.sections[0]?.severity, "review");
+assert.equal(oversizedLoudnessConsequence.sections[0]?.reason, "loudness_delta_outside_expected_range");
+const largerExplicitLoudnessConsequence = compareAudioSectionLoudnessConsequences(oversizedLoudnessShiftComparison, {
+  direction: "down",
+  maxAbsLevelDelta: 0.3,
+});
+assert.equal(largerExplicitLoudnessConsequence.status, "loudness_consequences_within_expected_range");
+assert.equal(largerExplicitLoudnessConsequence.sections[0]?.expectedDeltaRange?.source, "explicit_level_delta");
 const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
   kind: "human_review_packet",
   domain: "audio_mix",
@@ -428,6 +519,7 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
       rankingMetric: 1.23,
       receipts: [{ name: "section_energy_floors_preserved", ok: true }],
       sectionEnergyComparison: sectionComparison,
+      loudnessConsequenceComparison: smallLoudnessConsequence,
     },
   },
   supportedCandidates: [{
@@ -436,6 +528,7 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
     rankingMetric: 1.23,
     receipts: [{ name: "section_energy_floors_preserved", ok: true }],
     sectionEnergyComparison: sectionComparison,
+    loudnessConsequenceComparison: smallLoudnessConsequence,
     activeLaneReceipt: {
       version: "neon-step-sequencer.active-lane-receipt.v1",
       ok: true,
@@ -447,6 +540,13 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
       missingWindows: [],
       boundary: "Active-lane preservation proves declared required lanes stayed measurable in proof windows; it does not prove subjective mix quality.",
     },
+  }, {
+    label: "guitar -0.30",
+    action: { type: "set_mixer_level", track: "guitar", from: 0.6, to: 0.3, delta: -0.3 },
+    rankingMetric: 3.21,
+    receipts: [{ name: "section_energy_floors_preserved", ok: true }],
+    sectionEnergyComparison: oversizedLoudnessShiftComparison,
+    loudnessConsequenceComparison: oversizedLoudnessConsequence,
   }],
   rejectedCandidates: [{
     label: "chord -0.30",
@@ -478,6 +578,7 @@ const sectionHeuristicPacketMarkdown = formatHumanReviewPacketMarkdown({
 });
 assert.match(sectionHeuristicPacketMarkdown, /## Candidate Section Energy Details/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Supported: chord -0\.10/u);
+assert.match(sectionHeuristicPacketMarkdown, /### Supported: guitar -0\.30/u);
 assert.match(sectionHeuristicPacketMarkdown, /### Rejected: chord -0\.30/u);
 assert.match(sectionHeuristicPacketMarkdown, /Target Movement \| Receipts \| Guardrails \| Ranking/u);
 assert.match(sectionHeuristicPacketMarkdown, /Baseline Energy \| Candidate Energy \| Delta \| Tracked Instruments/u);
@@ -489,11 +590,16 @@ assert.match(sectionHeuristicPacketMarkdown, /headroom 0\.2 dB \(floor 0\.5 dB\)
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `true`/u);
 assert.match(sectionHeuristicPacketMarkdown, /required_section_energy_floors_preserved: `false`/u);
 assert.match(sectionHeuristicPacketMarkdown, /guardrails_preserved: `false`/u);
+assert.match(sectionHeuristicPacketMarkdown, /## Candidate Loudness Consequences/u);
+assert.match(sectionHeuristicPacketMarkdown, /Baseline Loudness \| Candidate Loudness \| Delta \| Expected Delta Range \| Status/u);
+assert.match(sectionHeuristicPacketMarkdown, /loudness_shift_requires_review \(review\)/u);
+assert.match(sectionHeuristicPacketMarkdown, /Loudness metrics are objective review signals/u);
 assert.match(sectionHeuristicPacketMarkdown, /## Active Lane Receipts/u);
 assert.match(sectionHeuristicPacketMarkdown, /declared required lanes stayed measurable/u);
 assert.match(sectionHeuristicPacketMarkdown, /Supported \| chord -0\.10 \| active_lanes_preserved \| 1 \/ 1 \| bass, chord \| none/u);
 assert.match(sectionHeuristicPacketMarkdown, /Rejected \| chord -0\.30 \| missing_required_active_lanes \| 1 \/ 1 \| bass, chord \| Verse: chord/u);
 assert.doesNotMatch(sectionHeuristicPacketMarkdown, /automatically better/u);
+assert.doesNotMatch(sectionHeuristicPacketMarkdown, /sounds better/u);
 
 const mixingCanonPacket = {
   kind: "human_review_packet",
