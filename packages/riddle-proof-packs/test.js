@@ -261,8 +261,16 @@ assert.equal(guitarRouteAlignment.version, "riddle-proof.audio-mix-intent-route-
 assert.equal(guitarRouteAlignment.role, "claim_target_route_alignment");
 assert.equal(guitarRouteAlignment.status, "route_instrument_aligned_to_single_intent");
 assert.equal(guitarRouteAlignment.ok, true);
+assert.match(guitarRouteAlignment.inputRoute, /instrument=bass/u);
+assert.equal(guitarRouteAlignment.inputRouteRole, "default_target_route");
 assert.match(guitarRouteAlignment.requestedRoute, /instrument=bass/u);
 assert.match(guitarRouteAlignment.effectiveRoute, /instrument=guitar/u);
+assert.deepEqual(guitarRouteAlignment.routeAdjustment, {
+  adjusted: true,
+  fromInstrument: "bass",
+  toInstrument: "guitar",
+  reason: "default target route was aligned to the single selected intent instrument",
+});
 assert.equal(guitarRouteAlignment.inferredInstrument, "guitar");
 assert.equal(guitarRouteAlignment.routeExplicit, false);
 assert.equal(guitarRouteAlignment.instrumentParam, "instrument");
@@ -273,7 +281,11 @@ const explicitGuitarRouteAlignment = audioHeuristicsSubpath.resolveAudioMixInten
   routeExplicit: true,
 });
 assert.equal(explicitGuitarRouteAlignment.status, "explicit_route_preserved");
+assert.equal(explicitGuitarRouteAlignment.inputRouteRole, "explicit_target_route");
 assert.match(explicitGuitarRouteAlignment.effectiveRoute, /instrument=bass/u);
+assert.equal(explicitGuitarRouteAlignment.routeAdjustment.adjusted, false);
+assert.equal(explicitGuitarRouteAlignment.routeAdjustment.fromInstrument, "bass");
+assert.equal(explicitGuitarRouteAlignment.routeAdjustment.toInstrument, "guitar");
 assert.equal(explicitGuitarRouteAlignment.inferredInstrument, "guitar");
 const customRouteAlignment = resolveAudioMixIntentRouteAlignment(guitarOnlySelection, {
   route: "/proof?track=bass",
@@ -281,11 +293,17 @@ const customRouteAlignment = resolveAudioMixIntentRouteAlignment(guitarOnlySelec
 });
 assert.equal(customRouteAlignment.status, "route_instrument_aligned_to_single_intent");
 assert.equal(customRouteAlignment.effectiveRoute, "/proof?track=guitar");
+assert.equal(customRouteAlignment.routeAdjustment.fromInstrument, "bass");
+assert.equal(customRouteAlignment.routeAdjustment.toInstrument, "guitar");
 const multiIntentRouteAlignment = resolveAudioMixIntentRouteAlignment(allAudioMixIntentSelection, {
   route: "/neon-lab/games/drum-sequencer?song=monkberry&instrument=bass",
 });
 assert.equal(multiIntentRouteAlignment.status, "shared_route_default_preserved");
 assert.match(multiIntentRouteAlignment.effectiveRoute, /instrument=bass/u);
+assert.equal(multiIntentRouteAlignment.inputRouteRole, "default_target_route");
+assert.equal(multiIntentRouteAlignment.routeAdjustment.adjusted, false);
+assert.equal(multiIntentRouteAlignment.routeAdjustment.fromInstrument, "bass");
+assert.equal(multiIntentRouteAlignment.routeAdjustment.toInstrument, null);
 assert.equal(multiIntentRouteAlignment.inferredInstrument, null);
 assert.equal(multiIntentRouteAlignment.selectedIntentCount, 2);
 const unknownIntentSelection = selectAudioMixIntentSet(audioMixIntentSet, {
