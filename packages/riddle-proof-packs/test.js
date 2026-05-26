@@ -223,9 +223,16 @@ assert.match(allAudioMixIntentSelectionMarkdown, /^# Neon Intent Selection/u);
 assert.match(allAudioMixIntentSelectionMarkdown, /Role: `bounded_intent_selection`/u);
 assert.match(allAudioMixIntentSelectionMarkdown, /Requested intent ids: `none`/u);
 assert.match(allAudioMixIntentSelectionMarkdown, /Selected intent ids: `guitar-down-little, bass-down-little`/u);
-assert.match(allAudioMixIntentSelectionMarkdown, /\| guitar-down-little \| turn the guitar part down a little \| guitar \| guitar \| down \|/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /Pattern \| Requested Magnitude \| Magnitude Word/u);
+assert.match(allAudioMixIntentSelectionMarkdown, /\| guitar-down-little \| turn the guitar part down a little \| guitar \| guitar \| down \| not captured \| not captured \| not captured \|/u);
 assert.match(allAudioMixIntentSelectionMarkdown, /does not prove subjective mix quality/u);
 assert.doesNotMatch(allAudioMixIntentSelectionMarkdown, /automatically better/u);
+const levelIntentSelectionMarkdown = formatAudioMixIntentSelectionMarkdown(subtleDownIntentSet, {
+  title: "Generated Level Intent Selection",
+  intentIds: ["guitar-down-little"],
+});
+assert.match(levelIntentSelectionMarkdown, /^# Generated Level Intent Selection/u);
+assert.match(levelIntentSelectionMarkdown, /\| guitar-down-little \| turn the guitar part down a little \| guitar \| guitar \| down \| level_change \| subtle \| a little \|/u);
 const guitarOnlySelection = audioHeuristicsSubpath.selectAudioMixIntentSet(audioMixIntentSet, {
   intentIds: ["guitar-down-little"],
 });
