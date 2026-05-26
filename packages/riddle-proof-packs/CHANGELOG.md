@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-packs
 
+## 0.8.24
+
+### Patch Changes
+
+- f2db66b: Render state restoration receipts in human-review packet Markdown so transient proof edits show expected and observed app state without implying subjective mix quality.
+
 ## 0.8.23
 
 ### Patch Changes
