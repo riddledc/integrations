@@ -28,6 +28,7 @@ import {
   resolveAudioMixIntentRouteAlignment,
   selectAudioMixProofWindows,
   selectAudioMixIntentSet,
+  summarizeAudioMixReviewWarningScope,
   summarizeAudioExplorationCoverage,
   summarizeAudioMixIntentMatrix,
   summarizeAudioSectionEnergy,
@@ -87,6 +88,7 @@ assert.equal(typeof selectAudioMixIntentSet, "function");
 assert.equal(typeof selectAudioMixProofWindows, "function");
 assert.equal(typeof summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof summarizeAudioMixIntentMatrix, "function");
+assert.equal(typeof summarizeAudioMixReviewWarningScope, "function");
 assert.equal(typeof summarizeAudioSectionEnergy, "function");
 assert.equal(typeof createMixingCanonSurrogateReview, "function");
 assert.equal(typeof buildNeonApprovedCandidateProfileFromReviewPacket, "function");
@@ -129,6 +131,7 @@ assert.equal(typeof audioHeuristicsSubpath.resolveAudioMixIntentRouteAlignment, 
 assert.equal(typeof audioHeuristicsSubpath.selectAudioMixIntentSet, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioExplorationCoverage, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioMixIntentMatrix, "function");
+assert.equal(typeof audioHeuristicsSubpath.summarizeAudioMixReviewWarningScope, "function");
 assert.equal(typeof audioHeuristicsSubpath.summarizeAudioSectionEnergy, "function");
 assert.equal(typeof audioReviewSubpath.createMixingCanonSurrogateReview, "function");
 
@@ -600,6 +603,29 @@ assert.equal(oversizedLoudnessWarnings[0]?.expectedDeltaRange?.source, "requeste
 assert.equal(oversizedLoudnessWarnings[0]?.status, "loudness_shift_requires_review");
 assert.equal(oversizedLoudnessWarnings[0]?.reason, "loudness_delta_outside_expected_range");
 assert.match(oversizedLoudnessWarnings[0]?.boundary, /do not prove subjective mix quality/u);
+const warningScopeForRejectedProbe = summarizeAudioMixReviewWarningScope(oversizedLoudnessWarnings, {
+  recommendedCandidate: { label: "guitar -0.02" },
+});
+assert.equal(warningScopeForRejectedProbe.version, "riddle-proof.audio-mix-review-warning-scope.v1");
+assert.equal(warningScopeForRejectedProbe.role, "recommended_candidate_warning_scope");
+assert.equal(warningScopeForRejectedProbe.matrixReviewWarningCount, 1);
+assert.equal(warningScopeForRejectedProbe.recommendedCandidateReviewWarningCount, 0);
+assert.equal(warningScopeForRejectedProbe.nonRecommendedCandidateReviewWarningCount, 1);
+assert.equal(warningScopeForRejectedProbe.reviewWarningScope, "warnings_belong_to_rejected_or_non_recommended_candidates");
+assert.equal(warningScopeForRejectedProbe.recommendedCandidate, "guitar -0.02");
+assert.match(warningScopeForRejectedProbe.boundary, /does not prove subjective mix quality/u);
+const warningScopeForRecommendation = audioHeuristicsSubpath.summarizeAudioMixReviewWarningScope({
+  reviewWarnings: oversizedLoudnessWarnings,
+  recommendedDevelopmentCandidate: "guitar oversized subtle-down probe",
+});
+assert.equal(warningScopeForRecommendation.matrixReviewWarningCount, 1);
+assert.equal(warningScopeForRecommendation.recommendedCandidateReviewWarningCount, 1);
+assert.equal(warningScopeForRecommendation.nonRecommendedCandidateReviewWarningCount, 0);
+assert.equal(warningScopeForRecommendation.reviewWarningScope, "recommended_candidate_has_review_warnings");
+assert.equal(
+  summarizeAudioMixReviewWarningScope([], { candidateLabel: "guitar -0.02" }).reviewWarningScope,
+  "no_review_warnings",
+);
 assert.deepEqual(
   audioHeuristicsSubpath.collectAudioMixLoudnessReviewWarnings(smallLoudnessConsequence, {
     candidateLabel: "guitar -0.02",
