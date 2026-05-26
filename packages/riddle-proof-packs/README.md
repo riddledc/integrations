@@ -222,6 +222,12 @@ own the track list and target route, but the proof-pack helper owns the
 repeatable intent ids, claim wording, focus/target tracks, direction, and subtle
 magnitude metadata.
 
+Use `resolveAudioMixIntentRouteAlignment()` when a smoke lane selects one intent
+from a broader route template. The receipt keeps compatibility fields such as
+`requestedRoute`, but also records `inputRouteRole`, `inputRoute`, and a
+`routeAdjustment` object so reviewers can distinguish an explicit route from a
+default route that was aligned to the selected claim target.
+
 ### Human-review packet handoff
 
 Human-review packets are proof artifacts for subjective follow-up. They are deliberately not taste scores. A packet should say what objective receipts passed, what was preserved, which candidate is ready for listening review, and which caveats remain.

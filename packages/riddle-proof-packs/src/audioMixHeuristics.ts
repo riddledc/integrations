@@ -241,6 +241,11 @@ export type AudioMixIntentRouteAlignmentStatus =
   | "route_instrument_aligned_to_single_intent"
   | "route_instrument_already_aligned";
 
+export type AudioMixIntentRouteInputRole =
+  | "explicit_target_route"
+  | "default_target_route"
+  | "missing_target_route";
+
 export interface AudioMixIntentRouteAlignmentOptions extends AudioMixIntentSelectionOptions {
   route?: unknown;
   routeExplicit?: unknown;
@@ -252,8 +257,16 @@ export interface AudioMixIntentRouteAlignment {
   role: "claim_target_route_alignment";
   status: AudioMixIntentRouteAlignmentStatus;
   ok: boolean;
+  inputRoute: string | null;
+  inputRouteRole: AudioMixIntentRouteInputRole;
   requestedRoute: string | null;
   effectiveRoute: string | null;
+  routeAdjustment: {
+    adjusted: boolean;
+    fromInstrument: string | null;
+    toInstrument: string | null;
+    reason: string;
+  };
   inferredInstrument: string | null;
   routeExplicit: boolean;
   instrumentParam: string;
@@ -1084,6 +1097,16 @@ const routeWithIntentInstrument = (
   }
 };
 
+const instrumentFromRoute = (route: string | null, instrumentParam: string): string | null => {
+  if (!route) return null;
+  try {
+    const parsed = new URL(route, "https://riddle-proof.local");
+    return asStringOrNull(parsed.searchParams.get(instrumentParam));
+  } catch {
+    return null;
+  }
+};
+
 export function resolveAudioMixIntentRouteAlignment(
   selectionOrIntentSet: unknown,
   options: AudioMixIntentRouteAlignmentOptions = {},
@@ -1095,6 +1118,10 @@ export function resolveAudioMixIntentRouteAlignment(
   const routeExplicit = asBooleanOption(options.routeExplicit);
   const instrumentParam = asStringOrNull(options.instrumentParam) ?? "instrument";
   const inferredInstrument = singleAudioMixIntentInstrument(selection);
+  const inputRouteRole: AudioMixIntentRouteInputRole = routeExplicit
+    ? "explicit_target_route"
+    : (requestedRoute ? "default_target_route" : "missing_target_route");
+  const inputInstrument = instrumentFromRoute(requestedRoute, instrumentParam);
 
   if (routeExplicit) {
     return {
@@ -1102,8 +1129,16 @@ export function resolveAudioMixIntentRouteAlignment(
       role: "claim_target_route_alignment",
       status: "explicit_route_preserved",
       ok: true,
+      inputRoute: requestedRoute,
+      inputRouteRole,
       requestedRoute,
       effectiveRoute: requestedRoute,
+      routeAdjustment: {
+        adjusted: false,
+        fromInstrument: inputInstrument,
+        toInstrument: inferredInstrument,
+        reason: "explicit route was preserved even when a selected intent suggested a different target instrument",
+      },
       inferredInstrument,
       routeExplicit,
       instrumentParam,
@@ -1119,8 +1154,18 @@ export function resolveAudioMixIntentRouteAlignment(
       role: "claim_target_route_alignment",
       status: "shared_route_default_preserved",
       ok: true,
+      inputRoute: requestedRoute,
+      inputRouteRole,
       requestedRoute,
       effectiveRoute: requestedRoute,
+      routeAdjustment: {
+        adjusted: false,
+        fromInstrument: inputInstrument,
+        toInstrument: inferredInstrument,
+        reason: inferredInstrument
+          ? "no input route was available to align"
+          : "multiple or no selected intents require preserving the shared/default route",
+      },
       inferredInstrument: null,
       routeExplicit,
       instrumentParam,
@@ -1131,6 +1176,7 @@ export function resolveAudioMixIntentRouteAlignment(
   }
 
   const effectiveRoute = routeWithIntentInstrument(requestedRoute, inferredInstrument, instrumentParam);
+  const adjusted = effectiveRoute !== requestedRoute;
 
   return {
     version: "riddle-proof.audio-mix-intent-route-alignment.v1",
@@ -1139,8 +1185,18 @@ export function resolveAudioMixIntentRouteAlignment(
       ? "route_instrument_already_aligned"
       : "route_instrument_aligned_to_single_intent",
     ok: true,
+    inputRoute: requestedRoute,
+    inputRouteRole,
     requestedRoute,
     effectiveRoute,
+    routeAdjustment: {
+      adjusted,
+      fromInstrument: inputInstrument,
+      toInstrument: inferredInstrument,
+      reason: adjusted
+        ? "default target route was aligned to the single selected intent instrument"
+        : "input route already matched the single selected intent instrument",
+    },
     inferredInstrument,
     routeExplicit,
     instrumentParam,
