@@ -1303,17 +1303,20 @@ const customNeonUiMixerControlProfile = buildNeonUiMixerControlProfile({
   route: "/neon-lab/games/drum-sequencer?song=monkberry-moon-delight-tab&mix=profile&view=trainer&instrument=bass",
   track: "bass",
   targetLevel: 0.47,
+  minAbsLevelDelta: 0.05,
   bars: 2,
   monitorProfile: "phone",
 });
 assert.equal(customNeonUiMixerControlProfile.target.url, "http://127.0.0.1:5173");
 assert.equal(customNeonUiMixerControlProfile.checks?.[0]?.expected_path, "/neon-lab/games/drum-sequencer");
 const customUiControlApplyAction = customNeonUiMixerControlProfile.target.setup_actions?.find((action) => action.label === "apply-ui-mixer-level-control");
-assert.deepEqual(customUiControlApplyAction?.args?.[0], { track: "bass", targetLevel: 0.47 });
+assert.deepEqual(customUiControlApplyAction?.args?.[0], { track: "bass", targetLevel: 0.47, minAbsLevelDelta: 0.05 });
+assert.match(String(customUiControlApplyAction?.script), /contract_level_delta_below_minimum/u);
 const customUiControlRenderAction = customNeonUiMixerControlProfile.target.setup_actions?.find((action) => action.label === "render-post-ui-control-metrics");
 assert.equal(customUiControlRenderAction?.args?.[0]?.bars, 2);
 assert.equal(customUiControlRenderAction?.args?.[0]?.monitorProfile, "phone");
 assert.equal(customNeonUiMixerControlProfile.metadata?.purpose, "UI-only proof that the real Neon mixer level slider updates contract state and preserves deterministic render guardrails.");
+assert.equal(customNeonUiMixerControlProfile.metadata?.min_abs_level_delta, 0.05);
 
 const neonUiMixerControlProfileResult = {
   status: "passed",
@@ -1337,6 +1340,8 @@ const neonUiMixerControlProfileResult = {
                 afterInputLevel: 0.5,
                 afterReadoutLevel: 0.5,
                 levelDelta: -0.03,
+                absLevelDelta: 0.03,
+                minAbsLevelDelta: 0.02,
                 proofApiEditUsed: false,
                 findings: [],
               },
@@ -1397,6 +1402,8 @@ assert.equal(neonUiMixerControlSummary.track, "guitar");
 assert.equal(neonUiMixerControlSummary.beforeContractLevel, 0.53);
 assert.equal(neonUiMixerControlSummary.afterContractLevel, 0.5);
 assert.equal(neonUiMixerControlSummary.levelDelta, -0.03);
+assert.equal(neonUiMixerControlSummary.absLevelDelta, 0.03);
+assert.equal(neonUiMixerControlSummary.minAbsLevelDelta, 0.02);
 assert.equal(neonUiMixerControlSummary.proofApiEditUsed, false);
 assert.equal(neonUiMixerControlSummary.guardrails?.headroomDb, 7.24);
 assert.equal(neonUiMixerControlSummary.restore?.ok, true);
@@ -1404,6 +1411,8 @@ assert.match(neonUiMixerControlSummary.boundary, /does not prove subjective mix 
 const neonUiMixerControlMarkdown = formatNeonUiMixerControlSummaryMarkdown(neonUiMixerControlSummary);
 assert.match(neonUiMixerControlMarkdown, /^# Neon UI Mixer Control Proof/u);
 assert.match(neonUiMixerControlMarkdown, /contract_before: `0\.53`/u);
+assert.match(neonUiMixerControlMarkdown, /abs_level_delta: `0\.03`/u);
+assert.match(neonUiMixerControlMarkdown, /min_abs_level_delta: `0\.02`/u);
 assert.match(neonUiMixerControlMarkdown, /proof_api_edit_used: `false`/u);
 assert.match(neonUiMixerControlMarkdown, /headroom_db: `7\.24`/u);
 assert.match(neonUiMixerControlMarkdown, /does not prove subjective mix taste/u);
