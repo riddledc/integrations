@@ -2580,6 +2580,18 @@ def run_verify_interaction_authored_query_hash_mismatch_returns_author():
         assert capture_quality['mismatch']['observed_after_path'] == '/pricing/'
         assert 'page.waitForURL: Timeout 15000ms exceeded' in capture_quality['summary']
         assert any('capture plan should be revised' in reason for reason in capture_quality['reasons'])
+        supporting = after_verify['verify_results']['after']['supporting_artifacts']
+        assert supporting['proof_evidence_present'] is True
+        assert supporting['has_structured_payload'] is True
+        synthetic_evidence = after_verify['evidence_bundle']['proof_evidence']
+        assert synthetic_evidence['version'] == 'riddle-proof.interaction.capture-failure.v1'
+        assert synthetic_evidence['passed'] is False
+        assert synthetic_evidence['authored_proof_evidence_present'] is False
+        assert synthetic_evidence['checks']['routeMatches'] is False
+        assert synthetic_evidence['expected']['query'] == 'rp_probe=1'
+        assert synthetic_evidence['expected']['hash'] == '#pricing-probe'
+        assert synthetic_evidence['observed']['path'] == '/pricing'
+        assert 'page.waitForURL: Timeout 15000ms exceeded' in synthetic_evidence['capture_error']
         return {
             'ok': True,
             'summary': capture_quality['summary'],

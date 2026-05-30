@@ -558,6 +558,83 @@ def extract_proof_evidence(payload):
     return evidence
 
 
+def attach_interaction_capture_failure_evidence(state, payload, expected_path, after_observation):
+    if not isinstance(payload, dict):
+        return payload, None
+    mode = normalized_verification_mode(state.get('verification_mode'))
+    if mode not in INTERACTION_MODES:
+        return payload, None
+    if extract_proof_evidence(payload) is not None:
+        return payload, None
+
+    details = after_observation.get('details') if isinstance(after_observation, dict) else {}
+    if not isinstance(details, dict):
+        details = {}
+    expected = normalize_observed_path(expected_path)
+    observed_raw = str(details.get('observed_path_raw') or details.get('observed_path') or '').strip()
+    observed = normalize_observed_path(observed_raw)
+    route_matches = route_matches_expected(expected, observed_raw or observed) if expected and (observed_raw or observed) else None
+    error_messages = [
+        str(item).strip()
+        for item in (details.get('capture_error_messages') or [])
+        if str(item).strip()
+    ]
+    if route_matches is not False and not error_messages:
+        return payload, None
+
+    route_expectation = state.get('route_expectation') if isinstance(state.get('route_expectation'), dict) else {}
+    expected_parts = route_parts(expected)
+    observed_parts = route_parts(observed_raw or observed)
+    evidence = {
+        'version': 'riddle-proof.interaction.capture-failure.v1',
+        'synthetic': True,
+        'source': 'verify_capture_failure',
+        'mode': mode,
+        'passed': False,
+        'proofReady': False,
+        'authored_proof_evidence_present': False,
+        'evidence_summary': 'Interaction capture failed before the authored script emitted structured proof evidence.',
+        'expected': {
+            'path': expected,
+            'pathname': expected_parts.get('pathname') or '',
+            'query': expected_parts.get('query') or '',
+            'hash': expected_parts.get('hash') or '',
+        },
+        'observed': {
+            'path': observed,
+            'raw_path': observed_raw,
+            'pathname': observed_parts.get('pathname') or '',
+            'query': observed_parts.get('query') or '',
+            'hash': observed_parts.get('hash') or '',
+        },
+        'checks': {
+            'scriptCompleted': len(error_messages) == 0,
+            'routeMatches': bool(route_matches),
+            'authoredEvidenceReturned': False,
+        },
+        'route_expectation_source': route_expectation.get('source') or '',
+    }
+    if error_messages:
+        evidence['capture_error'] = error_messages[0][:1000]
+    if route_matches is False:
+        evidence['evidence_summary'] = (
+            'Interaction capture reached a different terminal route than expected before authored proof evidence was emitted.'
+        )
+
+    enriched = enrich_capture_payload(payload)
+    patched = dict(enriched)
+    result = dict(patched.get('result') or {})
+    result['proofEvidence'] = evidence
+    patched['result'] = result
+    console = list(patched.get('console') or [])
+    try:
+        console.append(PROOF_EVIDENCE_PREFIX + json.dumps(evidence, sort_keys=True))
+    except Exception:
+        pass
+    patched['console'] = console
+    return patched, evidence
+
+
 def proof_evidence_records(value):
     if isinstance(value, dict):
         return [value]
@@ -3113,6 +3190,15 @@ after_observation = evaluate_capture_quality(after_payload, expected_path, verif
 details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
 details['viewport_matrix'] = after_viewport_matrix
 after_observation['details'] = details
+after_payload, synthetic_interaction_failure_evidence = attach_interaction_capture_failure_evidence(s, after_payload, expected_path, after_observation)
+if synthetic_interaction_failure_evidence is not None:
+    s['synthetic_interaction_failure_evidence'] = synthetic_interaction_failure_evidence
+    if isinstance(results.get('after'), dict):
+        results['after']['raw'] = after_payload
+    after_observation = evaluate_capture_quality(after_payload, expected_path, verification_mode)
+    details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+    details['viewport_matrix'] = after_viewport_matrix
+    after_observation['details'] = details
 if after_viewport_matrix.get('status') == 'incomplete':
     missing_names = [
         str(item.get('name') or item.get('slug') or '').strip()

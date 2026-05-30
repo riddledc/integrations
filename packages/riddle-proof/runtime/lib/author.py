@@ -158,6 +158,7 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'Keep capture_script concise Playwright statements.',
             'For visual/UI proof, include saveScreenshot(\'after-proof\') exactly once.',
             'For interaction proof, preserve the interaction contract and name the expected terminal route/state separately from the initial route.',
+            'For interaction proof, return a JSON-serializable evidence object with start route/state, terminal route/state, action, assertions, and matched UI text; catch waitForURL or selector timeouts and record them as failed assertions instead of throwing before evidence is emitted.',
             'For playable/gameplay proof, start the experience, send keyboard or pointer input, sample state before/after, measure non-HUD playfield/canvas pixel deltas across time, and return a JSON-serializable evidence object with playability or playability_evidence version riddle-proof.playability.v1.',
             'For data/audio/log/metric/custom proof, screenshots are optional; collect measurements inside page.evaluate, assign the result to an evidence variable, and return that evidence object from capture_script.',
             'Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence in the worker context. Avoid global evidence assignment unless it is inside page.evaluate for compatibility with older packets.',
