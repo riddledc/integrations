@@ -35,6 +35,11 @@ assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_
 assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
 assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
 assert.equal(openclawPluginManifest.configSchema.properties.defaultWorkflowMode.default, "background_pr");
+assert.equal(
+  openclawPluginManifest.capabilities.filesystem.read.includes("/root/.openclaw/npm/node_modules/@riddledc/riddle-proof"),
+  true,
+);
+assert.equal(JSON.stringify(openclawPluginManifest).includes("/root/.openclaw/extensions/openclaw-riddle-proof"), false);
 assert.equal(typeof createRiddleApiClient, "function");
 assert.match(riddleProofChangeParameters.properties.capture_script.description, /Playwright JavaScript/);
 assert.doesNotMatch(riddleProofChangeParameters.properties.capture_script.description, /or instructions/);
