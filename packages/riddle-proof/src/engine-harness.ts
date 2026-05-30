@@ -1003,7 +1003,7 @@ function checkpointResponseContinuation(
     }
     state.proof_contract = proofContractFromAuthorCheckpointResponse(response, packet, payload);
     appendCheckpointResponse(state, response);
-    return { next: { ...base, author_packet_json: jsonParam(payload) } };
+    return { next: { ...base, advance_stage: "author", author_packet_json: jsonParam(payload) } };
   }
 
   if (packet.kind === "assess_recon" || packet.stage === "recon") {
@@ -1535,7 +1535,7 @@ async function routeCheckpoint(
       }) as Record<string, unknown>,
     });
     return {
-      next: { ...baseContinuation(result), author_packet_json: jsonParam(packet.payload as Record<string, unknown>) },
+      next: { ...baseContinuation(result), advance_stage: "author", author_packet_json: jsonParam(packet.payload as Record<string, unknown>) },
     };
   }
 

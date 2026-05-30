@@ -1363,7 +1363,7 @@ export async function executeWorkflow(
       }
       const noImplementationMode = !implementationRequired(params, state);
       const authorNextStage = stageAfterAuthor(state, params);
-      const explicitAuthorDebug = params.advance_stage === "author";
+      const explicitAuthorDebug = params.advance_stage === "author" && !params.continue_from_checkpoint;
       recordAttempt("author", "completed", "Author applied the supervising agent's proof packet to recon observations.", {
         autoApproved: authorRes.autoApproved || false,
         checkpoint: explicitAuthorDebug ? "author_review" : "author_auto_continue",
@@ -2022,6 +2022,29 @@ export async function executeWorkflow(
         },
       );
     }
+
+    state = readState(config.statePath);
+    const recommended = recommendedAdvanceStage(state);
+    const fallbackStage: WorkflowStage = recommended || (implementationRequired(params, state) ? "implement" : "verify");
+    return checkpoint(
+      fallbackStage,
+      "awaiting_stage_advance",
+      "The requested run continuation finished its immediate work but did not resolve to verify or ship. Choose the next workflow stage explicitly.",
+      {
+        nextActions: ["inspect_state", "set_advance_stage", "resume_run"],
+        advanceOptions: implementationRequired(params, state)
+          ? ["recon", "author", "implement", "verify", "ship"]
+          : ["recon", "author", "verify"],
+        recommendedAdvanceStage: fallbackStage,
+        continueWithStage: fallbackStage,
+        blocking: false,
+        details: {
+          executed,
+          requestedAdvanceStage: effectiveAdvanceStage,
+        },
+        executed,
+      },
+    );
   }
 
   if (action === "ship") {

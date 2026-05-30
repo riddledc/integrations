@@ -82,7 +82,7 @@ function responseSchemaForAuthorPacket() {
       payload: {
         type: "object",
         description:
-          "For decision=author_packet, provide the proof packet itself or {author_packet:{...}} with proof_plan and capture_script.",
+          "For decision=author_packet, provide the proof packet itself or {author_packet:{...}} with proof_plan, capture_script, and refined_inputs.expected_terminal_path when the proof changes route, query, or hash.",
       },
       reasons: { type: "array", items: { type: "string" } },
       continue_with_stage: { type: "string", enum: ["author", "recon"] },
@@ -457,9 +457,11 @@ export function buildAuthorCheckpointPacket(input: {
       repo: input.request.repo || fullState.repo,
       branch: input.request.branch || fullState.branch,
       verification_mode: input.request.verification_mode || fullState.verification_mode,
+      success_criteria: fullState.success_criteria,
       reference: input.request.reference || fullState.reference,
       server_path: fullState.server_path,
       wait_for_selector: fullState.wait_for_selector,
+      route_expectation: jsonCloneRecord(fullState.route_expectation),
       author_summary: fullState.author_summary,
       author_request: jsonCloneRecord(authorRequest),
       recon_baseline_understanding: jsonCloneRecord(fullState.recon_baseline_understanding),
