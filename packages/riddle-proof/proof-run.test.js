@@ -397,9 +397,14 @@ async function run() {
     'CommonJS default riddle-proof lookup should prefer the bundled package runtime',
   );
   for (const stage of core.WORKFLOW_STAGE_ORDER) {
+    const pipelinePath = path.join(__dirname, 'runtime', 'pipelines', `riddle-proof-${stage}.lobster`);
     assert(
-      existsSync(path.join(__dirname, 'runtime', 'pipelines', `riddle-proof-${stage}.lobster`)),
+      existsSync(pipelinePath),
       `package runtime should include the ${stage} lobster pipeline`,
+    );
+    assert(
+      !readFileSync(pipelinePath, 'utf-8').includes('/root/.openclaw/extensions/openclaw-riddle-proof'),
+      `package runtime ${stage} pipeline should not fall back to the legacy OpenClaw extension path`,
     );
   }
   assert(existsSync(path.join(__dirname, 'runtime', 'lib', 'setup.py')), 'package runtime should include Python stage helpers');

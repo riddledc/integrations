@@ -22,5 +22,6 @@ steps:
 
   - id: run_implement
     command: |
-      RP="${RIDDLE_PROOF_DIR:-/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof/runtime}"
+      : "${RIDDLE_PROOF_DIR:?RIDDLE_PROOF_DIR must point to the @riddledc/riddle-proof/runtime directory}"
+      RP="$RIDDLE_PROOF_DIR"
       python3 "${RP}/lib/implement.py"

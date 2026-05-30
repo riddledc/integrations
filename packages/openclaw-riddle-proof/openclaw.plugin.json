@@ -36,7 +36,7 @@
         "/tmp/riddle-proof-run-*.json",
         "/tmp/riddle-proof-codex-*",
         "/var/tmp/riddle-proof",
-        "/root/.openclaw/extensions/openclaw-riddle-proof/node_modules/@riddledc/riddle-proof"
+        "/root/.openclaw/npm/node_modules/@riddledc/riddle-proof"
       ]
     },
     "agentContext": {
