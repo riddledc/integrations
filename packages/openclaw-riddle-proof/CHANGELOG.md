@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.132
+
+### Patch Changes
+
+- 2d98460: Surface concrete verify retry diagnostics and route authored interaction terminal mismatches back to proof authoring.
+- Updated dependencies [2d98460]
+  - @riddledc/riddle-proof@0.8.5
+
 ## 0.4.131
 
 ### Patch Changes

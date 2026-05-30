@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.5
+
+### Patch Changes
+
+- 2d98460: Surface concrete verify retry diagnostics and route authored interaction terminal mismatches back to proof authoring.
+
 ## 0.8.4
 
 ### Patch Changes
