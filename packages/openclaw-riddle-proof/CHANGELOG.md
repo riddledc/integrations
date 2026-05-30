@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.134
+
+### Patch Changes
+
+- 04f01da: Preserve interaction start routes during verify-capture retry recovery and read terminal routes from nested proof evidence.
+- Updated dependencies [04f01da]
+  - @riddledc/riddle-proof@0.8.7
+
 ## 0.4.133
 
 ### Patch Changes
