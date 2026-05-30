@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.129
+
+### Patch Changes
+
+- 44bad26: Fix interaction proof verification to judge the terminal route/state separately from the initial capture route, default no-diff remote audits to current-target capture, and surface route/script capture failures with concrete diagnostics.
+- Updated dependencies [44bad26]
+  - @riddledc/riddle-proof@0.8.2
+
 ## 0.4.128
 
 ### Patch Changes
