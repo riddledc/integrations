@@ -290,6 +290,41 @@ class FakeRiddle:
                         'totalPixels': 972000,
                     },
                 }
+            if 'pricingQueryHashDropsTerminal' in script:
+                message = (
+                    'page.waitForURL: Timeout 15000ms exceeded.\n'
+                    '=========================== logs ===========================\n'
+                    'waiting for navigation until "load"\n'
+                    '  navigated to "https://riddledc.com/pricing/"'
+                )
+                page_state = {
+                    'bodyTextLength': 260,
+                    'visibleTextSample': 'Pricing One rate Browser Compute Example Costs',
+                    'interactiveElements': 8,
+                    'visibleInteractiveElements': 8,
+                    'pathname': '/pricing/',
+                    'search': '',
+                    'hash': '',
+                    'title': 'Pricing',
+                    'buttons': [],
+                    'headings': ['Pricing', 'Browser Compute'],
+                    'links': [{'text': 'Pricing', 'href': '/pricing/?rp_probe=1#pricing-probe'}],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'main', 'text': 'Pricing'}],
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/pricing-no-query-hash.png'}],
+                    'outputs': [{'name': 'after-pricing-query-hash.png', 'url': 'https://cdn.example.com/pricing-no-query-hash.png'}],
+                    'result': {'pageState': page_state},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'Uncaught exception: ' + message,
+                    ],
+                    '_artifact_json': {
+                        'proof.json': {'script_error': message},
+                    },
+                }
             if 'clickedProofNavigation' in script:
                 page_state = {
                     'bodyTextLength': 180,
@@ -2495,6 +2530,65 @@ def run_verify_interaction_hash_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_authored_query_hash_mismatch_returns_author():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-query-hash-mismatch-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'implementation_mode': 'none',
+            'require_diff': False,
+            'allow_code_changes': False,
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Start at /, click Pricing, and verify /pricing/?rp_probe=1#pricing-probe.',
+            'capture_script': "pricingQueryHashDropsTerminal(); await page.waitForURL('/pricing/?rp_probe=1#pricing-probe');",
+            'supervisor_author_packet': {
+                'proof_plan': 'Click Pricing and prove the terminal query/hash route.',
+                'capture_script': "pricingQueryHashDropsTerminal(); await page.waitForURL('/pricing/?rp_probe=1#pricing-probe');",
+                'refined_inputs': {
+                    'server_path': '/',
+                    'expected_terminal_path': '/pricing/?rp_probe=1#pricing-probe',
+                },
+            },
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_authored_query_hash_mismatch', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        request = after_verify['verify_decision_request']
+        capture_quality = request['capture_quality']
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify['route_expectation']['expected_query'] == 'rp_probe=1'
+        assert after_verify['route_expectation']['expected_hash'] == '#pricing-probe'
+        assert request['recommended_stage'] == 'author'
+        assert request['continue_with_stage'] == 'author'
+        assert capture_quality['recommended_stage'] == 'author'
+        assert capture_quality['mismatch']['expected_path'] == '/pricing?rp_probe=1#pricing-probe'
+        assert capture_quality['mismatch']['observed_after_path'] == '/pricing/'
+        assert 'page.waitForURL: Timeout 15000ms exceeded' in capture_quality['summary']
+        assert any('capture plan should be revised' in reason for reason in capture_quality['reasons'])
+        return {
+            'ok': True,
+            'summary': capture_quality['summary'],
+            'recommended_stage': request['recommended_stage'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_capture_retry_surfaces_script_timeout():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-capture-timeout-'))
     state_path = tempdir / 'state.json'
@@ -2914,6 +3008,7 @@ if __name__ == '__main__':
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
         'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
+        'verify_interaction_authored_query_hash_mismatch_returns_author': run_verify_interaction_authored_query_hash_mismatch_returns_author(),
         'verify_capture_retry_surfaces_script_timeout': run_verify_capture_retry_surfaces_script_timeout(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),

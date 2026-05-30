@@ -1647,7 +1647,7 @@ export async function executeWorkflow(
           state = readState(config.statePath);
         }
         const checkpointName = "verify_capture_retry";
-        const summary = "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
+        const summary = stringValue(proofAssessment.summary) || "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
         recordAttempt("verify", "checkpoint", summary, {
           autoApproved: verifyRes.autoApproved || false,
           checkpoint: checkpointName,
