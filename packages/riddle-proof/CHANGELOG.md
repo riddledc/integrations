@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.3
+
+### Patch Changes
+
+- 421dd26: Remove legacy OpenClaw extension-path assumptions from Riddle Proof runtime metadata so npm-managed installs resolve the packaged runtime cleanly.
+
 ## 0.8.2
 
 ### Patch Changes
