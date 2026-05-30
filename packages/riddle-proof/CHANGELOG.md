@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.2
+
+### Patch Changes
+
+- 44bad26: Fix interaction proof verification to judge the terminal route/state separately from the initial capture route, default no-diff remote audits to current-target capture, and surface route/script capture failures with concrete diagnostics.
+
 ## 0.8.1
 
 ### Minor Changes
