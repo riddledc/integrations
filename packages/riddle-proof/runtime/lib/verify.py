@@ -2442,7 +2442,7 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     }
 
 
-def build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker=''):
+def build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker='', route_expectation=None):
     reasons = []
     if not required_baseline_present:
         reasons.append('Recon baseline is missing, so verify should return to recon instead of guessing a new reference context.')
@@ -2455,6 +2455,7 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
         }
 
     details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+    route_expectation = route_expectation if isinstance(route_expectation, dict) else {}
     route_mismatch = None
     reason_text = str(after_observation.get('reason') or '')
     if 'wrong route' in reason_text:
@@ -2466,6 +2467,11 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
                 'expected_path': expected,
                 'observed_after_path': observed,
             }
+    error_messages = [
+        str(item).strip()
+        for item in (details.get('capture_error_messages') or [])
+        if str(item).strip()
+    ]
 
     if proof_evidence_blocker:
         reasons.append(proof_evidence_blocker)
@@ -2493,6 +2499,9 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
                 (route_mismatch.get('observed_after_path') or '(unknown)') +
                 '.'
             )
+        if error_messages:
+            reasons.append('Capture script error: ' + error_messages[0][:500])
+            summary += ' Capture script error: ' + error_messages[0][:300]
         return {
             'decision': decision,
             'summary': summary,
@@ -2504,12 +2513,14 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
 
     reason = after_observation.get('reason') or 'after capture is not usable yet'
     reasons.append('The after evidence is not usable yet: ' + reason)
-    recommended_stage = 'recon' if 'wrong route' in reason else 'author'
-    error_messages = [
-        str(item).strip()
-        for item in (details.get('capture_error_messages') or [])
-        if str(item).strip()
-    ]
+    route_expectation_source = str(route_expectation.get('source') or '')
+    authored_terminal_route = bool(
+        route_mismatch
+        and route_expectation.get('mode') in INTERACTION_MODES
+        and route_expectation.get('terminal_path')
+        and route_expectation_source != 'recon_start_path'
+    )
+    recommended_stage = 'recon' if 'wrong route' in reason and not authored_terminal_route else 'author'
     mismatch = None
     if recommended_stage == 'recon':
         expected = details.get('expected_path') or ''
@@ -2526,7 +2537,17 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
             summary = 'Verify capture route mismatch needs recon to refresh the reference path.'
         reasons.append('The capture appears to be on the wrong route or baseline context, so recon should refresh the reference path.')
     else:
-        if error_messages:
+        if route_mismatch:
+            expected = route_mismatch.get('expected_path') or ''
+            observed = route_mismatch.get('observed_after_path') or ''
+            mismatch = route_mismatch
+            reasons.append('Route mismatch: expected after capture path ' + (expected or '(unknown)') + ', observed ' + (observed or '(unknown)') + '.')
+            reasons.append('The terminal route came from the authored interaction proof packet, so the capture plan should be revised instead of refreshing recon.')
+            summary = 'Verify capture route mismatch after authored interaction: expected ' + (expected or '(unknown)') + ', got ' + (observed or '(unknown)') + '.'
+            if error_messages:
+                reasons.append('Capture script error: ' + error_messages[0][:500])
+                summary += ' Capture script error: ' + error_messages[0][:300]
+        elif error_messages:
             reasons.append('Capture script error: ' + error_messages[0][:500])
             summary = 'Verify capture script failed: ' + error_messages[0][:300]
         else:
@@ -3298,7 +3319,7 @@ if has_good_evidence:
     summary_lines.append('Proof assessment: awaiting supervising agent judgment')
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
-    capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker)
+    capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker, s.get('route_expectation') or {})
     next_stage_options = ['author', 'verify', 'recon'] if no_implementation_mode else ['author', 'verify', 'implement', 'recon']
     s['verify_status'] = 'capture_incomplete'
     s['merge_recommendation'] = 'do-not-merge'

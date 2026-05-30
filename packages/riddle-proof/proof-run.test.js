@@ -1406,6 +1406,7 @@ async function run() {
   const verifyRetry = await engineMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, advance_stage: 'verify' }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
   assert(verifyRetry.checkpoint === 'verify_capture_retry', 'verify should keep bad captures inside the verify sub-loop');
   assert(verifyRetry.decisionRequest.continue_with_stage === 'author', 'capture retry should expose author as the resumable checkpoint target');
+  assert(verifyRetry.summary === verifyRetry.decisionRequest.summary, 'capture retry checkpoint summary should surface the verifier diagnostic');
 
   const authorRetry = await engineMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, continue_from_checkpoint: true }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
   assert(authorRetry.checkpoint === 'author_supervisor_judgment', 'capture retry should flow back into supervising-agent proof authoring');
