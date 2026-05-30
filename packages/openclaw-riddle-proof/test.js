@@ -392,6 +392,46 @@ assert.equal(jsonlCodexResult.ok, true);
 assert.equal(jsonlCodexResult.json?.proof_plan, "Check the generated page against the requested visual target.");
 assert.equal(jsonlCodexResult.json?.summary, "Authored visual proof packet.");
 
+const stdoutFallbackFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-stdout-codex-"));
+const stdoutFallbackCodexCommand = path.join(stdoutFallbackFixture, "fake-codex.mjs");
+writeFileSync(stdoutFallbackCodexCommand, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+
+const outputIndex = process.argv.indexOf("--output-last-message");
+if (outputIndex < 0 || !process.argv[outputIndex + 1]) {
+  process.exit(2);
+}
+
+writeFileSync(process.argv[outputIndex + 1], JSON.stringify({ type: "turn.started" }));
+console.log(JSON.stringify({
+  proof_plan: "Check the page after the fallback runner parses stdout.",
+  capture_script: "await saveScreenshot('after-proof');",
+  summary: "Authored proof packet from stdout."
+}));
+`);
+chmodSync(stdoutFallbackCodexCommand, 0o755);
+const stdoutFallbackCodexRunner = createCodexExecJsonRunner({
+  codexCommand: stdoutFallbackCodexCommand,
+  codexFullAuto: false,
+});
+const stdoutFallbackCodexResult = await stdoutFallbackCodexRunner({
+  purpose: "proof packet authoring",
+  workdir: adapterWorkdir,
+  prompt: "Return a proof packet.",
+  schema: {
+    type: "object",
+    required: ["proof_plan", "capture_script", "summary"],
+    properties: {
+      proof_plan: { type: "string" },
+      capture_script: { type: "string" },
+      summary: { type: "string" },
+    },
+  },
+});
+assert.equal(stdoutFallbackCodexResult.ok, true);
+assert.equal(stdoutFallbackCodexResult.json?.summary, "Authored proof packet from stdout.");
+assert.equal(stdoutFallbackCodexResult.metrics?.parsed_json_source, "stdout");
+
 const engineFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-engine-"));
 const engineWorkdir = path.join(engineFixture, "after");
 mkdirSync(engineWorkdir, { recursive: true });

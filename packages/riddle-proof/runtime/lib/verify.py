@@ -1995,16 +1995,22 @@ def route_parts(value):
 
 EXPLICIT_TERMINAL_PATH_KEYS = (
     'expected_terminal_path', 'expectedTerminalPath',
+    'expected_terminal_url', 'expectedTerminalUrl',
     'expected_terminal_route', 'expectedTerminalRoute',
     'terminal_path', 'terminalPath',
+    'terminal_url', 'terminalUrl',
     'terminal_route', 'terminalRoute',
     'expected_after_path', 'expectedAfterPath',
+    'expected_after_url', 'expectedAfterUrl',
     'expected_after_route', 'expectedAfterRoute',
     'after_path', 'afterPath',
+    'after_url', 'afterUrl',
     'after_route', 'afterRoute',
     'expected_final_path', 'expectedFinalPath',
+    'expected_final_url', 'expectedFinalUrl',
     'expected_final_route', 'expectedFinalRoute',
     'final_path', 'finalPath',
+    'final_url', 'finalUrl',
     'final_route', 'finalRoute',
 )
 LOCATION_PATH_KEYS = ('path', 'pathname', 'route', 'url', 'href')
@@ -2015,6 +2021,11 @@ AFTER_STATE_KEYS = (
     'expected_terminal', 'expectedTerminal',
     'final', 'final_state', 'finalState',
     'expected_final', 'expectedFinal',
+)
+EVIDENCE_CONTAINER_KEYS = (
+    'proofEvidence', 'proof_evidence',
+    'interactionEvidence', 'interaction_evidence',
+    'evidence',
 )
 CONTRACT_STATE_KEYS = (
     'interaction_contract', 'interactionContract',
@@ -2067,6 +2078,17 @@ def terminal_path_from_record(record, depth=0):
                 candidate = terminal_path_from_record(item, depth + 1)
                 if candidate:
                     return candidate
+    for key in EVIDENCE_CONTAINER_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = terminal_path_from_record(value, depth + 1)
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
     for key in CONTRACT_STATE_KEYS:
         value = record.get(key)
         if isinstance(value, dict):
@@ -2081,11 +2103,25 @@ def terminal_path_from_record(record, depth=0):
     return ''
 
 
+def text_path_candidate(value):
+    if not isinstance(value, str):
+        return ''
+    raw = value.strip().rstrip('.,;:)]}')
+    return path_candidate(raw)
+
+
 def terminal_path_from_text(value):
     if not isinstance(value, str):
         return ''
     for match in re.findall(r"""['"`](/[^'"`\s]+[?#][^'"`\s]*)['"`]""", value):
-        candidate = path_candidate(match)
+        candidate = text_path_candidate(match)
+        if candidate:
+            return candidate
+    context_pattern = re.compile(
+        r"""(?is)\b(?:expected\s+(?:terminal|after|final)|terminal|after|final)\b[^/\r\n]{0,120}['"`]?(/[^'"`\s,;)]*)"""
+    )
+    for match in context_pattern.findall(value):
+        candidate = text_path_candidate(match)
         if candidate:
             return candidate
     return ''
