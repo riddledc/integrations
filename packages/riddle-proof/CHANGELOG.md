@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.6
+
+### Patch Changes
+
+- 09355b1: Preserve structured failed interaction evidence when an authored capture script times out before returning proof evidence.
+
 ## 0.8.5
 
 ### Patch Changes
