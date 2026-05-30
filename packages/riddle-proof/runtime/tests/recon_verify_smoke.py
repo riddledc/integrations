@@ -2591,7 +2591,7 @@ def run_verify_interaction_hash_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
-def run_verify_interaction_authored_query_hash_mismatch_returns_author():
+def run_verify_interaction_authored_query_hash_mismatch_blocks_with_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-query-hash-mismatch-'))
     state_path = tempdir / 'state.json'
     try:
@@ -2630,17 +2630,24 @@ def run_verify_interaction_authored_query_hash_mismatch_returns_author():
         after_verify = json.loads(state_path.read_text())
 
         request = after_verify['verify_decision_request']
-        capture_quality = request['capture_quality']
-        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['merge_recommendation'] == 'do-not-merge'
         assert after_verify['route_expectation']['expected_query'] == 'rp_probe=1'
         assert after_verify['route_expectation']['expected_hash'] == '#pricing-probe'
-        assert request['recommended_stage'] == 'author'
-        assert request['continue_with_stage'] == 'author'
-        assert capture_quality['recommended_stage'] == 'author'
-        assert capture_quality['mismatch']['expected_path'] == '/pricing?rp_probe=1#pricing-probe'
-        assert capture_quality['mismatch']['observed_after_path'] == '/pricing/'
-        assert 'page.waitForURL: Timeout 15000ms exceeded' in capture_quality['summary']
-        assert any('capture plan should be revised' in reason for reason in capture_quality['reasons'])
+        assert 'capture_quality' not in request
+        assert request['recommended_stage'] is None
+        assert request['continue_with_stage'] is None
+        assert 'failed assertions' in request['summary']
+        assert 'checks.routeMatches' in request['structured_interaction_failure_summary']
+        assert 'page.waitForURL: Timeout 15000ms exceeded' in request['structured_interaction_failure_summary']
+        assessment_request = after_verify['proof_assessment_request']
+        assert 'structured-interaction-failure' in assessment_request['evidence_basis']
+        assert any('checks.routeMatches' in blocker for blocker in assessment_request['hard_blockers'])
+        assert assessment_request['semantic_context']['route']['expected_terminal_query'] == 'rp_probe=1'
+        assert assessment_request['semantic_context']['route']['expected_terminal_hash'] == '#pricing-probe'
+        assert assessment_request['semantic_context']['route']['after_observed_path'] == '/pricing'
+        assert assessment_request['semantic_context']['route']['after_observed_query'] == ''
+        assert assessment_request['semantic_context']['route']['after_observed_hash'] == ''
         supporting = after_verify['verify_results']['after']['supporting_artifacts']
         assert supporting['proof_evidence_present'] is True
         assert supporting['has_structured_payload'] is True
@@ -2655,7 +2662,7 @@ def run_verify_interaction_authored_query_hash_mismatch_returns_author():
         assert 'page.waitForURL: Timeout 15000ms exceeded' in synthetic_evidence['capture_error']
         return {
             'ok': True,
-            'summary': capture_quality['summary'],
+            'summary': request['summary'],
             'recommended_stage': request['recommended_stage'],
         }
     finally:
@@ -3082,7 +3089,7 @@ if __name__ == '__main__':
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
         'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
-        'verify_interaction_authored_query_hash_mismatch_returns_author': run_verify_interaction_authored_query_hash_mismatch_returns_author(),
+        'verify_interaction_authored_query_hash_mismatch_blocks_with_evidence': run_verify_interaction_authored_query_hash_mismatch_blocks_with_evidence(),
         'verify_capture_retry_surfaces_script_timeout': run_verify_capture_retry_surfaces_script_timeout(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),
