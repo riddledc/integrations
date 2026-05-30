@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.8
+
+### Patch Changes
+
+- 41f7cdd: Route failed structured interaction evidence into proof judgment instead of verify-capture retry loops.
+
 ## 0.8.7
 
 ### Patch Changes
