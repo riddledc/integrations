@@ -1845,16 +1845,17 @@ def normalize_observed_path(value):
     raw = str(value or '').strip()
     if not raw:
         return ''
-    parsed = urlparse(raw.split('#', 1)[0])
+    parsed = urlparse(raw)
     path = parsed.path or ''
     query = parsed.query or ''
+    fragment = parsed.fragment or ''
     if not path.startswith('/'):
         path = '/' + path.lstrip('/')
     parts = path.split('/')
     if len(parts) >= 4 and parts[1] == 's':
         path = '/' + '/'.join(parts[3:])
     path = path.rstrip('/') or '/'
-    return path + (('?' + query) if query else '')
+    return path + (('?' + query) if query else '') + (('#' + fragment) if fragment else '')
 
 
 def observed_location_from_page_state(page_state):
@@ -1862,10 +1863,13 @@ def observed_location_from_page_state(page_state):
         return ''
     pathname = str(page_state.get('pathname') or '').strip()
     search = str(page_state.get('search') or '').strip()
+    hash_value = str(page_state.get('hash') or page_state.get('fragment') or '').strip()
     if search and not search.startswith('?'):
         search = '?' + search
+    if hash_value and not hash_value.startswith('#'):
+        hash_value = '#' + hash_value
     if pathname:
-        return pathname + search
+        return pathname + search + hash_value
     return str(page_state.get('href') or '').strip()
 
 
@@ -1889,7 +1893,27 @@ def route_matches_expected(expected_path, observed_path):
         if pair not in remaining:
             return False
         remaining.remove(pair)
+    if expected_parsed.fragment and observed_parsed.fragment != expected_parsed.fragment:
+        return False
     return True
+
+
+def route_parts(value):
+    normalized = normalize_observed_path(value)
+    if not normalized:
+        return {
+            'href': '',
+            'pathname': '',
+            'query': '',
+            'hash': '',
+        }
+    parsed = urlparse(normalized)
+    return {
+        'href': normalized,
+        'pathname': parsed.path.rstrip('/') or '/',
+        'query': parsed.query or '',
+        'hash': ('#' + parsed.fragment) if parsed.fragment else '',
+    }
 
 
 EXPLICIT_TERMINAL_PATH_KEYS = (
@@ -1980,6 +2004,16 @@ def terminal_path_from_record(record, depth=0):
     return ''
 
 
+def terminal_path_from_text(value):
+    if not isinstance(value, str):
+        return ''
+    for match in re.findall(r"""['"`](/[^'"`\s]+[?#][^'"`\s]*)['"`]""", value):
+        candidate = path_candidate(match)
+        if candidate:
+            return candidate
+    return ''
+
+
 def interaction_assertions_pass(value):
     for record in proof_evidence_records(value):
         if any(record.get(key) is False for key in (
@@ -2039,29 +2073,58 @@ def interaction_terminal_path_from_state(state):
         candidate = terminal_path_from_record(state.get(key))
         if candidate:
             return candidate, key
+    for key in (
+        'expected_terminal_path',
+        'expected_after_path',
+        'capture_script',
+        'proof_plan',
+        'success_criteria',
+        'change_request',
+    ):
+        candidate = path_candidate(state.get(key)) or terminal_path_from_text(state.get(key))
+        if candidate:
+            return candidate, key
     return '', ''
 
 
 def expected_path_for_verify(state, start_path, proof_evidence):
     mode = normalized_verification_mode(state.get('verification_mode'))
     normalized_start = normalize_observed_path(start_path) or '/'
+    start_parts = route_parts(normalized_start)
     if mode not in INTERACTION_MODES:
         return normalized_start, {
             'mode': mode,
             'source': 'recon_start_path',
             'start_path': normalized_start,
             'expected_path': normalized_start,
+            'start_pathname': start_parts['pathname'],
+            'start_query': start_parts['query'],
+            'start_hash': start_parts['hash'],
+            'expected_pathname': start_parts['pathname'],
+            'expected_query': start_parts['query'],
+            'expected_hash': start_parts['hash'],
         }
     candidate, source = interaction_terminal_path_from_state(state)
     if not candidate:
         candidate, source = interaction_terminal_path_from_evidence(proof_evidence)
     expected = candidate or normalized_start
+    expected_parts = route_parts(expected)
     return expected, {
         'mode': mode,
         'source': source or 'recon_start_path',
         'start_path': normalized_start,
         'expected_path': expected,
         'terminal_path': expected if expected != normalized_start else '',
+        'start_pathname': start_parts['pathname'],
+        'start_query': start_parts['query'],
+        'start_hash': start_parts['hash'],
+        'expected_href': expected_parts['href'],
+        'expected_pathname': expected_parts['pathname'],
+        'expected_query': expected_parts['query'],
+        'expected_hash': expected_parts['hash'],
+        'terminal_pathname': expected_parts['pathname'] if expected != normalized_start else '',
+        'terminal_query': expected_parts['query'] if expected != normalized_start else '',
+        'terminal_hash': expected_parts['hash'] if expected != normalized_start else '',
     }
 
 
@@ -2391,6 +2454,19 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
             'reasons': reasons,
         }
 
+    details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+    route_mismatch = None
+    reason_text = str(after_observation.get('reason') or '')
+    if 'wrong route' in reason_text:
+        expected = details.get('expected_path') or ''
+        observed = details.get('observed_path_raw') or details.get('observed_path') or ''
+        if expected or observed:
+            route_mismatch = {
+                'field': 'route',
+                'expected_path': expected,
+                'observed_after_path': observed,
+            }
+
     if proof_evidence_blocker:
         reasons.append(proof_evidence_blocker)
         decision = 'missing_proof_evidence'
@@ -2399,19 +2475,36 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
             reasons.append('The capture reached usable page context, but the proof evidence explicitly failed its own required audio gate.')
         else:
             reasons.append('The capture reached usable page context, but the proof script did not emit the structured evidence required for this verification mode.')
+        if route_mismatch:
+            reasons.append(
+                'Route mismatch also present: expected after capture path ' +
+                (route_mismatch.get('expected_path') or '(unknown)') +
+                ', observed ' +
+                (route_mismatch.get('observed_after_path') or '(unknown)') +
+                '.'
+            )
         reasons.append('Return to author so the capture script can expose passing proof evidence before verify asks for a supervising-agent judgment.')
+        summary = proof_evidence_blocker
+        if route_mismatch:
+            summary += (
+                ' Route mismatch: expected ' +
+                (route_mismatch.get('expected_path') or '(unknown)') +
+                ', got ' +
+                (route_mismatch.get('observed_after_path') or '(unknown)') +
+                '.'
+            )
         return {
             'decision': decision,
-            'summary': proof_evidence_blocker,
+            'summary': summary,
             'recommended_stage': 'author',
             'continue_with_stage': 'author',
             'reasons': reasons,
+            'mismatch': route_mismatch,
         }
 
     reason = after_observation.get('reason') or 'after capture is not usable yet'
     reasons.append('The after evidence is not usable yet: ' + reason)
     recommended_stage = 'recon' if 'wrong route' in reason else 'author'
-    details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
     error_messages = [
         str(item).strip()
         for item in (details.get('capture_error_messages') or [])
@@ -2528,6 +2621,9 @@ def build_semantic_context(state, results, after_observation, expected_path):
     after_semantic = semantic_observation('after', after_observation)
     expected_start_path = state.get('expected_start_path') or expected_path
     route_expectation = state.get('route_expectation') if isinstance(state.get('route_expectation'), dict) else {}
+    expected_parts = route_parts(expected_path)
+    start_parts = route_parts(expected_start_path)
+    after_parts = route_parts(after_semantic.get('observed_path_raw') or after_semantic.get('observed_path') or '')
     return {
         'expected_path': expected_path,
         'expected_start_path': expected_start_path,
@@ -2540,10 +2636,20 @@ def build_semantic_context(state, results, after_observation, expected_path):
             'expected_after_path': expected_path,
             'expected_start_path': expected_start_path,
             'expected_terminal_path': route_expectation.get('terminal_path') or '',
+            'expected_pathname': expected_parts['pathname'],
+            'expected_query': expected_parts['query'],
+            'expected_hash': expected_parts['hash'],
+            'expected_start_pathname': start_parts['pathname'],
+            'expected_start_query': start_parts['query'],
+            'expected_start_hash': start_parts['hash'],
+            'expected_terminal_query': route_expectation.get('terminal_query') or route_expectation.get('expected_query') or '',
+            'expected_terminal_hash': route_expectation.get('terminal_hash') or route_expectation.get('expected_hash') or '',
             'expectation_source': route_expectation.get('source') or '',
             'before_observed_path': before_semantic.get('observed_path') or before.get('path') or '',
             'prod_observed_path': prod_semantic.get('observed_path') or prod.get('path') or '',
             'after_observed_path': after_semantic.get('observed_path') or '',
+            'after_observed_query': after_parts['query'],
+            'after_observed_hash': after_parts['hash'],
         },
         'before': before_semantic,
         'prod': prod_semantic,
@@ -3051,6 +3157,15 @@ if expected_start_path and expected_start_path != expected_path:
     summary_lines.append('Expected terminal proof path: ' + expected_path)
 else:
     summary_lines.append('Expected proof path from recon: ' + expected_path)
+route_expected_query = (s.get('route_expectation') or {}).get('expected_query') or ''
+route_expected_hash = (s.get('route_expectation') or {}).get('expected_hash') or ''
+if route_expected_query or route_expected_hash:
+    summary_lines.append(
+        'Expected terminal query/hash: ' +
+        ('?' + route_expected_query if route_expected_query else '(none)') +
+        ' ' +
+        (route_expected_hash if route_expected_hash else '(none)')
+    )
 summary_lines.append('After observation: ' + after_observation['reason'])
 supporting = results['after'].get('supporting_artifacts') or {}
 if supporting.get('has_structured_payload'):
@@ -3064,6 +3179,14 @@ if supporting.get('has_structured_payload'):
     summary_lines.append('Structured after evidence: ' + ('; '.join(basis) if basis else 'present'))
 observed_path = (after_observation.get('details') or {}).get('observed_path') or expected_path
 summary_lines.append('Observed after path: ' + observed_path)
+observed_parts = route_parts((after_observation.get('details') or {}).get('observed_path_raw') or observed_path)
+if observed_parts.get('query') or observed_parts.get('hash') or route_expected_query or route_expected_hash:
+    summary_lines.append(
+        'Observed after query/hash: ' +
+        ('?' + observed_parts.get('query') if observed_parts.get('query') else '(none)') +
+        ' ' +
+        (observed_parts.get('hash') if observed_parts.get('hash') else '(none)')
+    )
 details = after_observation.get('details') or {}
 if details.get('headings'):
     summary_lines.append('Visible headings: ' + '; '.join(str(item) for item in details.get('headings', [])[:6]))

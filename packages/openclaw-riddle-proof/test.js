@@ -1934,6 +1934,29 @@ assert.ok(checkpointProtocolWake.checkpoint_packet);
 const checkpointProtocolWakeText = formatOpenClawRiddleProofWakeEvent(checkpointProtocolWake, checkpointProtocolWrapperStatePath);
 assert.match(checkpointProtocolWakeText, /checkpoint_packet:/);
 assert.match(checkpointProtocolWakeText, /checkpoint_response_json/);
+const proofReviewWakeText = formatOpenClawRiddleProofWakeEvent({
+  should_dispatch: true,
+  kind: "proof_review_required",
+  dedupe_key: "proof-review-test",
+  status: "awaiting_checkpoint",
+  checkpoint: "verify_supervisor_judgment",
+  suggested_next_action: "inspect_or_review",
+  summary: "Proof review is required.",
+  next_tools: [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME],
+  checkpoint_packet: {
+    version: "riddle-proof.checkpoint.v1",
+    run_id: "rp_test",
+    checkpoint: "verify_supervisor_judgment",
+    kind: "proof_assessment",
+    stage: "verify",
+    summary: "Judge the proof packet.",
+    question: "Ready to ship?",
+    allowed_decisions: ["ready_to_ship", "needs_richer_proof", "revise_capture"],
+    response_schema: {},
+  },
+}, checkpointProtocolWrapperStatePath);
+assert.match(proofReviewWakeText, /decision=ready_to_ship/);
+assert.doesNotMatch(proofReviewWakeText, /decision=continue_checkpoint/);
 const checkpointProtocolResponse = {
   version: "riddle-proof.checkpoint_response.v1",
   run_id: checkpointProtocolResult.run_id,

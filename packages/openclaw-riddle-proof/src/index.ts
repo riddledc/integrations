@@ -568,6 +568,45 @@ function wakeAlreadyDispatched(state: RiddleProofRunState | null | undefined, de
   }));
 }
 
+function wakeRequestDedupeKey(state: RiddleProofRunState, result: RiddleProofRunResult) {
+  const blocker = result.blocker || state.blocker || null;
+  const packet = result.checkpoint_packet || state.checkpoint_packet || null;
+  return [
+    "riddle_proof_wake_request_v1",
+    state.state_path || result.state_path || "",
+    state.run_id || result.run_id || "",
+    result.status || state.status || "",
+    result.last_checkpoint || state.last_checkpoint || "",
+    blocker?.code || "",
+    packet?.checkpoint || "",
+    packet?.resume_token || "",
+  ].join("|");
+}
+
+function wakeRequestAlreadyRecorded(state: RiddleProofRunState | null | undefined, dedupeKey: string) {
+  return Boolean(state?.events?.some((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    if (record.kind !== "run.wake.requested") return false;
+    const details = recordValue(record.details);
+    return stringValue(details?.dedupe_key) === dedupeKey;
+  }));
+}
+
+function matchingWakeRequestAlreadyRecorded(
+  state: RiddleProofRunState | null | undefined,
+  classification: Extract<OpenClawRiddleProofWakeClassification, { should_dispatch: true }>,
+) {
+  return Boolean(state?.events?.some((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    if (record.kind !== "run.wake.requested") return false;
+    const details = recordValue(record.details);
+    if (stringValue(details?.dedupe_key) && stringValue(details?.dedupe_key) === classification.dedupe_key) return true;
+    const statusMatches = stringValue(details?.status) === stringValue(classification.status);
+    const checkpointMatches = stringValue(record.checkpoint) === stringValue(classification.checkpoint);
+    return statusMatches && checkpointMatches;
+  }));
+}
+
 function wakeDispatchFailureCount(state: RiddleProofRunState | null | undefined, dedupeKey: string) {
   return (state?.events || []).filter((event) => {
     const record = event as unknown as Record<string, unknown>;
@@ -578,6 +617,8 @@ function wakeDispatchFailureCount(state: RiddleProofRunState | null | undefined,
 }
 
 function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunResult) {
+  const dedupeKey = wakeRequestDedupeKey(state, result);
+  if (wakeRequestAlreadyRecorded(state, dedupeKey)) return;
   const engineStatePath = stringValue(state.request.engine_state_path);
   const engineState = engineStatePath ? readJsonRecord(engineStatePath) : null;
   const snapshot = createRunStatusSnapshot(state);
@@ -594,6 +635,7 @@ function appendWakeRequest(state: RiddleProofRunState, result: RiddleProofRunRes
       `Riddle Proof background run reached status=${result.status}.`,
     details: {
       status: result.status,
+      dedupe_key: dedupeKey,
       state_path: state.state_path || result.state_path || null,
       run_id: state.run_id || result.run_id || null,
       blocker: result.blocker,
@@ -3358,6 +3400,10 @@ export function formatOpenClawRiddleProofWakeEvent(
   const packet = recordValue(classification.checkpoint_packet);
   if (packet) {
     const responseSchema = recordValue(packet.response_schema);
+    const proofReviewPacket =
+      classification.kind === "proof_review_required" ||
+      stringValue(packet.kind) === "proof_assessment" ||
+      stringValue(packet.stage) === "verify";
     lines.push(
       `checkpoint_packet: ${compactValue({
         version: packet.version,
@@ -3370,8 +3416,16 @@ export function formatOpenClawRiddleProofWakeEvent(
         allowed_decisions: packet.allowed_decisions,
         response_schema: responseSchema,
       }, 4000)}`,
-      `checkpoint_response_instruction: Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with decision=continue_checkpoint and checkpoint_response_json set to a valid riddle-proof.checkpoint_response.v1 object matching the packet.`,
     );
+    if (proofReviewPacket) {
+      lines.push(
+        `checkpoint_response_instruction: Inspect the packet, then call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with decision=ready_to_ship, needs_richer_proof, revise_capture, needs_recon, or needs_implementation as appropriate.`,
+      );
+    } else {
+      lines.push(
+        `checkpoint_response_instruction: Call ${RIDDLE_PROOF_REVIEW_TOOL_NAME} with decision=continue_checkpoint and checkpoint_response_json set to a valid riddle-proof.checkpoint_response.v1 object matching the packet.`,
+      );
+    }
   }
   return lines.join("\n");
 }
@@ -3573,6 +3627,11 @@ function recoverOpenClawRiddleProofWakeMonitors(
     if (!status) continue;
     const classification = classifyOpenClawRiddleProofWake(status as RiddleProofRunStatusSnapshot & Record<string, unknown>);
     if (classification.should_dispatch && wakeAlreadyDispatched(state, classification.dedupe_key)) continue;
+    if (
+      classification.should_dispatch &&
+      isProtectedFinalWrapperState(state) &&
+      matchingWakeRequestAlreadyRecorded(state, classification)
+    ) continue;
     startOpenClawRiddleProofWakeMonitor(statePath, runtime);
   }
 }

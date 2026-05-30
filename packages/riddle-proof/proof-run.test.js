@@ -999,6 +999,7 @@ async function run() {
   });
   assert(resumedCheckpoint.status === 'ready_to_ship', 'checkpoint response should resume through verify_ship_ready');
   assert(checkpointEngineCalls.some((call) => call.author_packet_json), 'engine should receive author_packet_json after checkpoint response');
+  assert(checkpointEngineCalls.some((call) => call.author_packet_json && call.advance_stage === 'author'), 'author checkpoint responses should resume through the author stage even when the stale checkpoint continuation points elsewhere');
   const resumedCheckpointState = readJson(checkpointHarnessStatePath);
   assert(!resumedCheckpointState.checkpoint_packet, 'checkpoint packet should clear after accepted response');
   assert(resumedCheckpointState.checkpoint_summary.pending === false, 'checkpoint summary should clear pending after accepted response');
@@ -1408,6 +1409,30 @@ async function run() {
 
   const authorRetry = await engineMod.executeWorkflow({ action: 'run', state_path: verifyRetryStatePath, continue_from_checkpoint: true }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
   assert(authorRetry.checkpoint === 'author_supervisor_judgment', 'capture retry should flow back into supervising-agent proof authoring');
+
+  const staleCaptureRetryState = readJson(verifyRetryStatePath);
+  staleCaptureRetryState.stage_decision_request.continue_with_stage = 'recon';
+  staleCaptureRetryState.stage_decision_request.recommended_advance_stage = 'recon';
+  writeJson(verifyRetryStatePath, staleCaptureRetryState);
+  const authoredAfterCaptureRetry = await engineMod.executeWorkflow({
+    action: 'run',
+    state_path: verifyRetryStatePath,
+    continue_from_checkpoint: true,
+    advance_stage: 'author',
+    author_packet_json: JSON.stringify({
+      proof_plan: 'Use a repaired capture packet after verify_capture_retry.',
+      capture_script: "await saveScreenshot('after-proof');",
+      baseline_understanding_used: baselineUnderstanding(),
+      refined_inputs: { server_path: '/good', wait_for_selector: '.cta', expected_terminal_path: '/pricing/?rp_probe=1#pricing-probe' },
+      rationale: ['The retry packet explicitly supplies the terminal route.'],
+      confidence: 'high',
+      summary: 'Capture retry packet',
+    }),
+  }, { riddleProofDir: fakeSkillDir, statePath: verifyRetryStatePath, defaultReviewer: 'octocat' }, verifyRetryConfig);
+  assert(authoredAfterCaptureRetry.checkpoint === 'verify_capture_retry', 'author packet recovery should rerun verify instead of following stale recon continuation');
+  assert(authoredAfterCaptureRetry.executed.some((step) => step.step === 'author'), 'author packet recovery should execute the author stage');
+  assert(authoredAfterCaptureRetry.executed.some((step) => step.step === 'verify'), 'author packet recovery should execute verify after author');
+  assert(readJson(verifyRetryStatePath).expected_terminal_path === '/pricing/?rp_probe=1#pricing-probe', 'author packet recovery should preserve query/hash terminal route');
 
   const ambiguousAssessmentStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-ambiguous-')), 'state.json');
   writeJson(ambiguousAssessmentStatePath, {

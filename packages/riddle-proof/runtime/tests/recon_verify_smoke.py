@@ -249,6 +249,47 @@ class FakeRiddle:
                         'largeVisibleElements': [{'tag': 'button', 'text': 'Buy Now'}],
                     }),
                 }
+            if 'clickedSkipHashNavigation' in script:
+                page_state = {
+                    'bodyTextLength': 180,
+                    'visibleTextSample': 'Riddle Proof homepage main content',
+                    'interactiveElements': 4,
+                    'visibleInteractiveElements': 4,
+                    'pathname': '/',
+                    'search': '',
+                    'hash': '#main-content',
+                    'title': 'Riddle',
+                    'buttons': ['Start Free'],
+                    'headings': ['Riddle Proof'],
+                    'links': [{'text': 'Skip to main content', 'href': '#main-content'}],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'main', 'text': 'Riddle Proof'}],
+                }
+                proof_evidence = {
+                    'before': {'href': 'https://riddledc.com/'},
+                    'action': 'clicked Skip to main content',
+                    'after': {'href': 'https://riddledc.com/#main-content'},
+                    'assertions': {
+                        'startedOnHome': True,
+                        'hashPreserved': True,
+                        'mainContentFocused': True,
+                    },
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/hash-after.png'}],
+                    'outputs': [{'name': 'after-hash.png', 'url': 'https://cdn.example.com/hash-after.png'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                    'visual_diff': {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    },
+                }
             if 'clickedProofNavigation' in script:
                 page_state = {
                     'bodyTextLength': 180,
@@ -1376,6 +1417,34 @@ def run_project_build_retries_after_clean_failure():
         shutil.rmtree(tempdir)
 
 
+def run_invoke_retry_stops_on_playwright_locator_timeout():
+    util = load_module('util_retry_timeout', UTIL_PATH)
+    calls = []
+    original_invoke = util.invoke
+    original_sleep = util.time.sleep
+
+    def fake_invoke(tool, args, timeout=180):
+        calls.append({'tool': tool, 'args': args, 'timeout': timeout})
+        return {
+            'ok': False,
+            'error': 'locator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded',
+        }
+
+    try:
+        util.invoke = fake_invoke
+        util.time.sleep = lambda _seconds: None
+        result = util.invoke_retry('riddle_script', {'script': 'await page.locator("a").click();'}, retries=3, timeout=60)
+        assert result['ok'] is False
+        assert len(calls) == 1, calls
+        calls.clear()
+        generic = util.invoke_retry('riddle_preview', {'directory': '/tmp/nope'}, retries=3, timeout=60)
+        assert generic['ok'] is False
+        assert len(calls) == 3, calls
+    finally:
+        util.invoke = original_invoke
+        util.time.sleep = original_sleep
+
+
 def run_implement_records_detection_when_changes_missing():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-implement-missing-'))
     state_path = tempdir / 'state.json'
@@ -2381,6 +2450,51 @@ def run_verify_interaction_reverse_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_hash_terminal_route_from_proof_evidence():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-hash-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Start at /, click the skip link, and verify the terminal /#main-content route.',
+            'capture_script': "clickedSkipHashNavigation(); await saveScreenshot('after-hash');",
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_hash_terminal_route', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['route_expectation']['expected_path'] == '/#main-content'
+        assert after_verify['route_expectation']['expected_hash'] == '#main-content'
+        route = after_verify['proof_assessment_request']['semantic_context']['route']
+        assert route['expected_after_path'] == '/#main-content'
+        assert route['expected_terminal_hash'] == '#main-content'
+        assert route['after_observed_path'] == '/#main-content'
+        assert route['after_observed_hash'] == '#main-content'
+        assert 'wrong route' not in after_verify['verify_results']['after']['observation']['reason']
+        return {
+            'ok': True,
+            'expected_path': after_verify['route_expectation']['expected_path'],
+            'after_observed_hash': route['after_observed_hash'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_capture_retry_surfaces_script_timeout():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-capture-timeout-'))
     state_path = tempdir / 'state.json'
@@ -2778,6 +2892,7 @@ if __name__ == '__main__':
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
         'apply_auth_context': run_apply_auth_context_passes_supported_auth_payloads(),
         'run_project_build_retries_after_clean_failure': run_project_build_retries_after_clean_failure(),
+        'invoke_retry_stops_on_playwright_locator_timeout': run_invoke_retry_stops_on_playwright_locator_timeout(),
         'implement_records_detection_when_changes_missing': run_implement_records_detection_when_changes_missing(),
         'implement_ignores_tool_noise_when_detecting_changes': run_implement_ignores_tool_noise_when_detecting_changes(),
         'verify_quality_ignores_proof_telemetry_console_text': run_verify_quality_ignores_proof_telemetry_console_text(),
@@ -2798,6 +2913,7 @@ if __name__ == '__main__':
         'remote_audit_verify_uses_default_capture_script': run_remote_audit_verify_uses_default_capture_script(),
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
+        'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
         'verify_capture_retry_surfaces_script_timeout': run_verify_capture_retry_surfaces_script_timeout(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),

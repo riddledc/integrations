@@ -710,6 +710,60 @@ def invoke(tool, args, timeout=180):
         return {'ok': False, 'error': r.stdout[:300], 'stderr': r.stderr[:300]}
 
 
+def compact_error_text(value, depth=0):
+    if depth > 4 or value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    if isinstance(value, list):
+        return '\n'.join(compact_error_text(item, depth + 1) for item in value[:12])
+    if isinstance(value, dict):
+        parts = []
+        priority_keys = (
+            'error', 'message', 'script_error', 'stderr', 'stdout', 'raw',
+            'details', 'result', 'capture', 'proof', '_proof_json',
+        )
+        for key in priority_keys:
+            if key in value:
+                text = compact_error_text(value.get(key), depth + 1)
+                if text:
+                    parts.append(text)
+        if not parts:
+            for item in list(value.values())[:12]:
+                text = compact_error_text(item, depth + 1)
+                if text:
+                    parts.append(text)
+        return '\n'.join(parts)
+    return ''
+
+
+def non_retryable_riddle_script_error(result):
+    text = compact_error_text(result).lower()
+    if not text:
+        return False
+    playwright_timeout = (
+        'timeout' in text
+        and (
+            'locator.' in text
+            or 'page.waitforurl' in text
+            or 'page.waitforselector' in text
+            or 'waiting for selector' in text
+            or 'waiting for navigation' in text
+            or 'getbyrole' in text
+            or 'getbytext' in text
+            or 'scrollintoviewifneeded' in text
+        )
+    )
+    deterministic_playwright_error = (
+        'strict mode violation' in text
+        or 'selector_not_found' in text
+        or 'index_out_of_range' in text
+    )
+    return playwright_timeout or deterministic_playwright_error
+
+
 def invoke_retry(tool, args, retries=3, timeout=180):
     """Call an OpenClaw tool with automatic retries on failure."""
     last_result = None
@@ -720,6 +774,9 @@ def invoke_retry(tool, args, retries=3, timeout=180):
         if result.get('ok') or result.get('outputs') or result.get('screenshots'):
             return result
         print(f'invoke_retry({tool}) attempt {attempt}/{retries} failed: {str(result.get("error", "no output"))[:200]}')
+        if tool == 'riddle_script' and non_retryable_riddle_script_error(result):
+            print('invoke_retry(riddle_script) stopping early for deterministic Playwright script error')
+            return result
         if attempt < retries:
             import time
             time.sleep(5)
