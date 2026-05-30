@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.133
+
+### Patch Changes
+
+- 09355b1: Preserve structured failed interaction evidence when an authored capture script times out before returning proof evidence.
+- Updated dependencies [09355b1]
+  - @riddledc/riddle-proof@0.8.6
+
 ## 0.4.132
 
 ### Patch Changes
