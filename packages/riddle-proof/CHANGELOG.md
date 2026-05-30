@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.7
+
+### Patch Changes
+
+- 04f01da: Preserve interaction start routes during verify-capture retry recovery and read terminal routes from nested proof evidence.
+
 ## 0.8.6
 
 ### Patch Changes
