@@ -926,6 +926,9 @@ export function proofContractFromAuthorCheckpointResponse(
     capture_script: nonEmptyString(payload.capture_script),
     artifact_contract: jsonCloneRecord(payload.artifact_contract),
     assertions: jsonCloneValue(payload.assertions),
+    interaction_contract:
+      jsonCloneRecord(payload.interaction_contract) ||
+      jsonCloneRecord(payload.interactionContract),
     baseline_understanding:
       jsonCloneRecord(payload.baseline_understanding) ||
       jsonCloneRecord(payload.recon_baseline_understanding) ||
@@ -941,6 +944,11 @@ export function proofContractFromAuthorCheckpointResponse(
         nonEmptyString(packet.state_excerpt?.wait_for_selector),
       reference: nonEmptyString(refinedInputs.reference) || nonEmptyString(payload.reference),
       expected_path: nonEmptyString(payload.expected_path) || nonEmptyString(refinedInputs.expected_path),
+      expected_terminal_path:
+        nonEmptyString(refinedInputs.expected_terminal_path) ||
+        nonEmptyString(payload.expected_terminal_path) ||
+        nonEmptyString(refinedInputs.expected_after_path) ||
+        nonEmptyString(payload.expected_after_path),
     }),
     stop_condition: nonEmptyString(payload.stop_condition),
     rationale: jsonCloneValue(payload.rationale),

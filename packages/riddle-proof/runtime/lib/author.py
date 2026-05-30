@@ -53,6 +53,10 @@ def sanitize_rationale(value):
     return out[:6]
 
 
+def optional_record(value):
+    return value if isinstance(value, dict) else {}
+
+
 def recon_baseline_understanding(state):
     assessment = state.get('recon_assessment') or {}
     understanding = assessment.get('baseline_understanding') or state.get('recon_baseline_understanding') or {}
@@ -145,12 +149,15 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'capture_script': fallback_capture_script,
             'proof_plan': fallback_proof_plan,
         },
+        'interaction_contract': optional_record(state.get('interaction_contract')),
+        'proof_contract': optional_record(state.get('proof_contract')),
         'instructions': [
             'The supervising agent owns proof authoring. Use the recon-confirmed route and baselines instead of inventing a new context.',
             'Treat baseline_understanding as the required before-state review. The proof plan must name the observed before state, requested delta, and stop condition.',
             'Return the authored packet via author_packet_json when possible. You may also set proof_plan, capture_script, server_path, and wait_for_selector directly.',
             'Keep capture_script concise Playwright statements.',
             'For visual/UI proof, include saveScreenshot(\'after-proof\') exactly once.',
+            'For interaction proof, preserve the interaction contract and name the expected terminal route/state separately from the initial route.',
             'For playable/gameplay proof, start the experience, send keyboard or pointer input, sample state before/after, measure non-HUD playfield/canvas pixel deltas across time, and return a JSON-serializable evidence object with playability or playability_evidence version riddle-proof.playability.v1.',
             'For data/audio/log/metric/custom proof, screenshots are optional; collect measurements inside page.evaluate, assign the result to an evidence variable, and return that evidence object from capture_script.',
             'Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence in the worker context. Avoid global evidence assignment unless it is inside page.evaluate for compatibility with older packets.',
@@ -176,6 +183,13 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
                 'server_path': 'string',
                 'wait_for_selector': 'string',
                 'reference': 'string',
+                'expected_terminal_path': 'string',
+            },
+            'interaction_contract': {
+                'start_path': 'string',
+                'expected_terminal_path': 'string',
+                'expected_terminal_state': 'object',
+                'actions': ['string'],
             },
             'rationale': ['string'],
             'confidence': 'high | medium | low',
@@ -215,6 +229,8 @@ provided_payload = {
     'capture_script': first_non_empty(supervisor_packet.get('capture_script'), s.get('capture_script')),
     'baseline_understanding_used': supervisor_packet.get('baseline_understanding_used') or recon_baseline_understanding(s),
     'refined_inputs': supervisor_packet.get('refined_inputs') or {},
+    'interaction_contract': optional_record(supervisor_packet.get('interaction_contract') or supervisor_packet.get('interactionContract') or s.get('interaction_contract')),
+    'proof_contract': optional_record(supervisor_packet.get('proof_contract') or supervisor_packet.get('proofContract') or s.get('proof_contract')),
     'rationale': supervisor_packet.get('rationale', s.get('supervisor_author_rationale', [])),
     'confidence': first_non_empty(supervisor_packet.get('confidence'), s.get('supervisor_author_confidence'), 'medium').lower(),
     'summary': first_non_empty(supervisor_packet.get('summary'), s.get('supervisor_author_summary')),
@@ -260,6 +276,13 @@ refined = provided_payload['refined_inputs'] if isinstance(provided_payload['ref
 refined_path = normalize_path(first_non_empty(refined.get('server_path'), s.get('server_path'), default_path)) or '/'
 refined_selector = first_non_empty(refined.get('wait_for_selector'), s.get('wait_for_selector'), default_selector)
 refined_reference = first_non_empty(refined.get('reference'), reference) or reference
+expected_terminal_path = normalize_path(first_non_empty(
+    refined.get('expected_terminal_path'),
+    refined.get('expected_after_path'),
+    supervisor_packet.get('expected_terminal_path'),
+    supervisor_packet.get('expected_after_path'),
+    s.get('expected_terminal_path'),
+))
 confidence = provided_payload['confidence'] if provided_payload['confidence'] in ('high', 'medium', 'low') else 'medium'
 rationale = sanitize_rationale(provided_payload['rationale'])
 summary = provided_payload['summary'] or 'Supervising agent supplied the proof packet from recon observations.'
@@ -272,7 +295,10 @@ authored_packet = {
         'server_path': refined_path,
         'wait_for_selector': refined_selector,
         'reference': refined_reference,
+        'expected_terminal_path': expected_terminal_path,
     },
+    'interaction_contract': provided_payload['interaction_contract'],
+    'proof_contract': provided_payload['proof_contract'],
     'rationale': rationale,
     'confidence': confidence,
     'mode': 'supervising_agent',
@@ -281,6 +307,12 @@ authored_packet = {
 }
 
 s['server_path'] = refined_path
+if expected_terminal_path:
+    s['expected_terminal_path'] = expected_terminal_path
+if authored_packet['interaction_contract']:
+    s['interaction_contract'] = authored_packet['interaction_contract']
+if authored_packet['proof_contract']:
+    s['proof_contract'] = authored_packet['proof_contract']
 if refined_selector:
     s['wait_for_selector'] = refined_selector
 elif s.get('wait_for_selector'):

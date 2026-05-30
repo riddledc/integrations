@@ -396,7 +396,12 @@ async function run() {
     cjsCore.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
     'CommonJS default riddle-proof lookup should prefer the bundled package runtime',
   );
-  assert(existsSync(path.join(__dirname, 'runtime', 'pipelines', 'riddle-proof-setup.lobster')), 'package runtime should include lobster pipelines');
+  for (const stage of core.WORKFLOW_STAGE_ORDER) {
+    assert(
+      existsSync(path.join(__dirname, 'runtime', 'pipelines', `riddle-proof-${stage}.lobster`)),
+      `package runtime should include the ${stage} lobster pipeline`,
+    );
+  }
   assert(existsSync(path.join(__dirname, 'runtime', 'lib', 'setup.py')), 'package runtime should include Python stage helpers');
   assert(existsSync(path.join(__dirname, 'lib', 'workspace-core.mjs')), 'package should include shared workspace helper');
   const originalRiddleProofDir = process.env.RIDDLE_PROOF_DIR;
@@ -415,6 +420,28 @@ async function run() {
   const isolatedConfig = core.resolveConfig({ riddleProofDir: fakeSkillDir }, { action: 'run' });
   assert(isolatedConfig.statePath.startsWith('/tmp/riddle-proof-state-'), 'new run should get an isolated state file');
   assert(isolatedConfig.argsPath.startsWith('/tmp/riddle-proof-args-'), 'new run should get a matching isolated args file');
+
+  const missingWorkflowRoot = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-missing-workflow-'));
+  mkdirSync(path.join(missingWorkflowRoot, 'pipelines'), { recursive: true });
+  const missingWorkflowStatePath = path.join(missingWorkflowRoot, 'state.json');
+  writeJson(missingWorkflowStatePath, {
+    ...makeLoopState(),
+    implementation_status: 'changes_detected',
+  });
+  const missingWorkflowConfig = core.resolveConfig(
+    { riddleProofDir: missingWorkflowRoot, statePath: missingWorkflowStatePath, defaultReviewer: 'octocat' },
+    { action: 'verify', state_path: missingWorkflowStatePath },
+  );
+  const missingWorkflowResult = await engineMod.executeWorkflow(
+    { action: 'verify', state_path: missingWorkflowStatePath },
+    { riddleProofDir: missingWorkflowRoot, statePath: missingWorkflowStatePath, defaultReviewer: 'octocat' },
+    missingWorkflowConfig,
+  );
+  assert(missingWorkflowResult.ok === false, 'missing workflow file should fail explicitly before lobster execution');
+  assert(
+    String(missingWorkflowResult.error || '').includes('Riddle Proof workflow file missing for verify'),
+    'missing workflow failure should name the missing verify pipeline',
+  );
 
   const visualSessionInput = {
     run_id: 'rp_test_visual',
@@ -509,7 +536,8 @@ async function run() {
     author_packet_json: JSON.stringify({
       proof_plan: 'Use the recon-confirmed route and capture the fixed state.',
       capture_script: "const evidence = { ok: true };\nglobalThis.__riddleProofEvidence = evidence;\nawait saveScreenshot('after-proof');",
-      refined_inputs: { server_path: '/pricing', wait_for_selector: '.cta' },
+      refined_inputs: { server_path: '/pricing', wait_for_selector: '.cta', expected_terminal_path: '/proof/' },
+      interaction_contract: { start_path: '/pricing', expected_terminal_path: '/proof/' },
       rationale: ['Recon already confirmed the route.'],
       confidence: 'high',
       summary: 'Supervisor packet',
@@ -549,6 +577,8 @@ async function run() {
   assert(patched.leave_draft === 'true', 'state merge should preserve explicit draft hold intent');
   assert(patched.capture_script.includes('typeof globalThis !== "undefined"'), 'unsafe proof-evidence global assignment should be guarded before verify');
   assert(patched.supervisor_author_packet.capture_script.includes('typeof globalThis !== "undefined"'), 'stored supervisor packet should keep the guarded capture script');
+  assert(patched.expected_terminal_path === '/proof/', 'author packet should preserve expected interaction terminal path');
+  assert(patched.interaction_contract.expected_terminal_path === '/proof/', 'author packet should preserve interaction contract');
 
   core.ensureStageLoopState(patched);
   patched.verify_status = 'evidence_captured';

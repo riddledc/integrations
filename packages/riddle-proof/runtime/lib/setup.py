@@ -563,6 +563,9 @@ if remote_audit_mode():
     s['author_status'] = 'ready'
     s['proof_plan_status'] = 'ready'
     s['proof_plan'] = (s.get('proof_plan') or 'Audit the current prod_url target and capture current evidence without requiring a repo diff.').strip()
+    if not (s.get('capture_script') or '').strip():
+        s['capture_script'] = 'await page.waitForTimeout(1500);'
+        s['capture_script_source'] = 'default_remote_audit_current_target'
     s['dependency_install'] = {
         'shared': 'skipped:remote_audit',
         'before': 'skipped:remote_audit',

@@ -55,6 +55,7 @@ VISUAL_FIRST_MODES = {
     'visual', 'render', 'interaction', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
 }
+INTERACTION_MODES = {'interaction', 'interactive', 'user_flow', 'user-flow', 'workflow'}
 PLAYABILITY_MODES = {'playable', 'gameplay', 'game'}
 PROOF_EVIDENCE_REQUIRED_MODES = {'audio'}
 MIN_VISUAL_DELTA_PERCENT = 0.5
@@ -1891,6 +1892,179 @@ def route_matches_expected(expected_path, observed_path):
     return True
 
 
+EXPLICIT_TERMINAL_PATH_KEYS = (
+    'expected_terminal_path', 'expectedTerminalPath',
+    'expected_terminal_route', 'expectedTerminalRoute',
+    'terminal_path', 'terminalPath',
+    'terminal_route', 'terminalRoute',
+    'expected_after_path', 'expectedAfterPath',
+    'expected_after_route', 'expectedAfterRoute',
+    'after_path', 'afterPath',
+    'after_route', 'afterRoute',
+    'expected_final_path', 'expectedFinalPath',
+    'expected_final_route', 'expectedFinalRoute',
+    'final_path', 'finalPath',
+    'final_route', 'finalRoute',
+)
+LOCATION_PATH_KEYS = ('path', 'pathname', 'route', 'url', 'href')
+AFTER_STATE_KEYS = (
+    'after', 'after_state', 'afterState',
+    'expected_after', 'expectedAfter',
+    'terminal', 'terminal_state', 'terminalState',
+    'expected_terminal', 'expectedTerminal',
+    'final', 'final_state', 'finalState',
+    'expected_final', 'expectedFinal',
+)
+CONTRACT_STATE_KEYS = (
+    'interaction_contract', 'interactionContract',
+    'proof_contract', 'proofContract',
+    'contract',
+    'route_assumptions', 'routeAssumptions',
+    'refined_inputs', 'refinedInputs',
+    'assertions', 'checks',
+)
+
+
+def path_candidate(value):
+    if not isinstance(value, str):
+        return ''
+    raw = value.strip()
+    if not raw:
+        return ''
+    if raw.startswith(('http://', 'https://', '/', '?')):
+        return normalize_observed_path(raw)
+    return ''
+
+
+def record_path_candidate(record, allow_location_keys=False):
+    if not isinstance(record, dict):
+        return ''
+    keys = list(EXPLICIT_TERMINAL_PATH_KEYS)
+    if allow_location_keys:
+        keys.extend(LOCATION_PATH_KEYS)
+    for key in keys:
+        candidate = path_candidate(record.get(key))
+        if candidate:
+            return candidate
+    return ''
+
+
+def terminal_path_from_record(record, depth=0):
+    if not isinstance(record, dict) or depth > 4:
+        return ''
+    candidate = record_path_candidate(record)
+    if candidate:
+        return candidate
+    for key in AFTER_STATE_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = record_path_candidate(value, allow_location_keys=True) or terminal_path_from_record(value, depth + 1)
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    for key in CONTRACT_STATE_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = terminal_path_from_record(value, depth + 1)
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    return ''
+
+
+def interaction_assertions_pass(value):
+    for record in proof_evidence_records(value):
+        if any(record.get(key) is False for key in (
+            'passed', 'ok', 'proofReady', 'proof_ready', 'routeMatches', 'route_matches',
+        )):
+            return False
+        if any(record.get(key) is True for key in (
+            'passed', 'ok', 'proofReady', 'proof_ready', 'interactionPassed', 'interaction_passed',
+        )):
+            return True
+        for key in ('assertions', 'checks', 'predicates', 'expectations'):
+            checks = record.get(key)
+            if isinstance(checks, dict):
+                bools = [value for value in checks.values() if isinstance(value, bool)]
+                if bools:
+                    return all(bools)
+            elif isinstance(checks, list):
+                bools = []
+                for item in checks:
+                    if isinstance(item, bool):
+                        bools.append(item)
+                    elif isinstance(item, dict):
+                        for flag_key in ('passed', 'ok', 'valid'):
+                            if isinstance(item.get(flag_key), bool):
+                                bools.append(item.get(flag_key))
+                                break
+                if bools:
+                    return all(bools)
+    return False
+
+
+def interaction_terminal_path_from_evidence(proof_evidence):
+    for record in proof_evidence_records(proof_evidence):
+        candidate = terminal_path_from_record(record)
+        if candidate:
+            return candidate, 'proof_evidence_contract'
+    if interaction_assertions_pass(proof_evidence):
+        for record in proof_evidence_records(proof_evidence):
+            for key in AFTER_STATE_KEYS:
+                value = record.get(key)
+                if isinstance(value, dict):
+                    candidate = record_path_candidate(value, allow_location_keys=True)
+                    if candidate:
+                        return candidate, 'proof_evidence_after_state'
+    return '', ''
+
+
+def interaction_terminal_path_from_state(state):
+    for key in (
+        'interaction_contract',
+        'proof_contract',
+        'supervisor_author_packet',
+        'author_packet',
+        'author_request',
+        'proof_plan_request',
+    ):
+        candidate = terminal_path_from_record(state.get(key))
+        if candidate:
+            return candidate, key
+    return '', ''
+
+
+def expected_path_for_verify(state, start_path, proof_evidence):
+    mode = normalized_verification_mode(state.get('verification_mode'))
+    normalized_start = normalize_observed_path(start_path) or '/'
+    if mode not in INTERACTION_MODES:
+        return normalized_start, {
+            'mode': mode,
+            'source': 'recon_start_path',
+            'start_path': normalized_start,
+            'expected_path': normalized_start,
+        }
+    candidate, source = interaction_terminal_path_from_state(state)
+    if not candidate:
+        candidate, source = interaction_terminal_path_from_evidence(proof_evidence)
+    expected = candidate or normalized_start
+    return expected, {
+        'mode': mode,
+        'source': source or 'recon_start_path',
+        'start_path': normalized_start,
+        'expected_path': expected,
+        'terminal_path': expected if expected != normalized_start else '',
+    }
+
+
 def collect_supporting_artifacts(payload):
     payload = enrich_capture_payload(payload)
     outputs = payload.get('outputs') or []
@@ -2063,6 +2237,7 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     screenshot_required = screenshot_required_for_mode(mode)
     details = {
         'verification_mode': mode,
+        'expected_path': normalize_observed_path(expected_path),
         'capture_tool_error': capture_payload_error(payload),
         'has_screenshot': False,
         'screenshot_required': screenshot_required,
@@ -2138,7 +2313,12 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     for text in iter_console_messages(console):
         if is_proof_telemetry_console_message(text):
             continue
-        if isinstance(text, str) and ('error' in text.lower() or 'failed' in text.lower()):
+        if isinstance(text, str) and (
+            'error' in text.lower()
+            or 'failed' in text.lower()
+            or 'timeout' in text.lower()
+            or 'timed out' in text.lower()
+        ):
             details['has_errors'] = True
             if len(details['capture_error_messages']) < 3:
                 details['capture_error_messages'].append(text[:500])
@@ -2231,16 +2411,41 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
     reason = after_observation.get('reason') or 'after capture is not usable yet'
     reasons.append('The after evidence is not usable yet: ' + reason)
     recommended_stage = 'recon' if 'wrong route' in reason else 'author'
+    details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+    error_messages = [
+        str(item).strip()
+        for item in (details.get('capture_error_messages') or [])
+        if str(item).strip()
+    ]
+    mismatch = None
     if recommended_stage == 'recon':
+        expected = details.get('expected_path') or ''
+        observed = details.get('observed_path_raw') or details.get('observed_path') or ''
+        if expected or observed:
+            mismatch = {
+                'field': 'route',
+                'expected_path': expected,
+                'observed_after_path': observed,
+            }
+            reasons.append('Route mismatch: expected after capture path ' + (expected or '(unknown)') + ', observed ' + (observed or '(unknown)') + '.')
+            summary = 'Verify capture route mismatch: expected ' + (expected or '(unknown)') + ', got ' + (observed or '(unknown)') + '.'
+        else:
+            summary = 'Verify capture route mismatch needs recon to refresh the reference path.'
         reasons.append('The capture appears to be on the wrong route or baseline context, so recon should refresh the reference path.')
     else:
+        if error_messages:
+            reasons.append('Capture script error: ' + error_messages[0][:500])
+            summary = 'Verify capture script failed: ' + error_messages[0][:300]
+        else:
+            summary = 'Verify needs another internal capture iteration before the evidence can be judged.'
         reasons.append('The capture plan itself needs revision, so author should tighten the proof script or framing inputs.')
     return {
         'decision': 'revise_capture',
-        'summary': 'Verify needs another internal capture iteration before the evidence can be judged.',
+        'summary': summary,
         'recommended_stage': recommended_stage,
         'continue_with_stage': recommended_stage,
         'reasons': reasons,
+        'mismatch': mismatch,
     }
 
 
@@ -2321,13 +2526,21 @@ def build_semantic_context(state, results, after_observation, expected_path):
     before_semantic = semantic_observation('before', before.get('observation') or {})
     prod_semantic = semantic_observation('prod', prod.get('observation') or {})
     after_semantic = semantic_observation('after', after_observation)
+    expected_start_path = state.get('expected_start_path') or expected_path
+    route_expectation = state.get('route_expectation') if isinstance(state.get('route_expectation'), dict) else {}
     return {
         'expected_path': expected_path,
+        'expected_start_path': expected_start_path,
+        'route_expectation': route_expectation,
         'reference': state.get('requested_reference') or state.get('reference', 'both'),
         'requested_change': state.get('change_request', ''),
         'success_criteria': (state.get('success_criteria') or '').strip(),
         'route': {
             'expected_path': expected_path,
+            'expected_after_path': expected_path,
+            'expected_start_path': expected_start_path,
+            'expected_terminal_path': route_expectation.get('terminal_path') or '',
+            'expectation_source': route_expectation.get('source') or '',
             'before_observed_path': before_semantic.get('observed_path') or before.get('path') or '',
             'prod_observed_path': prod_semantic.get('observed_path') or prod.get('path') or '',
             'after_observed_path': after_semantic.get('observed_path') or '',
@@ -2405,6 +2618,8 @@ def build_evidence_bundle(state, results, after_payload, after_observation, requ
         'verification_mode': normalized_verification_mode(state.get('verification_mode')),
         'reference': state.get('requested_reference') or state.get('reference', 'both'),
         'expected_path': expected_path,
+        'expected_start_path': state.get('expected_start_path') or expected_path,
+        'route_expectation': state.get('route_expectation') or {},
         'required_baseline_present': required_baseline_present,
         'baseline': results.get('baseline') or {},
         'semantic_context': semantic_context,
@@ -2518,6 +2733,8 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'status': 'needs_supervising_agent_assessment',
         'verification_mode': verification_mode,
         'expected_path': expected_path,
+        'expected_start_path': state.get('expected_start_path') or expected_path,
+        'route_expectation': state.get('route_expectation') or {},
         'required_baseline_present': required_baseline_present,
         'after_observation': after_observation,
         'supporting_artifacts': supporting,
@@ -2545,10 +2762,14 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
 
 s = load_state()
 capture_script = (s.get('capture_script') or '').strip()
-if not capture_script:
+no_implementation_mode = audit_no_diff_mode(s)
+if not capture_script and no_implementation_mode:
+    capture_script = 'await page.waitForTimeout(1500);'
+    s['capture_script'] = capture_script
+    s['capture_script_source'] = s.get('capture_script_source') or 'default_remote_audit_current_target'
+elif not capture_script:
     raise SystemExit('capture_script not set in state. Recon should finish homework first, then verify should receive the real capture plan.')
 
-no_implementation_mode = audit_no_diff_mode(s)
 if not implementation_ready_for_verify(s):
     raise SystemExit('Implementation not recorded. Make the code changes and run riddle-proof-implement before verify.')
 if no_implementation_mode and s.get('implementation_status') != 'not_required':
@@ -2568,15 +2789,17 @@ if not no_implementation_mode and (not after_dir or not os.path.exists(after_dir
 
 build_cmd = s.get('build_command', 'npm run build')
 recon_baselines = ((s.get('recon_results') or {}).get('baselines') or {})
-expected_path = (
+capture_start_path = (
     (recon_baselines.get('before') or {}).get('path')
     or (recon_baselines.get('prod') or {}).get('path')
     or ((s.get('recon_hypothesis') or {}).get('target_path'))
     or s.get('server_path')
     or '/'
 )
+expected_path = capture_start_path
+s['expected_start_path'] = normalize_observed_path(capture_start_path) or '/'
 verification_mode = normalized_verification_mode(s.get('verification_mode'))
-proof_session_seed = capture_proof_session_seed(s, expected_path)
+proof_session_seed = capture_proof_session_seed(s, s['expected_start_path'])
 probe_capture_script = build_probe_capture_script(capture_script, verification_mode, proof_session_seed, s.get('viewport_matrix'))
 results = {
     'baseline': {
@@ -2751,6 +2974,13 @@ else:
         results['after'] = {'screenshots': [{'url': capture.get('url', '')}] if capture.get('url') else [], 'raw': capture.get('raw')}
         s['after_cdn'] = capture.get('url', '')
 
+proof_evidence_for_route = extract_proof_evidence(after_payload)
+expected_path, route_expectation = expected_path_for_verify(s, s.get('expected_start_path') or capture_start_path, proof_evidence_for_route)
+s['route_expectation'] = route_expectation
+s['expected_path'] = expected_path
+if route_expectation.get('terminal_path'):
+    s['expected_terminal_path'] = route_expectation.get('terminal_path')
+
 after_viewport_matrix = capture_viewport_matrix_status(s, after_payload, 'after-proof')
 after_observation = evaluate_capture_quality(after_payload, expected_path, verification_mode)
 details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
@@ -2815,7 +3045,12 @@ if existing_prod:
 summary_lines.append('After screenshot: ' + (s.get('after_cdn') or '(none)'))
 if after_viewport_matrix.get('status') not in ('not_requested', ''):
     summary_lines.append('Viewport matrix: ' + after_viewport_matrix.get('status', 'unknown') + ' (' + str(len(after_viewport_matrix.get('executed') or [])) + '/' + str(len(after_viewport_matrix.get('requested') or [])) + ' captured)')
-summary_lines.append('Expected proof path from recon: ' + expected_path)
+expected_start_path = s.get('expected_start_path') or expected_path
+if expected_start_path and expected_start_path != expected_path:
+    summary_lines.append('Expected start path from recon: ' + expected_start_path)
+    summary_lines.append('Expected terminal proof path: ' + expected_path)
+else:
+    summary_lines.append('Expected proof path from recon: ' + expected_path)
 summary_lines.append('After observation: ' + after_observation['reason'])
 supporting = results['after'].get('supporting_artifacts') or {}
 if supporting.get('has_structured_payload'):
@@ -2901,7 +3136,7 @@ has_good_evidence = (
 if has_good_evidence:
     s['capture_hint_saved'] = record_successful_capture_hint(
         s,
-        server_path=expected_path or s.get('server_path') or '/',
+        server_path=s.get('expected_start_path') or expected_path or s.get('server_path') or '/',
         wait_for_selector=s.get('wait_for_selector') or '',
         observed_path=observed_path,
         source_stage='verify',
@@ -2923,6 +3158,8 @@ if has_good_evidence:
         'status': s['verify_status'],
         'summary': 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.',
         'expected_path': expected_path,
+        'expected_start_path': s.get('expected_start_path') or expected_path,
+        'route_expectation': s.get('route_expectation') or {},
         'latest_observation': after_observation,
         'next_stage_options': next_stage_options,
         'recommended_stage': None,
@@ -2949,6 +3186,8 @@ else:
         'status': s['verify_status'],
         'summary': capture_retry['summary'],
         'expected_path': expected_path,
+        'expected_start_path': s.get('expected_start_path') or expected_path,
+        'route_expectation': s.get('route_expectation') or {},
         'latest_observation': after_observation,
         'capture_quality': capture_retry,
         'next_stage_options': next_stage_options,
