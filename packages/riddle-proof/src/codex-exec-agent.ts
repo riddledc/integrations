@@ -402,6 +402,25 @@ function parseJsonObject(raw: string, schema?: Record<string, unknown>): Record<
   return null;
 }
 
+function parseJsonFromRunnerOutputs(
+  outputs: Array<{ source: string; text: string }>,
+  schema?: Record<string, unknown>,
+) {
+  const seen = new Set<string>();
+  for (const output of outputs) {
+    if (!output.text.trim() || seen.has(output.text)) continue;
+    seen.add(output.text);
+    const parsed = parseJsonObject(output.text, schema);
+    if (parsed) return { parsed, source: output.source };
+  }
+  const combined = outputs
+    .map((output) => output.text)
+    .filter((text) => text.trim())
+    .join("\n");
+  if (!combined.trim() || seen.has(combined)) return { parsed: null, source: "" };
+  return { parsed: parseJsonObject(combined, schema), source: "combined_output" };
+}
+
 function isHarnessVerificationOnlyBlocker(blocker: string) {
   const text = blocker.toLowerCase();
   return (
@@ -419,6 +438,7 @@ function runnerMetrics(input: {
   stdout?: string;
   stderr?: string;
   finalText?: string;
+  parsedJsonSource?: string;
   status?: number | null;
   timedOut?: boolean;
   errorCode?: string;
@@ -437,6 +457,7 @@ function runnerMetrics(input: {
     stdout_chars: (input.stdout || "").length,
     stderr_chars: (input.stderr || "").length,
     final_message_chars: (input.finalText || "").length,
+    parsed_json_source: input.parsedJsonSource,
     exit_status: input.status ?? null,
     timed_out: input.timedOut || false,
     error_code: input.errorCode,
@@ -552,19 +573,25 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
       const finalText = existsSync(lastMessagePath)
         ? readFileSync(lastMessagePath, "utf-8")
         : String(proc.stdout || "");
-      const parsed = parseJsonObject(finalText, request.schema);
+      const stdoutText = String(proc.stdout || "");
+      const stderrText = String(proc.stderr || "");
+      const { parsed, source: parsedJsonSource } = parseJsonFromRunnerOutputs([
+        { source: existsSync(lastMessagePath) ? "last_message" : "stdout", text: finalText },
+        { source: "stdout", text: stdoutText },
+        { source: "stderr", text: stderrText },
+      ], request.schema);
       if (!parsed) {
         return {
           ok: false,
-          stdout: proc.stdout || "",
-          stderr: proc.stderr || "",
+          stdout: stdoutText,
+          stderr: stderrText,
           metrics: runnerMetrics({
             request,
             config,
             startedAt,
             startedMs,
-            stdout: proc.stdout || "",
-            stderr: proc.stderr || "",
+            stdout: stdoutText,
+            stderr: stderrText,
             finalText,
             status: proc.status,
             errorCode: "invalid_json",
@@ -572,7 +599,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
           blocker: {
             code: "codex_invalid_json",
             message: `Codex completed ${request.purpose}, but did not return valid JSON.`,
-            details: { finalText, stdout: proc.stdout || "", stderr: proc.stderr || "" },
+            details: { finalText, stdout: stdoutText, stderr: stderrText },
           },
         };
       }
@@ -580,16 +607,17 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
       return {
         ok: true,
         json: parsed,
-        stdout: proc.stdout || "",
-        stderr: proc.stderr || "",
+        stdout: stdoutText,
+        stderr: stderrText,
         metrics: runnerMetrics({
           request,
           config,
           startedAt,
           startedMs,
-          stdout: proc.stdout || "",
-          stderr: proc.stderr || "",
+          stdout: stdoutText,
+          stderr: stderrText,
           finalText,
+          parsedJsonSource,
           status: proc.status,
         }),
       };

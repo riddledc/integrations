@@ -9,6 +9,7 @@ Instead it does two things:
 import json
 import os
 import sys
+from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state
@@ -32,6 +33,31 @@ def normalize_path(value):
     if not path.startswith('/'):
         path = '/' + path
     return path
+
+
+def normalize_route_path(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+    parsed = urlparse(raw)
+    path = parsed.path or raw
+    query = parsed.query or ''
+    fragment = parsed.fragment or ''
+    if '?' in path:
+        path, query_tail = path.split('?', 1)
+        query = query or query_tail.split('#', 1)[0]
+    if '#' in path:
+        path, fragment_tail = path.split('#', 1)
+        fragment = fragment or fragment_tail
+    if not path.startswith('/'):
+        path = '/' + path.lstrip('/')
+    path = path.rstrip('/') or '/'
+    return path + (('?' + query) if query else '') + (('#' + fragment) if fragment else '')
+
+
+def is_interaction_mode(state):
+    mode = (state.get('verification_mode') or '').strip().lower()
+    return mode in ('interaction', 'interactive', 'user_flow', 'user-flow', 'workflow')
 
 
 def first_non_empty(*values):
@@ -284,6 +310,17 @@ expected_terminal_path = normalize_path(first_non_empty(
     supervisor_packet.get('expected_after_path'),
     s.get('expected_terminal_path'),
 ))
+author_warnings = []
+if is_interaction_mode(s):
+    interaction_start_path = normalize_route_path(first_non_empty(s.get('expected_start_path'), default_path, s.get('server_path'), '/')) or '/'
+    refined_route = normalize_route_path(refined_path)
+    terminal_route = normalize_route_path(expected_terminal_path)
+    if terminal_route and refined_route == terminal_route and refined_route != interaction_start_path:
+        refined_path = interaction_start_path
+        author_warnings.append(
+            'Supervisor packet refined_inputs.server_path matched the terminal interaction route; kept the recon start route for capture.'
+        )
+    s['expected_start_path'] = interaction_start_path
 confidence = provided_payload['confidence'] if provided_payload['confidence'] in ('high', 'medium', 'low') else 'medium'
 rationale = sanitize_rationale(provided_payload['rationale'])
 summary = provided_payload['summary'] or 'Supervising agent supplied the proof packet from recon observations.'
@@ -301,6 +338,7 @@ authored_packet = {
     'interaction_contract': provided_payload['interaction_contract'],
     'proof_contract': provided_payload['proof_contract'],
     'rationale': rationale,
+    'warnings': author_warnings,
     'confidence': confidence,
     'mode': 'supervising_agent',
     'model': ('supervising-agent:' + RUNTIME_MODEL_HINT) if RUNTIME_MODEL_HINT else 'supervising-agent',
@@ -328,7 +366,7 @@ s['author_mode'] = 'supervising_agent'
 s['author_model'] = authored_packet['model']
 s['author_confidence'] = confidence
 s['author_rationale'] = rationale
-s['author_warnings'] = []
+s['author_warnings'] = author_warnings
 s['author_runtime_model_hint'] = RUNTIME_MODEL_HINT
 s['author_packet'] = authored_packet
 s['author_summary'] = summary

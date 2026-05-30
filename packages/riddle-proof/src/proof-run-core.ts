@@ -293,6 +293,86 @@ function normalizeOptionalString(value?: string) {
   return typeof value === "string" ? value.trim() : undefined;
 }
 
+const INTERACTION_VERIFICATION_MODES = new Set(["interaction", "interactive", "user_flow", "user-flow", "workflow"]);
+
+function normalizeRoutePath(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "";
+  try {
+    const url = /^https?:\/\//i.test(raw)
+      ? new URL(raw)
+      : new URL(raw.startsWith("/") || raw.startsWith("?") || raw.startsWith("#") ? raw : `/${raw}`, "https://riddle-proof.local");
+    const pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return `${pathname}${url.search}${url.hash}`;
+  } catch {
+    const hashSplit = raw.split("#");
+    const beforeHash = hashSplit.shift() || "";
+    const hash = hashSplit.length ? `#${hashSplit.join("#")}` : "";
+    const querySplit = beforeHash.split("?");
+    const rawPath = querySplit.shift() || "";
+    const query = querySplit.length ? `?${querySplit.join("?")}` : "";
+    const pathname = `/${rawPath}`.replace(/\/+/g, "/").replace(/\/+$/, "") || "/";
+    return `${pathname}${query}${hash}`;
+  }
+}
+
+function isInteractionVerificationMode(value: unknown) {
+  return INTERACTION_VERIFICATION_MODES.has(typeof value === "string" ? value.trim().toLowerCase() : "");
+}
+
+function stringRecordValue(record: unknown, key: string) {
+  if (!record || typeof record !== "object") return "";
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function appendStateWarning(state: Record<string, unknown>, key: string, warning: string) {
+  const existing = Array.isArray(state[key])
+    ? (state[key] as unknown[]).filter((item): item is string => typeof item === "string")
+    : [];
+  if (!existing.includes(warning)) state[key] = [...existing, warning];
+}
+
+function interactionStartPathForAuthorPacket(
+  state: Record<string, unknown>,
+  parsed: Record<string, unknown>,
+  refined: Record<string, unknown>,
+) {
+  return normalizeRoutePath(
+    stringRecordValue(state, "expected_start_path") ||
+    stringRecordValue(refined, "expected_start_path") ||
+    stringRecordValue(parsed.interaction_contract, "start_path") ||
+    stringRecordValue(parsed.proof_contract, "start_path") ||
+    stringRecordValue(state, "server_path") ||
+    "/",
+  ) || "/";
+}
+
+function authorPacketServerPath(
+  state: Record<string, unknown>,
+  parsed: Record<string, unknown>,
+  refined: Record<string, unknown>,
+  serverPath: string,
+  expectedTerminalPath: string,
+) {
+  if (!isInteractionVerificationMode(state.verification_mode)) return serverPath;
+  const startPath = interactionStartPathForAuthorPacket(state, parsed, refined);
+  state.expected_start_path = startPath;
+  if (
+    expectedTerminalPath &&
+    normalizeRoutePath(serverPath) === normalizeRoutePath(expectedTerminalPath) &&
+    normalizeRoutePath(serverPath) !== startPath
+  ) {
+    appendStateWarning(
+      state,
+      "author_warnings",
+      "Supervisor packet refined_inputs.server_path matched the terminal interaction route; kept the recon start route for capture.",
+    );
+    return startPath;
+  }
+  return serverPath;
+}
+
 function knownEnvironmentIssuesFromNotes(notes: string) {
   const text = notes.toLowerCase();
   const issues: Array<Record<string, string>> = [];
@@ -1055,17 +1135,28 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
         state.proof_contract = parsed.proof_contract;
       }
       const refined = parsed?.refined_inputs || {};
+      const expectedTerminalPath = normalizeOptionalString(
+        typeof refined?.expected_terminal_path === "string"
+          ? refined.expected_terminal_path
+          : typeof parsed?.expected_terminal_path === "string"
+            ? parsed.expected_terminal_path
+            : "",
+      ) || "";
       if (typeof refined?.server_path === "string") {
-        state.server_path = normalizeOptionalString(refined.server_path) || "";
+        const refinedServerPath = normalizeOptionalString(refined.server_path) || "";
+        state.server_path = authorPacketServerPath(
+          state,
+          parsed,
+          refined,
+          refinedServerPath,
+          expectedTerminalPath,
+        );
         state.server_path_source = "supervising_agent";
       }
       if (typeof refined?.wait_for_selector === "string") state.wait_for_selector = normalizeOptionalString(refined.wait_for_selector) || "";
       if (typeof refined?.reference === "string" && refined.reference.trim()) state.reference = refined.reference.trim();
-      if (typeof refined?.expected_terminal_path === "string") {
-        state.expected_terminal_path = normalizeOptionalString(refined.expected_terminal_path) || "";
-      }
-      if (typeof parsed?.expected_terminal_path === "string") {
-        state.expected_terminal_path = normalizeOptionalString(parsed.expected_terminal_path) || "";
+      if (expectedTerminalPath) {
+        state.expected_terminal_path = expectedTerminalPath;
       }
       if (typeof parsed?.confidence === "string") state.supervisor_author_confidence = normalizeOptionalString(parsed.confidence) || null;
       if (parsed?.rationale !== undefined) state.supervisor_author_rationale = parsed.rationale;

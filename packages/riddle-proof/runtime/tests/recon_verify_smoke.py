@@ -340,14 +340,18 @@ class FakeRiddle:
                     'largeVisibleElements': [{'tag': 'h1', 'text': 'Proof'}],
                 }
                 proof_evidence = {
-                    'before': {'path': '/'},
-                    'action': 'clicked Proof',
-                    'after': {'path': '/proof/'},
-                    'assertions': {
-                        'startedOnHome': True,
-                        'clickedProofNavigation': True,
-                        'terminalPathIsProof': True,
-                        'proofContentVisible': True,
+                    'proofEvidence': {
+                        'version': 'riddle-proof.interaction.v1',
+                        'start': {'href': 'https://riddledc.com/'},
+                        'action': {'type': 'click', 'target': 'Proof'},
+                        'terminal': {'href': 'https://riddledc.com/proof/'},
+                        'afterUrl': 'https://riddledc.com/proof/',
+                        'assertions': {
+                            'startedOnHome': True,
+                            'clickedProofNavigation': True,
+                            'terminalPathIsProof': True,
+                            'proofContentVisible': True,
+                        },
                     },
                 }
                 return {
@@ -1921,6 +1925,63 @@ def run_author_applies_supervisor_packet():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_author_keeps_interaction_start_route():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-supervisor-interaction-start-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'expected_start_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+                'current_plan': {'target_path': '/'},
+            },
+            'author_request': {
+                'current_plan': {'target_path': '/'},
+                'observed_baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+            'supervisor_author_packet': {
+                'proof_plan': 'Start at /, click Proof, and verify the terminal /proof/ route.',
+                'capture_script': "clickedProofNavigation(); await saveScreenshot('after-proof');",
+                'refined_inputs': {
+                    'server_path': '/proof/',
+                    'expected_terminal_path': '/proof/',
+                    'wait_for_selector': '',
+                    'reference': 'before',
+                },
+                'rationale': ['The interaction starts on home and terminates on Proof.'],
+                'confidence': 'high',
+                'summary': 'Supervisor supplied the interaction proof packet.',
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('author_supervisor_interaction_start', AUTHOR_PATH)
+        after_author = json.loads(state_path.read_text())
+
+        assert after_author['author_status'] == 'ready'
+        assert after_author['server_path'] == '/'
+        assert after_author['expected_start_path'] == '/'
+        assert after_author['expected_terminal_path'] == '/proof/'
+        assert after_author['author_packet']['refined_inputs']['server_path'] == '/'
+        assert after_author['author_warnings']
+        assert 'terminal interaction route' in after_author['author_warnings'][0]
+        return {
+            'ok': True,
+            'server_path': after_author['server_path'],
+            'expected_terminal_path': after_author['expected_terminal_path'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_requests_supervisor_assessment():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-verify-supervisor-'))
     state_path = tempdir / 'state.json'
@@ -3009,6 +3070,7 @@ if __name__ == '__main__':
         'recon_hint_root_preference': run_recon_prefers_hint_root_over_single_route_literal(),
         'capture_hint_rejects_route_specific_mode_only_match': run_capture_hint_rejects_route_specific_mode_only_match(),
         'author_applies_supervisor_packet': run_author_applies_supervisor_packet(),
+        'author_keeps_interaction_start_route': run_author_keeps_interaction_start_route(),
         'verify_requests_supervisor_assessment': run_verify_requests_supervisor_assessment(),
         'verify_routes_unmeasured_visual_delta_to_recovery': run_verify_routes_unmeasured_visual_delta_to_recovery(),
         'verify_structured_evidence_without_screenshot': run_verify_structured_evidence_without_screenshot(),

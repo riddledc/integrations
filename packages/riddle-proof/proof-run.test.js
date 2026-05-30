@@ -585,6 +585,34 @@ async function run() {
   assert(patched.expected_terminal_path === '/proof/', 'author packet should preserve expected interaction terminal path');
   assert(patched.interaction_contract.expected_terminal_path === '/proof/', 'author packet should preserve interaction contract');
 
+  const interactionAuthorStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-interaction-author-')), 'state.json');
+  writeJson(interactionAuthorStatePath, {
+    ...makeLoopState(),
+    verification_mode: 'interaction',
+    server_path: '/',
+    expected_start_path: '/',
+    recon_results: {
+      ...makeLoopState().recon_results,
+      baselines: { before: { path: '/', url: 'https://cdn.example.com/before-home.png' } },
+    },
+  });
+  const interactionPatched = core.mergeStateFromParams(interactionAuthorStatePath, {
+    action: 'author',
+    author_packet_json: JSON.stringify({
+      proof_plan: 'Start at /, click Proof, and verify the terminal /proof/ route.',
+      capture_script: "await saveScreenshot('after-proof');",
+      refined_inputs: { server_path: '/proof/', wait_for_selector: '', expected_terminal_path: '/proof/' },
+      interaction_contract: { start_path: '/', expected_terminal_path: '/proof/' },
+      rationale: ['The terminal route differs from the start route.'],
+      confidence: 'high',
+      summary: 'Supervisor packet',
+    }),
+  });
+  assert(interactionPatched.server_path === '/', 'interaction author packet should keep the recon start route as server_path');
+  assert(interactionPatched.expected_start_path === '/', 'interaction author packet should persist expected_start_path');
+  assert(interactionPatched.expected_terminal_path === '/proof/', 'interaction author packet should still preserve terminal path');
+  assert(interactionPatched.author_warnings?.some((warning) => warning.includes('terminal interaction route')), 'interaction route correction should be recorded');
+
   core.ensureStageLoopState(patched);
   patched.verify_status = 'evidence_captured';
   patched.verify_summary = 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.';
