@@ -2158,6 +2158,170 @@ def interaction_assertions_pass(value):
     return False
 
 
+INTERACTION_ASSERTION_CONTAINER_KEYS = ('assertions', 'checks', 'predicates', 'expectations')
+INTERACTION_FAILURE_FLAG_KEYS = (
+    'passed',
+    'ok',
+    'valid',
+    'success',
+    'proofReady',
+    'proof_ready',
+    'interactionPassed',
+    'interaction_passed',
+    'routeMatches',
+    'route_matches',
+)
+INTERACTION_FAILURE_STATUS_VALUES = {'fail', 'failed', 'failure', 'error', 'errored', 'timeout', 'timed_out'}
+INTERACTION_ASSERTION_NAME_KEYS = ('name', 'id', 'key', 'label', 'assertion', 'check', 'field')
+INTERACTION_ROUTE_CONTEXT_KEYS = (
+    'expected',
+    'observed',
+    'actual',
+    'start',
+    'before',
+    'after',
+    'terminal',
+    'final',
+    'expected_after',
+    'expectedAfter',
+    'expected_terminal',
+    'expectedTerminal',
+    'expected_final',
+    'expectedFinal',
+)
+
+
+def failure_label(prefix, key):
+    key = str(key or '').strip()
+    prefix = str(prefix or '').strip()
+    if prefix and key:
+        return prefix + '.' + key
+    return key or prefix or 'failed'
+
+
+def assertion_item_label(item, fallback):
+    if isinstance(item, dict):
+        for key in INTERACTION_ASSERTION_NAME_KEYS:
+            value = str(item.get(key) or '').strip()
+            if value:
+                return value
+    return fallback
+
+
+def collect_interaction_failed_assertions(value, prefix='', depth=0):
+    if depth > 6:
+        return []
+    failures = []
+    if isinstance(value, dict):
+        for key in INTERACTION_FAILURE_FLAG_KEYS:
+            if value.get(key) is False:
+                failures.append(failure_label(prefix, key))
+        status = str(value.get('status') or value.get('result') or '').strip().lower()
+        if status in INTERACTION_FAILURE_STATUS_VALUES:
+            failures.append(failure_label(prefix, assertion_item_label(value, 'status')))
+        for key in INTERACTION_ASSERTION_CONTAINER_KEYS:
+            checks = value.get(key)
+            container_prefix = failure_label(prefix, key)
+            if isinstance(checks, dict):
+                for check_key, check_value in checks.items():
+                    if check_value is False:
+                        failures.append(failure_label(container_prefix, check_key))
+                    elif isinstance(check_value, dict):
+                        nested = collect_interaction_failed_assertions(
+                            check_value,
+                            failure_label(container_prefix, check_key),
+                            depth + 1,
+                        )
+                        failures.extend(nested)
+                    elif isinstance(check_value, list):
+                        failures.extend(collect_interaction_failed_assertions(
+                            check_value,
+                            failure_label(container_prefix, check_key),
+                            depth + 1,
+                        ))
+            elif isinstance(checks, list):
+                for index, item in enumerate(checks):
+                    if item is False:
+                        failures.append(failure_label(container_prefix, str(index)))
+                    elif isinstance(item, dict):
+                        item_label = assertion_item_label(item, str(index))
+                        failures.extend(collect_interaction_failed_assertions(
+                            item,
+                            failure_label(container_prefix, item_label),
+                            depth + 1,
+                        ))
+        for key in EVIDENCE_CONTAINER_KEYS:
+            nested = value.get(key)
+            if isinstance(nested, (dict, list)):
+                failures.extend(collect_interaction_failed_assertions(nested, failure_label(prefix, key), depth + 1))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            if item is False:
+                failures.append(failure_label(prefix, str(index)))
+            elif isinstance(item, (dict, list)):
+                failures.extend(collect_interaction_failed_assertions(item, prefix, depth + 1))
+    deduped = []
+    seen = set()
+    for failure in failures:
+        failure = str(failure or '').strip()
+        if not failure or failure in seen:
+            continue
+        seen.add(failure)
+        deduped.append(failure)
+    return deduped
+
+
+def interaction_route_context_present(value, depth=0):
+    if depth > 6:
+        return False
+    if isinstance(value, dict):
+        if terminal_path_from_record(value):
+            return True
+        for key in INTERACTION_ROUTE_CONTEXT_KEYS:
+            nested = value.get(key)
+            if isinstance(nested, dict):
+                if record_path_candidate(nested, allow_location_keys=True):
+                    return True
+                query = str(nested.get('query') or nested.get('search') or '').strip()
+                hash_value = str(nested.get('hash') or nested.get('fragment') or '').strip()
+                if query or hash_value:
+                    return True
+                if interaction_route_context_present(nested, depth + 1):
+                    return True
+            elif isinstance(nested, str) and path_candidate(nested):
+                return True
+        for key in EVIDENCE_CONTAINER_KEYS:
+            nested = value.get(key)
+            if isinstance(nested, (dict, list)) and interaction_route_context_present(nested, depth + 1):
+                return True
+    elif isinstance(value, list):
+        return any(interaction_route_context_present(item, depth + 1) for item in value)
+    return False
+
+
+def failed_interaction_evidence_summary(proof_evidence):
+    failures = []
+    for record in proof_evidence_records(proof_evidence):
+        failures.extend(collect_interaction_failed_assertions(record))
+    deduped = []
+    seen = set()
+    for failure in failures:
+        if failure not in seen:
+            seen.add(failure)
+            deduped.append(failure)
+    if not deduped or not interaction_route_context_present(proof_evidence):
+        return ''
+    summary = 'Structured interaction proof evidence captured failed assertion(s): ' + ', '.join(deduped[:8]) + '.'
+    capture_errors = []
+    for record in proof_evidence_records(proof_evidence):
+        error = str(record.get('capture_error') or record.get('error') or '').strip()
+        if error:
+            capture_errors.append(error)
+    if capture_errors:
+        summary += ' Capture script error: ' + capture_errors[0][:300]
+    return summary
+
+
 def interaction_terminal_path_from_evidence(proof_evidence):
     for record in proof_evidence_records(proof_evidence):
         candidate = terminal_path_from_record(record)
@@ -2903,6 +3067,9 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_basis.append('structured-artifacts')
     if supporting.get('playability_ready'):
         evidence_basis.append('playability')
+    interaction_failure_summary = str(state.get('structured_interaction_failure_summary') or '').strip()
+    if interaction_failure_summary:
+        evidence_basis.append('structured-interaction-failure')
     visual_delta = ((evidence_bundle or {}).get('after') or {}).get('visual_delta') or {}
     if visual_delta.get('status') == 'measured':
         evidence_basis.append('visual-delta')
@@ -2936,6 +3103,8 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         evidence_bundle['artifact_usage'] = artifact_usage
     visual_delta_blocker = '' if audit_no_diff_mode(state) else visual_delta_blocker_for_mode(verification_mode, visual_delta)
     hard_blockers = [visual_delta_blocker] if visual_delta_blocker else []
+    if interaction_failure_summary:
+        hard_blockers.append(interaction_failure_summary)
     if verification_mode in PLAYABILITY_MODES and not supporting.get('playability_ready'):
         assessment = supporting.get('playability_assessment') or {}
         concerns = assessment.get('concerns') if isinstance(assessment, dict) else []
@@ -2961,6 +3130,10 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         instructions.append(
             'For visual/UI polish, capture success is not proof. If visual_delta.status is unmeasured, missing, not_applicable, or measured with passed=false, choose needs_implementation or needs_richer_proof instead of ready_to_ship.'
         )
+    if interaction_failure_summary:
+        instructions.append(
+            'The structured interaction evidence contains failed assertions. Treat those failed assertions as a hard blocker for ready_to_ship; do not send this back to author unless the capture script itself is missing the needed evidence.'
+        )
     instructions.extend([
         'For playable/gameplay proof, screenshots are supporting evidence only. Do not mark ready_to_ship unless playability_assessment.passed is true and the proof shows accepted input, state/time progression, and playfield/canvas pixel motion.',
         'For data/audio/log/metrics/custom modes, judge the structured evidence bundle and proof_evidence_sample directly; screenshots are optional supporting context.',
@@ -2983,6 +3156,7 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
         'viewport_matrix': viewport_matrix,
         'evidence_bundle': evidence_bundle or {},
         'evidence_basis': evidence_basis,
+        'structured_interaction_failure_summary': interaction_failure_summary,
         'artifact_contract': artifact_contract,
         'artifact_production': artifact_production,
         'artifact_usage': artifact_usage,
@@ -3384,6 +3558,14 @@ if proof_evidence_required_for_mode(s.get('verification_mode')):
     if proof_evidence_blocker:
         summary_lines.append('Structured proof evidence gate: ' + proof_evidence_blocker)
 
+structured_interaction_failure_summary = ''
+proof_evidence = evidence_bundle.get('proof_evidence')
+if verification_mode in INTERACTION_MODES and proof_evidence is not None:
+    structured_interaction_failure_summary = failed_interaction_evidence_summary(proof_evidence)
+    if structured_interaction_failure_summary:
+        summary_lines.append('Structured interaction evidence gate: ' + structured_interaction_failure_summary)
+s['structured_interaction_failure_summary'] = structured_interaction_failure_summary
+
 visual_delta_recovery = build_visual_delta_recovery_decision(
     s.get('verification_mode'),
     visual_delta,
@@ -3392,14 +3574,20 @@ visual_delta_recovery = build_visual_delta_recovery_decision(
 if visual_delta_recovery:
     summary_lines.append('Visual delta recovery: ' + visual_delta_recovery['summary'])
 
+has_judgable_failed_interaction_evidence = (
+    bool(structured_interaction_failure_summary)
+    and required_baseline_present
+    and not proof_evidence_blocker
+    and not visual_delta_recovery
+)
 has_good_evidence = (
     required_baseline_present
-    and after_observation.get('valid')
+    and (after_observation.get('valid') or has_judgable_failed_interaction_evidence)
     and not proof_evidence_blocker
     and not visual_delta_recovery
 )
 
-if has_good_evidence:
+if has_good_evidence and after_observation.get('valid'):
     s['capture_hint_saved'] = record_successful_capture_hint(
         s,
         server_path=s.get('expected_start_path') or expected_path or s.get('server_path') or '/',
@@ -3410,9 +3598,12 @@ if has_good_evidence:
     )
 
 if has_good_evidence:
+    if has_judgable_failed_interaction_evidence and isinstance(evidence_bundle.get('proof_session'), dict):
+        evidence_bundle['proof_session']['status'] = 'evidence_captured'
+        s['proof_session'] = evidence_bundle.get('proof_session') or {}
     supervisor_request = build_supervisor_assessment_request(s, after_payload, after_observation, required_baseline_present, expected_path, evidence_bundle)
     s['verify_status'] = 'evidence_captured'
-    s['merge_recommendation'] = 'pending-supervisor-judgment'
+    s['merge_recommendation'] = 'do-not-merge' if has_judgable_failed_interaction_evidence else 'pending-supervisor-judgment'
     s['proof_assessment'] = {}
     s['proof_assessment_source'] = None
     s['proof_assessment_request'] = supervisor_request
@@ -3422,11 +3613,16 @@ if has_good_evidence:
         fields_agent_may_update.append('implementation_notes')
     s['verify_decision_request'] = {
         'status': s['verify_status'],
-        'summary': 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.',
+        'summary': (
+            'Verify captured structured interaction evidence with failed assertions and is waiting for supervising-agent proof assessment.'
+            if has_judgable_failed_interaction_evidence
+            else 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.'
+        ),
         'expected_path': expected_path,
         'expected_start_path': s.get('expected_start_path') or expected_path,
         'route_expectation': s.get('route_expectation') or {},
         'latest_observation': after_observation,
+        'structured_interaction_failure_summary': structured_interaction_failure_summary,
         'next_stage_options': next_stage_options,
         'recommended_stage': None,
         'continue_with_stage': None,
@@ -3438,7 +3634,10 @@ if has_good_evidence:
             'Do not escalate to the human unless the supervising agent concludes the workflow is genuinely stuck or not converging.',
         ],
     }
-    summary_lines.append('Proof assessment: awaiting supervising agent judgment')
+    if has_judgable_failed_interaction_evidence:
+        summary_lines.append('Proof assessment: awaiting supervising agent judgment on failed interaction evidence')
+    else:
+        summary_lines.append('Proof assessment: awaiting supervising agent judgment')
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
     capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker, s.get('route_expectation') or {})
