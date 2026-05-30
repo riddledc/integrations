@@ -771,6 +771,13 @@ export async function executeWorkflow(
     const args = step === "setup" ? buildSetupArgs(params, config) : {};
     const stepWorkflowFile = workflowFile(config.riddleProofDir, step);
     const timer = beginRuntimeStep(config.statePath, action, step, stepWorkflowFile);
+    if (!existsSync(stepWorkflowFile)) {
+      return finishRuntimeStep(config.statePath, action, {
+        ok: false,
+        step,
+        error: `Riddle Proof workflow file missing for ${step}: ${stepWorkflowFile}`,
+      }, timer);
+    }
     let output: any;
     try {
       if (step === "setup") {

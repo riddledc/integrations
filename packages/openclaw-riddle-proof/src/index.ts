@@ -2233,13 +2233,18 @@ function buildSemanticContext(
   const prodSemantic = semanticObservation("prod", prodBaseline.observation);
   const afterSemantic = semanticObservation("after", after.observation || assessmentRequest.after_observation);
   const expectedPath = stringValue(assessmentRequest.expected_path) || stringValue(evidenceBundle.expected_path) || stringValue(fullState.server_path);
+  const expectedStartPath = stringValue(assessmentRequest.expected_start_path) || stringValue(evidenceBundle.expected_start_path) || expectedPath;
   return {
     expected_path: expectedPath || null,
+    expected_start_path: expectedStartPath || null,
     reference: stringValue(evidenceBundle.reference) || stringValue(fullState.reference) || null,
     requested_change: stringValue(fullState.change_request) || null,
     success_criteria: stringValue(fullState.success_criteria) || null,
     route: {
       expected_path: expectedPath || null,
+      expected_after_path: expectedPath || null,
+      expected_start_path: expectedStartPath || null,
+      expected_terminal_path: stringValue(fullState.expected_terminal_path) || null,
       before_observed_path: stringValue(beforeSemantic.observed_path) || stringValue(beforeBaseline.path) || null,
       prod_observed_path: stringValue(prodSemantic.observed_path) || stringValue(prodBaseline.path) || null,
       after_observed_path: stringValue(afterSemantic.observed_path) || null,
@@ -2252,15 +2257,17 @@ function buildSemanticContext(
 
 function routeMatches(route: Record<string, unknown> | null) {
   if (!route) return false;
-  const expected = stringValue(route.expected_path);
-  if (!expected) return false;
+  const expectedAfter = stringValue(route.expected_after_path) || stringValue(route.expected_terminal_path) || stringValue(route.expected_path);
+  const expectedStart = stringValue(route.expected_start_path) || stringValue(route.expected_path);
+  if (!expectedAfter) return false;
   const after = stringValue(route.after_observed_path);
-  if (!routeMatchesExpected(expected, after)) return false;
+  if (!routeMatchesExpected(expectedAfter, after)) return false;
   const observed = [
     stringValue(route.before_observed_path),
     stringValue(route.prod_observed_path),
   ].filter(Boolean);
-  return observed.every((item) => routeMatchesExpected(expected, item));
+  const baselineExpected = expectedStart || expectedAfter;
+  return observed.every((item) => routeMatchesExpected(baselineExpected, item));
 }
 
 function normalizedRouteUrl(value: string) {
@@ -2713,8 +2720,8 @@ function proofInspectionCanAutoAdvance(inspection: Record<string, unknown>) {
 function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
   const screenshotRequired = inspectionRequiresScreenshot(inspection);
   const reasons = [
-    "ship_mode is none, so advancing can only reach the non-shipping ready_to_ship state.",
-    "The inspection packet marked the proof as a ready_to_ship_candidate.",
+    "ship_mode is none, so advancing can only reach a non-shipping held proof state.",
+    "The inspection packet marked the evidence as acceptable for a held proof decision.",
     "The target route matched across available observations.",
     "Required artifact signals are present for the verification mode.",
     "Playable/gameplay evidence passed when required by the verification mode.",
@@ -2727,7 +2734,7 @@ function autoShipModeNoneAssessment(inspection: Record<string, unknown>) {
   return {
     decision: "ready_to_ship",
     summary:
-      "Auto-reviewed proof for ship_mode=none. The inspection packet marks this as a ready-to-ship candidate, the target route matched, required artifact signals are present, and this mode can only advance to a held ready state without shipping.",
+      "Auto-reviewed proof for ship_mode=none. The inspection packet marks the evidence as acceptable, the target route matched, required artifact signals are present, and this mode can only advance to a held proof state without PR/ship handoff.",
     recommended_stage: "ship",
     continue_with_stage: "ship",
     escalation_target: "agent",

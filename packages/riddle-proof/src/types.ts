@@ -263,6 +263,7 @@ export interface RiddleProofProofContract {
   capture_script?: string;
   artifact_contract?: Record<string, unknown>;
   assertions?: unknown;
+  interaction_contract?: Record<string, unknown>;
   baseline_understanding?: Record<string, unknown>;
   route_assumptions?: Record<string, unknown>;
   stop_condition?: string;

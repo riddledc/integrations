@@ -1048,6 +1048,12 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       if (parsed?.baseline_understanding_used && typeof parsed.baseline_understanding_used === "object") {
         state.author_baseline_understanding_used = parsed.baseline_understanding_used;
       }
+      if (parsed?.interaction_contract && typeof parsed.interaction_contract === "object") {
+        state.interaction_contract = parsed.interaction_contract;
+      }
+      if (parsed?.proof_contract && typeof parsed.proof_contract === "object") {
+        state.proof_contract = parsed.proof_contract;
+      }
       const refined = parsed?.refined_inputs || {};
       if (typeof refined?.server_path === "string") {
         state.server_path = normalizeOptionalString(refined.server_path) || "";
@@ -1055,6 +1061,12 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       }
       if (typeof refined?.wait_for_selector === "string") state.wait_for_selector = normalizeOptionalString(refined.wait_for_selector) || "";
       if (typeof refined?.reference === "string" && refined.reference.trim()) state.reference = refined.reference.trim();
+      if (typeof refined?.expected_terminal_path === "string") {
+        state.expected_terminal_path = normalizeOptionalString(refined.expected_terminal_path) || "";
+      }
+      if (typeof parsed?.expected_terminal_path === "string") {
+        state.expected_terminal_path = normalizeOptionalString(parsed.expected_terminal_path) || "";
+      }
       if (typeof parsed?.confidence === "string") state.supervisor_author_confidence = normalizeOptionalString(parsed.confidence) || null;
       if (parsed?.rationale !== undefined) state.supervisor_author_rationale = parsed.rationale;
       if (typeof parsed?.summary === "string") state.supervisor_author_summary = normalizeOptionalString(parsed.summary) || null;

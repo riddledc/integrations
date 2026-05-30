@@ -1405,7 +1405,7 @@ async function routeCheckpoint(
       return { next: { ...baseContinuation(result), ship_after_verify: true } };
     }
     return {
-      terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof is ready to ship.", {
+      terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.", {
         ship_held: true,
       }),
     };
@@ -1643,7 +1643,7 @@ async function routeCheckpoint(
           state,
           "ready_to_ship",
           result,
-          assessment.summary || result.summary || "Riddle Proof is ready to ship.",
+          assessment.summary || result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
           {
             ship_held: true,
             proof_assessment: payload,
@@ -1664,7 +1664,7 @@ async function routeCheckpoint(
     if (next) {
       if (String(next.advance_stage || "") === "ship" && effectiveShipMode(request, input.config) !== "ship") {
         return {
-          terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof is ready to ship.", {
+          terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.", {
             ship_held: true,
           }),
         };
