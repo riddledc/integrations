@@ -37,6 +37,9 @@ export interface CodexJsonResult {
 
 export type CodexJsonRunner = (request: CodexJsonRequest) => Promise<CodexJsonResult> | CodexJsonResult;
 
+const DEFAULT_CODEX_TIMEOUT_MS = 600_000;
+const DEFAULT_PROOF_PACKET_AUTHOR_TIMEOUT_MS = 180_000;
+
 const REFINED_INPUTS_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -421,6 +424,62 @@ function parseJsonFromRunnerOutputs(
   return { parsed: parseJsonObject(combined, schema), source: "combined_output" };
 }
 
+function resolveCodexTimeoutMs(config: CodexExecAgentConfig, request: CodexJsonRequest) {
+  if (typeof config.codexTimeoutMs === "number" && Number.isFinite(config.codexTimeoutMs) && config.codexTimeoutMs > 0) {
+    return Number(config.codexTimeoutMs);
+  }
+  return request.purpose === "proof packet authoring"
+    ? DEFAULT_PROOF_PACKET_AUTHOR_TIMEOUT_MS
+    : DEFAULT_CODEX_TIMEOUT_MS;
+}
+
+function isCodexLifecycleEvent(value: unknown): value is { type: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const type = (value as Record<string, unknown>).type;
+  return typeof type === "string" && (
+    type.startsWith("thread.") ||
+    type.startsWith("turn.") ||
+    type.startsWith("exec.") ||
+    type.startsWith("agent.") ||
+    type.startsWith("token.") ||
+    type.startsWith("reasoning.") ||
+    type.startsWith("error.")
+  );
+}
+
+function analyzeCodexRunnerOutput(outputs: Array<{ source: string; text: string }>) {
+  const eventTypes = new Set<string>();
+  let eventLineCount = 0;
+  let nonEventLineCount = 0;
+  const nonEventSamples: string[] = [];
+
+  for (const output of outputs) {
+    const lines = output.text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const line of lines) {
+      try {
+        const parsed = JSON.parse(line);
+        if (isCodexLifecycleEvent(parsed)) {
+          eventLineCount += 1;
+          eventTypes.add(parsed.type);
+          continue;
+        }
+      } catch {
+        // Treat unparsable output as non-event text below.
+      }
+      nonEventLineCount += 1;
+      if (nonEventSamples.length < 3) nonEventSamples.push(line.slice(0, 240));
+    }
+  }
+
+  return {
+    eventLineCount,
+    eventTypes: Array.from(eventTypes),
+    nonEventLineCount,
+    nonEventSamples,
+    onlyLifecycleEvents: eventLineCount > 0 && nonEventLineCount === 0,
+  };
+}
+
 function isHarnessVerificationOnlyBlocker(blocker: string) {
   const text = blocker.toLowerCase();
   return (
@@ -442,6 +501,10 @@ function runnerMetrics(input: {
   status?: number | null;
   timedOut?: boolean;
   errorCode?: string;
+  timeoutMs?: number;
+  codexEventTypes?: string[];
+  codexEventLineCount?: number;
+  codexNonEventLineCount?: number;
 }) {
   const schemaText = JSON.stringify(input.request.schema);
   const finishedAt = new Date().toISOString();
@@ -461,11 +524,14 @@ function runnerMetrics(input: {
     exit_status: input.status ?? null,
     timed_out: input.timedOut || false,
     error_code: input.errorCode,
+    codex_event_types: input.codexEventTypes && input.codexEventTypes.length ? input.codexEventTypes : undefined,
+    codex_event_line_count: input.codexEventLineCount,
+    codex_non_event_line_count: input.codexNonEventLineCount,
     codex_command: input.config.codexCommand || "codex",
     codex_model: input.config.codexModel,
     codex_sandbox: input.config.codexSandbox || "workspace-write",
     codex_full_auto: input.config.codexFullAuto !== false,
-    timeout_ms: Number(input.config.codexTimeoutMs || 600_000),
+    timeout_ms: input.timeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS,
   }) as Record<string, unknown>;
 }
 
@@ -473,10 +539,11 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
   return (request: CodexJsonRequest): CodexJsonResult => {
     const startedAt = new Date().toISOString();
     const startedMs = Date.now();
+    const timeoutMs = resolveCodexTimeoutMs(config, request);
     if (!request.workdir || !existsSync(request.workdir)) {
       return {
         ok: false,
-        metrics: runnerMetrics({ request, config, startedAt, startedMs, errorCode: "workdir_missing" }),
+        metrics: runnerMetrics({ request, config, startedAt, startedMs, timeoutMs, errorCode: "workdir_missing" }),
         blocker: {
           code: "codex_workdir_missing",
           message: `Codex workdir does not exist for ${request.purpose}.`,
@@ -515,7 +582,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
       const proc = spawnSync(config.codexCommand || "codex", args, {
         input: request.prompt,
         encoding: "utf-8",
-        timeout: Number(config.codexTimeoutMs || 600_000),
+        timeout: timeoutMs,
         maxBuffer: 10 * 1024 * 1024,
         env,
       });
@@ -535,6 +602,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
             stderr: proc.stderr || "",
             status: proc.status,
             timedOut,
+            timeoutMs,
             errorCode: (proc.error as NodeJS.ErrnoException).code || "spawn_error",
           }),
           blocker: {
@@ -560,6 +628,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
             stdout: proc.stdout || "",
             stderr: proc.stderr || "",
             status: proc.status,
+            timeoutMs,
             errorCode: "nonzero_exit",
           }),
           blocker: {
@@ -575,12 +644,15 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
         : String(proc.stdout || "");
       const stdoutText = String(proc.stdout || "");
       const stderrText = String(proc.stderr || "");
-      const { parsed, source: parsedJsonSource } = parseJsonFromRunnerOutputs([
+      const runnerOutputs = [
         { source: existsSync(lastMessagePath) ? "last_message" : "stdout", text: finalText },
         { source: "stdout", text: stdoutText },
         { source: "stderr", text: stderrText },
-      ], request.schema);
+      ];
+      const { parsed, source: parsedJsonSource } = parseJsonFromRunnerOutputs(runnerOutputs, request.schema);
       if (!parsed) {
+        const outputAnalysis = analyzeCodexRunnerOutput(runnerOutputs);
+        const errorCode = outputAnalysis.onlyLifecycleEvents ? "no_final_response" : "invalid_json";
         return {
           ok: false,
           stdout: stdoutText,
@@ -594,12 +666,26 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
             stderr: stderrText,
             finalText,
             status: proc.status,
-            errorCode: "invalid_json",
+            timeoutMs,
+            errorCode,
+            codexEventTypes: outputAnalysis.eventTypes,
+            codexEventLineCount: outputAnalysis.eventLineCount,
+            codexNonEventLineCount: outputAnalysis.nonEventLineCount,
           }),
           blocker: {
-            code: "codex_invalid_json",
-            message: `Codex completed ${request.purpose}, but did not return valid JSON.`,
-            details: { finalText, stdout: stdoutText, stderr: stderrText },
+            code: outputAnalysis.onlyLifecycleEvents ? "codex_no_final_response" : "codex_invalid_json",
+            message: outputAnalysis.onlyLifecycleEvents
+              ? `Codex emitted lifecycle events during ${request.purpose}, but did not produce a final JSON response.`
+              : `Codex completed ${request.purpose}, but did not return valid JSON.`,
+            details: {
+              finalText,
+              stdout: stdoutText,
+              stderr: stderrText,
+              event_types: outputAnalysis.eventTypes,
+              event_line_count: outputAnalysis.eventLineCount,
+              non_event_line_count: outputAnalysis.nonEventLineCount,
+              non_event_samples: outputAnalysis.nonEventSamples,
+            },
           },
         };
       }
@@ -619,6 +705,7 @@ export function createCodexExecJsonRunner(config: CodexExecAgentConfig = {}): Co
           finalText,
           parsedJsonSource,
           status: proc.status,
+          timeoutMs,
         }),
       };
     } finally {
@@ -749,6 +836,7 @@ export function createCodexExecAgentAdapter(
           "Write a proof_plan and capture_script that will verify the exact user-facing change.",
           "Use recon_assessment.baseline_understanding as the source of truth. Do not author a proof plan unless it names the observed before state and the requested delta from that state.",
           "Use the recon-approved route and baseline context; make the plan name the concrete target, expected before state, expected after state, and stop condition.",
+          "Do not leave this authoring stage pending for external investigation. Keep any repo inspection brief, do not modify files, and return the JSON proof packet from the available state.",
           "Choose the evidence modality from verification_mode and success_criteria: screenshots for visual/UI proof, interactions plus screenshots for interaction proof, structured metrics/logs/JSON/audio analysis for non-visual proof.",
           "For playable/gameplay proof, treat screenshots as supporting artifacts only: start the game, send keyboard or pointer input, measure state before/after, measure non-HUD canvas/playfield pixel deltas across time, and return playability evidence with version riddle-proof.playability.v1.",
           "For interaction proof, return a structured evidence object with start route/state, terminal route/state, action, assertions, and matched UI text. Catch waitForURL or selector timeouts and record them as failed assertions instead of throwing before evidence is emitted.",

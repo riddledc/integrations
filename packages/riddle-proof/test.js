@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
-import { lstatSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import os from "node:os";
@@ -35,6 +35,7 @@ import {
   extractRiddleProofProfileResult,
   createRunResult,
   createCodexExecAgentAdapter,
+  createCodexExecJsonRunner,
   createLocalAgentAdapter,
   isSuccessfulStatus,
   isTerminalStatus,
@@ -140,6 +141,47 @@ function runCli(args, options = {}) {
     });
   });
 }
+
+const eventOnlyCodexFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-event-only-codex-"));
+const eventOnlyCodexCommand = path.join(eventOnlyCodexFixture, "fake-codex.mjs");
+writeFileSync(eventOnlyCodexCommand, `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+
+const outputIndex = process.argv.indexOf("--output-last-message");
+if (outputIndex < 0 || !process.argv[outputIndex + 1]) {
+  process.exit(2);
+}
+
+writeFileSync(process.argv[outputIndex + 1], [
+  JSON.stringify({ type: "thread.started", thread_id: "thread_event_only" }),
+  JSON.stringify({ type: "turn.started" })
+].join("\\n"));
+`);
+chmodSync(eventOnlyCodexCommand, 0o755);
+const eventOnlyCodexResult = await createCodexExecJsonRunner({
+  codexCommand: eventOnlyCodexCommand,
+  codexFullAuto: false,
+})({
+  purpose: "proof packet authoring",
+  workdir: eventOnlyCodexFixture,
+  prompt: "Return a proof packet.",
+  schema: {
+    type: "object",
+    required: ["proof_plan", "capture_script", "summary"],
+    properties: {
+      proof_plan: { type: "string" },
+      capture_script: { type: "string" },
+      summary: { type: "string" },
+    },
+  },
+});
+assert.equal(eventOnlyCodexResult.ok, false);
+assert.equal(eventOnlyCodexResult.blocker?.code, "codex_no_final_response");
+assert.match(eventOnlyCodexResult.blocker?.message || "", /did not produce a final JSON response/);
+assert.deepEqual(eventOnlyCodexResult.blocker?.details?.event_types, ["thread.started", "turn.started"]);
+assert.equal(eventOnlyCodexResult.blocker?.details?.event_line_count, 2);
+assert.equal(eventOnlyCodexResult.metrics?.error_code, "no_final_response");
+assert.equal(eventOnlyCodexResult.metrics?.timeout_ms, 180_000);
 
 const artifactAssertion = deriveRiddleProofArtifactBodyAssertions({
   artifact_text: "status passed; Timed Out; partial results available",
