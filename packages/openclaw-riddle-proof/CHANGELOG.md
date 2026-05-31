@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.138
+
+### Patch Changes
+
+- be6a3a2: Ignore prose/package path noise when deriving interaction terminal routes.
+- Updated dependencies [be6a3a2]
+  - @riddledc/riddle-proof@0.8.11
+
 ## 0.4.137
 
 ### Patch Changes

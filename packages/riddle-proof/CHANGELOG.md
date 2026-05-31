@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.11
+
+### Patch Changes
+
+- be6a3a2: Ignore prose/package path noise when deriving interaction terminal routes.
+
 ## 0.8.10
 
 ### Patch Changes
