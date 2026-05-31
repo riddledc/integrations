@@ -2061,7 +2061,24 @@ EXPLICIT_TERMINAL_PATH_KEYS = (
     'final_url', 'finalUrl',
     'final_route', 'finalRoute',
 )
-LOCATION_PATH_KEYS = ('path', 'pathname', 'route', 'url', 'href')
+FULL_LOCATION_PATH_KEYS = (
+    'url', 'href',
+    'hrefNormalized', 'href_normalized',
+    'terminalUrl', 'terminal_url',
+    'afterUrl', 'after_url',
+    'finalUrl', 'final_url',
+    'currentUrl', 'current_url',
+    'pathWithSearchAndHash', 'path_with_search_and_hash',
+    'fullPath', 'full_path',
+)
+PARTIAL_LOCATION_PATH_KEYS = (
+    'route',
+    'path',
+    'pathname',
+    'normalizedPath', 'normalized_path',
+    'rawPath', 'raw_path',
+)
+LOCATION_PATH_KEYS = FULL_LOCATION_PATH_KEYS + PARTIAL_LOCATION_PATH_KEYS
 AFTER_STATE_KEYS = (
     'after', 'after_state', 'afterState',
     'expected_after', 'expectedAfter',
@@ -2383,6 +2400,25 @@ def failed_interaction_evidence_summary(proof_evidence):
     return summary
 
 
+def interaction_capture_failure_evidence_summary(proof_evidence):
+    for record in proof_evidence_records_deep(proof_evidence):
+        if not isinstance(record, dict):
+            continue
+        version = str(record.get('version') or '').strip()
+        source = str(record.get('source') or '').strip()
+        if version != 'riddle-proof.interaction.capture-failure.v1' and source != 'verify_capture_failure':
+            continue
+        summary = str(record.get('evidence_summary') or '').strip() or 'Interaction capture failed before usable authored proof evidence was emitted.'
+        failures = collect_interaction_failed_assertions(record)
+        if failures:
+            summary += ' Failed checks: ' + ', '.join(failures[:8]) + '.'
+        error = str(record.get('capture_error') or record.get('error') or '').strip()
+        if error:
+            summary += ' Capture script error: ' + error[:300]
+        return summary
+    return ''
+
+
 def interaction_terminal_path_from_evidence(proof_evidence):
     for record in proof_evidence_records(proof_evidence):
         candidate = terminal_path_from_record(record)
@@ -2428,6 +2464,23 @@ def interaction_terminal_path_from_state(state):
     return '', ''
 
 
+def proof_evidence_should_override_state_terminal_path(state_candidate, evidence_candidate, proof_evidence):
+    if not evidence_candidate:
+        return False
+    if not state_candidate:
+        return True
+    if route_matches_expected(state_candidate, evidence_candidate):
+        return False
+    if interaction_assertions_pass(proof_evidence):
+        return True
+    for record in proof_evidence_records_deep(proof_evidence):
+        if interaction_assertions_pass(record):
+            return True
+        if explicit_route_match_flag(record) is True:
+            return True
+    return False
+
+
 def expected_path_for_verify(state, start_path, proof_evidence):
     mode = normalized_verification_mode(state.get('verification_mode'))
     normalized_start = normalize_observed_path(start_path) or '/'
@@ -2445,9 +2498,14 @@ def expected_path_for_verify(state, start_path, proof_evidence):
             'expected_query': start_parts['query'],
             'expected_hash': start_parts['hash'],
         }
-    candidate, source = interaction_terminal_path_from_state(state)
+    state_candidate, state_source = interaction_terminal_path_from_state(state)
+    evidence_candidate, evidence_source = interaction_terminal_path_from_evidence(proof_evidence)
+    if proof_evidence_should_override_state_terminal_path(state_candidate, evidence_candidate, proof_evidence):
+        candidate, source = evidence_candidate, evidence_source
+    else:
+        candidate, source = state_candidate, state_source
     if not candidate:
-        candidate, source = interaction_terminal_path_from_evidence(proof_evidence)
+        candidate, source = evidence_candidate, evidence_source
     expected = candidate or normalized_start
     expected_parts = route_parts(expected)
     return expected, {
@@ -2838,10 +2896,17 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
 
     if proof_evidence_blocker:
         reasons.append(proof_evidence_blocker)
-        decision = 'missing_proof_evidence'
+        interaction_capture_blocker = (
+            proof_evidence_blocker.startswith('Interaction capture ')
+            or 'Interaction capture failed before usable authored proof evidence was emitted' in proof_evidence_blocker
+            or 'Interaction capture reached a different terminal route' in proof_evidence_blocker
+        )
+        decision = 'failed_interaction_capture' if interaction_capture_blocker else 'missing_proof_evidence'
         if 'proof_evidence_present=false' in proof_evidence_blocker:
             decision = 'failed_proof_evidence'
             reasons.append('The capture reached usable page context, but the proof evidence explicitly failed its own required audio gate.')
+        elif interaction_capture_blocker:
+            reasons.append('The capture produced conclusive structured interaction-failure evidence, so this run should block with that specific browser evidence instead of re-authoring in a loop.')
         else:
             reasons.append('The capture reached usable page context, but the proof script did not emit the structured evidence required for this verification mode.')
         if route_mismatch:
@@ -2852,7 +2917,10 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
                 (route_mismatch.get('observed_after_path') or '(unknown)') +
                 '.'
             )
-        reasons.append('Return to author so the capture script can expose passing proof evidence before verify asks for a supervising-agent judgment.')
+        if interaction_capture_blocker:
+            reasons.append('Do not ask the authoring loop to infer a new route; the captured browser evidence is the terminal blocker.')
+        else:
+            reasons.append('Return to author so the capture script can expose passing proof evidence before verify asks for a supervising-agent judgment.')
         summary = proof_evidence_blocker
         if route_mismatch:
             summary += (
@@ -2868,8 +2936,10 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
         return {
             'decision': decision,
             'summary': summary,
-            'recommended_stage': 'author',
-            'continue_with_stage': 'author',
+            'recommended_stage': None if interaction_capture_blocker else 'author',
+            'continue_with_stage': None if interaction_capture_blocker else 'author',
+            'blocking': bool(interaction_capture_blocker),
+            'terminal_blocker': bool(interaction_capture_blocker),
             'reasons': reasons,
             'mismatch': route_mismatch,
         }
@@ -3645,12 +3715,17 @@ if proof_evidence_required_for_mode(s.get('verification_mode')):
         summary_lines.append('Structured proof evidence gate: ' + proof_evidence_blocker)
 
 structured_interaction_failure_summary = ''
+structured_interaction_capture_failure_summary = ''
 proof_evidence = evidence_bundle.get('proof_evidence')
 if verification_mode in INTERACTION_MODES and proof_evidence is not None:
     structured_interaction_failure_summary = failed_interaction_evidence_summary(proof_evidence)
+    structured_interaction_capture_failure_summary = interaction_capture_failure_evidence_summary(proof_evidence)
     if structured_interaction_failure_summary:
         summary_lines.append('Structured interaction evidence gate: ' + structured_interaction_failure_summary)
+    if structured_interaction_capture_failure_summary:
+        summary_lines.append('Structured interaction capture blocker: ' + structured_interaction_capture_failure_summary)
 s['structured_interaction_failure_summary'] = structured_interaction_failure_summary
+s['structured_interaction_capture_failure_summary'] = structured_interaction_capture_failure_summary
 
 visual_delta_recovery = build_visual_delta_recovery_decision(
     s.get('verification_mode'),
@@ -3662,6 +3737,7 @@ if visual_delta_recovery:
 
 has_judgable_failed_interaction_evidence = (
     bool(structured_interaction_failure_summary)
+    and not structured_interaction_capture_failure_summary
     and required_baseline_present
     and not proof_evidence_blocker
     and not visual_delta_recovery
@@ -3670,6 +3746,7 @@ has_good_evidence = (
     required_baseline_present
     and (after_observation.get('valid') or has_judgable_failed_interaction_evidence)
     and not proof_evidence_blocker
+    and not structured_interaction_capture_failure_summary
     and not visual_delta_recovery
 )
 
@@ -3726,7 +3803,12 @@ if has_good_evidence:
         summary_lines.append('Proof assessment: awaiting supervising agent judgment')
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
-    capture_retry = build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker, s.get('route_expectation') or {})
+    capture_retry = build_capture_retry_decision(
+        after_observation,
+        required_baseline_present,
+        proof_evidence_blocker or structured_interaction_capture_failure_summary,
+        s.get('route_expectation') or {},
+    )
     if visual_delta_recovery:
         observation_reason = str(after_observation.get('reason') or '')
         observation_details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
@@ -3735,6 +3817,7 @@ else:
             or 'console/runtime errors' in observation_reason
             or (observation_details.get('capture_error_messages') or [])
             or proof_evidence_blocker
+            or structured_interaction_capture_failure_summary
         )
         if has_primary_capture_failure:
             capture_retry['visual_delta_recovery'] = visual_delta_recovery
@@ -3742,6 +3825,9 @@ else:
         else:
             capture_retry = visual_delta_recovery
     next_stage_options = ['author', 'verify', 'recon'] if no_implementation_mode else ['author', 'verify', 'implement', 'recon']
+    capture_terminal_blocker = bool(capture_retry.get('terminal_blocker') or capture_retry.get('blocking'))
+    recommended_stage = None if capture_terminal_blocker else (capture_retry.get('recommended_stage') or 'author')
+    continue_with_stage = None if capture_terminal_blocker else (capture_retry.get('continue_with_stage') or 'author')
     s['verify_status'] = 'capture_incomplete'
     s['merge_recommendation'] = 'do-not-merge'
     s['proof_assessment'] = {}
@@ -3756,8 +3842,8 @@ else:
         'latest_observation': after_observation,
         'capture_quality': capture_retry,
         'next_stage_options': next_stage_options,
-        'recommended_stage': capture_retry.get('recommended_stage') or 'author',
-        'continue_with_stage': capture_retry.get('continue_with_stage') or 'author',
+        'recommended_stage': recommended_stage,
+        'continue_with_stage': continue_with_stage,
         'fields_agent_may_update': ['capture_script', 'server_path', 'wait_for_selector', 'proof_plan'],
         'instructions': [
             'The after-proof evidence packet is incomplete, so use the recommended stage before proof review.',
@@ -3767,7 +3853,7 @@ else:
         ],
     }
     summary_lines.append('Proof assessment: not yet possible because the after capture is still incomplete')
-    summary_lines.append('Proof next stage: ' + str(capture_retry.get('recommended_stage') or 'author'))
+    summary_lines.append('Proof next stage: blocked' if capture_terminal_blocker else 'Proof next stage: ' + str(recommended_stage or 'author'))
 
 s['verify_summary'] = '\n'.join(summary_lines)
 s['proof_summary'] = s['verify_summary']

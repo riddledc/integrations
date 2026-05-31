@@ -26,6 +26,12 @@ CASES = [
         'expected_terminal': 'pass',
     },
     {
+        'name': 'route-change-retry-state-drift-ignored',
+        'covers': ['route-changing interactions', 'proof-evidence-present'],
+        'function': 'run_verify_interaction_proof_evidence_overrides_stale_expected_path',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'route-change-reverse-pass',
         'covers': ['route-changing interactions'],
         'function': 'run_verify_interaction_reverse_terminal_route_from_proof_evidence',
@@ -65,6 +71,12 @@ CASES = [
         'name': 'thrown-error-preserves-structured-evidence',
         'covers': ['thrown errors', 'proof-evidence-present'],
         'function': 'run_verify_preserves_proof_evidence_on_capture_script_error',
+        'expected_terminal': 'specific_blocker',
+    },
+    {
+        'name': 'interaction-thrown-error-specific-blocker',
+        'covers': ['thrown errors', 'invalid browser evidence'],
+        'function': 'run_verify_interaction_thrown_error_terminal_blocker',
         'expected_terminal': 'specific_blocker',
     },
     {

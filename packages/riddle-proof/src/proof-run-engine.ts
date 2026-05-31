@@ -271,14 +271,22 @@ function verifyAssessment(state: any) {
     };
   }
   if (state?.verify_status === "capture_incomplete") {
+    const captureQuality = verifyDecision?.capture_quality || {};
+    const terminalBlocker = captureQuality?.terminal_blocker === true || captureQuality?.blocking === true;
+    const recommendedStage = terminalBlocker
+      ? null
+      : (verifyDecision?.continue_with_stage || verifyDecision?.recommended_stage || "author");
+    const continueWithStage = terminalBlocker
+      ? null
+      : (verifyDecision?.continue_with_stage || verifyDecision?.recommended_stage || "author");
     return {
-      decision: verifyDecision?.capture_quality?.decision || "revise_capture",
+      decision: captureQuality?.decision || "revise_capture",
       summary: verifyDecision?.summary || "Verify needs another internal capture iteration before the evidence can be judged.",
-      recommendedStage: verifyDecision?.continue_with_stage || verifyDecision?.recommended_stage || "author",
-      continueWithStage: verifyDecision?.continue_with_stage || verifyDecision?.recommended_stage || "author",
+      recommendedStage,
+      continueWithStage,
       escalationTarget: "agent",
-      reasons: Array.isArray(verifyDecision?.capture_quality?.reasons) ? verifyDecision.capture_quality.reasons : [],
-      raw: verifyDecision?.capture_quality || verifyDecision,
+      reasons: Array.isArray(captureQuality?.reasons) ? captureQuality.reasons : [],
+      raw: captureQuality || verifyDecision,
       source: "workflow_capture",
     };
   }
@@ -1638,7 +1646,9 @@ export async function executeWorkflow(
       };
 
       if (verifyStatus !== "evidence_captured") {
-        if ((verifyContinueWithStage || verifyRecommendedStage || "author") === "author") {
+        const captureQuality = verifyDecisionRequest?.capture_quality || {};
+        const captureTerminalBlocker = captureQuality?.terminal_blocker === true || captureQuality?.blocking === true;
+        if (!captureTerminalBlocker && (verifyContinueWithStage || verifyRecommendedStage || "author") === "author") {
           updateState(config.statePath, (currentState) => {
             currentState.author_status = "needs_authoring";
             currentState.proof_plan_status = "needs_authoring";
@@ -1646,7 +1656,7 @@ export async function executeWorkflow(
           });
           state = readState(config.statePath);
         }
-        const checkpointName = "verify_capture_retry";
+        const checkpointName = captureTerminalBlocker ? "verify_capture_blocked" : "verify_capture_retry";
         const summary = stringValue(proofAssessment.summary) || "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
         recordAttempt("verify", "checkpoint", summary, {
           autoApproved: verifyRes.autoApproved || false,
@@ -1659,11 +1669,13 @@ export async function executeWorkflow(
           summary,
           {
             ok: true,
-            nextActions: ["inspect_after_capture", "continue_internal_loop_with_checkpoint", "return_to_recon_if_baseline_is_wrong"],
+            nextActions: captureTerminalBlocker
+              ? ["inspect_after_capture", "report_specific_browser_evidence_blocker", "start_a_new_run_after_the_product_or_script_is_fixed"]
+              : ["inspect_after_capture", "continue_internal_loop_with_checkpoint", "return_to_recon_if_baseline_is_wrong"],
             advanceOptions: verifyLoopAdvanceOptions,
-            recommendedAdvanceStage: verifyRecommendedStage || "author",
-            continueWithStage: verifyContinueWithStage || "author",
-            blocking: false,
+            recommendedAdvanceStage: captureTerminalBlocker ? null : (verifyRecommendedStage || "author"),
+            continueWithStage: captureTerminalBlocker ? null : (verifyContinueWithStage || "author"),
+            blocking: captureTerminalBlocker,
             details: verifyDetails,
             verifyStatus,
             verifySummary,

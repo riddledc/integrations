@@ -158,6 +158,7 @@ export interface ShipGateValidation {
     visual_delta_required: boolean;
     visual_delta_status: string | null;
     visual_delta_passed: boolean | null;
+    hard_blockers?: string[];
   };
 }
 
@@ -698,6 +699,26 @@ export function visualDeltaShipGateReason(state: any = {}) {
   return `visual_delta.status=${status} blocks ready_to_ship for visual/UI proof`;
 }
 
+export function proofAssessmentHardBlockersForState(state: any = {}) {
+  const request = objectValue(state?.proof_assessment_request);
+  const blockers: string[] = [];
+  const add = (value: unknown) => {
+    if (typeof value !== "string") return;
+    const trimmed = value.trim();
+    if (trimmed && !blockers.includes(trimmed)) blockers.push(trimmed);
+  };
+  if (Array.isArray(request.hard_blockers)) {
+    for (const blocker of request.hard_blockers) add(blocker);
+  }
+  add(state?.structured_interaction_capture_failure_summary);
+  add(state?.structured_interaction_failure_summary);
+  const mergeRecommendation = String(state?.merge_recommendation || "").trim();
+  if (mergeRecommendation === "do-not-merge" && blockers.length) {
+    add("merge_recommendation=do-not-merge because the proof bundle contains hard blockers.");
+  }
+  return blockers;
+}
+
 function visualDeltaEvidenceIssueCode(state: any = {}, blocker = "") {
   const visualDelta = visualDeltaForState(state || {});
   const status = String(visualDelta.status || "").trim();
@@ -739,6 +760,7 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
   const visualDelta = visualDeltaForState(state);
   const visualDeltaRequired = visualDeltaRequiredForState(state);
   const visualDeltaBlocker = visualDeltaShipGateReason(state);
+  const hardBlockers = proofAssessmentHardBlockersForState(state);
   const reasons: string[] = [];
 
   if (!["before", "prod", "both"].includes(reference)) {
@@ -772,6 +794,9 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
   if (visualDeltaBlocker) {
     reasons.push(visualDeltaBlocker);
   }
+  for (const blocker of hardBlockers) {
+    reasons.push(`proof hard blocker prevents ready_to_ship: ${blocker}`);
+  }
 
   return {
     ok: reasons.length === 0,
@@ -790,6 +815,7 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
       visual_delta_required: visualDeltaRequired,
       visual_delta_status: typeof visualDelta.status === "string" ? visualDelta.status : null,
       visual_delta_passed: typeof visualDelta.passed === "boolean" ? visualDelta.passed : null,
+      hard_blockers: hardBlockers,
     },
   };
 }
@@ -908,6 +934,10 @@ const CHECKPOINT_CONTRACT_SPECS: Record<string, {
       type: "json",
       description: "Optional revised proof packet if returning to author.",
     }],
+    required_state: ["verify_decision_request"],
+  },
+  verify_capture_blocked: {
+    purpose: "Verify capture produced conclusive failed browser evidence and should stop instead of retrying proof authoring.",
     required_state: ["verify_decision_request"],
   },
   verify_supervisor_judgment: {
