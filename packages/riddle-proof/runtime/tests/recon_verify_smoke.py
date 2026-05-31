@@ -2612,6 +2612,59 @@ def run_verify_interaction_reverse_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_prose_route_noise_uses_proof_evidence():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-prose-noise-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/proof/',
+            'before_cdn': 'https://cdn.example.com/before-proof.png',
+            'proof_plan': 'Start on the proof page, click Home, and confirm the home page content is visible.',
+            'capture_script': "clickedHomeNavigation(); await saveScreenshot('after-home');",
+            'change_request': (
+                'Prior wrapper notes mentioned terminal drift to /Your and package '
+                '@riddledc/openclaw-riddle-proof, but those are prose diagnostics, not route expectations.'
+            ),
+            'success_criteria': (
+                'Use structured browser evidence for the terminal route; do not parse '
+                '/openclaw-riddle-proof from package text as the expected path.'
+            ),
+            'recon_results': {
+                'baselines': {'before': {'path': '/proof/', 'url': 'https://cdn.example.com/before-proof.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_prose_route_noise', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['route_expectation']['source'] == 'proof_evidence_contract'
+        assert after_verify['route_expectation']['expected_path'] == '/'
+        route = after_verify['proof_assessment_request']['semantic_context']['route']
+        assert route['expected_after_path'] == '/'
+        assert route['after_observed_path'] == '/'
+        encoded = json.dumps(after_verify, sort_keys=True)
+        assert '"expected_path": "/Your"' not in encoded
+        assert '"expected_path": "/openclaw-riddle-proof"' not in encoded
+        return {
+            'ok': True,
+            'expected_path': after_verify['route_expectation']['expected_path'],
+            'source': after_verify['route_expectation']['source'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_hash_terminal_route_from_proof_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-hash-'))
     state_path = tempdir / 'state.json'
@@ -3210,6 +3263,7 @@ if __name__ == '__main__':
         'remote_audit_verify_uses_default_capture_script': run_remote_audit_verify_uses_default_capture_script(),
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
+        'verify_interaction_prose_route_noise_uses_proof_evidence': run_verify_interaction_prose_route_noise_uses_proof_evidence(),
         'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
         'verify_interaction_authored_query_hash_mismatch_blocks_with_evidence': run_verify_interaction_authored_query_hash_mismatch_blocks_with_evidence(),
         'verify_interaction_query_hash_pass_uses_proof_evidence_route': run_verify_interaction_query_hash_pass_uses_proof_evidence_route(),

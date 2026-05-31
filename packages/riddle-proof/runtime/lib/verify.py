@@ -2158,18 +2158,29 @@ def text_path_candidate(value):
     return path_candidate(raw)
 
 
+def text_route_candidate(value):
+    candidate = text_path_candidate(value)
+    if not candidate:
+        return ''
+    parsed = urlparse(candidate)
+    first_segment = next((part for part in (parsed.path or '').split('/') if part), '')
+    if first_segment and first_segment[:1].isupper():
+        return ''
+    return candidate
+
+
 def terminal_path_from_text(value):
     if not isinstance(value, str):
         return ''
     for match in re.findall(r"""['"`](/[^'"`\s]+[?#][^'"`\s]*)['"`]""", value):
-        candidate = text_path_candidate(match)
+        candidate = text_route_candidate(match)
         if candidate:
             return candidate
     context_pattern = re.compile(
-        r"""(?is)\b(?:expected\s+(?:terminal|after|final)|terminal|after|final)\b[^/\r\n]{0,120}['"`]?(/[^'"`\s,;)]*)"""
+        r"""(?is)\b(?:expected\s+(?:terminal|after|final)(?:\s+(?:route|path|url))?|terminal(?:\s+(?:route|path|url))?|after(?:\s+(?:route|path|url))?|final(?:\s+(?:route|path|url))?)\s*(?:should\s+(?:be|equal|match)|must\s+(?:be|equal|match)|is|as|to|=|:)?\s*['"`]?(/[^'"`\s,;)]*)"""
     )
     for match in context_pattern.findall(value):
-        candidate = text_path_candidate(match)
+        candidate = text_route_candidate(match)
         if candidate:
             return candidate
     return ''
@@ -2390,6 +2401,13 @@ def interaction_terminal_path_from_evidence(proof_evidence):
 
 def interaction_terminal_path_from_state(state):
     for key in (
+        'expected_terminal_path',
+        'expected_after_path',
+    ):
+        candidate = path_candidate(state.get(key))
+        if candidate:
+            return candidate, key
+    for key in (
         'interaction_contract',
         'proof_contract',
         'supervisor_author_packet',
@@ -2401,14 +2419,10 @@ def interaction_terminal_path_from_state(state):
         if candidate:
             return candidate, key
     for key in (
-        'expected_terminal_path',
-        'expected_after_path',
         'capture_script',
         'proof_plan',
-        'success_criteria',
-        'change_request',
     ):
-        candidate = path_candidate(state.get(key)) or terminal_path_from_text(state.get(key))
+        candidate = terminal_path_from_text(state.get(key))
         if candidate:
             return candidate, key
     return '', ''
