@@ -1657,6 +1657,27 @@ async function routeCheckpoint(
   if (checkpoint === "verify_agent_retry") {
     const next = recommendedContinuation(result);
     if (next) return { next };
+    return {
+      blocker: {
+        code: "proof_assessment_blocked",
+        checkpoint,
+        message:
+          result.summary ||
+          "The supervising proof assessment did not approve shipping and did not provide a safe retry continuation.",
+        details: compactRecord({
+          proofAssessment:
+            result.proofAssessment ||
+            result.checkpointContract?.proof_assessment ||
+            recordValue(result.raw)?.proofAssessment ||
+            null,
+          verifyDecisionRequest:
+            result.verifyDecisionRequest ||
+            result.checkpointContract?.verify_decision_request ||
+            null,
+          checkpointContract: result.checkpointContract || null,
+        }) as Record<string, unknown>,
+      },
+    };
   }
 
   if (checkpoint === "awaiting_stage_advance") {
