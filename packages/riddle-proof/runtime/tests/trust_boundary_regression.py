@@ -32,6 +32,12 @@ CASES = [
         'expected_terminal': 'pass',
     },
     {
+        'name': 'route-prose-noise-ignored',
+        'covers': ['route-changing interactions', 'proof-evidence-present'],
+        'function': 'run_verify_interaction_prose_route_noise_uses_proof_evidence',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'query-hash-trailing-slash-pass',
         'covers': ['query/hash/trailing-slash URLs', 'proof-evidence-present'],
         'function': 'run_verify_interaction_query_hash_pass_uses_proof_evidence_route',
