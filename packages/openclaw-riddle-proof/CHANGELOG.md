@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.136
+
+### Patch Changes
+
+- 1ee25a8: Classify Codex event-only authoring output as a missing final response, bound the default proof-packet authoring timeout, and refresh the OpenClaw wrapper release.
+- Updated dependencies [1ee25a8]
+  - @riddledc/riddle-proof@0.8.9
+
 ## 0.4.135
 
 ### Patch Changes
