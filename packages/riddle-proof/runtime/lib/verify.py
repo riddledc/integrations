@@ -646,6 +646,24 @@ def proof_evidence_records(value):
     return []
 
 
+def proof_evidence_records_deep(value, depth=0):
+    if depth > 6:
+        return []
+    if isinstance(value, dict):
+        records = [value]
+        for key in EVIDENCE_CONTAINER_KEYS:
+            nested = value.get(key)
+            if isinstance(nested, (dict, list)):
+                records.extend(proof_evidence_records_deep(nested, depth + 1))
+        return records
+    if isinstance(value, list):
+        records = []
+        for item in value:
+            records.extend(proof_evidence_records_deep(item, depth + 1))
+        return records
+    return []
+
+
 def static_audit_evidence_support(value):
     for record in proof_evidence_records(value):
         explicit_static = (
@@ -1993,6 +2011,36 @@ def route_parts(value):
     }
 
 
+def explicit_route_match_flag(record):
+    if not isinstance(record, dict):
+        return None
+    true_keys = ('routeMatched', 'route_matched', 'routeMatches', 'route_matches')
+    false_keys = true_keys + ('passed', 'ok', 'proofReady', 'proof_ready', 'interactionPassed', 'interaction_passed')
+    if any(record.get(key) is False for key in false_keys):
+        return False
+    if any(record.get(key) is True for key in true_keys):
+        return True
+    return None
+
+
+def interaction_proof_route_match(expected_path, proof_evidence):
+    expected = normalize_observed_path(expected_path)
+    if not expected or proof_evidence is None:
+        return None
+    for record in proof_evidence_records_deep(proof_evidence):
+        flag = explicit_route_match_flag(record)
+        candidate = terminal_path_from_record(record)
+        if candidate and route_matches_expected(expected, candidate):
+            return {
+                'matched': True,
+                'observed_path': normalize_observed_path(candidate),
+                'observed_path_raw': candidate,
+                'source': 'proof_evidence_terminal_route',
+                'route_match_flag': flag,
+            }
+    return None
+
+
 EXPLICIT_TERMINAL_PATH_KEYS = (
     'expected_terminal_path', 'expectedTerminalPath',
     'expected_terminal_url', 'expectedTerminalUrl',
@@ -2168,6 +2216,8 @@ INTERACTION_FAILURE_FLAG_KEYS = (
     'proof_ready',
     'interactionPassed',
     'interaction_passed',
+    'routeMatched',
+    'route_matched',
     'routeMatches',
     'route_matches',
 )
@@ -2649,6 +2699,21 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
             'observed_path_raw': expected_path,
         })
 
+    proof_route_match = (
+        interaction_proof_route_match(expected_path, proof_evidence)
+        if mode in INTERACTION_MODES
+        else None
+    )
+    if isinstance(proof_route_match, dict):
+        details['proof_evidence_route_matched'] = bool(proof_route_match.get('matched'))
+        details['proof_evidence_route_match_source'] = proof_route_match.get('source') or ''
+        details['proof_evidence_observed_path'] = proof_route_match.get('observed_path') or ''
+        details['proof_evidence_observed_path_raw'] = proof_route_match.get('observed_path_raw') or ''
+        if proof_route_match.get('matched') and proof_route_match.get('observed_path'):
+            details['observed_path'] = proof_route_match.get('observed_path')
+            details['observed_path_raw'] = proof_route_match.get('observed_path_raw') or proof_route_match.get('observed_path')
+            details['observed_path_source'] = 'proof_evidence'
+
     console = payload.get('console') or []
     for text in iter_console_messages(console):
         if is_proof_telemetry_console_message(text):
@@ -2698,7 +2763,14 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
         reasons.append('page has console/runtime errors')
 
     observed_path = normalize_observed_path(details.get('observed_path'))
-    if isinstance(page_state, dict) and expected_path and observed_path and not route_matches_expected(expected_path, observed_path):
+    proof_route_matched = isinstance(proof_route_match, dict) and proof_route_match.get('matched')
+    if (
+        isinstance(page_state, dict)
+        and expected_path
+        and observed_path
+        and not proof_route_matched
+        and not route_matches_expected(expected_path, observed_path)
+    ):
         raw_observed = details.get('observed_path_raw') or details.get('observed_path') or observed_path
         reasons.append(f'wrong route: expected {expected_path}, got {raw_observed}')
 
@@ -3640,7 +3712,21 @@ if has_good_evidence:
         summary_lines.append('Proof assessment: awaiting supervising agent judgment')
     summary_lines.append('Proof next stage: supervising agent decides after reviewing the evidence packet')
 else:
-    capture_retry = visual_delta_recovery or build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker, s.get('route_expectation') or {})
+    capture_retry = build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker, s.get('route_expectation') or {})
+    if visual_delta_recovery:
+        observation_reason = str(after_observation.get('reason') or '')
+        observation_details = after_observation.get('details') if isinstance(after_observation.get('details'), dict) else {}
+        has_primary_capture_failure = bool(
+            'wrong route' in observation_reason
+            or 'console/runtime errors' in observation_reason
+            or (observation_details.get('capture_error_messages') or [])
+            or proof_evidence_blocker
+        )
+        if has_primary_capture_failure:
+            capture_retry['visual_delta_recovery'] = visual_delta_recovery
+            capture_retry.setdefault('reasons', []).append('Visual delta recovery also needed: ' + str(visual_delta_recovery.get('summary') or visual_delta_recovery.get('reason') or 'visual delta incomplete'))
+        else:
+            capture_retry = visual_delta_recovery
     next_stage_options = ['author', 'verify', 'recon'] if no_implementation_mode else ['author', 'verify', 'implement', 'recon']
     s['verify_status'] = 'capture_incomplete'
     s['merge_recommendation'] = 'do-not-merge'
