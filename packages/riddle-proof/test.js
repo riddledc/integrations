@@ -13824,6 +13824,70 @@ assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_required,
 assert.equal(auditVisualCheckpointPacket.evidence_excerpt.visual_delta_ready, true);
 assert.equal(auditVisualCheckpointPacket.evidence_excerpt.evidence_issue_code, undefined);
 
+const interactionHardBlockerFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-interaction-hard-blocker-"));
+const interactionHardBlockerStatePath = path.join(interactionHardBlockerFixture, "riddle-state.json");
+writeFileSync(interactionHardBlockerStatePath, JSON.stringify({
+  verification_mode: "interaction",
+  verify_status: "evidence_captured",
+  merge_recommendation: "do-not-merge",
+  before_cdn: "https://riddle-screenshots.example/before.png",
+  after_cdn: "https://riddle-screenshots.example/after.png",
+  structured_interaction_capture_failure_summary: "Capture script error: intentional-riddle-proof-0811-thrown-error",
+  proof_assessment_request: {
+    hard_blockers: ["Capture script error: intentional-riddle-proof-0811-thrown-error"],
+  },
+}, null, 2));
+const interactionHardBlockerCalls = [];
+const interactionHardBlockerResult = await runRiddleProofEngineHarness({
+  request: {
+    repo: "riddledc/example",
+    change_request: "Block ready_to_ship when interaction evidence contains a hard blocker.",
+    verification_mode: "interaction",
+    ship_mode: "none",
+    harness_state_path: path.join(interactionHardBlockerFixture, "harness-state.json"),
+    engine_state_path: interactionHardBlockerStatePath,
+  },
+  max_iterations: 2,
+  engine: {
+    async execute(params) {
+      interactionHardBlockerCalls.push(params);
+      if (params.proof_assessment_json) {
+        throw new Error("hard-blocked proof should not be resumed with a ready_to_ship assessment");
+      }
+      return {
+        ok: false,
+        state_path: interactionHardBlockerStatePath,
+        checkpoint: "verify_supervisor_judgment",
+        summary: "Proof assessment required.",
+      };
+    },
+  },
+  agent: {
+    async assessRecon() { throw new Error("recon should not run"); },
+    async authorProofPacket() { throw new Error("author should not run"); },
+    async implementChange() { throw new Error("implement should not run"); },
+    async assessProof() {
+      return {
+        ok: true,
+        summary: "Incorrectly optimistic assessment.",
+        payload: {
+          decision: "ready_to_ship",
+          recommended_stage: "ship",
+          continue_with_stage: "ship",
+          escalation_target: "agent",
+          reasons: ["screenshot is present"],
+          source: "supervising_agent",
+        },
+      };
+    },
+  },
+});
+assert.equal(interactionHardBlockerResult.status, "blocked");
+assert.equal(interactionHardBlockerResult.blocker.code, "proof_hard_blocker");
+assert.equal(interactionHardBlockerCalls.some((call) => call.proof_assessment_json), false);
+const interactionHardBlockerHarnessState = JSON.parse(readFileSync(interactionHardBlockerResult.state_path, "utf-8"));
+assert.equal(interactionHardBlockerHarnessState.events.some((event) => event.kind === "agent.proof_assessment.hard_blocked"), true);
+
 const auditRetryFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-audit-retry-"));
 const auditRetryStatePath = path.join(auditRetryFixture, "riddle-state.json");
 writeFileSync(auditRetryStatePath, JSON.stringify({

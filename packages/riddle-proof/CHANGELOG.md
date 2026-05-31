@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.12
+
+### Patch Changes
+
+- Harden interaction verification around trusted browser evidence, route expectation drift, and conclusive capture-failure blockers.
+
 ## 0.8.11
 
 ### Patch Changes

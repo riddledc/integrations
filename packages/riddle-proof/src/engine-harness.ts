@@ -47,7 +47,13 @@ import type {
   RiddleProofStage,
   RiddleProofStatus,
 } from "./types";
-import { noImplementationModeFor, visualDeltaForState, visualDeltaRequiredForState, visualDeltaShipGateReason } from "./proof-run-core";
+import {
+  noImplementationModeFor,
+  proofAssessmentHardBlockersForState,
+  visualDeltaForState,
+  visualDeltaRequiredForState,
+  visualDeltaShipGateReason,
+} from "./proof-run-core";
 
 export type RiddleProofShipMode = "none" | "ship";
 export type RiddleProofCheckpointMode = "auto" | "yield";
@@ -504,6 +510,18 @@ function proofAssessmentRequestsShip(payload: Record<string, unknown>) {
   const recommendedStage = String(payload.recommended_stage || "");
   const continueStage = String(payload.continue_with_stage || "");
   return decision === "ready_to_ship" || recommendedStage === "ship" || continueStage === "ship";
+}
+
+function proofAssessmentHardBlockers(state: Record<string, unknown> | null, payload: Record<string, unknown>) {
+  const blockers = proofAssessmentHardBlockersForState(state || {});
+  if (Array.isArray(payload.hard_blockers)) {
+    for (const blocker of payload.hard_blockers) {
+      if (typeof blocker !== "string") continue;
+      const trimmed = blocker.trim();
+      if (trimmed && !blockers.includes(trimmed)) blockers.push(trimmed);
+    }
+  }
+  return blockers;
 }
 
 function proofAssessmentContinuation(
@@ -1612,6 +1630,37 @@ async function routeCheckpoint(
         adapter_details: assessment.details || null,
       }) as Record<string, unknown>,
     });
+    const hardBlockers = proofAssessmentHardBlockers(context.fullRiddleState || {}, payload);
+    if (proofAssessmentRequestsShip(payload) && hardBlockers.length) {
+      const summary = hardBlockers[0];
+      recordEvent(state, {
+        kind: "agent.proof_assessment.hard_blocked",
+        checkpoint,
+        stage: "verify",
+        summary,
+        details: compactRecord({
+          hard_blockers: hardBlockers,
+          proof_assessment: payload,
+          agent_duration_ms: durationMs,
+        }),
+      });
+      return {
+        blocker: {
+          code: "proof_hard_blocker",
+          checkpoint,
+          message: "Riddle Proof cannot mark ready_to_ship while the proof bundle contains a hard blocker: " + summary,
+          details: compactRecord({
+            hard_blockers: hardBlockers,
+            proofAssessment: payload,
+            verifyDecisionRequest:
+              context.fullRiddleState?.verify_decision_request ||
+              result.verifyDecisionRequest ||
+              result.checkpointContract?.verify_decision_request ||
+              null,
+          }) as Record<string, unknown>,
+        },
+      };
+    }
     const visualBlocker = proofAssessmentVisualBlocker({
       ...(context.fullRiddleState || {}),
       verification_mode: context.fullRiddleState?.verification_mode || request.verification_mode,
@@ -1670,6 +1719,25 @@ async function routeCheckpoint(
             result.checkpointContract?.proof_assessment ||
             recordValue(result.raw)?.proofAssessment ||
             null,
+          verifyDecisionRequest:
+            result.verifyDecisionRequest ||
+            result.checkpointContract?.verify_decision_request ||
+            null,
+          checkpointContract: result.checkpointContract || null,
+        }) as Record<string, unknown>,
+      },
+    };
+  }
+
+  if (checkpoint === "verify_capture_blocked") {
+    return {
+      blocker: {
+        code: "verify_capture_blocked",
+        checkpoint,
+        message:
+          result.summary ||
+          "Verify captured conclusive failed browser evidence and stopped instead of retrying proof authoring.",
+        details: compactRecord({
           verifyDecisionRequest:
             result.verifyDecisionRequest ||
             result.checkpointContract?.verify_decision_request ||

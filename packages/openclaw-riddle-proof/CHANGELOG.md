@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.139
+
+### Patch Changes
+
+- Harden interaction verification around trusted browser evidence, route expectation drift, and conclusive capture-failure blockers.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.12
+
 ## 0.4.138
 
 ### Patch Changes
