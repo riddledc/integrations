@@ -488,6 +488,69 @@ class FakeRiddle:
                         'totalPixels': 972000,
                     },
                 }
+            if 'clickedHomeNavigationOcTerminalShape' in script:
+                page_state = {
+                    'bodyTextLength': 180,
+                    'visibleTextSample': 'Riddle Proof homepage hero Start Free',
+                    'interactiveElements': 4,
+                    'visibleInteractiveElements': 4,
+                    'pathname': '/',
+                    'href': 'https://riddledc.com/',
+                    'title': 'Riddle',
+                    'buttons': ['Start Free'],
+                    'headings': ['Riddle Proof'],
+                    'links': [],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'h1', 'text': 'Riddle Proof'}],
+                }
+                proof_evidence = {
+                    'version': 'riddle-proof.interaction.v1',
+                    'start': {
+                        'expectedUrl': 'https://riddledc.com/proof/',
+                        'expectedPath': '/proof/',
+                        'observedUrl': 'https://riddledc.com/proof/',
+                        'observedPath': '/proof/',
+                    },
+                    'action': {
+                        'type': 'click',
+                        'target': 'visible Riddle/Home nav link to root',
+                        'chosenText': 'Riddle',
+                        'chosenHref': '/',
+                        'clicked': True,
+                    },
+                    'terminal': {
+                        'expectedUrl': 'https://riddledc.com/',
+                        'expectedPath': '/',
+                        'routeExpectationSource': 'capture_script.expectedUrl',
+                        'observedUrl': 'https://riddledc.com/',
+                        'observedPath': '/',
+                        'pageReady': True,
+                    },
+                    'assertions': {
+                        'startedOnProofRoute': True,
+                        'clickedRootNavLink': True,
+                        'terminalUrlMatchedExpected': True,
+                        'terminalRouteMatchedRoot': True,
+                        'terminalMainVisible': True,
+                        'routeExpectationSourceMatched': True,
+                    },
+                    'errors': [],
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/home-after.png'}],
+                    'outputs': [{'name': 'after-home.png', 'url': 'https://cdn.example.com/home-after.png'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                    'visual_diff': {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    },
+                }
             if 'clickedHomeNavigation' in script:
                 page_state = {
                     'bodyTextLength': 180,
@@ -2768,6 +2831,56 @@ def run_verify_interaction_reverse_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-reverse-oc-shape-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='prod')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'not_required',
+            'verification_mode': 'interaction',
+            'implementation_mode': 'none',
+            'require_diff': False,
+            'allow_code_changes': False,
+            'server_path': '/proof/',
+            'prod_url': 'https://riddledc.com/proof/',
+            'prod_cdn': 'https://cdn.example.com/prod-proof.png',
+            'proof_plan': 'Start on the proof page, click the visible Riddle/Home root nav link, and trust the structured evidence for the terminal route.',
+            'capture_script': "clickedHomeNavigationOcTerminalShape(); await saveScreenshot('after-home');",
+            'recon_results': {
+                'baselines': {'prod': {'path': '/proof/', 'url': 'https://cdn.example.com/prod-proof.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_reverse_terminal_nested_expected_url', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['route_expectation']['source'] == 'proof_evidence_contract'
+        assert after_verify['route_expectation']['start_path'] == '/proof'
+        assert after_verify['route_expectation']['expected_path'] == '/'
+        route = after_verify['proof_assessment_request']['semantic_context']['route']
+        assert route['expected_start_path'] == '/proof'
+        assert route['expected_after_path'] == '/'
+        assert route['after_observed_path'] == '/'
+        assert 'wrong route' not in after_verify['verify_results']['after']['observation']['reason']
+        return {
+            'ok': True,
+            'expected_path': after_verify['route_expectation']['expected_path'],
+            'after_observed_path': route['after_observed_path'],
+            'source': after_verify['route_expectation']['source'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_prose_route_noise_uses_proof_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-prose-noise-'))
     state_path = tempdir / 'state.json'
@@ -3553,6 +3666,7 @@ if __name__ == '__main__':
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_proof_evidence_overrides_stale_expected_path': run_verify_interaction_proof_evidence_overrides_stale_expected_path(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
+        'verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence': run_verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence(),
         'verify_interaction_prose_route_noise_uses_proof_evidence': run_verify_interaction_prose_route_noise_uses_proof_evidence(),
         'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
         'verify_interaction_authored_query_hash_mismatch_blocks_with_evidence': run_verify_interaction_authored_query_hash_mismatch_blocks_with_evidence(),

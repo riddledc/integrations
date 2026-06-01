@@ -38,6 +38,12 @@ CASES = [
         'expected_terminal': 'pass',
     },
     {
+        'name': 'route-change-reverse-nested-terminal-url-pass',
+        'covers': ['route-changing interactions', 'proof-evidence-present'],
+        'function': 'run_verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'route-prose-noise-ignored',
         'covers': ['route-changing interactions', 'proof-evidence-present'],
         'function': 'run_verify_interaction_prose_route_noise_uses_proof_evidence',

@@ -82,6 +82,40 @@ function baseRequest(paths, changeRequest) {
   assert(!result.blocker, 'valid evidence should not create a blocker');
   assert(calls.length === 1, 'valid evidence should not loop after verify_ship_ready');
   assertNoGenericLifecycleFailure(result, 'valid evidence pass');
+
+  const terminalStateWithoutFinalizedFlag = readJson(paths.harnessStatePath);
+  terminalStateWithoutFinalizedFlag.finalized = false;
+  writeJson(paths.harnessStatePath, terminalStateWithoutFinalizedFlag);
+  const lateReadyCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Ready-to-ship run should ignore stale manual checkpoint responses even without finalized=true.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('late checkpoint response after ready_to_ship should not call the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: result.run_id,
+      checkpoint: 'author_supervisor_judgment',
+      decision: 'author_packet',
+      summary: 'Late manual author packet after terminal ready_to_ship.',
+      payload: {
+        proof_plan: 'stale proof plan',
+        capture_script: "return { passed: true, staleManualCheckpointProbe: true };",
+      },
+      created_at: '2026-06-01T14:27:30.000Z',
+    },
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(lateReadyCheckpointResponse.status === 'ready_to_ship', `late checkpoint response should preserve ready_to_ship, got ${lateReadyCheckpointResponse.status}`);
+  assert(lateReadyCheckpointResponse.raw?.ignored_checkpoint_response === true, 'late ready checkpoint response should be explicitly ignored');
+  assert(!lateReadyCheckpointResponse.blocker, 'late ready checkpoint response should not create a blocker');
+  const persistedReadyState = readJson(paths.harnessStatePath);
+  assert(persistedReadyState.status === 'ready_to_ship', 'persisted ready_to_ship status should remain after late checkpoint response');
+  assert(persistedReadyState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late ready checkpoint response should be recorded');
+  assertNoGenericLifecycleFailure(lateReadyCheckpointResponse, 'late checkpoint response after ready_to_ship');
 }
 
 {
@@ -250,6 +284,7 @@ console.log(JSON.stringify({
   suite: 'riddle-proof.direct-trust-boundary',
   cases: [
     'valid evidence ready_to_ship',
+    'late checkpoint response ignored after ready_to_ship without finalized flag',
     'invalid evidence proof_assessment_blocked',
     'timeout capture retry checkpoint',
     'no-diff audit completed',
