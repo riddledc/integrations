@@ -183,6 +183,36 @@ assert.equal(eventOnlyCodexResult.blocker?.details?.event_line_count, 2);
 assert.equal(eventOnlyCodexResult.metrics?.error_code, "no_final_response");
 assert.equal(eventOnlyCodexResult.metrics?.timeout_ms, 180_000);
 
+const timeoutCodexFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-timeout-codex-"));
+const timeoutCodexCommand = path.join(timeoutCodexFixture, "fake-codex-timeout.mjs");
+writeFileSync(timeoutCodexCommand, `#!/usr/bin/env node
+setTimeout(() => {}, 60_000);
+`);
+chmodSync(timeoutCodexCommand, 0o755);
+const timeoutCodexResult = await createCodexExecJsonRunner({
+  codexCommand: timeoutCodexCommand,
+  codexFullAuto: false,
+  codexTimeoutMs: 50,
+})({
+  purpose: "proof packet authoring",
+  workdir: timeoutCodexFixture,
+  prompt: "Return a proof packet.",
+  schema: {
+    type: "object",
+    required: ["proof_plan", "capture_script", "summary"],
+    properties: {
+      proof_plan: { type: "string" },
+      capture_script: { type: "string" },
+      summary: { type: "string" },
+    },
+  },
+});
+assert.equal(timeoutCodexResult.ok, false);
+assert.equal(timeoutCodexResult.blocker?.code, "codex_timeout");
+assert.match(timeoutCodexResult.blocker?.message || "", /timed out during proof packet authoring/);
+assert.equal(timeoutCodexResult.metrics?.timed_out, true);
+assert.equal(timeoutCodexResult.metrics?.timeout_ms, 50);
+
 const artifactAssertion = deriveRiddleProofArtifactBodyAssertions({
   artifact_text: "status passed; Timed Out; partial results available",
   candidates: ["passed", "completed_timeout", "partial results available", "passed"],

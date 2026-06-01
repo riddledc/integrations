@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.15
+
+### Patch Changes
+
+- Ignore stale checkpoint responses after finalized Riddle Proof runs and harden direct trust-boundary regressions.
+
 ## 0.8.14
 
 ### Patch Changes

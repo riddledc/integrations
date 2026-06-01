@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.142
+
+### Patch Changes
+
+- Ignore stale checkpoint responses after finalized Riddle Proof runs and harden direct trust-boundary regressions.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.15
+
 ## 0.4.141
 
 ### Patch Changes
