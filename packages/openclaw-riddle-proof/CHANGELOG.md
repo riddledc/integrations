@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.140
+
+### Patch Changes
+
+- Block structured interaction evidence when an explicit expected URL with query/hash does not match the captured terminal browser route.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.13
+
 ## 0.4.139
 
 ### Patch Changes

@@ -325,6 +325,70 @@ class FakeRiddle:
                         'proof.json': {'script_error': message},
                     },
                 }
+            if 'pricingQueryHashStructuredNegativeControl' in script:
+                page_state = {
+                    'bodyTextLength': 260,
+                    'visibleTextSample': 'Pricing One rate Browser Compute Example Costs',
+                    'interactiveElements': 8,
+                    'visibleInteractiveElements': 8,
+                    'pathname': '/pricing/',
+                    'search': '',
+                    'hash': '',
+                    'title': 'Pricing',
+                    'buttons': [],
+                    'headings': ['Pricing', 'Browser Compute'],
+                    'links': [{'text': 'Pricing', 'href': '/pricing/?rp_probe=1#pricing-probe'}],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'main', 'text': 'Pricing'}],
+                }
+                proof_evidence = {
+                    'version': 'riddle-proof.interaction.v1',
+                    'probe': 'query-hash-dropped-negative-control',
+                    'negativeControl': True,
+                    'routeExpectationSource': 'capture_script.expectedUrl',
+                    'expectedUrl': 'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
+                    'expectedHref': '/pricing/?rp_probe=1#pricing-probe',
+                    'intentionalObservedUrl': 'https://riddledc.com/pricing/',
+                    'start': {'href': 'https://riddledc.com/', 'pathname': '/', 'search': '', 'hash': ''},
+                    'action': {
+                        'type': 'rewrite-pricing-link-click-then-drop-query-hash',
+                        'afterClickHref': 'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
+                        'afterClickPathname': '/pricing/',
+                        'afterClickSearch': '?rp_probe=1',
+                        'afterClickHash': '#pricing-probe',
+                        'expectedNavigationReached': True,
+                    },
+                    'terminal': {
+                        'href': 'https://riddledc.com/pricing/',
+                        'pathname': '/pricing/',
+                        'search': '',
+                        'hash': '',
+                    },
+                    'assertions': {
+                        'expectedUrlPreserved': True,
+                        'expectedUrlReachedBeforeDrop': True,
+                        'routeExpectationSourceIsCaptureScriptExpectedUrl': True,
+                        'terminalIntentionallyDroppedQueryHash': True,
+                        'terminalUrlMismatchIsIntentional': True,
+                        'terminalMainVisible': True,
+                    },
+                    'errors': [],
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/pricing-negative-control.png'}],
+                    'outputs': [{'name': 'after-pricing-negative-control.png', 'url': 'https://cdn.example.com/pricing-negative-control.png'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                    'visual_diff': {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    },
+                }
             if 'pricingQueryHashPassesWithPageStateHashGap' in script:
                 page_state = {
                     'bodyTextLength': 260,
@@ -2934,6 +2998,78 @@ def run_verify_interaction_query_hash_pass_uses_proof_evidence_route():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_explicit_expected_url_blocks_dropped_terminal_route():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-explicit-expected-url-mismatch-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Start at /, click Pricing, and intentionally prove the query/hash route mismatch.',
+            'capture_script': "pricingQueryHashStructuredNegativeControl();",
+            'supervisor_author_packet': {
+                'proof_plan': 'Use expectedUrl as the route expectation and return structured evidence for the dropped query/hash terminal URL.',
+                'capture_script': "pricingQueryHashStructuredNegativeControl();",
+                'refined_inputs': {
+                    'server_path': '/',
+                },
+            },
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_explicit_expected_url_blocks_dropped_terminal_route', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        request = after_verify['verify_decision_request']
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify['merge_recommendation'] == 'do-not-merge'
+        assert after_verify['route_expectation']['source'] == 'proof_evidence_contract'
+        assert after_verify['route_expectation']['expected_path'] == '/pricing?rp_probe=1#pricing-probe'
+        assert after_verify['route_expectation']['expected_query'] == 'rp_probe=1'
+        assert after_verify['route_expectation']['expected_hash'] == '#pricing-probe'
+        assert request['recommended_stage'] is None
+        assert request['continue_with_stage'] is None
+        capture_quality = request['capture_quality']
+        assert capture_quality['decision'] == 'failed_interaction_capture'
+        assert capture_quality['blocking'] is True
+        assert capture_quality['terminal_blocker'] is True
+        assert capture_quality['mismatch']['expected_path'] == '/pricing?rp_probe=1#pricing-probe'
+        assert capture_quality['mismatch']['observed_after_path'] in ('/pricing', '/pricing/')
+        assert 'Interaction proof terminal route mismatch' in capture_quality['summary']
+        assert after_verify['proof_assessment_request'] == {}
+        observation = request['latest_observation']
+        assert observation['valid'] is False
+        assert 'wrong route' in observation['reason']
+        supporting = after_verify['verify_results']['after']['supporting_artifacts']
+        assert supporting['proof_evidence_present'] is True
+        assert supporting['has_structured_payload'] is True
+        route = after_verify['evidence_bundle']['semantic_context']['route']
+        assert route['expected_terminal_query'] == 'rp_probe=1'
+        assert route['expected_terminal_hash'] == '#pricing-probe'
+        assert route['after_observed_path'] == '/pricing'
+        assert route['after_observed_query'] == ''
+        assert route['after_observed_hash'] == ''
+        return {
+            'ok': True,
+            'decision': capture_quality['decision'],
+            'summary': capture_quality['summary'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_thrown_error_terminal_blocker():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-thrown-error-'))
     state_path = tempdir / 'state.json'
@@ -3416,6 +3552,7 @@ if __name__ == '__main__':
         'verify_interaction_hash_terminal_route_from_proof_evidence': run_verify_interaction_hash_terminal_route_from_proof_evidence(),
         'verify_interaction_authored_query_hash_mismatch_blocks_with_evidence': run_verify_interaction_authored_query_hash_mismatch_blocks_with_evidence(),
         'verify_interaction_query_hash_pass_uses_proof_evidence_route': run_verify_interaction_query_hash_pass_uses_proof_evidence_route(),
+        'verify_interaction_explicit_expected_url_blocks_dropped_terminal_route': run_verify_interaction_explicit_expected_url_blocks_dropped_terminal_route(),
         'verify_interaction_thrown_error_terminal_blocker': run_verify_interaction_thrown_error_terminal_blocker(),
         'verify_capture_retry_surfaces_script_timeout': run_verify_capture_retry_surfaces_script_timeout(),
         'missing_baseline_guard': run_verify_missing_baseline(),
