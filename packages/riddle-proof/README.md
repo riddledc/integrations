@@ -208,6 +208,27 @@ viewport and returns an `environment_blocked` result without starting partial
 jobs when the account balance cannot cover the intended sweep. Use
 `--balance-preflight=false` to bypass this check.
 
+## Regression Packs
+
+Reusable regression packs live in `examples/regression-packs`. They are
+host-readable manifests for recurring trust-boundary checks that should produce
+the same terminal outcomes across generic runners and wrappers.
+
+The first pack is
+`examples/regression-packs/oc-flow-regression.json`. It names the live OpenClaw
+regression cases for route-changing interactions, query/hash preservation,
+negative dropped query/hash evidence, no-diff production audits, selector and
+thrown-error blockers, and stale checkpoint responses after terminal status.
+The same pack also points at the local generic core suite:
+
+```sh
+python3 packages/riddle-proof/runtime/tests/trust_boundary_regression.py
+```
+
+Before counting live wrapper runs, use the pack's runtime gate: verify
+`riddle_proof_status` reports the loaded `@riddledc/openclaw-riddle-proof` and
+`@riddledc/riddle-proof` versions. Disk package versions alone are not enough.
+
 Use `--viewport-name <name>` to run only one named viewport from a
 multi-viewport profile while preserving viewport-scoped setup actions and
 checks:

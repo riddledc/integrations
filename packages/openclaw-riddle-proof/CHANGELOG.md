@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.145
+
+### Patch Changes
+
+- Add a reusable OC flow regression pack for Riddle Proof and validate its expected terminal outcomes.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.17
+
 ## 0.4.144
 
 ### Patch Changes
