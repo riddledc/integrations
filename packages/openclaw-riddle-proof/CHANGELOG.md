@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.147
+
+### Patch Changes
+
+- Activate the Riddle Proof OpenClaw plugin on gateway startup so its tools register after service restarts.
+
 ## 0.4.146
 
 ### Patch Changes
