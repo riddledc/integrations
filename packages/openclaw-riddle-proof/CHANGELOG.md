@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.144
+
+### Patch Changes
+
+- Ignore stale checkpoint responses that arrive after the wrapper has reached a terminal status.
+
 ## 0.4.143
 
 ### Patch Changes

@@ -459,11 +459,44 @@ function persistRunState(state: RiddleProofRunState) {
   writeFileSync(state.state_path, JSON.stringify(state, null, 2) + "\n");
 }
 
-function isProtectedFinalWrapperState(state: RiddleProofRunState | null | undefined) {
+function isProtectedTerminalWrapperState(state: RiddleProofRunState | null | undefined) {
   return Boolean(
-    state?.finalized === true &&
-    (state.status === "ready_to_ship" || state.status === "shipped" || state.status === "completed"),
+    state?.status === "ready_to_ship" || state?.status === "shipped" || state?.status === "completed",
   );
+}
+
+function ignoredTerminalCheckpointResponseResult(
+  state: RiddleProofRunState,
+  response: RiddleProofCheckpointResponse | Record<string, unknown>,
+  summary: string,
+): RiddleProofRunResult | null {
+  if (!isProtectedTerminalWrapperState(state) || state.checkpoint_packet) return null;
+  const status = state.status;
+  if (status !== "ready_to_ship" && status !== "shipped" && status !== "completed") return null;
+  state.blocker = undefined;
+  appendRunEvent(state, {
+    kind: "agent.checkpoint_response.ignored",
+    checkpoint: stringValue((response as Record<string, unknown>).checkpoint) || state.last_checkpoint || "checkpoint_response",
+    stage: state.current_stage || null,
+    summary: "Ignored stale checkpoint response because the wrapper run is already terminal.",
+    details: {
+      response,
+      preserved_status: status,
+      finalized: state.finalized === true,
+      checkpoint_summary: checkpointSummaryFromState(state),
+    },
+  });
+  persistRunState(state);
+  return createRunResult({
+    state,
+    status,
+    last_summary: summary || "Ignored stale checkpoint response because the wrapper run is already terminal.",
+    raw: {
+      ignored_checkpoint_response: true,
+      preserved_status: status,
+      reason: "terminal_status_without_pending_checkpoint_packet",
+    },
+  });
 }
 
 function wakeNextToolsFor(result: RiddleProofRunResult) {
@@ -680,7 +713,7 @@ function serializableBackgroundConfig(config: OpenClawRiddleProofRuntimeConfig):
 function markBackgroundWorkerFailed(statePath: string, message: string) {
   const state = readRunState(statePath);
   if (!state) return;
-  if (isProtectedFinalWrapperState(state)) {
+  if (isProtectedTerminalWrapperState(state)) {
     appendRunEvent(state, {
       kind: "run.background.failure_ignored",
       checkpoint: state.last_checkpoint || "background_worker",
@@ -730,7 +763,7 @@ async function runBackgroundWorkerJob(data: BackgroundWorkerData) {
   });
   const state = readRunState(data.state_path);
   if (state) {
-    if (isProtectedFinalWrapperState(state) && state.status !== result.status) {
+    if (isProtectedTerminalWrapperState(state) && state.status !== result.status) {
       appendRunEvent(state, {
         kind: "run.background.result_ignored",
         checkpoint: state.last_checkpoint || result.last_checkpoint || null,
@@ -3629,7 +3662,7 @@ function recoverOpenClawRiddleProofWakeMonitors(
     if (classification.should_dispatch && wakeAlreadyDispatched(state, classification.dedupe_key)) continue;
     if (
       classification.should_dispatch &&
-      isProtectedFinalWrapperState(state) &&
+      isProtectedTerminalWrapperState(state) &&
       matchingWakeRequestAlreadyRecorded(state, classification)
     ) continue;
     startOpenClawRiddleProofWakeMonitor(statePath, runtime);
@@ -3910,6 +3943,9 @@ export async function submitOpenClawRiddleProofReview(
     return createRunResult({ state, status: "blocked", last_summary: state.blocker.message });
   }
   if (checkpointResponse) {
+    const ignoredTerminalResponse = ignoredTerminalCheckpointResponseResult(state, checkpointResponse, params.summary);
+    if (ignoredTerminalResponse) return ignoredTerminalResponse;
+
     appendRunEvent(state, {
       kind: "agent.checkpoint_response.submitted",
       checkpoint: state.last_checkpoint || state.checkpoint_packet?.checkpoint || "checkpoint_response",

@@ -2135,6 +2135,90 @@ for (let attempt = 0; attempt < 50 && backgroundCheckpointDoneStatus?.status ===
 assert.equal(backgroundCheckpointDoneStatus?.status, "ready_to_ship");
 assert.ok(backgroundCheckpointEngineCalls.some((call) => call.author_packet_json));
 
+const lateCheckpointTerminalFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-late-checkpoint-terminal-"));
+const lateCheckpointEngineStatePath = path.join(lateCheckpointTerminalFixture, "engine-state.json");
+const lateCheckpointWrapperStatePath = path.join(lateCheckpointTerminalFixture, "wrapper-state.json");
+writeFileSync(lateCheckpointEngineStatePath, JSON.stringify({
+  branch: "agent/late-checkpoint-terminal",
+  after_cdn: "https://example.com/after-terminal.png",
+}, null, 2));
+writeFileSync(lateCheckpointWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_late_checkpoint_terminal",
+  status: "ready_to_ship",
+  finalized: false,
+  state_path: lateCheckpointWrapperStatePath,
+  created_at: "2026-06-01T15:45:00.000Z",
+  updated_at: "2026-06-01T15:46:00.000Z",
+  request: {
+    repo: "riddledc/riddle-site",
+    change_request: "Prove terminal state ignores late checkpoint responses.",
+    engine_state_path: lateCheckpointEngineStatePath,
+    verification_mode: "interaction",
+    ship_mode: "none",
+  },
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  events: [
+    {
+      kind: "run.background.started",
+      checkpoint: "background_started",
+      stage: "setup",
+      summary: "Background run accepted.",
+      details: {},
+    },
+    {
+      kind: "run.wake.requested",
+      checkpoint: "verify_supervisor_judgment",
+      stage: "verify",
+      summary: "Terminal ready_to_ship wake requested.",
+      details: { status: "ready_to_ship" },
+    },
+  ],
+}, null, 2));
+const lateCheckpointResponse = {
+  version: "riddle-proof.checkpoint_response.v1",
+  run_id: "rp_late_checkpoint_terminal",
+  checkpoint: "author_supervisor_judgment",
+  decision: "author_packet",
+  summary: "Late stale author packet after terminal ready_to_ship.",
+  payload: {
+    proof_plan: "STALE: should not resume terminal run.",
+    capture_script: "return { passed: true, staleManualCheckpointProbe: true };",
+  },
+  created_at: "2026-06-01T15:52:00.000Z",
+};
+let lateCheckpointEngineCalled = false;
+const lateCheckpointIgnored = await submitOpenClawRiddleProofReview(
+  {
+    state_path: lateCheckpointWrapperStatePath,
+    decision: "continue_checkpoint",
+    summary: "Submit stale checkpoint response after terminal ready_to_ship.",
+    checkpoint_response_json: JSON.stringify(lateCheckpointResponse),
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute() {
+        lateCheckpointEngineCalled = true;
+        throw new Error("late terminal checkpoint response should not resume the engine");
+      },
+    },
+  },
+);
+assert.equal(lateCheckpointIgnored.status, "ready_to_ship");
+assert.equal(lateCheckpointIgnored.raw?.ignored_checkpoint_response, true);
+assert.equal(lateCheckpointEngineCalled, false);
+const lateCheckpointStatus = readOpenClawRiddleProofStatus(lateCheckpointWrapperStatePath);
+assert.equal(lateCheckpointStatus?.status, "ready_to_ship");
+assert.equal(lateCheckpointStatus?.blocker, undefined);
+const lateCheckpointState = JSON.parse(readFileSync(lateCheckpointWrapperStatePath, "utf-8"));
+assert.equal(lateCheckpointState.status, "ready_to_ship");
+assert.equal(lateCheckpointState.finalized, false);
+assert.equal(lateCheckpointState.blocker, undefined);
+assert.equal(lateCheckpointState.events.at(-1).kind, "agent.checkpoint_response.ignored");
+
 const checkpointProtocolBlockedDuplicateEngineStatePath = path.join(checkpointProtocolFixture, "riddle-state-blocked-duplicate.json");
 const checkpointProtocolBlockedDuplicateWrapperStatePath = path.join(checkpointProtocolFixture, "wrapper-state-blocked-duplicate.json");
 writeFileSync(checkpointProtocolBlockedDuplicateEngineStatePath, JSON.stringify({
