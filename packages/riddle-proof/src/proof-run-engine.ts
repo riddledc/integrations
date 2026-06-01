@@ -33,6 +33,14 @@ function authorReady(state: any) {
   return state?.author_status === "ready" || state?.proof_plan_status === "ready";
 }
 
+function hasAuthoredProofPlan(state: any = {}) {
+  return Boolean((state?.proof_plan || "").trim()) && Boolean((state?.capture_script || "").trim());
+}
+
+function hasExplicitCaptureScript(state: any = {}) {
+  return Boolean((state?.capture_script || "").trim());
+}
+
 function implementationReady(state: any) {
   return ["changes_detected", "completed"].includes(state?.implementation_status || "");
 }
@@ -68,6 +76,51 @@ function requiredReconBaselineLabels(state: any) {
 function latestReconHasRequiredBaselines(state: any) {
   const baselines = latestReconCapturedBaselines(state);
   return requiredReconBaselineLabels(state).every((label) => Boolean((baselines?.[label]?.url || "").trim()));
+}
+
+function canAutoAcceptExplicitCaptureRecon(params: WorkflowParams, state: any) {
+  const labels = requiredReconBaselineLabels(state);
+  return Boolean(
+    !implementationRequired(params, state)
+    && hasExplicitCaptureScript(state)
+    && ["needs_agent_decision", "needs_supervisor_judgment"].includes(state?.recon_status || "")
+    && labels.length > 0
+    && latestReconHasRequiredBaselines(state),
+  );
+}
+
+function applyExplicitCaptureReconAcceptance(state: any) {
+  const baselines = promoteLatestReconBaselines(state);
+  const labels = requiredReconBaselineLabels(state);
+  const selected = latestReconAttempt(state) || {};
+  state.recon_status = "ready_for_proof_plan";
+  state.recon_results = state.recon_results || {};
+  state.recon_results.status = "ready_for_proof_plan";
+  state.recon_results.baselines = baselines;
+  state.recon_assessment_request = {};
+  state.recon_decision_request = {};
+  state.recon_assessment = {
+    decision: "ready_for_author",
+    continue_with_stage: "author",
+    source: "runner_auto_accept",
+    summary: "Runner accepted recon automatically because this audit/no-diff run already supplied an explicit capture script, and the required baseline capture exists.",
+    baseline_labels: labels,
+  };
+  state.recon_assessment_source = "runner_auto_accept";
+  state.recon_baseline_understanding = state.recon_baseline_understanding || {
+    reference: state?.reference || state?.requested_reference || "before",
+    target_route: selected?.plan?.target_path || state?.server_path || "/",
+    proof_focus: state?.proof_plan || state?.change_request || "",
+    stop_condition: "Verify must judge the authored capture evidence against the explicit proof packet.",
+  };
+  if (hasAuthoredProofPlan(state)) {
+    state.author_status = "ready";
+    state.proof_plan_status = "ready";
+  } else {
+    state.author_status = "needs_authoring";
+    state.proof_plan_status = "needs_authoring";
+  }
+  return { baselines, labels };
 }
 
 function hasReconBaselineUnderstanding(state: any) {
@@ -1269,6 +1322,7 @@ export async function executeWorkflow(
       }
     }
 
+    let reconAutoAcceptedExplicitCapture = false;
     if (!state?.recon_results || state?.stage === "setup" || state?.stage === "preflight" || ["needs_agent_decision", "needs_supervisor_judgment"].includes(state?.recon_status || "") || requestedStage === "recon") {
       const reconRes = runOne("recon");
       executed.push(executedStep(reconRes));
@@ -1281,40 +1335,64 @@ export async function executeWorkflow(
       }
       state = readState(config.statePath);
       if (["needs_agent_decision", "needs_supervisor_judgment"].includes(state?.recon_status || "")) {
-        const reconAssessmentRequest = state?.recon_assessment_request || state?.recon_decision_request || null;
-        const summary = "Recon gathered route hints, candidate paths, baseline captures, and observations. The supervising agent should now judge whether the latest baseline is trustworthy, whether recon should retry/reframe, and whether recon is done.";
-        const reconDetails = {
-          executed,
-          latestAttempt: latestReconAttempt(state),
-          latestCapturedBaselines: latestReconCapturedBaselines(state),
-          reconAssessmentRequest,
-        };
-        recordAttempt("recon", "checkpoint", summary, {
-          autoApproved: reconRes.autoApproved || false,
-          checkpoint: "recon_supervisor_judgment",
-          details: reconDetails,
-        });
-        return checkpoint(
-          "recon",
-          "recon_supervisor_judgment",
-          summary,
-          {
-            nextActions: ["inspect_recon_packet", "supply_recon_assessment_json", "continue_internal_loop_with_checkpoint"],
-            advanceOptions: ["recon", "author"],
-            recommendedAdvanceStage: "recon",
-            continueWithStage: "recon",
-            blocking: false,
-            details: reconDetails,
-            reconAssessmentRequest,
-            reconDecisionRequest: state?.recon_decision_request || null,
+        if (canAutoAcceptExplicitCaptureRecon(params, state)) {
+          const promoted = updateState(config.statePath, (currentState) => {
+            applyExplicitCaptureReconAcceptance(currentState);
+          });
+          state = promoted;
+          reconAutoAcceptedExplicitCapture = true;
+          effectiveAdvanceStage = stageAfterAuthor(state, params);
+          requestedStage = normalizeStageRequest(state, effectiveAdvanceStage);
+          updateState(config.statePath, (currentState) => {
+            currentState.last_requested_advance_stage = effectiveAdvanceStage;
+          });
+          recordAttempt("recon", "completed", "Recon baseline was captured and auto-accepted for an explicit audit/no-diff proof packet.", {
+            autoApproved: true,
+            checkpoint: "recon_auto_accept_explicit_capture",
+            details: {
+              executed,
+              promotedBaselines: latestReconCapturedBaselines(state),
+              baselineLabels: requiredReconBaselineLabels(state),
+            },
+          });
+        } else {
+          const reconAssessmentRequest = state?.recon_assessment_request || state?.recon_decision_request || null;
+          const summary = "Recon gathered route hints, candidate paths, baseline captures, and observations. The supervising agent should now judge whether the latest baseline is trustworthy, whether recon should retry/reframe, and whether recon is done.";
+          const reconDetails = {
             executed,
-          },
-        );
+            latestAttempt: latestReconAttempt(state),
+            latestCapturedBaselines: latestReconCapturedBaselines(state),
+            reconAssessmentRequest,
+          };
+          recordAttempt("recon", "checkpoint", summary, {
+            autoApproved: reconRes.autoApproved || false,
+            checkpoint: "recon_supervisor_judgment",
+            details: reconDetails,
+          });
+          return checkpoint(
+            "recon",
+            "recon_supervisor_judgment",
+            summary,
+            {
+              nextActions: ["inspect_recon_packet", "supply_recon_assessment_json", "continue_internal_loop_with_checkpoint"],
+              advanceOptions: ["recon", "author"],
+              recommendedAdvanceStage: "recon",
+              continueWithStage: "recon",
+              blocking: false,
+              details: reconDetails,
+              reconAssessmentRequest,
+              reconDecisionRequest: state?.recon_decision_request || null,
+              executed,
+            },
+          );
+        }
       }
-      recordAttempt("recon", "completed", "Recon completed and promoted an approved baseline context.", {
-        autoApproved: reconRes.autoApproved || false,
-        details: { executed },
-      });
+      if (!reconAutoAcceptedExplicitCapture) {
+        recordAttempt("recon", "completed", "Recon completed and promoted an approved baseline context.", {
+          autoApproved: reconRes.autoApproved || false,
+          details: { executed },
+        });
+      }
     }
 
     state = readState(config.statePath);

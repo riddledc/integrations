@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.14
+
+### Patch Changes
+
+- Terminalize authored interaction route mismatches before agent proof review, and let explicit no-diff capture runs skip recon agent judgment once required baselines are captured.
+
 ## 0.8.13
 
 ### Patch Changes

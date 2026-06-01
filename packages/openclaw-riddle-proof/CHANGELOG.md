@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.141
+
+### Patch Changes
+
+- Terminalize authored interaction route mismatches before agent proof review, and let explicit no-diff capture runs skip recon agent judgment once required baselines are captured.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.14
+
 ## 0.4.140
 
 ### Patch Changes

@@ -365,12 +365,17 @@ class FakeRiddle:
                         'hash': '',
                     },
                     'assertions': {
-                        'expectedUrlPreserved': True,
                         'expectedUrlReachedBeforeDrop': True,
+                        'expectedUrlStillPresentAtTerminal': False,
+                        'queryDropped': True,
+                        'hashDropped': True,
                         'routeExpectationSourceIsCaptureScriptExpectedUrl': True,
-                        'terminalIntentionallyDroppedQueryHash': True,
-                        'terminalUrlMismatchIsIntentional': True,
+                        'shouldTerminalizeAsFailedInteractionCapture': True,
                         'terminalMainVisible': True,
+                    },
+                    'checks': {
+                        'routeMatches': False,
+                        'specificMismatchDetected': True,
                     },
                     'errors': [],
                 }
