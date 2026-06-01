@@ -779,6 +779,88 @@ async function run() {
   assert(auditSetupState.require_diff === false, 'audit/no-diff setup should deliver require_diff=false to the runtime');
   assert(auditSetupState.allow_code_changes === false, 'audit/no-diff setup should deliver allow_code_changes=false to the runtime');
 
+  const explicitAuditStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-explicit-audit-recon-')), 'state.json');
+  writeJson(explicitAuditStatePath, {
+    workspace_ready: true,
+    stage: 'setup',
+    repo: 'openclaw/openclaw-plugins',
+    branch: 'agent/openclaw/explicit-audit',
+    mode: 'static',
+    reference: 'before',
+    change_request: 'Audit a route-changing interaction without code edits',
+    commit_message: 'Audit a route-changing interaction without code edits',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    implementation_status: 'not_required',
+    author_status: 'ready',
+    proof_plan_status: 'ready',
+    proof_plan: 'Use the supplied capture script to verify the interaction.',
+    capture_script: "await saveScreenshot('after-proof');",
+    recon_status: '',
+    recon_results: {},
+    server_path: '/good',
+    before_cdn: '',
+    after_cdn: '',
+    prod_cdn: '',
+  });
+  const explicitAuditResult = await localEngine.execute({
+    action: 'run',
+    state_path: explicitAuditStatePath,
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+  });
+  assert(
+    explicitAuditResult.checkpoint === 'verify_supervisor_judgment',
+    `explicit audit proof packet should auto-accept captured recon and reach verify, got ${explicitAuditResult.checkpoint}: ${explicitAuditResult.summary || ''}`,
+  );
+  const explicitAuditState = readJson(explicitAuditStatePath);
+  assert(explicitAuditState.recon_status === 'ready_for_proof_plan', 'explicit audit recon should be marked ready without an agent recon assessment');
+  assert(explicitAuditState.before_cdn === 'https://cdn.example.com/before.png', 'explicit audit recon should promote the captured baseline');
+  assert(explicitAuditState.stage_attempts.recon.history.some((attempt) => attempt.checkpoint === 'recon_auto_accept_explicit_capture'), 'explicit audit recon should record the auto-accept boundary');
+  assert(explicitAuditState.verify_status === 'evidence_captured', 'explicit audit should continue into verify after recon auto-accept');
+
+  const captureOnlyAuditStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-capture-only-audit-recon-')), 'state.json');
+  writeJson(captureOnlyAuditStatePath, {
+    workspace_ready: true,
+    stage: 'setup',
+    repo: 'openclaw/openclaw-plugins',
+    branch: 'agent/openclaw/capture-only-audit',
+    mode: 'static',
+    reference: 'before',
+    change_request: 'Audit a supplied capture script without code edits',
+    commit_message: 'Audit a supplied capture script without code edits',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    implementation_status: 'not_required',
+    author_status: 'pending_recon',
+    proof_plan_status: 'pending_recon',
+    capture_script: "await saveScreenshot('after-proof');",
+    recon_status: '',
+    recon_results: {},
+    server_path: '/good',
+    before_cdn: '',
+    after_cdn: '',
+    prod_cdn: '',
+  });
+  const captureOnlyAuditResult = await localEngine.execute({
+    action: 'run',
+    state_path: captureOnlyAuditStatePath,
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+  });
+  assert(
+    captureOnlyAuditResult.checkpoint === 'author_supervisor_judgment',
+    `capture-only audit should auto-accept recon then request proof-plan authoring, got ${captureOnlyAuditResult.checkpoint}: ${captureOnlyAuditResult.summary || ''}`,
+  );
+  const captureOnlyAuditState = readJson(captureOnlyAuditStatePath);
+  assert(captureOnlyAuditState.recon_status === 'ready_for_proof_plan', 'capture-only audit recon should be marked ready without an agent recon assessment');
+  assert(captureOnlyAuditState.stage_attempts.recon.history.some((attempt) => attempt.checkpoint === 'recon_auto_accept_explicit_capture'), 'capture-only audit recon should record the auto-accept boundary');
+  assert(captureOnlyAuditState.active_checkpoint === 'author_supervisor_judgment', 'capture-only audit should still require proof-plan authoring');
+
   const reconLoopStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-recon-')), 'state.json');
   writeJson(reconLoopStatePath, {
     workspace_ready: true,

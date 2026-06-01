@@ -3900,6 +3900,16 @@ has_judgable_failed_interaction_evidence = (
     and not proof_evidence_blocker
     and not visual_delta_recovery
 )
+route_expectation = s.get('route_expectation') if isinstance(s.get('route_expectation'), dict) else {}
+authored_terminal_route_mismatch = (
+    verification_mode in INTERACTION_MODES
+    and 'wrong route' in str(after_observation.get('reason') or '')
+    and bool(route_expectation.get('terminal_path'))
+    and str(route_expectation.get('source') or '') != 'recon_start_path'
+)
+if authored_terminal_route_mismatch:
+    has_judgable_failed_interaction_evidence = False
+    summary_lines.append('Structured interaction route gate: authored terminal route mismatch is a terminal capture blocker.')
 has_good_evidence = (
     required_baseline_present
     and (after_observation.get('valid') or has_judgable_failed_interaction_evidence)
