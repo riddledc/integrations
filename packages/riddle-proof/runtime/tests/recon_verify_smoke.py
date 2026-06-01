@@ -444,6 +444,62 @@ class FakeRiddle:
                         'totalPixels': 972000,
                     },
                 }
+            if 'clickedProofNavigationOcLiveShape' in script:
+                page_state = {
+                    'bodyTextLength': 4113,
+                    'visibleTextSample': 'RIDDLE PROOF Turn a URL into evidence an agent can cite.',
+                    'interactiveElements': 6,
+                    'visibleInteractiveElements': 6,
+                    'pathname': '/proof/',
+                    'href': 'https://riddledc.com/proof/',
+                    'title': 'Riddle Proof',
+                    'buttons': ['Proof'],
+                    'headings': ['Riddle Proof'],
+                    'links': [],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'h1', 'text': 'Riddle Proof'}],
+                }
+                proof_evidence = {
+                    'version': 'riddle-proof.interaction.v1',
+                    'expectedUrl': 'https://riddledc.com/proof/',
+                    'routeExpectationSource': 'capture_script.expectedUrl',
+                    'startRoute': {'url': 'https://riddledc.com/', 'pathname': '/'},
+                    'terminalRoute': {'url': 'https://riddledc.com/proof/', 'pathname': '/proof/'},
+                    'action': {'type': 'click', 'target': 'visible Proof navigation link', 'clicked': True},
+                    'startState': {'url': 'https://riddledc.com/', 'pathname': '/'},
+                    'terminalState': {'url': 'https://riddledc.com/proof/', 'pathname': '/proof/'},
+                    'assertions': [
+                        {
+                            'name': 'route expectation source is capture_script.expectedUrl',
+                            'pass': True,
+                            'routeExpectationSource': 'capture_script.expectedUrl',
+                            'expectedUrl': 'https://riddledc.com/proof/',
+                        },
+                        {'name': 'start URL is production home', 'pass': True, 'startPathname': '/'},
+                        {
+                            'name': 'terminal URL matched expected proof route',
+                            'pass': True,
+                            'terminalUrl': 'https://riddledc.com/proof/',
+                        },
+                        {'name': 'Proof page content visible', 'pass': True},
+                    ],
+                    'success': True,
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/proof-after.png'}],
+                    'outputs': [{'name': 'after-proof.png', 'url': 'https://cdn.example.com/proof-after.png'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                    'visual_diff': {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    },
+                }
             if 'clickedProofNavigation' in script:
                 page_state = {
                     'bodyTextLength': 180,
@@ -2787,6 +2843,51 @@ def run_verify_interaction_proof_evidence_overrides_stale_expected_path():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_proof_plan_placeholder_uses_live_evidence():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-placeholder-route-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Start at /, click Proof, and verify the terminal pathname /pathname.',
+            'capture_script': "clickedProofNavigationOcLiveShape(); await saveScreenshot('after-proof');",
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_placeholder_route_uses_evidence', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['route_expectation']['source'] == 'proof_evidence_contract'
+        assert after_verify['route_expectation']['expected_path'] == '/proof'
+        route = after_verify['proof_assessment_request']['semantic_context']['route']
+        assert route['expected_after_path'] == '/proof'
+        assert route['after_observed_path'] == '/proof'
+        assert after_verify.get('expected_terminal_path') == '/proof'
+        assert '/pathname' not in json.dumps(after_verify['route_expectation'])
+        assert 'wrong route' not in after_verify['verify_results']['after']['observation']['reason']
+        return {
+            'ok': True,
+            'expected_path': after_verify['route_expectation']['expected_path'],
+            'source': after_verify['route_expectation']['source'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_reverse_terminal_route_from_proof_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-reverse-'))
     state_path = tempdir / 'state.json'
@@ -3665,6 +3766,7 @@ if __name__ == '__main__':
         'remote_audit_verify_uses_default_capture_script': run_remote_audit_verify_uses_default_capture_script(),
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_proof_evidence_overrides_stale_expected_path': run_verify_interaction_proof_evidence_overrides_stale_expected_path(),
+        'verify_interaction_proof_plan_placeholder_uses_live_evidence': run_verify_interaction_proof_plan_placeholder_uses_live_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),
         'verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence': run_verify_interaction_reverse_terminal_expected_url_from_nested_terminal_evidence(),
         'verify_interaction_prose_route_noise_uses_proof_evidence': run_verify_interaction_prose_route_noise_uses_proof_evidence(),

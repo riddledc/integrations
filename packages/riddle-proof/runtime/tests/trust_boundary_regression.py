@@ -32,6 +32,12 @@ CASES = [
         'expected_terminal': 'pass',
     },
     {
+        'name': 'route-change-proof-plan-placeholder-ignored',
+        'covers': ['route-changing interactions', 'proof-evidence-present'],
+        'function': 'run_verify_interaction_proof_plan_placeholder_uses_live_evidence',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'route-change-reverse-pass',
         'covers': ['route-changing interactions'],
         'function': 'run_verify_interaction_reverse_terminal_route_from_proof_evidence',

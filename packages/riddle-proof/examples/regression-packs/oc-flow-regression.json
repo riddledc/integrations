@@ -4,8 +4,8 @@
   "public_name": "Riddle Proof OC Flow Regression Pack",
   "description": "Reusable regression pack for the trust boundary between browser evidence, verifier judgment, retry policy, wrapper checkpoint handling, and terminal status.",
   "minimum_versions": {
-    "@riddledc/openclaw-riddle-proof": "0.4.144",
-    "@riddledc/riddle-proof": "0.8.16"
+    "@riddledc/openclaw-riddle-proof": "0.4.146",
+    "@riddledc/riddle-proof": "0.8.18"
   },
   "runtime_gate": {
     "tool": "riddle_proof_status",
@@ -26,6 +26,7 @@
     "required_cases": [
       "route-change-forward-pass",
       "route-change-retry-state-drift-ignored",
+      "route-change-proof-plan-placeholder-ignored",
       "route-change-reverse-pass",
       "route-change-reverse-nested-terminal-url-pass",
       "query-hash-trailing-slash-pass",
