@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.143
+
+### Patch Changes
+
+- Preserve terminal status on stale checkpoint responses and parse nested interaction terminal URLs.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.16
+
 ## 0.4.142
 
 ### Patch Changes

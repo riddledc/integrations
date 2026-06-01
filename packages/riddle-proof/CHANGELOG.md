@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.16
+
+### Patch Changes
+
+- Preserve terminal status on stale checkpoint responses and parse nested interaction terminal URLs.
+
 ## 0.8.15
 
 ### Patch Changes

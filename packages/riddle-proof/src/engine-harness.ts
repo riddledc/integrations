@@ -1144,7 +1144,7 @@ function finalizedCheckpointResponseWithoutPacketResult(
   state: RiddleProofRunState,
   value?: RiddleProofCheckpointResponse | Record<string, unknown>,
 ): RiddleProofRunResult | null {
-  if (!value || state.checkpoint_packet || !state.finalized || !isProtectedFinalStatus(state.status)) return null;
+  if (!value || state.checkpoint_packet || !isProtectedFinalStatus(state.status)) return null;
   const response = normalizeCheckpointResponse(value);
   if (!response) return null;
   if (isDuplicateCheckpointResponse(state, response)) return null;

@@ -2109,6 +2109,8 @@ FULL_LOCATION_PATH_KEYS = (
     'afterUrl', 'after_url',
     'finalUrl', 'final_url',
     'currentUrl', 'current_url',
+    'observedUrl', 'observed_url',
+    'actualUrl', 'actual_url',
     'pathWithSearchAndHash', 'path_with_search_and_hash',
     'fullPath', 'full_path',
 )
@@ -2116,6 +2118,8 @@ PARTIAL_LOCATION_PATH_KEYS = (
     'route',
     'path',
     'pathname',
+    'observedPath', 'observed_path',
+    'actualPath', 'actual_path',
     'normalizedPath', 'normalized_path',
     'rawPath', 'raw_path',
 )
@@ -2237,6 +2241,20 @@ def expected_terminal_path_from_record(record, depth=0):
         if isinstance(value, dict):
             candidate = (
                 record_path_candidate_for_keys(value, EXPECTED_TERMINAL_PATH_KEYS, allow_location_keys=True)
+                or expected_terminal_path_from_record(value, depth + 1)
+            )
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = expected_terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    for key in AFTER_STATE_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = (
+                record_path_candidate_for_keys(value, EXPECTED_TERMINAL_PATH_KEYS)
                 or expected_terminal_path_from_record(value, depth + 1)
             )
             if candidate:
