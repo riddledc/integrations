@@ -1,0 +1,318 @@
+{
+  "version": "riddle-proof.regression-pack.v1",
+  "pack_id": "riddle-proof-oc-flow-2026-06",
+  "public_name": "Riddle Proof OC Flow Regression Pack",
+  "description": "Reusable regression pack for the trust boundary between browser evidence, verifier judgment, retry policy, wrapper checkpoint handling, and terminal status.",
+  "minimum_versions": {
+    "@riddledc/openclaw-riddle-proof": "0.4.144",
+    "@riddledc/riddle-proof": "0.8.16"
+  },
+  "runtime_gate": {
+    "tool": "riddle_proof_status",
+    "require_loaded_metadata": true,
+    "fresh_runtime_rule": "Count only runs whose riddle_proof_status package_metadata reports the minimum_versions or newer. If disk package versions differ from loaded metadata, restart the gateway and discard stale runs."
+  },
+  "forbidden_terminal_markers": [
+    "codex_invalid_json",
+    "codex_no_final_response",
+    "codex_timeout",
+    "max_iterations_reached",
+    "stage_iteration_limit_reached",
+    "verify_capture_retry",
+    "checkpoint_response_without_packet"
+  ],
+  "local_core_suite": {
+    "command": "python3 packages/riddle-proof/runtime/tests/trust_boundary_regression.py",
+    "required_cases": [
+      "route-change-forward-pass",
+      "route-change-retry-state-drift-ignored",
+      "route-change-reverse-pass",
+      "route-change-reverse-nested-terminal-url-pass",
+      "query-hash-trailing-slash-pass",
+      "query-hash-dropped-structured-negative-blocker",
+      "same-page-hash-pass",
+      "missing-selector-timeout-specific-blocker",
+      "thrown-error-preserves-structured-evidence",
+      "interaction-thrown-error-specific-blocker",
+      "proof-evidence-absent-specific-blocker",
+      "no-diff-prod-audit-default-capture-pass"
+    ]
+  },
+  "openclaw_live_suite": {
+    "target": {
+      "repo": "davisdiehl/riddle-site",
+      "prod_url": "https://riddledc.com/",
+      "ship_mode": "none",
+      "implementation_mode": "none",
+      "require_diff": false,
+      "allow_code_changes": false
+    },
+    "result_log_fields": [
+      "run_id",
+      "loaded_metadata",
+      "state_path",
+      "terminal_status",
+      "last_checkpoint",
+      "route_expectation_source",
+      "proof_evidence_present",
+      "proof_json_urls",
+      "screenshots",
+      "forbidden_terminal_markers_seen"
+    ],
+    "cases": [
+      {
+        "id": "home-to-proof-route-change-pass",
+        "tool": "riddle_proof_change",
+        "intent": "Start on the production home page, click the visible Proof navigation link, and prove the terminal route is /proof/.",
+        "params": {
+          "verification_mode": "interaction",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "capture_script_contract": [
+            "goto https://riddledc.com/",
+            "wait for main#main-content",
+            "click a visible Proof link whose href includes /proof",
+            "wait for terminal URL https://riddledc.com/proof/",
+            "return riddle-proof.interaction.v1 evidence with start, action, terminal, assertions, and routeExpectationSource=capture_script.expectedUrl",
+            "save screenshot after-proof"
+          ]
+        },
+        "expect": {
+          "terminal_status": "ready_to_ship",
+          "terminal_path": "/proof/",
+          "proof_evidence_present": true,
+          "route_expectation_source": "capture_script.expectedUrl",
+          "forbidden_terminal_markers": []
+        }
+      },
+      {
+        "id": "proof-to-home-route-change-pass",
+        "tool": "riddle_proof_change",
+        "intent": "Start on /proof/, click the visible Riddle/Home root navigation link, and prove the terminal route is /.",
+        "params": {
+          "verification_mode": "interaction",
+          "prod_url": "https://riddledc.com/proof/",
+          "server_path": "/proof/",
+          "wait_for_selector": "main#main-content",
+          "capture_script_contract": [
+            "goto https://riddledc.com/proof/",
+            "wait for main#main-content",
+            "click the visible Riddle/Home nav link whose href is / or resolves to the site root",
+            "wait for terminal URL https://riddledc.com/",
+            "return riddle-proof.interaction.v1 evidence with nested terminal.expectedUrl and terminal.observedUrl",
+            "save screenshot after-home"
+          ]
+        },
+        "expect": {
+          "terminal_status": "ready_to_ship",
+          "terminal_path": "/",
+          "proof_evidence_present": true,
+          "route_expectation_source": "capture_script.expectedUrl",
+          "forbidden_terminal_markers": []
+        }
+      },
+      {
+        "id": "pricing-query-hash-positive-pass",
+        "tool": "riddle_proof_change",
+        "intent": "Click into Pricing with a terminal query/hash expectation and prove slash, query, and hash are preserved.",
+        "params": {
+          "verification_mode": "interaction",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "expected_terminal_url": "https://riddledc.com/pricing/?rp_probe=1#pricing-probe",
+          "capture_script_contract": [
+            "start from https://riddledc.com/",
+            "navigate or click to the pricing route with ?rp_probe=1#pricing-probe",
+            "wait for https://riddledc.com/pricing/?rp_probe=1#pricing-probe",
+            "return structured evidence proving pathname /pricing/, search ?rp_probe=1, and hash #pricing-probe",
+            "save screenshot after-proof"
+          ]
+        },
+        "expect": {
+          "terminal_status": "ready_to_ship",
+          "terminal_url": "https://riddledc.com/pricing/?rp_probe=1#pricing-probe",
+          "proof_evidence_present": true,
+          "query_preserved": true,
+          "hash_preserved": true,
+          "forbidden_terminal_markers": []
+        }
+      },
+      {
+        "id": "pricing-query-hash-dropped-blocker",
+        "tool": "riddle_proof_change",
+        "intent": "Force a negative control where expected query/hash are dropped at terminal; this must block specifically as invalid browser evidence.",
+        "params": {
+          "verification_mode": "interaction",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "expected_terminal_url": "https://riddledc.com/pricing/?rp_probe=1#pricing-probe",
+          "forced_observed_terminal_url": "https://riddledc.com/pricing/",
+          "capture_script_contract": [
+            "record expected terminal URL with ?rp_probe=1#pricing-probe",
+            "intentionally observe or force terminal evidence for https://riddledc.com/pricing/",
+            "return riddle-proof.interaction.v1 evidence with expected and observed terminal URLs",
+            "save screenshot terminal-pricing-negative-control"
+          ]
+        },
+        "expect": {
+          "terminal_status": "blocked",
+          "last_checkpoint": "verify_capture_blocked",
+          "blocker_code": "verify_capture_blocked",
+          "capture_decision": "failed_interaction_capture",
+          "observed_terminal_url": "https://riddledc.com/pricing/",
+          "forbidden_terminal_markers": [
+            "ready_to_ship",
+            "codex_invalid_json",
+            "codex_timeout",
+            "max_iterations_reached",
+            "checkpoint_response_without_packet"
+          ]
+        }
+      },
+      {
+        "id": "no-diff-prod-audit-pass",
+        "tool": "riddle_proof_change",
+        "intent": "Audit the live production home page without implementation or PR handoff, and prove the current target evidence directly.",
+        "params": {
+          "verification_mode": "interaction",
+          "implementation_mode": "none",
+          "require_diff": false,
+          "allow_code_changes": false,
+          "ship_mode": "none",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "capture_script_contract": [
+            "use the current production target only",
+            "do not request implementation or git diff",
+            "prove main#main-content and expected home-page content are visible",
+            "return structured evidence and save screenshot after-proof"
+          ]
+        },
+        "expect": {
+          "terminal_status": "ready_to_ship",
+          "ship_handoff": "none",
+          "implementation_attempted": false,
+          "proof_evidence_present": true,
+          "forbidden_terminal_markers": []
+        }
+      },
+      {
+        "id": "missing-selector-timeout-blocker",
+        "tool": "riddle_proof_change",
+        "intent": "Use a missing selector in capture and require a specific Playwright selector timeout in terminal evidence.",
+        "params": {
+          "verification_mode": "interaction",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "capture_script_contract": [
+            "start from https://riddledc.com/",
+            "try to click or scroll a selector that does not exist",
+            "use a short selector timeout",
+            "surface the exact Playwright timeout message in structured failure evidence"
+          ]
+        },
+        "expect": {
+          "terminal_status": "blocked",
+          "failure_kind": "specific_blocker",
+          "message_contains": "Timeout",
+          "forbidden_terminal_markers": [
+            "codex_invalid_json",
+            "codex_timeout",
+            "max_iterations_reached"
+          ]
+        }
+      },
+      {
+        "id": "thrown-error-specific-blocker",
+        "tool": "riddle_proof_change",
+        "intent": "Throw an intentional marker from capture and require the exact marker to survive in structured failure evidence.",
+        "params": {
+          "verification_mode": "interaction",
+          "server_path": "/",
+          "wait_for_selector": "main#main-content",
+          "capture_script_contract": [
+            "throw intentional-riddle-proof-regression-thrown-error from the capture script",
+            "preserve the exact marker in terminal evidence",
+            "do not convert the failure to generic Codex JSON/lifecycle failure"
+          ]
+        },
+        "expect": {
+          "terminal_status": "blocked",
+          "failure_kind": "specific_blocker",
+          "message_contains": "intentional-riddle-proof-regression-thrown-error",
+          "forbidden_terminal_markers": [
+            "codex_invalid_json",
+            "codex_timeout",
+            "max_iterations_reached"
+          ]
+        }
+      },
+      {
+        "id": "late-stale-checkpoint-ignored",
+        "tool": "riddle_proof_change + riddle_proof_review",
+        "intent": "Complete a terminal ready_to_ship proof, then submit a stale manual author checkpoint response after terminal status and preserve ready_to_ship.",
+        "steps": [
+          {
+            "tool": "riddle_proof_change",
+            "params": {
+              "verification_mode": "interaction",
+              "server_path": "/",
+              "wait_for_selector": "main#main-content",
+              "checkpoint_mode": "terminal_only",
+              "report_mode": "terminal_only",
+              "capture_script_contract": [
+                "complete the Home -> Proof route proof",
+                "terminalize as ready_to_ship before any manual checkpoint injection",
+                "record state_path and run_id from riddle_proof_status"
+              ]
+            },
+            "expect": {
+              "terminal_status": "ready_to_ship",
+              "proof_evidence_present": true
+            }
+          },
+          {
+            "tool": "riddle_proof_review",
+            "after": "terminal ready_to_ship",
+            "params_template": {
+              "state_path": "${state_path}",
+              "decision": "continue_checkpoint",
+              "summary": "Submit stale checkpoint response after terminal ready_to_ship.",
+              "checkpoint_response": {
+                "version": "riddle-proof.checkpoint_response.v1",
+                "run_id": "${run_id}",
+                "checkpoint": "author_supervisor_judgment",
+                "decision": "author_packet",
+                "summary": "Late stale author packet after terminal ready_to_ship.",
+                "payload": {
+                  "proof_plan": "STALE PACKET: do not resume. This packet is intentionally late and should not alter a terminal run.",
+                  "capture_script": "return { passed: true, staleManualCheckpointProbe: true };"
+                }
+              }
+            },
+            "expect": {
+              "terminal_status": "ready_to_ship",
+              "ignored_checkpoint_response": true,
+              "background_resume_started": false,
+              "forbidden_terminal_markers": [
+                "checkpoint_response_without_packet",
+                "max_iterations_reached",
+                "codex_invalid_json"
+              ]
+            }
+          }
+        ],
+        "expect": {
+          "terminal_status": "ready_to_ship",
+          "ignored_checkpoint_response": true,
+          "background_resume_started": false,
+          "forbidden_terminal_markers": [
+            "checkpoint_response_without_packet",
+            "max_iterations_reached",
+            "codex_invalid_json"
+          ]
+        }
+      }
+    ]
+  }
+}

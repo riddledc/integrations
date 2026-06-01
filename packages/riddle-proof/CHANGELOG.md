@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.17
+
+### Patch Changes
+
+- Add a reusable OC flow regression pack for Riddle Proof and validate its expected terminal outcomes.
+
 ## 0.8.16
 
 ### Patch Changes
