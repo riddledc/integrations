@@ -1140,6 +1140,46 @@ function checkpointResponseContinuation(
   };
 }
 
+function finalizedCheckpointResponseWithoutPacketResult(
+  state: RiddleProofRunState,
+  value?: RiddleProofCheckpointResponse | Record<string, unknown>,
+): RiddleProofRunResult | null {
+  if (!value || state.checkpoint_packet || !state.finalized || !isProtectedFinalStatus(state.status)) return null;
+  const response = normalizeCheckpointResponse(value);
+  if (!response) return null;
+  if (isDuplicateCheckpointResponse(state, response)) return null;
+
+  const at = timestamp();
+  state.checkpoint_history = [
+    ...(state.checkpoint_history || []),
+    { ts: at, response },
+  ].slice(-25);
+  appendRunEvent(state, {
+    ts: at,
+    kind: "checkpoint.response.ignored",
+    checkpoint: response.checkpoint,
+    stage: state.current_stage || "verify",
+    summary: "Late checkpoint response ignored because the run is already finalized.",
+    details: compactRecord({
+      status: state.status,
+      decision: response.decision,
+      resume_token: response.resume_token,
+      source: response.source,
+    }) as Record<string, unknown>,
+  });
+  persist(state);
+
+  return createRunResult({
+    state,
+    status: state.status,
+    last_summary: "Late checkpoint response ignored because the run is already finalized.",
+    raw: {
+      ignored_checkpoint_response: true,
+      response,
+    },
+  });
+}
+
 function disabledAdapterPayload(action: string, context: RiddleProofEngineHarnessContext): RiddleProofAgentPayload {
   return {
     ok: false,
@@ -1792,6 +1832,8 @@ export async function runRiddleProofEngineHarness(
     nonEmptyString(input.resume_params?.state_path) ||
     nonEmptyString(state.request.engine_state_path) ||
     createEngineStatePath(state, input.config);
+  const finalizedCheckpointResponse = finalizedCheckpointResponseWithoutPacketResult(state, input.checkpoint_response);
+  if (finalizedCheckpointResponse) return finalizedCheckpointResponse;
   const checkpointContinuation = checkpointResponseContinuation(state, input.checkpoint_response);
   if (checkpointContinuation.blocker) {
     return blockerResult(state, null, checkpointContinuation.blocker);

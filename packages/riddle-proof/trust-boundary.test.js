@@ -23,6 +23,7 @@ function assertNoGenericLifecycleFailure(result, label) {
   for (const marker of [
     'codex_invalid_json',
     'codex_no_final_response',
+    'codex_timeout',
     'max_iterations_reached',
     'stage_iteration_limit_reached',
     'unhandled_checkpoint',
@@ -206,6 +207,42 @@ function baseRequest(paths, changeRequest) {
   assert(result.raw?.audit_complete === true, 'audit completion should be marked in result metadata');
   assert(calls.length === 1, 'audit completion should not loop');
   assertNoGenericLifecycleFailure(result, 'audit completion');
+
+  const lateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      ...baseRequest(paths, 'No-diff prod audit should ignore late manual checkpoint responses after terminal completion.'),
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+    },
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('late checkpoint response after terminal completion should not call the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: result.run_id,
+      checkpoint: 'verify_capture_retry',
+      decision: 'author_packet',
+      summary: 'Late manual response from a stale checkpoint surface.',
+      payload: {
+        proof_plan: 'stale proof plan',
+        capture_script: "await saveScreenshot('stale');",
+      },
+      created_at: '2026-06-01T04:00:00.000Z',
+    },
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(lateCheckpointResponse.status === 'completed', `late checkpoint response should preserve completed status, got ${lateCheckpointResponse.status}`);
+  assert(lateCheckpointResponse.raw?.ignored_checkpoint_response === true, 'late checkpoint response should be explicitly ignored');
+  assert(!lateCheckpointResponse.blocker, 'late checkpoint response should not create a blocker after terminal completion');
+  const persistedAuditState = readJson(paths.harnessStatePath);
+  assert(persistedAuditState.status === 'completed', 'persisted terminal status should remain completed after late checkpoint response');
+  assert(persistedAuditState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late checkpoint response should be recorded as an event');
+  assertNoGenericLifecycleFailure(lateCheckpointResponse, 'late checkpoint response after terminal completion');
 }
 
 console.log(JSON.stringify({
@@ -216,5 +253,6 @@ console.log(JSON.stringify({
     'invalid evidence proof_assessment_blocked',
     'timeout capture retry checkpoint',
     'no-diff audit completed',
+    'late checkpoint response ignored after terminal completion',
   ],
 }, null, 2));

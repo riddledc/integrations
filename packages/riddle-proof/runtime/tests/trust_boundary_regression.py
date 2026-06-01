@@ -109,6 +109,7 @@ CASES = [
 GENERIC_FAILURE_MARKERS = (
     'codex_invalid_json',
     'codex_no_final_response',
+    'codex_timeout',
     'max_iterations_reached',
     'stage_iteration_limit_reached',
     'unhandled_checkpoint',
