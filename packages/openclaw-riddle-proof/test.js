@@ -31,6 +31,7 @@ import register, {
 const openclawRiddleProofPackageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
 const riddleProofPackageJson = JSON.parse(readFileSync(new URL("../riddle-proof/package.json", import.meta.url), "utf8"));
 const openclawPluginManifest = JSON.parse(readFileSync(new URL("./openclaw.plugin.json", import.meta.url), "utf8"));
+assert.equal(openclawPluginManifest.activation.onStartup, true);
 assert.equal(openclawPluginManifest.capabilities.tools.provides.includes(RIDDLE_PROOF_WAIT_TOOL_NAME), true);
 assert.equal(openclawPluginManifest.configSchema.properties.enableWakeMonitor.default, true);
 assert.equal(openclawPluginManifest.configSchema.properties.checkpointMode.default, "quiet");
