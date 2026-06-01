@@ -56,6 +56,12 @@ CASES = [
         'expected_terminal': 'specific_blocker',
     },
     {
+        'name': 'query-hash-dropped-structured-negative-blocker',
+        'covers': ['query/hash/trailing-slash URLs', 'invalid browser evidence', 'proof-evidence-present'],
+        'function': 'run_verify_interaction_explicit_expected_url_blocks_dropped_terminal_route',
+        'expected_terminal': 'specific_blocker',
+    },
+    {
         'name': 'same-page-hash-pass',
         'covers': ['same-page hashes'],
         'function': 'run_verify_interaction_hash_terminal_route_from_proof_evidence',

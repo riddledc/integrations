@@ -2029,7 +2029,7 @@ def interaction_proof_route_match(expected_path, proof_evidence):
         return None
     for record in proof_evidence_records_deep(proof_evidence):
         flag = explicit_route_match_flag(record)
-        candidate = terminal_path_from_record(record)
+        candidate = observed_terminal_path_from_record(record)
         if candidate and route_matches_expected(expected, candidate):
             return {
                 'matched': True,
@@ -2042,23 +2042,64 @@ def interaction_proof_route_match(expected_path, proof_evidence):
 
 
 EXPLICIT_TERMINAL_PATH_KEYS = (
+    'expected_url', 'expectedUrl',
+    'expected_href', 'expectedHref',
     'expected_terminal_path', 'expectedTerminalPath',
     'expected_terminal_url', 'expectedTerminalUrl',
+    'expected_terminal_href', 'expectedTerminalHref',
     'expected_terminal_route', 'expectedTerminalRoute',
+    'expected_route', 'expectedRoute',
     'terminal_path', 'terminalPath',
     'terminal_url', 'terminalUrl',
+    'terminal_href', 'terminalHref',
     'terminal_route', 'terminalRoute',
     'expected_after_path', 'expectedAfterPath',
     'expected_after_url', 'expectedAfterUrl',
+    'expected_after_href', 'expectedAfterHref',
     'expected_after_route', 'expectedAfterRoute',
     'after_path', 'afterPath',
     'after_url', 'afterUrl',
+    'after_href', 'afterHref',
     'after_route', 'afterRoute',
     'expected_final_path', 'expectedFinalPath',
     'expected_final_url', 'expectedFinalUrl',
+    'expected_final_href', 'expectedFinalHref',
     'expected_final_route', 'expectedFinalRoute',
     'final_path', 'finalPath',
     'final_url', 'finalUrl',
+    'final_href', 'finalHref',
+    'final_route', 'finalRoute',
+)
+EXPECTED_TERMINAL_PATH_KEYS = (
+    'expected_url', 'expectedUrl',
+    'expected_href', 'expectedHref',
+    'expected_path', 'expectedPath',
+    'expected_route', 'expectedRoute',
+    'expected_terminal_path', 'expectedTerminalPath',
+    'expected_terminal_url', 'expectedTerminalUrl',
+    'expected_terminal_href', 'expectedTerminalHref',
+    'expected_terminal_route', 'expectedTerminalRoute',
+    'expected_after_path', 'expectedAfterPath',
+    'expected_after_url', 'expectedAfterUrl',
+    'expected_after_href', 'expectedAfterHref',
+    'expected_after_route', 'expectedAfterRoute',
+    'expected_final_path', 'expectedFinalPath',
+    'expected_final_url', 'expectedFinalUrl',
+    'expected_final_href', 'expectedFinalHref',
+    'expected_final_route', 'expectedFinalRoute',
+)
+OBSERVED_TERMINAL_PATH_KEYS = (
+    'terminal_path', 'terminalPath',
+    'terminal_url', 'terminalUrl',
+    'terminal_href', 'terminalHref',
+    'terminal_route', 'terminalRoute',
+    'after_path', 'afterPath',
+    'after_url', 'afterUrl',
+    'after_href', 'afterHref',
+    'after_route', 'afterRoute',
+    'final_path', 'finalPath',
+    'final_url', 'finalUrl',
+    'final_href', 'finalHref',
     'final_route', 'finalRoute',
 )
 FULL_LOCATION_PATH_KEYS = (
@@ -2087,6 +2128,19 @@ AFTER_STATE_KEYS = (
     'final', 'final_state', 'finalState',
     'expected_final', 'expectedFinal',
 )
+EXPECTED_STATE_KEYS = (
+    'expected', 'expectation',
+    'route_expectation', 'routeExpectation',
+    'expected_after', 'expectedAfter',
+    'expected_terminal', 'expectedTerminal',
+    'expected_final', 'expectedFinal',
+)
+OBSERVED_STATE_KEYS = (
+    'observed', 'actual',
+    'after', 'after_state', 'afterState',
+    'terminal', 'terminal_state', 'terminalState',
+    'final', 'final_state', 'finalState',
+)
 EVIDENCE_CONTAINER_KEYS = (
     'proofEvidence', 'proof_evidence',
     'interactionEvidence', 'interaction_evidence',
@@ -2113,10 +2167,10 @@ def path_candidate(value):
     return ''
 
 
-def record_path_candidate(record, allow_location_keys=False):
+def record_path_candidate_for_keys(record, keys, allow_location_keys=False):
     if not isinstance(record, dict):
         return ''
-    keys = list(EXPLICIT_TERMINAL_PATH_KEYS)
+    keys = list(keys)
     if allow_location_keys:
         keys.extend(LOCATION_PATH_KEYS)
     for key in keys:
@@ -2124,6 +2178,10 @@ def record_path_candidate(record, allow_location_keys=False):
         if candidate:
             return candidate
     return ''
+
+
+def record_path_candidate(record, allow_location_keys=False):
+    return record_path_candidate_for_keys(record, EXPLICIT_TERMINAL_PATH_KEYS, allow_location_keys)
 
 
 def terminal_path_from_record(record, depth=0):
@@ -2163,6 +2221,74 @@ def terminal_path_from_record(record, depth=0):
         elif isinstance(value, list):
             for item in value:
                 candidate = terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    return ''
+
+
+def expected_terminal_path_from_record(record, depth=0):
+    if not isinstance(record, dict) or depth > 4:
+        return ''
+    candidate = record_path_candidate_for_keys(record, EXPECTED_TERMINAL_PATH_KEYS)
+    if candidate:
+        return candidate
+    for key in EXPECTED_STATE_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = (
+                record_path_candidate_for_keys(value, EXPECTED_TERMINAL_PATH_KEYS, allow_location_keys=True)
+                or expected_terminal_path_from_record(value, depth + 1)
+            )
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = expected_terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    for key in EVIDENCE_CONTAINER_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = expected_terminal_path_from_record(value, depth + 1)
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = expected_terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    return ''
+
+
+def observed_terminal_path_from_record(record, depth=0):
+    if not isinstance(record, dict) or depth > 4:
+        return ''
+    candidate = record_path_candidate_for_keys(record, OBSERVED_TERMINAL_PATH_KEYS)
+    if candidate:
+        return candidate
+    for key in OBSERVED_STATE_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = (
+                record_path_candidate_for_keys(value, OBSERVED_TERMINAL_PATH_KEYS, allow_location_keys=True)
+                or observed_terminal_path_from_record(value, depth + 1)
+            )
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = observed_terminal_path_from_record(item, depth + 1)
+                if candidate:
+                    return candidate
+    for key in EVIDENCE_CONTAINER_KEYS:
+        value = record.get(key)
+        if isinstance(value, dict):
+            candidate = observed_terminal_path_from_record(value, depth + 1)
+            if candidate:
+                return candidate
+        elif isinstance(value, list):
+            for item in value:
+                candidate = observed_terminal_path_from_record(item, depth + 1)
                 if candidate:
                     return candidate
     return ''
@@ -2421,17 +2547,20 @@ def interaction_capture_failure_evidence_summary(proof_evidence):
 
 def interaction_terminal_path_from_evidence(proof_evidence):
     for record in proof_evidence_records(proof_evidence):
-        candidate = terminal_path_from_record(record)
+        candidate = expected_terminal_path_from_record(record)
         if candidate:
             return candidate, 'proof_evidence_contract'
-    if interaction_assertions_pass(proof_evidence):
+    route_evidence_passed = interaction_assertions_pass(proof_evidence)
+    if not route_evidence_passed:
+        for record in proof_evidence_records_deep(proof_evidence):
+            if interaction_assertions_pass(record) or explicit_route_match_flag(record) is True:
+                route_evidence_passed = True
+                break
+    if route_evidence_passed:
         for record in proof_evidence_records(proof_evidence):
-            for key in AFTER_STATE_KEYS:
-                value = record.get(key)
-                if isinstance(value, dict):
-                    candidate = record_path_candidate(value, allow_location_keys=True)
-                    if candidate:
-                        return candidate, 'proof_evidence_after_state'
+            candidate = observed_terminal_path_from_record(record)
+            if candidate:
+                return candidate, 'proof_evidence_contract'
     return '', ''
 
 
@@ -2468,6 +2597,16 @@ def proof_evidence_should_override_state_terminal_path(state_candidate, evidence
     if not evidence_candidate:
         return False
     if not state_candidate:
+        return True
+    state_parts = route_parts(state_candidate)
+    evidence_parts = route_parts(evidence_candidate)
+    if (
+        state_parts.get('pathname') == evidence_parts.get('pathname')
+        and (
+            (evidence_parts.get('query') and not state_parts.get('query'))
+            or (evidence_parts.get('hash') and not state_parts.get('hash'))
+        )
+    ):
         return True
     if route_matches_expected(state_candidate, evidence_candidate):
         return False
@@ -2953,6 +3092,25 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
         and route_expectation.get('terminal_path')
         and route_expectation_source != 'recon_start_path'
     )
+    if authored_terminal_route:
+        expected = route_mismatch.get('expected_path') or ''
+        observed = route_mismatch.get('observed_after_path') or ''
+        summary = 'Interaction proof terminal route mismatch: expected ' + (expected or '(unknown)') + ', got ' + (observed or '(unknown)') + '.'
+        if error_messages:
+            reasons.append('Capture script error: ' + error_messages[0][:500])
+            summary += ' Capture script error: ' + error_messages[0][:300]
+        reasons.append('Route mismatch: expected after capture path ' + (expected or '(unknown)') + ', observed ' + (observed or '(unknown)') + '.')
+        reasons.append('The terminal route came from authored interaction proof evidence, so the captured browser evidence is the terminal blocker instead of an author retry loop.')
+        return {
+            'decision': 'failed_interaction_capture',
+            'summary': summary,
+            'recommended_stage': None,
+            'continue_with_stage': None,
+            'blocking': True,
+            'terminal_blocker': True,
+            'reasons': reasons,
+            'mismatch': route_mismatch,
+        }
     recommended_stage = 'recon' if 'wrong route' in reason and not authored_terminal_route else 'author'
     mismatch = None
     if recommended_stage == 'recon':

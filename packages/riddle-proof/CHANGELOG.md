@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.13
+
+### Patch Changes
+
+- Block structured interaction evidence when an explicit expected URL with query/hash does not match the captured terminal browser route.
+
 ## 0.8.12
 
 ### Patch Changes
