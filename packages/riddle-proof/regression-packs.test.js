@@ -5,8 +5,8 @@ const pack = JSON.parse(readFileSync(new URL("./examples/regression-packs/oc-flo
 
 assert.equal(pack.version, "riddle-proof.regression-pack.v1");
 assert.equal(pack.pack_id, "riddle-proof-oc-flow-2026-06");
-assert.equal(pack.minimum_versions["@riddledc/openclaw-riddle-proof"], "0.4.144");
-assert.equal(pack.minimum_versions["@riddledc/riddle-proof"], "0.8.16");
+assert.equal(pack.minimum_versions["@riddledc/openclaw-riddle-proof"], "0.4.146");
+assert.equal(pack.minimum_versions["@riddledc/riddle-proof"], "0.8.18");
 assert.equal(pack.runtime_gate.tool, "riddle_proof_status");
 assert.equal(pack.runtime_gate.require_loaded_metadata, true);
 
@@ -23,6 +23,7 @@ for (const marker of [
 
 const requiredCoreCases = new Set([
   "route-change-forward-pass",
+  "route-change-proof-plan-placeholder-ignored",
   "route-change-reverse-nested-terminal-url-pass",
   "query-hash-trailing-slash-pass",
   "query-hash-dropped-structured-negative-blocker",

@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.146
+
+### Patch Changes
+
+- Fix interaction route verification when proof-plan prose contains placeholder paths such as `/pathname`, while live browser evidence supplies the real expected terminal URL.
+- Updated dependencies
+  - @riddledc/riddle-proof@0.8.18
+
 ## 0.4.145
 
 ### Patch Changes

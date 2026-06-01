@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.18
+
+### Patch Changes
+
+- Fix interaction route verification when proof-plan prose contains placeholder paths such as `/pathname`, while live browser evidence supplies the real expected terminal URL.
+
 ## 0.8.17
 
 ### Patch Changes

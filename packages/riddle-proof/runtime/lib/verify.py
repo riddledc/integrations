@@ -2319,11 +2319,22 @@ def text_path_candidate(value):
     return path_candidate(raw)
 
 
+PROSE_ROUTE_PLACEHOLDER_PATHS = {
+    '/href',
+    '/path',
+    '/pathname',
+    '/route',
+    '/url',
+}
+
+
 def text_route_candidate(value):
     candidate = text_path_candidate(value)
     if not candidate:
         return ''
     parsed = urlparse(candidate)
+    if (parsed.path or '').lower() in PROSE_ROUTE_PLACEHOLDER_PATHS and not parsed.query and not parsed.fragment:
+        return ''
     first_segment = next((part for part in (parsed.path or '').split('/') if part), '')
     if first_segment and first_segment[:1].isupper():
         return ''
@@ -2350,11 +2361,11 @@ def terminal_path_from_text(value):
 def interaction_assertions_pass(value):
     for record in proof_evidence_records(value):
         if any(record.get(key) is False for key in (
-            'passed', 'ok', 'proofReady', 'proof_ready', 'routeMatches', 'route_matches',
+            'passed', 'pass', 'ok', 'success', 'proofReady', 'proof_ready', 'routeMatches', 'route_matches',
         )):
             return False
         if any(record.get(key) is True for key in (
-            'passed', 'ok', 'proofReady', 'proof_ready', 'interactionPassed', 'interaction_passed',
+            'passed', 'pass', 'ok', 'success', 'proofReady', 'proof_ready', 'interactionPassed', 'interaction_passed',
         )):
             return True
         for key in ('assertions', 'checks', 'predicates', 'expectations'):
@@ -2369,7 +2380,7 @@ def interaction_assertions_pass(value):
                     if isinstance(item, bool):
                         bools.append(item)
                     elif isinstance(item, dict):
-                        for flag_key in ('passed', 'ok', 'valid'):
+                        for flag_key in ('passed', 'pass', 'ok', 'valid', 'success'):
                             if isinstance(item.get(flag_key), bool):
                                 bools.append(item.get(flag_key))
                                 break
@@ -2381,6 +2392,7 @@ def interaction_assertions_pass(value):
 INTERACTION_ASSERTION_CONTAINER_KEYS = ('assertions', 'checks', 'predicates', 'expectations')
 INTERACTION_FAILURE_FLAG_KEYS = (
     'passed',
+    'pass',
     'ok',
     'valid',
     'success',
