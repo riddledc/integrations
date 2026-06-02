@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.21
+
+### Patch Changes
+
+- a0e281d: Block structured interaction capture failures without retrying authoring, and preserve terminal query/hash evidence when proof payloads include both bare path fields and full terminal URLs.
+
 ## 0.8.20
 
 ### Patch Changes
