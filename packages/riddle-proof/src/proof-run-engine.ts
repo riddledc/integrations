@@ -1722,11 +1722,18 @@ export async function executeWorkflow(
         verifyContinueWithStage,
         convergenceSignals,
       };
-      const structuredInteractionFailureSummary = stringValue(verifyDecisionRequest?.structured_interaction_failure_summary);
+      const structuredInteractionFailureSummary =
+        stringValue(verifyDecisionRequest?.structured_interaction_capture_failure_summary)
+        || stringValue(verifyDecisionRequest?.structured_interaction_failure_summary)
+        || stringValue(state?.structured_interaction_capture_failure_summary)
+        || stringValue(state?.structured_interaction_failure_summary);
 
       if (verifyStatus !== "evidence_captured") {
         const captureQuality = verifyDecisionRequest?.capture_quality || {};
-        const captureTerminalBlocker = captureQuality?.terminal_blocker === true || captureQuality?.blocking === true;
+        const captureTerminalBlocker =
+          Boolean(structuredInteractionFailureSummary)
+          || captureQuality?.terminal_blocker === true
+          || captureQuality?.blocking === true;
         if (!captureTerminalBlocker && (verifyContinueWithStage || verifyRecommendedStage || "author") === "author") {
           updateState(config.statePath, (currentState) => {
             currentState.author_status = "needs_authoring";
@@ -1736,7 +1743,10 @@ export async function executeWorkflow(
           state = readState(config.statePath);
         }
         const checkpointName = captureTerminalBlocker ? "verify_capture_blocked" : "verify_capture_retry";
-        const summary = stringValue(proofAssessment.summary) || "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
+        const summary =
+          structuredInteractionFailureSummary
+          || stringValue(proofAssessment.summary)
+          || "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
         recordAttempt("verify", "checkpoint", summary, {
           autoApproved: verifyRes.autoApproved || false,
           checkpoint: checkpointName,

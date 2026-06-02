@@ -280,10 +280,13 @@ if (stage === 'verify') {
   state.stage = 'verify';
   const verifyStatus = state.simulate_verify_status || 'evidence_captured';
   const structuredInteractionFailureSummary = (state.simulate_structured_interaction_failure_summary || '').trim();
+  const structuredInteractionCaptureFailureSummary = (state.simulate_structured_interaction_capture_failure_summary || '').trim();
+  state.structured_interaction_capture_failure_summary = structuredInteractionCaptureFailureSummary || undefined;
+  state.structured_interaction_failure_summary = structuredInteractionFailureSummary || undefined;
   state.verify_status = verifyStatus;
   if (verifyStatus === 'capture_incomplete') {
     state.after_cdn = '';
-    state.verify_summary = 'Verify did not capture a usable proof packet yet.';
+    state.verify_summary = structuredInteractionCaptureFailureSummary || 'Verify did not capture a usable proof packet yet.';
     state.merge_recommendation = 'do-not-merge';
     state.proof_assessment = {};
     state.proof_assessment_request = {};
@@ -294,6 +297,7 @@ if (stage === 'verify') {
     state.verify_decision_request = {
       status: verifyStatus,
       summary: state.verify_summary,
+      structured_interaction_capture_failure_summary: structuredInteractionCaptureFailureSummary || undefined,
       next_stage_options: ['author', 'verify', 'implement', 'recon'],
       recommended_stage: 'author',
       continue_with_stage: 'author',
@@ -1471,6 +1475,38 @@ async function run() {
   const afterFailedInteraction = readJson(failedInteractionStatePath);
   assert(afterFailedInteraction.stage_attempts.verify.count === 1, 'failed structured interaction verify attempt should be recorded once');
   assert(afterFailedInteraction.merge_recommendation === 'do-not-merge', 'failed structured interaction evidence should stay do-not-merge');
+
+  const failedCaptureInteractionStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-failed-capture-interaction-')), 'state.json');
+  writeJson(failedCaptureInteractionStatePath, {
+    ...makeLoopState(),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    verification_mode: 'interaction',
+    server_path: '/',
+    simulate_verify_status: 'capture_incomplete',
+    simulate_structured_interaction_capture_failure_summary: 'Interaction capture failed before usable authored proof evidence was emitted. Capture script error: intentional-riddle-proof-test-thrown-error',
+  });
+  const failedCaptureInteractionBlocked = await localEngine.execute({ action: 'run', state_path: failedCaptureInteractionStatePath, advance_stage: 'verify' });
+  assert(
+    failedCaptureInteractionBlocked.checkpoint === 'verify_capture_blocked',
+    `failed structured interaction capture should block at verify_capture_blocked, got ${failedCaptureInteractionBlocked.checkpoint}`,
+  );
+  assert(failedCaptureInteractionBlocked.blocking === true, 'failed structured interaction capture should be a blocking checkpoint');
+  assert(
+    failedCaptureInteractionBlocked.summary.includes('intentional-riddle-proof-test-thrown-error'),
+    'failed structured interaction capture blocker should preserve the concrete capture error',
+  );
+  assert(
+    failedCaptureInteractionBlocked.decisionRequest.continue_with_stage == null,
+    'failed structured interaction capture should not continue into author retry',
+  );
+  const afterFailedCaptureInteraction = readJson(failedCaptureInteractionStatePath);
+  assert(
+    afterFailedCaptureInteraction.author_status === 'ready',
+    'failed structured interaction capture should not reset authoring state for a retry',
+  );
+  assert(afterFailedCaptureInteraction.merge_recommendation === 'do-not-merge', 'failed structured interaction capture should stay do-not-merge');
 
   const shipped = await localEngine.execute({
     action: 'run',

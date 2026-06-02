@@ -412,6 +412,12 @@ class FakeRiddle:
                 }
                 proof_evidence = {
                     'version': 'riddle-proof.interaction.v1',
+                    'routeExpectationSource': 'capture_script.expectedUrl',
+                    'expectedUrl': 'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
+                    'terminalPath': '/pricing/',
+                    'terminalSearch': '?rp_probe=1',
+                    'terminalHash': '#pricing-probe',
+                    'terminalUrl': 'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
                     'start': {'href': 'https://riddledc.com/'},
                     'action': {'type': 'click', 'target': 'Pricing'},
                     'terminal': {
