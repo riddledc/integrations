@@ -2112,15 +2112,40 @@ EXPECTED_TERMINAL_PATH_KEYS = (
     'expected_final_route', 'expectedFinalRoute',
 )
 OBSERVED_TERMINAL_PATH_KEYS = (
-    'terminal_path', 'terminalPath',
     'terminal_url', 'terminalUrl',
     'terminal_href', 'terminalHref',
     'terminal_route', 'terminalRoute',
-    'after_path', 'afterPath',
+    'terminal_path', 'terminalPath',
     'after_url', 'afterUrl',
     'after_href', 'afterHref',
     'after_route', 'afterRoute',
+    'after_path', 'afterPath',
+    'final_url', 'finalUrl',
+    'final_href', 'finalHref',
+    'final_route', 'finalRoute',
     'final_path', 'finalPath',
+)
+EXPECTED_TERMINAL_FULL_PATH_KEYS = (
+    'expected_url', 'expectedUrl',
+    'expected_href', 'expectedHref',
+    'expected_route', 'expectedRoute',
+    'expected_terminal_url', 'expectedTerminalUrl',
+    'expected_terminal_href', 'expectedTerminalHref',
+    'expected_terminal_route', 'expectedTerminalRoute',
+    'expected_after_url', 'expectedAfterUrl',
+    'expected_after_href', 'expectedAfterHref',
+    'expected_after_route', 'expectedAfterRoute',
+    'expected_final_url', 'expectedFinalUrl',
+    'expected_final_href', 'expectedFinalHref',
+    'expected_final_route', 'expectedFinalRoute',
+)
+OBSERVED_TERMINAL_FULL_PATH_KEYS = (
+    'terminal_url', 'terminalUrl',
+    'terminal_href', 'terminalHref',
+    'terminal_route', 'terminalRoute',
+    'after_url', 'afterUrl',
+    'after_href', 'afterHref',
+    'after_route', 'afterRoute',
     'final_url', 'finalUrl',
     'final_href', 'finalHref',
     'final_route', 'finalRoute',
@@ -2211,6 +2236,103 @@ def record_path_candidate(record, allow_location_keys=False):
     return record_path_candidate_for_keys(record, EXPLICIT_TERMINAL_PATH_KEYS, allow_location_keys)
 
 
+def first_string_for_keys(record, keys):
+    if not isinstance(record, dict):
+        return ''
+    for key in keys:
+        value = record.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ''
+
+
+def route_component_candidate(record, path_keys, query_keys, hash_keys):
+    path_value = first_string_for_keys(record, path_keys)
+    if not path_value:
+        return ''
+    base = path_candidate(path_value)
+    if not base:
+        return ''
+    parsed = urlparse(base)
+    query = parsed.query or ''
+    fragment = parsed.fragment or ''
+    query_value = first_string_for_keys(record, query_keys)
+    hash_value = first_string_for_keys(record, hash_keys)
+    if query_value:
+        query = query_value[1:] if query_value.startswith('?') else query_value
+    if hash_value:
+        fragment = hash_value[1:] if hash_value.startswith('#') else hash_value
+    pathname = parsed.path or '/'
+    return normalize_observed_path(
+        pathname
+        + (('?' + query) if query else '')
+        + (('#' + fragment) if fragment else '')
+    )
+
+
+EXPECTED_COMPONENT_PATH_KEYS = (
+    'expected_path', 'expectedPath',
+    'expected_terminal_path', 'expectedTerminalPath',
+    'expected_after_path', 'expectedAfterPath',
+    'expected_final_path', 'expectedFinalPath',
+)
+EXPECTED_COMPONENT_QUERY_KEYS = (
+    'expected_query', 'expectedQuery',
+    'expected_search', 'expectedSearch',
+    'expected_terminal_query', 'expectedTerminalQuery',
+    'expected_terminal_search', 'expectedTerminalSearch',
+    'expected_after_query', 'expectedAfterQuery',
+    'expected_after_search', 'expectedAfterSearch',
+    'expected_final_query', 'expectedFinalQuery',
+    'expected_final_search', 'expectedFinalSearch',
+)
+EXPECTED_COMPONENT_HASH_KEYS = (
+    'expected_hash', 'expectedHash',
+    'expected_fragment', 'expectedFragment',
+    'expected_terminal_hash', 'expectedTerminalHash',
+    'expected_terminal_fragment', 'expectedTerminalFragment',
+    'expected_after_hash', 'expectedAfterHash',
+    'expected_after_fragment', 'expectedAfterFragment',
+    'expected_final_hash', 'expectedFinalHash',
+    'expected_final_fragment', 'expectedFinalFragment',
+)
+OBSERVED_COMPONENT_PATH_KEYS = (
+    'terminal_path', 'terminalPath',
+    'after_path', 'afterPath',
+    'final_path', 'finalPath',
+    'observed_path', 'observedPath',
+    'actual_path', 'actualPath',
+    'pathname',
+)
+OBSERVED_COMPONENT_QUERY_KEYS = (
+    'terminal_query', 'terminalQuery',
+    'terminal_search', 'terminalSearch',
+    'after_query', 'afterQuery',
+    'after_search', 'afterSearch',
+    'final_query', 'finalQuery',
+    'final_search', 'finalSearch',
+    'observed_query', 'observedQuery',
+    'observed_search', 'observedSearch',
+    'actual_query', 'actualQuery',
+    'actual_search', 'actualSearch',
+    'search',
+)
+OBSERVED_COMPONENT_HASH_KEYS = (
+    'terminal_hash', 'terminalHash',
+    'terminal_fragment', 'terminalFragment',
+    'after_hash', 'afterHash',
+    'after_fragment', 'afterFragment',
+    'final_hash', 'finalHash',
+    'final_fragment', 'finalFragment',
+    'observed_hash', 'observedHash',
+    'observed_fragment', 'observedFragment',
+    'actual_hash', 'actualHash',
+    'actual_fragment', 'actualFragment',
+    'hash',
+    'fragment',
+)
+
+
 def terminal_path_from_record(record, depth=0):
     if not isinstance(record, dict) or depth > 4:
         return ''
@@ -2256,6 +2378,17 @@ def terminal_path_from_record(record, depth=0):
 def expected_terminal_path_from_record(record, depth=0):
     if not isinstance(record, dict) or depth > 4:
         return ''
+    candidate = record_path_candidate_for_keys(record, EXPECTED_TERMINAL_FULL_PATH_KEYS)
+    if candidate:
+        return candidate
+    candidate = route_component_candidate(
+        record,
+        EXPECTED_COMPONENT_PATH_KEYS,
+        EXPECTED_COMPONENT_QUERY_KEYS,
+        EXPECTED_COMPONENT_HASH_KEYS,
+    )
+    if candidate:
+        return candidate
     candidate = record_path_candidate_for_keys(record, EXPECTED_TERMINAL_PATH_KEYS)
     if candidate:
         return candidate
@@ -2304,6 +2437,17 @@ def expected_terminal_path_from_record(record, depth=0):
 def observed_terminal_path_from_record(record, depth=0):
     if not isinstance(record, dict) or depth > 4:
         return ''
+    candidate = record_path_candidate_for_keys(record, OBSERVED_TERMINAL_FULL_PATH_KEYS)
+    if candidate:
+        return candidate
+    candidate = route_component_candidate(
+        record,
+        OBSERVED_COMPONENT_PATH_KEYS,
+        OBSERVED_COMPONENT_QUERY_KEYS,
+        OBSERVED_COMPONENT_HASH_KEYS,
+    )
+    if candidate:
+        return candidate
     candidate = record_path_candidate_for_keys(record, OBSERVED_TERMINAL_PATH_KEYS)
     if candidate:
         return candidate
