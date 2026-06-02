@@ -10,7 +10,7 @@ from util import load_state, save_state, invoke, git
 DISCORD_API = 'https://discord.com/api/v10'
 SHIP_NOISE_PATHS = ('.codex', '.oc-smoke')
 VISUAL_FIRST_MODES = {
-    'visual', 'render', 'interaction', 'ui', 'layout', 'screenshot',
+    'visual', 'render', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
 }
 

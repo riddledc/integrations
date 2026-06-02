@@ -35,6 +35,7 @@
       "missing-selector-timeout-specific-blocker",
       "thrown-error-preserves-structured-evidence",
       "interaction-thrown-error-specific-blocker",
+      "interaction-iife-structured-proof-without-screenshot-pass",
       "proof-evidence-absent-specific-blocker",
       "no-diff-prod-audit-default-capture-pass"
     ]

@@ -444,6 +444,45 @@ class FakeRiddle:
                         'totalPixels': 972000,
                     },
                 }
+            if 'clickedProofNavigationOcLiveShapeNoScreenshot' in script:
+                assert '__riddleProofCaptureScriptResult = await ((async () =>' in script
+                page_state = {
+                    'bodyTextLength': 4113,
+                    'visibleTextSample': 'RIDDLE PROOF Turn a URL into evidence an agent can cite.',
+                    'interactiveElements': 6,
+                    'visibleInteractiveElements': 6,
+                    'pathname': '/proof/',
+                    'href': 'https://riddledc.com/proof/',
+                    'title': 'Riddle Proof',
+                    'buttons': ['Proof'],
+                    'headings': ['Riddle Proof'],
+                    'links': [],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'h1', 'text': 'Riddle Proof'}],
+                }
+                proof_evidence = {
+                    'version': 'riddle-proof.interaction.v1',
+                    'expectedUrl': 'https://riddledc.com/proof/',
+                    'routeExpectationSource': 'capture_script.expectedUrl',
+                    'start': {'href': 'https://riddledc.com/', 'pathname': '/'},
+                    'action': {'type': 'click', 'target': 'visible Proof navigation link', 'clicked': True},
+                    'terminal': {'href': 'https://riddledc.com/proof/', 'pathname': '/proof/'},
+                    'assertions': [
+                        {'name': 'route expectation source is capture_script.expectedUrl', 'pass': True},
+                        {'name': 'terminal URL matched expected proof route', 'pass': True},
+                        {'name': 'Proof page content visible', 'pass': True},
+                    ],
+                    'success': True,
+                }
+                return {
+                    'ok': True,
+                    'outputs': [{'name': 'proof.json', 'url': 'https://cdn.example.com/proof.json'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                    ],
+                }
             if 'clickedProofNavigationOcLiveShape' in script:
                 page_state = {
                     'bodyTextLength': 4113,
@@ -2791,6 +2830,63 @@ def run_verify_interaction_terminal_route_from_proof_evidence():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_iife_structured_evidence_without_screenshot():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-iife-no-shot-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Start at /, click Proof, and verify the terminal /proof/ route.',
+            'capture_script': (
+                "(async () => { "
+                "const evidence = await clickedProofNavigationOcLiveShapeNoScreenshot(); "
+                "await saveScreenshot('after-proof'); "
+                "return evidence; "
+                "})();"
+            ),
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_iife_no_screenshot', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'evidence_captured'
+        assert after_verify['after_cdn'] == ''
+        assert after_verify['verify_results']['after']['observation']['valid'] is True
+        assert after_verify['verify_results']['after']['observation']['details']['screenshot_required'] is False
+        assert after_verify['evidence_bundle']['artifact_contract']['required']['screenshot'] is False
+        assert 'screenshot' not in after_verify['evidence_bundle']['artifact_usage']['missing_required_signals']
+        assert after_verify['route_expectation']['expected_path'] == '/proof'
+        route = after_verify['proof_assessment_request']['semantic_context']['route']
+        assert route['expected_after_path'] == '/proof'
+        assert route['after_observed_path'] == '/proof'
+        assert 'wrong route' not in after_verify['verify_results']['after']['observation']['reason']
+        supporting = after_verify['verify_results']['after']['supporting_artifacts']
+        assert supporting['proof_evidence_present'] is True
+        assert supporting['has_structured_payload'] is True
+        return {
+            'ok': True,
+            'expected_path': after_verify['route_expectation']['expected_path'],
+            'after_cdn': after_verify['after_cdn'],
+            'screenshot_required': after_verify['verify_results']['after']['observation']['details']['screenshot_required'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_proof_evidence_overrides_stale_expected_path():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-stale-route-'))
     state_path = tempdir / 'state.json'
@@ -3765,6 +3861,7 @@ if __name__ == '__main__':
         'verify_capture_retry': run_verify_capture_retry(),
         'remote_audit_verify_uses_default_capture_script': run_remote_audit_verify_uses_default_capture_script(),
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
+        'verify_interaction_iife_structured_evidence_without_screenshot': run_verify_interaction_iife_structured_evidence_without_screenshot(),
         'verify_interaction_proof_evidence_overrides_stale_expected_path': run_verify_interaction_proof_evidence_overrides_stale_expected_path(),
         'verify_interaction_proof_plan_placeholder_uses_live_evidence': run_verify_interaction_proof_plan_placeholder_uses_live_evidence(),
         'verify_interaction_reverse_terminal_route_from_proof_evidence': run_verify_interaction_reverse_terminal_route_from_proof_evidence(),

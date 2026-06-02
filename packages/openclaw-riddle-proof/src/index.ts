@@ -104,6 +104,13 @@ const STRUCTURED_FIRST_VERIFICATION_MODES = new Set([
   "telemetry",
   "text",
 ]);
+const INTERACTION_VERIFICATION_MODES = new Set([
+  "interaction",
+  "interactive",
+  "user_flow",
+  "user-flow",
+  "workflow",
+]);
 
 export type OpenClawRiddleProofPackageMetadata = {
   plugin_package: string | null;
@@ -1236,7 +1243,8 @@ function sanitizeRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function verificationModeRequiresScreenshot(mode: unknown) {
-  return !STRUCTURED_FIRST_VERIFICATION_MODES.has(stringValue(mode).toLowerCase());
+  const normalized = stringValue(mode).toLowerCase();
+  return !STRUCTURED_FIRST_VERIFICATION_MODES.has(normalized) && !INTERACTION_VERIFICATION_MODES.has(normalized);
 }
 
 function artifactContractRequiresScreenshot(

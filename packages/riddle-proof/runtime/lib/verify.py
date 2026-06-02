@@ -52,7 +52,7 @@ STRUCTURED_FIRST_MODES = {
     'telemetry', 'text', 'api',
 }
 VISUAL_FIRST_MODES = {
-    'visual', 'render', 'interaction', 'ui', 'layout', 'screenshot',
+    'visual', 'render', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
 }
 INTERACTION_MODES = {'interaction', 'interactive', 'user_flow', 'user-flow', 'workflow'}
@@ -235,6 +235,20 @@ def auto_screenshot_for_mode(verification_mode):
     return normalized_verification_mode(verification_mode) not in STRUCTURED_FIRST_MODES
 
 
+def capture_script_iife_expression(script):
+    text = (script or '').strip()
+    while text.endswith(';'):
+        text = text[:-1].rstrip()
+    if not text:
+        return ''
+    compact = re.sub(r'\s+', ' ', text)
+    if re.match(r'^\(\s*async\s*(function\b|\([^)]*\)\s*=>)', compact) and re.search(r'\)\s*\(\s*\)$', compact):
+        return text
+    if re.match(r'^\(\s*(function\b|\([^)]*\)\s*=>)', compact) and re.search(r'\)\s*\(\s*\)$', compact):
+        return text
+    return ''
+
+
 def record_verify_phase(phase, status='running', summary=''):
     global s
     ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
@@ -368,10 +382,19 @@ def abort_capture_failure(state, results, expected_path, message, raw_payload):
 def build_probe_capture_script(base_script='', verification_mode='proof', proof_session_seed=None, viewport_matrix=None):
     pieces = []
     script = (base_script or '').strip()
+    iife_expression = capture_script_iife_expression(script)
     pieces.extend(viewport_matrix_setup_js(viewport_matrix))
     pieces.append('let __riddleProofCaptureScriptError = null;')
     pieces.append('let __riddleProofCaptureScriptResult = null;')
-    if script:
+    if iife_expression:
+        pieces.extend([
+            'try {',
+            '__riddleProofCaptureScriptResult = await (' + iife_expression + ');',
+            '} catch (err) {',
+            '  __riddleProofCaptureScriptError = err;',
+            '}',
+        ])
+    elif script:
         pieces.extend([
             'try {',
             '__riddleProofCaptureScriptResult = await (async () => {',

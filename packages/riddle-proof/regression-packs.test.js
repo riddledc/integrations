@@ -29,6 +29,7 @@ const requiredCoreCases = new Set([
   "query-hash-dropped-structured-negative-blocker",
   "missing-selector-timeout-specific-blocker",
   "thrown-error-preserves-structured-evidence",
+  "interaction-iife-structured-proof-without-screenshot-pass",
   "no-diff-prod-audit-default-capture-pass",
 ]);
 const coreCases = new Set(pack.local_core_suite.required_cases);

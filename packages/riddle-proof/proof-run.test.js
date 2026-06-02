@@ -670,6 +670,47 @@ async function run() {
   assert(missingAfterGate.ok === false, 'ship gate should reject missing after evidence');
   assert(missingAfterGate.reasons.includes('after_cdn is required before ship'), 'ship gate should explain missing after evidence');
 
+  const structuredInteractionAfterGate = core.validateShipGate({
+    ...makeLoopState(),
+    verification_mode: 'interaction',
+    implementation_status: 'changes_detected',
+    verify_status: 'evidence_captured',
+    proof_assessment: { decision: 'ready_to_ship', source: 'supervising_agent' },
+    proof_assessment_source: 'supervising_agent',
+    evidence_bundle: {
+      verification_mode: 'interaction',
+      expected_path: '/proof',
+      artifact_contract: {
+        verification_mode: 'interaction',
+        required: {
+          baseline_context: true,
+          route_semantics: true,
+          screenshot: false,
+          proof_evidence: false,
+          visual_delta: false,
+        },
+      },
+      after: {
+        observation: { valid: true, telemetry_ready: true, reason: 'ok' },
+        supporting_artifacts: {
+          has_structured_payload: true,
+          proof_evidence_present: true,
+        },
+        proof_evidence: {
+          version: 'riddle-proof.interaction.v1',
+          terminal: { href: 'https://riddledc.com/proof/', pathname: '/proof/' },
+          assertions: [{ name: 'terminal URL matched expected proof route', pass: true }],
+        },
+        visual_delta: { status: 'not_applicable', passed: null },
+      },
+      proof_evidence: {
+        version: 'riddle-proof.interaction.v1',
+        terminal: { href: 'https://riddledc.com/proof/', pathname: '/proof/' },
+      },
+    },
+  });
+  assert(structuredInteractionAfterGate.ok === true, 'ship gate should accept valid structured interaction evidence without an after screenshot');
+
   const visualUnmeasuredGate = core.validateShipGate({
     ...makeLoopState(),
     verification_mode: 'visual',
