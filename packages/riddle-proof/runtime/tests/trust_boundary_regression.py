@@ -104,6 +104,12 @@ CASES = [
         'expected_terminal': 'pass',
     },
     {
+        'name': 'interaction-iife-structured-proof-without-screenshot-pass',
+        'covers': ['route-changing interactions', 'proof-evidence-present', 'proof-evidence-present/absent cases'],
+        'function': 'run_verify_interaction_iife_structured_evidence_without_screenshot',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'proof-evidence-absent-specific-blocker',
         'covers': ['proof-evidence-absent'],
         'function': 'run_verify_audio_requires_proof_evidence',

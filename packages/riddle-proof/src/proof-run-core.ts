@@ -633,7 +633,6 @@ function normalizedProofAssessment(state: any = {}) {
 const VISUAL_FIRST_MODES = new Set([
   "visual",
   "render",
-  "interaction",
   "ui",
   "layout",
   "screenshot",
@@ -748,6 +747,24 @@ export function requiredBaselineLabelsForState(state: any = {}) {
   return labels;
 }
 
+function stateHasAfterEvidence(state: any = {}) {
+  if (String(state?.after_cdn || "").trim()) return true;
+  const bundle = objectValue(state?.evidence_bundle);
+  const after = objectValue(bundle.after);
+  const observation = objectValue(after.observation);
+  const supporting = objectValue(after.supporting_artifacts);
+  return Boolean(
+    observation.valid === true &&
+    (
+      supporting.has_structured_payload === true ||
+      supporting.proof_evidence_present === true ||
+      observation.telemetry_ready === true ||
+      Object.keys(objectValue(bundle.proof_evidence)).length > 0 ||
+      Object.keys(objectValue(after.proof_evidence)).length > 0
+    ),
+  );
+}
+
 export function validateShipGate(state: any = {}): ShipGateValidation {
   const reference = normalizedReference(state);
   const prodUrl = String(state?.prod_url || "").trim();
@@ -779,7 +796,7 @@ export function validateShipGate(state: any = {}): ShipGateValidation {
       reasons.push("prod_cdn is required before ship");
     }
   }
-  if (!afterCdn) {
+  if (!stateHasAfterEvidence(state)) {
     reasons.push("after_cdn is required before ship");
   }
   if (verifyStatus !== "evidence_captured") {

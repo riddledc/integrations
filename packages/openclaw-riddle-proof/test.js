@@ -2887,6 +2887,143 @@ assert.equal(audioAutoReviewResult.status, "ready_to_ship");
 assert.equal(audioAutoReviewResult.ok, true);
 assert.ok(audioAutoReviewEngineCalls.length >= 1);
 
+const interactionAutoReviewFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-interaction-auto-review-"));
+const interactionAutoReviewStatePath = path.join(interactionAutoReviewFixture, "riddle-state.json");
+const interactionAutoReviewWrapperStatePath = path.join(interactionAutoReviewFixture, "wrapper-state.json");
+writeFileSync(interactionAutoReviewStatePath, JSON.stringify({
+  branch: "agent/interaction-auto-review-fixture",
+  before_cdn: "https://example.com/home-before.png",
+  after_cdn: "",
+  verification_mode: "interaction",
+  evidence_bundle: {
+    verification_mode: "interaction",
+    expected_path: "/proof",
+    artifact_contract: {
+      verification_mode: "interaction",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: false,
+        proof_evidence: false,
+        playability: false,
+        visual_delta: false,
+      },
+    },
+    artifact_usage: {
+      missing_required_signals: [],
+    },
+    proof_evidence: {
+      version: "riddle-proof.interaction.v1",
+      expectedUrl: "https://riddledc.com/proof/",
+      routeExpectationSource: "capture_script.expectedUrl",
+      terminal: { href: "https://riddledc.com/proof/", pathname: "/proof/" },
+      assertions: [
+        { name: "terminal URL matched expected proof route", pass: true },
+        { name: "Proof page content visible", pass: true },
+      ],
+      success: true,
+    },
+    semantic_context: {
+      route: {
+        expected_path: "/proof",
+        expected_after_path: "/proof",
+        expected_start_path: "/",
+        before_observed_path: "/",
+        after_observed_path: "/proof/",
+      },
+      after: {
+        valid: true,
+        headings: ["Riddle Proof"],
+        buttons: ["Proof"],
+        visible_text_sample: "RIDDLE PROOF Turn a URL into evidence an agent can cite.",
+      },
+    },
+    after: {
+      observation: { valid: true, telemetry_ready: true, reason: "ok" },
+      supporting_artifacts: {
+        proof_evidence_present: true,
+        has_structured_payload: true,
+        data_outputs: [{ name: "proof.json", url: "https://example.com/proof.json" }],
+      },
+      visual_delta: { status: "not_applicable", passed: null },
+    },
+  },
+  proof_assessment_request: {
+    expected_path: "/proof",
+    expected_start_path: "/",
+  },
+}, null, 2));
+writeFileSync(interactionAutoReviewWrapperStatePath, JSON.stringify({
+  version: "riddle-proof.run-state.v1",
+  run_id: "rp_interaction_auto_review",
+  status: "blocked",
+  current_stage: "verify",
+  last_checkpoint: "verify_supervisor_judgment",
+  state_path: interactionAutoReviewWrapperStatePath,
+  request: {
+    repo: "davisdiehl/riddle-site",
+    change_request: "Home -> Proof no-ship interaction smoke.",
+    engine_state_path: interactionAutoReviewStatePath,
+    verification_mode: "interaction",
+    ship_mode: "none",
+  },
+  events: [],
+}, null, 2));
+const interactionAutoReviewInspect = inspectOpenClawRiddleProof({ state_path: interactionAutoReviewWrapperStatePath });
+assert.equal(interactionAutoReviewInspect.ready_to_ship_candidate, true);
+assert.equal(interactionAutoReviewInspect.artifact_contract?.required?.screenshot, false);
+assert.equal(interactionAutoReviewInspect.structured_evidence?.proof_evidence_present, true);
+assert.equal(interactionAutoReviewInspect.route_matched, true);
+
+const interactionAutoReviewEngineCalls = [];
+const interactionAutoReviewResult = await runOpenClawRiddleProof(
+  {
+    ...params,
+    dry_run: false,
+    run_mode: "blocking",
+    ship_after_verify: false,
+    ship_mode: "none",
+    harness_state_path: interactionAutoReviewWrapperStatePath,
+    state_path: interactionAutoReviewStatePath,
+    verification_mode: "interaction",
+    change_request: "Home -> Proof no-ship interaction smoke.",
+  },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    proofReviewMode: "main_agent",
+    engine: {
+      async execute(engineParams) {
+        interactionAutoReviewEngineCalls.push(engineParams);
+        if (engineParams.proof_assessment_json) {
+          const proofAssessment = JSON.parse(engineParams.proof_assessment_json);
+          assert.equal(proofAssessment.decision, "ready_to_ship");
+          assert.equal(proofAssessment.source, "openclaw_auto_ship_mode_none");
+          assert.equal(proofAssessment.continue_with_stage, "ship");
+          assert.equal(proofAssessment.inspection_summary.screenshot_required, false);
+          return {
+            ok: true,
+            state_path: interactionAutoReviewStatePath,
+            checkpoint: "verify_ship_ready",
+            summary: "Interaction proof is ready but ship mode is held.",
+            shipGate: { ok: true },
+          };
+        }
+        return {
+          ok: false,
+          state_path: interactionAutoReviewStatePath,
+          checkpoint: "verify_supervisor_judgment",
+          summary: "Interaction proof evidence needs judgment.",
+        };
+      },
+    },
+    agent: reviewDelegate,
+  },
+);
+assert.equal(interactionAutoReviewResult.status, "ready_to_ship");
+assert.equal(interactionAutoReviewResult.ok, true);
+assert.ok(interactionAutoReviewEngineCalls.length >= 1);
+
 const reviewResumeEngineCalls = [];
 const reviewResumed = await submitOpenClawRiddleProofReview(
   {
