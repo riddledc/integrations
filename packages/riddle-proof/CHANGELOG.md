@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.20
+
+### Patch Changes
+
+- 5fbd4cf: Terminalize structured interaction evidence with failed assertions as a verify capture blocker instead of awaiting a supervisor checkpoint.
+
 ## 0.8.19
 
 ### Patch Changes
