@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.150
+
+### Patch Changes
+
+- 9c74585: Block interaction captures that throw after emitting failed structured proof evidence without entering an author retry, and read the installed core package version from wrapper module ancestors.
+- Updated dependencies [9c74585]
+  - @riddledc/riddle-proof@0.8.23
+
 ## 0.4.149
 
 ### Patch Changes
