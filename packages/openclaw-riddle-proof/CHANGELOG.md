@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.148
+
+### Patch Changes
+
+- dfa6fc9: Handle async-IIFE interaction capture scripts and allow valid structured interaction evidence to terminalize without a screenshot artifact.
+- Updated dependencies [dfa6fc9]
+  - @riddledc/riddle-proof@0.8.19
+
 ## 0.4.147
 
 ### Patch Changes
