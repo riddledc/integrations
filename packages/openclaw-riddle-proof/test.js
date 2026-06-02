@@ -3282,6 +3282,21 @@ assert.equal(terminalStatus.package_metadata.plugin_package, "@riddledc/openclaw
 assert.equal(terminalStatus.package_metadata.plugin_version, openclawRiddleProofPackageJson.version);
 assert.equal(terminalStatus.package_metadata.dependency_package, "@riddledc/riddle-proof");
 assert.equal(terminalStatus.package_metadata.dependency_version, riddleProofPackageJson.version);
+const originalCwd = process.cwd();
+const fakeRuntimeRoot = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-runtime-metadata-"));
+const fakeRuntimeDependencyDir = path.join(fakeRuntimeRoot, "node_modules", "@riddledc", "riddle-proof");
+mkdirSync(fakeRuntimeDependencyDir, { recursive: true });
+writeFileSync(path.join(fakeRuntimeDependencyDir, "package.json"), JSON.stringify({
+  name: "@riddledc/riddle-proof",
+  version: "9.8.7-runtime",
+}, null, 2));
+try {
+  process.chdir(fakeRuntimeRoot);
+  const runtimeMetadataStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+  assert.equal(runtimeMetadataStatus.package_metadata.dependency_version, "9.8.7-runtime");
+} finally {
+  process.chdir(originalCwd);
+}
 assert.equal(terminalStatus.request_metadata.reference_input_ignored, "use the public tic tac toe route");
 assert.equal(terminalStatus.request_metadata.effective_reference, "before");
 assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");

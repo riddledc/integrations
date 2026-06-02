@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import {
@@ -121,8 +122,50 @@ export type OpenClawRiddleProofPackageMetadata = {
 
 declare const __RIDDLE_PROOF_PACKAGE_METADATA__: OpenClawRiddleProofPackageMetadata;
 
+function runtimePackageVersion(packageName: string) {
+  const readVersion = (packageJsonPath: string) => {
+    try {
+      const parsed = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+      if (typeof parsed.version === "string" && parsed.version.trim()) return parsed.version.trim();
+    } catch {
+      return null;
+    }
+    return null;
+  };
+  const searchRoots = [
+    process.cwd(),
+    path.dirname(process.argv[1] || process.cwd()),
+  ];
+  for (const root of searchRoots) {
+    const nodeModulesPackageJson = path.join(root, "node_modules", ...packageName.split("/"), "package.json");
+    const nodeModulesVersion = readVersion(nodeModulesPackageJson);
+    if (nodeModulesVersion) return nodeModulesVersion;
+
+    try {
+      const requireFromRoot = createRequire(path.join(root, "openclaw-riddle-proof-runtime.cjs"));
+      let packageDir = path.dirname(requireFromRoot.resolve(packageName));
+      for (let depth = 0; depth < 8; depth += 1) {
+        const packageJsonPath = path.join(packageDir, "package.json");
+        const version = readVersion(packageJsonPath);
+        if (version) return version;
+        const parent = path.dirname(packageDir);
+        if (parent === packageDir) break;
+        packageDir = parent;
+      }
+    } catch {
+      // Fall back to build-time metadata when the runtime package root is not resolvable.
+    }
+  }
+  return null;
+}
+
 function riddleProofPackageMetadata() {
-  return __RIDDLE_PROOF_PACKAGE_METADATA__;
+  return {
+    ...__RIDDLE_PROOF_PACKAGE_METADATA__,
+    dependency_version:
+      runtimePackageVersion(__RIDDLE_PROOF_PACKAGE_METADATA__.dependency_package)
+      || __RIDDLE_PROOF_PACKAGE_METADATA__.dependency_version,
+  };
 }
 
 export type OpenClawRiddleProofRunMode = "blocking" | "background";
