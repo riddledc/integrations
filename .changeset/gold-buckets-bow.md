@@ -1,3 +1,4 @@
+---
 "@riddledc/riddle-proof": patch
 ---
 
