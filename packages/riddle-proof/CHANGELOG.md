@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.22
+
+### Patch Changes
+
+- b4481d4: Terminalize conclusive verify hard blockers as native capture blockers without proof-author retry or manual proof judgment.
+
 ## 0.8.21
 
 ### Patch Changes
