@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
 import {
   appendRunEvent,
@@ -132,30 +133,82 @@ function runtimePackageVersion(packageName: string) {
     }
     return null;
   };
-  const searchRoots = [
-    process.cwd(),
-    path.dirname(process.argv[1] || process.cwd()),
-  ];
-  for (const root of searchRoots) {
-    const nodeModulesPackageJson = path.join(root, "node_modules", ...packageName.split("/"), "package.json");
-    const nodeModulesVersion = readVersion(nodeModulesPackageJson);
-    if (nodeModulesVersion) return nodeModulesVersion;
-
-    try {
-      const requireFromRoot = createRequire(path.join(root, "openclaw-riddle-proof-runtime.cjs"));
-      let packageDir = path.dirname(requireFromRoot.resolve(packageName));
-      for (let depth = 0; depth < 8; depth += 1) {
-        const packageJsonPath = path.join(packageDir, "package.json");
-        const version = readVersion(packageJsonPath);
-        if (version) return version;
-        const parent = path.dirname(packageDir);
-        if (parent === packageDir) break;
-        packageDir = parent;
-      }
-    } catch {
-      // Fall back to build-time metadata when the runtime package root is not resolvable.
+  const packagePathParts = packageName.split("/");
+  const uniquePaths = (values: string[]) => {
+    const seen = new Set<string>();
+    const paths: string[] = [];
+    for (const value of values) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) continue;
+      const resolved = path.resolve(trimmed);
+      if (seen.has(resolved)) continue;
+      seen.add(resolved);
+      paths.push(resolved);
     }
+    return paths;
+  };
+  const ancestors = (start: string, maxDepth = 12) => {
+    const paths: string[] = [];
+    let current = path.resolve(start);
+    for (let depth = 0; depth < maxDepth; depth += 1) {
+      paths.push(current);
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+    return paths;
+  };
+  const installedPackageVersion = (roots: string[]) => {
+    for (const root of roots) {
+      const nodeModulesPackageJson = path.join(root, "node_modules", ...packagePathParts, "package.json");
+      const nodeModulesVersion = readVersion(nodeModulesPackageJson);
+      if (nodeModulesVersion) return nodeModulesVersion;
+
+      if (packagePathParts.length === 2 && path.basename(root) === packagePathParts[0]) {
+        const scopedSiblingVersion = readVersion(path.join(root, packagePathParts[1], "package.json"));
+        if (scopedSiblingVersion) return scopedSiblingVersion;
+      }
+
+      try {
+        const requireFromRoot = createRequire(path.join(root, "openclaw-riddle-proof-runtime.cjs"));
+        let packageDir = path.dirname(requireFromRoot.resolve(packageName));
+        for (let depth = 0; depth < 8; depth += 1) {
+          const packageJsonPath = path.join(packageDir, "package.json");
+          const version = readVersion(packageJsonPath);
+          if (version) return version;
+          const parent = path.dirname(packageDir);
+          if (parent === packageDir) break;
+          packageDir = parent;
+        }
+      } catch {
+        // Keep searching explicit package.json candidates before falling back to build-time metadata.
+      }
+    }
+    return null;
+  };
+  const cwdRoots = uniquePaths([process.cwd()]);
+  const argvRoots = uniquePaths([path.dirname(process.argv[1] || process.cwd())]);
+  const processSearchRoots = uniquePaths([
+    ...cwdRoots,
+    ...cwdRoots.flatMap((root) => ancestors(root)),
+    ...argvRoots,
+    ...argvRoots.flatMap((root) => ancestors(root)),
+  ]);
+  const processInstalledVersion = installedPackageVersion(processSearchRoots);
+  if (processInstalledVersion) return processInstalledVersion;
+
+  const moduleUrl = typeof import.meta === "object" && typeof import.meta.url === "string" ? import.meta.url : "";
+  const moduleDir = moduleUrl ? path.dirname(fileURLToPath(moduleUrl)) : "";
+  const moduleSearchRoots = moduleDir ? uniquePaths([moduleDir, ...ancestors(moduleDir)]) : [];
+  const workspacePackageDir = packagePathParts[packagePathParts.length - 1] || "";
+  for (const root of uniquePaths([...processSearchRoots, ...moduleSearchRoots])) {
+    if (!workspacePackageDir || path.basename(root) !== "packages") continue;
+    const workspaceVersion = readVersion(path.join(root, workspacePackageDir, "package.json"));
+    if (workspaceVersion) return workspaceVersion;
   }
+
+  const moduleInstalledVersion = installedPackageVersion(moduleSearchRoots);
+  if (moduleInstalledVersion) return moduleInstalledVersion;
   return null;
 }
 
