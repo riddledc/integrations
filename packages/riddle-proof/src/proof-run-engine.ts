@@ -1722,6 +1722,7 @@ export async function executeWorkflow(
         verifyContinueWithStage,
         convergenceSignals,
       };
+      const structuredInteractionFailureSummary = stringValue(verifyDecisionRequest?.structured_interaction_failure_summary);
 
       if (verifyStatus !== "evidence_captured") {
         const captureQuality = verifyDecisionRequest?.capture_quality || {};
@@ -1761,6 +1762,37 @@ export async function executeWorkflow(
             mergeRecommendation: state?.merge_recommendation || null,
             verifyDecisionRequest,
             proofAssessment: proofAssessment.raw,
+            executed,
+          },
+        );
+      }
+
+      if (structuredInteractionFailureSummary) {
+        const summary = structuredInteractionFailureSummary;
+        recordAttempt("verify", "checkpoint", summary, {
+          autoApproved: verifyRes.autoApproved || false,
+          checkpoint: "verify_capture_blocked",
+          details: verifyDetails,
+        });
+        return checkpoint(
+          "verify",
+          "verify_capture_blocked",
+          summary,
+          {
+            ok: true,
+            nextActions: ["inspect_after_capture", "report_specific_browser_evidence_blocker", "start_a_new_run_after_the_product_or_script_is_fixed"],
+            advanceOptions: verifyLoopAdvanceOptions,
+            recommendedAdvanceStage: null,
+            continueWithStage: null,
+            blocking: true,
+            details: verifyDetails,
+            verifyStatus,
+            verifySummary,
+            afterCdn: state?.after_cdn || null,
+            mergeRecommendation: state?.merge_recommendation || null,
+            verifyDecisionRequest,
+            proofAssessment: proofAssessment.raw,
+            proofAssessmentRequest: state?.proof_assessment_request || null,
             executed,
           },
         );

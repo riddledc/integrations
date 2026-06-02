@@ -279,6 +279,7 @@ if (stage === 'implement') {
 if (stage === 'verify') {
   state.stage = 'verify';
   const verifyStatus = state.simulate_verify_status || 'evidence_captured';
+  const structuredInteractionFailureSummary = (state.simulate_structured_interaction_failure_summary || '').trim();
   state.verify_status = verifyStatus;
   if (verifyStatus === 'capture_incomplete') {
     state.after_cdn = '';
@@ -305,8 +306,8 @@ if (stage === 'verify') {
     };
   } else {
     state.after_cdn = 'https://cdn.example.com/after.png';
-    state.verify_summary = 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.';
-    state.merge_recommendation = 'pending-supervisor-judgment';
+    state.verify_summary = structuredInteractionFailureSummary || 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.';
+    state.merge_recommendation = structuredInteractionFailureSummary ? 'do-not-merge' : 'pending-supervisor-judgment';
     state.proof_assessment = {};
     state.proof_assessment_request = {
       status: 'needs_supervising_agent_assessment',
@@ -325,6 +326,7 @@ if (stage === 'verify') {
       next_stage_options: ['verify', 'author', 'implement', 'ship', 'recon'],
       recommended_stage: null,
       continue_with_stage: null,
+      structured_interaction_failure_summary: structuredInteractionFailureSummary || undefined,
       assessment_request: state.proof_assessment_request,
     };
   }
@@ -1445,6 +1447,30 @@ async function run() {
   const afterVerifyCapture = readJson(reconLoopStatePath);
   assert(afterVerifyCapture.stage_attempts.verify.count === 1, 'verify capture should be recorded');
   assert(afterVerifyCapture.merge_recommendation === 'pending-supervisor-judgment', 'verify should wait on supervising-agent judgment before shipping');
+
+  const failedInteractionStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-failed-interaction-')), 'state.json');
+  writeJson(failedInteractionStatePath, {
+    ...makeLoopState(),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    verification_mode: 'interaction',
+    server_path: '/',
+    simulate_structured_interaction_failure_summary: 'Structured interaction proof evidence captured failed assertion(s): passed, success, proofReady.',
+  });
+  const failedInteractionBlocked = await localEngine.execute({ action: 'run', state_path: failedInteractionStatePath, advance_stage: 'verify' });
+  assert(
+    failedInteractionBlocked.checkpoint === 'verify_capture_blocked',
+    `failed structured interaction evidence should block at verify_capture_blocked, got ${failedInteractionBlocked.checkpoint}`,
+  );
+  assert(failedInteractionBlocked.blocking === true, 'failed structured interaction evidence should be a blocking checkpoint');
+  assert(
+    failedInteractionBlocked.summary.includes('Structured interaction proof evidence captured failed assertion'),
+    'failed structured interaction blocker should preserve the concrete failed evidence summary',
+  );
+  const afterFailedInteraction = readJson(failedInteractionStatePath);
+  assert(afterFailedInteraction.stage_attempts.verify.count === 1, 'failed structured interaction verify attempt should be recorded once');
+  assert(afterFailedInteraction.merge_recommendation === 'do-not-merge', 'failed structured interaction evidence should stay do-not-merge');
 
   const shipped = await localEngine.execute({
     action: 'run',
