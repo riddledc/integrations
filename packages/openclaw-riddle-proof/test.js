@@ -3297,6 +3297,25 @@ try {
 } finally {
   process.chdir(originalCwd);
 }
+const fakeGatewayRoot = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-module-metadata-"));
+const fakeGatewayWrapperDist = path.join(fakeGatewayRoot, "node_modules", "@riddledc", "openclaw-riddle-proof", "dist");
+const fakeGatewayDependencyDir = path.join(fakeGatewayRoot, "node_modules", "@riddledc", "riddle-proof");
+mkdirSync(fakeGatewayWrapperDist, { recursive: true });
+mkdirSync(fakeGatewayDependencyDir, { recursive: true });
+writeFileSync(path.join(fakeGatewayDependencyDir, "package.json"), JSON.stringify({
+  name: "@riddledc/riddle-proof",
+  version: "9.8.8-module-ancestor",
+  exports: {
+    ".": "./dist/index.js",
+  },
+}, null, 2));
+try {
+  process.chdir(fakeGatewayWrapperDist);
+  const moduleAncestorMetadataStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+  assert.equal(moduleAncestorMetadataStatus.package_metadata.dependency_version, "9.8.8-module-ancestor");
+} finally {
+  process.chdir(originalCwd);
+}
 assert.equal(terminalStatus.request_metadata.reference_input_ignored, "use the public tic tac toe route");
 assert.equal(terminalStatus.request_metadata.effective_reference, "before");
 assert.equal(terminalStatus.monitor_contract.report_mode, "terminal_only");

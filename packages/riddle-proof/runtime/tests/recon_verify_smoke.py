@@ -718,6 +718,47 @@ class FakeRiddle:
                         'proof.json': {'script_error': message},
                     },
                 }
+            if 'interactionThrownAfterFailedEvidence' in script:
+                message = 'Error: intentional-riddle-proof-0823-thrown-error-after-failed-evidence'
+                page_state = {
+                    'bodyTextLength': 180,
+                    'visibleTextSample': 'Riddle Proof homepage hero Start Free',
+                    'interactiveElements': 4,
+                    'visibleInteractiveElements': 4,
+                    'pathname': '/',
+                    'search': '',
+                    'hash': '',
+                    'title': 'Riddle',
+                    'buttons': ['Start Free'],
+                    'headings': ['Riddle Proof'],
+                    'links': [],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'h1', 'text': 'Riddle Proof'}],
+                }
+                proof_evidence = {
+                    'version': 'riddle-proof.interaction.v1',
+                    'evidence_summary': 'Structured interaction evidence was emitted before the diagnostic script threw.',
+                    'checks': {
+                        'passed': False,
+                        'success': False,
+                        'proofReady': False,
+                    },
+                    'capture_error': message,
+                }
+                return {
+                    'ok': True,
+                    'screenshots': [{'url': 'https://cdn.example.com/thrown-error-failed-evidence.png'}],
+                    'outputs': [{'name': 'after-thrown-error.png', 'url': 'https://cdn.example.com/thrown-error-failed-evidence.png'}],
+                    'result': {'pageState': page_state, 'proofEvidence': proof_evidence},
+                    'console': [
+                        'RIDDLE_PROOF_STATE:' + json.dumps(page_state),
+                        'RIDDLE_PROOF_EVIDENCE:' + json.dumps(proof_evidence),
+                        'Uncaught exception: ' + message,
+                    ],
+                    '_artifact_json': {
+                        'proof.json': {'script_error': message},
+                    },
+                }
             if 'interactionThrownError' in script:
                 message = 'Error: intentional-riddle-proof-0811-thrown-error'
                 page_state = {
@@ -3449,6 +3490,65 @@ def run_verify_interaction_thrown_error_terminal_blocker():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_verify_interaction_thrown_error_after_failed_evidence_terminal_blocker():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-thrown-after-evidence-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='before')
+        state.update({
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'changes_detected',
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'before_cdn': 'https://cdn.example.com/before-home.png',
+            'proof_plan': 'Run a diagnostic interaction script that emits failed proof evidence and then intentionally throws.',
+            'capture_script': "interactionThrownAfterFailedEvidence();",
+            'recon_results': {
+                'baselines': {'before': {'path': '/', 'url': 'https://cdn.example.com/before-home.png'}},
+            },
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        load_module('verify_interaction_thrown_error_after_failed_evidence_terminal_blocker', VERIFY_PATH)
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify['merge_recommendation'] == 'do-not-merge'
+        assert after_verify['proof_assessment_request'] == {}
+        capture_quality = after_verify['verify_decision_request']['capture_quality']
+        assert capture_quality['decision'] == 'failed_interaction_capture'
+        assert capture_quality['recommended_stage'] is None
+        assert capture_quality['continue_with_stage'] is None
+        assert capture_quality['blocking'] is True
+        assert capture_quality['terminal_blocker'] is True
+        capture_quality_text = json.dumps(capture_quality, sort_keys=True)
+        assert 'intentional-riddle-proof-0823-thrown-error-after-failed-evidence' in capture_quality_text
+        assert 'proofReady' in capture_quality_text
+        assert after_verify['structured_interaction_capture_failure_summary']
+        evidence = after_verify['evidence_bundle']['proof_evidence']
+        if isinstance(evidence, list):
+            evidence = next(
+                record for record in evidence_records(evidence)
+                if isinstance(record.get('checks'), dict) and record['checks'].get('proofReady') is False
+            )
+        assert evidence['checks']['passed'] is False
+        assert evidence['checks']['success'] is False
+        assert evidence['checks']['proofReady'] is False
+        assert 'Structured interaction capture blocker' in after_verify['proof_summary']
+        return {
+            'ok': True,
+            'decision': capture_quality['decision'],
+            'blocking': capture_quality['blocking'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_capture_retry_surfaces_script_timeout():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-capture-timeout-'))
     state_path = tempdir / 'state.json'
@@ -3878,6 +3978,7 @@ if __name__ == '__main__':
         'verify_interaction_query_hash_pass_uses_proof_evidence_route': run_verify_interaction_query_hash_pass_uses_proof_evidence_route(),
         'verify_interaction_explicit_expected_url_blocks_dropped_terminal_route': run_verify_interaction_explicit_expected_url_blocks_dropped_terminal_route(),
         'verify_interaction_thrown_error_terminal_blocker': run_verify_interaction_thrown_error_terminal_blocker(),
+        'verify_interaction_thrown_error_after_failed_evidence_terminal_blocker': run_verify_interaction_thrown_error_after_failed_evidence_terminal_blocker(),
         'verify_capture_retry_surfaces_script_timeout': run_verify_capture_retry_surfaces_script_timeout(),
         'missing_baseline_guard': run_verify_missing_baseline(),
         'ship_supervisor_gate': run_ship_missing_supervisor_gate(),

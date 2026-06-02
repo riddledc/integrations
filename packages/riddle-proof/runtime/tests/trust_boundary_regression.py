@@ -98,6 +98,12 @@ CASES = [
         'expected_terminal': 'specific_blocker',
     },
     {
+        'name': 'interaction-thrown-error-after-failed-evidence-specific-blocker',
+        'covers': ['thrown errors', 'proof-evidence-present', 'invalid browser evidence'],
+        'function': 'run_verify_interaction_thrown_error_after_failed_evidence_terminal_blocker',
+        'expected_terminal': 'specific_blocker',
+    },
+    {
         'name': 'structured-proof-without-screenshot-pass',
         'covers': ['proof-evidence-present'],
         'function': 'run_verify_structured_evidence_without_screenshot',

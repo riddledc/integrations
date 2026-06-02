@@ -2723,6 +2723,29 @@ def failed_interaction_evidence_summary(proof_evidence):
     return summary
 
 
+def interaction_failed_evidence_after_script_error_summary(proof_evidence, capture_error):
+    capture_error = str(capture_error or '').strip()
+    if not capture_error:
+        return ''
+    failures = []
+    for record in proof_evidence_records(proof_evidence):
+        failures.extend(collect_interaction_failed_assertions(record))
+    deduped = []
+    seen = set()
+    for failure in failures:
+        failure = str(failure or '').strip()
+        if not failure or failure in seen:
+            continue
+        seen.add(failure)
+        deduped.append(failure)
+    if not deduped:
+        return ''
+    summary = 'Interaction capture emitted failed structured proof evidence before the capture script completed.'
+    summary += ' Failed checks: ' + ', '.join(deduped[:8]) + '.'
+    summary += ' Capture script error: ' + capture_error[:300]
+    return summary
+
+
 def interaction_capture_failure_evidence_summary(proof_evidence):
     for record in proof_evidence_records_deep(proof_evidence):
         if not isinstance(record, dict):
@@ -4073,8 +4096,20 @@ structured_interaction_failure_summary = ''
 structured_interaction_capture_failure_summary = ''
 proof_evidence = evidence_bundle.get('proof_evidence')
 if verification_mode in INTERACTION_MODES and proof_evidence is not None:
+    capture_error_messages = []
+    if isinstance(after_observation.get('details'), dict):
+        capture_error_messages = [
+            str(item).strip()
+            for item in (after_observation.get('details') or {}).get('capture_error_messages') or []
+            if str(item).strip()
+        ]
     structured_interaction_failure_summary = failed_interaction_evidence_summary(proof_evidence)
     structured_interaction_capture_failure_summary = interaction_capture_failure_evidence_summary(proof_evidence)
+    if capture_error_messages and not structured_interaction_capture_failure_summary:
+        structured_interaction_capture_failure_summary = interaction_failed_evidence_after_script_error_summary(
+            proof_evidence,
+            capture_error_messages[0],
+        )
     if structured_interaction_failure_summary:
         summary_lines.append('Structured interaction evidence gate: ' + structured_interaction_failure_summary)
     if structured_interaction_capture_failure_summary:
