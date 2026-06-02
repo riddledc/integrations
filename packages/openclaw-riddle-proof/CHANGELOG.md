@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.149
+
+### Patch Changes
+
+- cb71e76: Report the runtime-resolved Riddle Proof core package version in OpenClaw status metadata instead of relying only on build-time package metadata.
+
 ## 0.4.148
 
 ### Patch Changes
