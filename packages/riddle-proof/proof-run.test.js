@@ -281,6 +281,7 @@ if (stage === 'verify') {
   const verifyStatus = state.simulate_verify_status || 'evidence_captured';
   const structuredInteractionFailureSummary = (state.simulate_structured_interaction_failure_summary || '').trim();
   const structuredInteractionCaptureFailureSummary = (state.simulate_structured_interaction_capture_failure_summary || '').trim();
+  const proofAssessmentHardBlocker = (state.simulate_proof_assessment_hard_blocker || '').trim();
   state.structured_interaction_capture_failure_summary = structuredInteractionCaptureFailureSummary || undefined;
   state.structured_interaction_failure_summary = structuredInteractionFailureSummary || undefined;
   state.verify_status = verifyStatus;
@@ -289,7 +290,9 @@ if (stage === 'verify') {
     state.verify_summary = structuredInteractionCaptureFailureSummary || 'Verify did not capture a usable proof packet yet.';
     state.merge_recommendation = 'do-not-merge';
     state.proof_assessment = {};
-    state.proof_assessment_request = {};
+    state.proof_assessment_request = proofAssessmentHardBlocker
+      ? { hard_blockers: [proofAssessmentHardBlocker] }
+      : {};
     state.verify_results = {
       baseline: { reference: state.reference || 'before' },
       after: { screenshots: [], observation: { valid: false, reason: 'no screenshot in capture' } },
@@ -311,10 +314,11 @@ if (stage === 'verify') {
   } else {
     state.after_cdn = 'https://cdn.example.com/after.png';
     state.verify_summary = structuredInteractionFailureSummary || 'Verify captured usable evidence and is waiting for supervising-agent proof assessment.';
-    state.merge_recommendation = structuredInteractionFailureSummary ? 'do-not-merge' : 'pending-supervisor-judgment';
+    state.merge_recommendation = structuredInteractionFailureSummary || proofAssessmentHardBlocker ? 'do-not-merge' : 'pending-supervisor-judgment';
     state.proof_assessment = {};
     state.proof_assessment_request = {
       status: 'needs_supervising_agent_assessment',
+      hard_blockers: proofAssessmentHardBlocker ? [proofAssessmentHardBlocker] : undefined,
       response_schema: {
         decision: 'ready_to_ship | needs_richer_proof',
         continue_with_stage: 'ship | author',
@@ -1507,6 +1511,58 @@ async function run() {
     'failed structured interaction capture should not reset authoring state for a retry',
   );
   assert(afterFailedCaptureInteraction.merge_recommendation === 'do-not-merge', 'failed structured interaction capture should stay do-not-merge');
+
+  const hardBlockedCaptureStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-hard-blocked-capture-')), 'state.json');
+  writeJson(hardBlockedCaptureStatePath, {
+    ...makeLoopState(),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    verification_mode: 'interaction',
+    server_path: '/',
+    simulate_verify_status: 'capture_incomplete',
+    simulate_proof_assessment_hard_blocker: 'locator.scrollIntoViewIfNeeded: Timeout 3000ms exceeded for selector [data-rp-missing]',
+  });
+  const hardBlockedCapture = await localEngine.execute({ action: 'run', state_path: hardBlockedCaptureStatePath, advance_stage: 'verify' });
+  assert(
+    hardBlockedCapture.checkpoint === 'verify_capture_blocked',
+    `contract hard-blocked capture should block at verify_capture_blocked, got ${hardBlockedCapture.checkpoint}`,
+  );
+  assert(hardBlockedCapture.blocking === true, 'contract hard-blocked capture should be a blocking checkpoint');
+  assert(
+    hardBlockedCapture.summary.includes('locator.scrollIntoViewIfNeeded: Timeout 3000ms exceeded'),
+    'contract hard-blocked capture should preserve the selector timeout',
+  );
+  assert(
+    hardBlockedCapture.decisionRequest.continue_with_stage == null,
+    'contract hard-blocked capture should not continue into author retry',
+  );
+
+  const hardBlockedEvidenceStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-hard-blocked-evidence-')), 'state.json');
+  writeJson(hardBlockedEvidenceStatePath, {
+    ...makeLoopState(),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    verification_mode: 'interaction',
+    server_path: '/',
+    simulate_verify_status: 'evidence_captured',
+    simulate_proof_assessment_hard_blocker: 'Capture script error: intentional-riddle-proof-contract-hard-blocker',
+  });
+  const hardBlockedEvidence = await localEngine.execute({ action: 'run', state_path: hardBlockedEvidenceStatePath, advance_stage: 'verify' });
+  assert(
+    hardBlockedEvidence.checkpoint === 'verify_capture_blocked',
+    `contract hard-blocked evidence should block at verify_capture_blocked, got ${hardBlockedEvidence.checkpoint}`,
+  );
+  assert(hardBlockedEvidence.blocking === true, 'contract hard-blocked evidence should be a blocking checkpoint');
+  assert(
+    hardBlockedEvidence.summary.includes('intentional-riddle-proof-contract-hard-blocker'),
+    'contract hard-blocked evidence should preserve the hard blocker marker',
+  );
+  assert(
+    hardBlockedEvidence.checkpoint !== 'verify_supervisor_judgment',
+    'contract hard-blocked evidence should not pause for supervisor judgment',
+  );
 
   const shipped = await localEngine.execute({
     action: 'run',

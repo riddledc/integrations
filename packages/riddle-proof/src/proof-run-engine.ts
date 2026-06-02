@@ -11,6 +11,7 @@ import {
   invalidateVerifyEvidence,
   mergeStateFromParams,
   noImplementationModeFor,
+  proofAssessmentHardBlockersForState,
   readState,
   recordStageAttempt,
   resolveConfig,
@@ -1722,16 +1723,29 @@ export async function executeWorkflow(
         verifyContinueWithStage,
         convergenceSignals,
       };
+      const conclusiveVerifyBlockers = proofAssessmentHardBlockersForState({
+        ...state,
+        structured_interaction_capture_failure_summary:
+          stringValue(verifyDecisionRequest?.structured_interaction_capture_failure_summary)
+          || stringValue(state?.structured_interaction_capture_failure_summary)
+          || undefined,
+        structured_interaction_failure_summary:
+          stringValue(verifyDecisionRequest?.structured_interaction_failure_summary)
+          || stringValue(state?.structured_interaction_failure_summary)
+          || undefined,
+      });
       const structuredInteractionFailureSummary =
         stringValue(verifyDecisionRequest?.structured_interaction_capture_failure_summary)
         || stringValue(verifyDecisionRequest?.structured_interaction_failure_summary)
         || stringValue(state?.structured_interaction_capture_failure_summary)
-        || stringValue(state?.structured_interaction_failure_summary);
+        || stringValue(state?.structured_interaction_failure_summary)
+        || stringValue(conclusiveVerifyBlockers[0]);
 
       if (verifyStatus !== "evidence_captured") {
         const captureQuality = verifyDecisionRequest?.capture_quality || {};
         const captureTerminalBlocker =
-          Boolean(structuredInteractionFailureSummary)
+          conclusiveVerifyBlockers.length > 0
+          || Boolean(structuredInteractionFailureSummary)
           || captureQuality?.terminal_blocker === true
           || captureQuality?.blocking === true;
         if (!captureTerminalBlocker && (verifyContinueWithStage || verifyRecommendedStage || "author") === "author") {
@@ -1750,7 +1764,7 @@ export async function executeWorkflow(
         recordAttempt("verify", "checkpoint", summary, {
           autoApproved: verifyRes.autoApproved || false,
           checkpoint: checkpointName,
-          details: verifyDetails,
+          details: { ...verifyDetails, conclusiveVerifyBlockers },
         });
         return checkpoint(
           "verify",
@@ -1765,7 +1779,7 @@ export async function executeWorkflow(
             recommendedAdvanceStage: captureTerminalBlocker ? null : (verifyRecommendedStage || "author"),
             continueWithStage: captureTerminalBlocker ? null : (verifyContinueWithStage || "author"),
             blocking: captureTerminalBlocker,
-            details: verifyDetails,
+            details: { ...verifyDetails, conclusiveVerifyBlockers },
             verifyStatus,
             verifySummary,
             afterCdn: state?.after_cdn || null,
@@ -1777,12 +1791,12 @@ export async function executeWorkflow(
         );
       }
 
-      if (structuredInteractionFailureSummary) {
+      if (conclusiveVerifyBlockers.length > 0 || structuredInteractionFailureSummary) {
         const summary = structuredInteractionFailureSummary;
         recordAttempt("verify", "checkpoint", summary, {
           autoApproved: verifyRes.autoApproved || false,
           checkpoint: "verify_capture_blocked",
-          details: verifyDetails,
+          details: { ...verifyDetails, conclusiveVerifyBlockers },
         });
         return checkpoint(
           "verify",
@@ -1795,7 +1809,7 @@ export async function executeWorkflow(
             recommendedAdvanceStage: null,
             continueWithStage: null,
             blocking: true,
-            details: verifyDetails,
+            details: { ...verifyDetails, conclusiveVerifyBlockers },
             verifyStatus,
             verifySummary,
             afterCdn: state?.after_cdn || null,
