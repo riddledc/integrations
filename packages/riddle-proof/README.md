@@ -225,6 +225,23 @@ The same pack also points at the local generic core suite:
 python3 packages/riddle-proof/runtime/tests/trust_boundary_regression.py
 ```
 
+Use the pack runner to validate the local generic core first and generate the
+small serial OpenClaw handoff from the same manifest:
+
+```sh
+riddle-proof-loop regression-pack run \
+  --pack oc-flow-regression \
+  --local-core true \
+  --format markdown \
+  --output artifacts/riddle-proof/oc-flow-regression
+```
+
+The command writes `regression-pack-result.json`, `summary.md`, and
+`oc-handoff.md` when `--output` / `--output-dir` is set. The OC handoff prompt
+is generated only as wrapper/runtime validation guidance; the browser evidence,
+required cases, forbidden lifecycle markers, and version gate remain owned by
+the generic pack manifest.
+
 Before counting live wrapper runs, use the pack's runtime gate: verify
 `riddle_proof_status` reports the loaded `@riddledc/openclaw-riddle-proof` and
 `@riddledc/riddle-proof` versions. Disk package versions alone are not enough.

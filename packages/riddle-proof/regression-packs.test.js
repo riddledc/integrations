@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const pack = JSON.parse(readFileSync(new URL("./examples/regression-packs/oc-flow-regression.json", import.meta.url), "utf8"));
+const packageDir = new URL(".", import.meta.url);
 
 assert.equal(pack.version, "riddle-proof.regression-pack.v1");
 assert.equal(pack.pack_id, "riddle-proof-oc-flow-2026-06");
@@ -78,6 +82,52 @@ assert.equal(staleCheckpointCase.steps[1].params_template.state_path, "${state_p
 assert.equal(staleCheckpointCase.steps[1].params_template.checkpoint_response.run_id, "${run_id}");
 assert.equal(staleCheckpointCase.steps[1].params_template.checkpoint_response.checkpoint, "author_supervisor_judgment");
 assert.equal(staleCheckpointCase.steps[1].expect.ignored_checkpoint_response, true);
+
+const cliCompact = JSON.parse(execFileSync(process.execPath, [
+  "dist/cli.js",
+  "regression-pack",
+  "run",
+  "--pack",
+  "oc-flow-regression",
+  "--local-core",
+  "true",
+  "--format",
+  "compact-json",
+], {
+  cwd: packageDir,
+  encoding: "utf8",
+}));
+assert.equal(cliCompact.version, "riddle-proof.regression-pack-run-result.v1");
+assert.equal(cliCompact.pack_id, "riddle-proof-oc-flow-2026-06");
+assert.equal(cliCompact.ok, true);
+assert.equal(cliCompact.local_core.ok, true);
+assert.equal(cliCompact.local_core.missing_required_cases.length, 0);
+assert.equal(cliCompact.local_core.failed_cases.length, 0);
+assert.equal(cliCompact.local_core.forbidden_terminal_markers_seen.length, 0);
+
+const outputDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-regression-pack-test-"));
+const cliNoLocalCore = JSON.parse(execFileSync(process.execPath, [
+  "dist/cli.js",
+  "regression-pack",
+  "run",
+  "--pack",
+  "oc-flow-regression",
+  "--local-core",
+  "false",
+  "--format",
+  "json",
+  "--output-dir",
+  outputDir,
+], {
+  cwd: packageDir,
+  encoding: "utf8",
+}));
+assert.equal(cliNoLocalCore.ok, true);
+assert.equal(cliNoLocalCore.local_core.requested, false);
+assert.equal(cliNoLocalCore.local_core_validated, false);
+assert.match(cliNoLocalCore.openclaw_handoff_prompt, /Local generic core suite is not green or was not run/);
+assert.match(readFileSync(path.join(outputDir, "oc-handoff.md"), "utf8"), /Run the Riddle Proof OC flow regression pack/);
+assert.equal(JSON.parse(readFileSync(path.join(outputDir, "regression-pack-result.json"), "utf8")).pack_id, "riddle-proof-oc-flow-2026-06");
 
 console.log(JSON.stringify({
   ok: true,
