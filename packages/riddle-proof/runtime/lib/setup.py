@@ -6,7 +6,7 @@ scratch storage by default:
   /var/tmp/riddle-proof/.riddle-proof-worktrees/riddle-proof-<run_id>-after
 """
 
-import json, subprocess as sp, os, sys, shutil, time, tempfile
+import json, subprocess as sp, os, sys, shutil, time, tempfile, re
 from urllib.parse import urlparse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, git, shell_quote
@@ -221,6 +221,76 @@ def interaction_verification_mode():
         'user-flow',
         'workflow',
     )
+
+
+def normalize_route_path(value):
+    raw = str(value or '').strip()
+    if not raw:
+        return ''
+    try:
+        parsed = urlparse(raw if raw.startswith(('http://', 'https://')) else raw)
+        path = parsed.path or '/'
+        if not path.startswith('/'):
+            path = '/' + path
+        if len(path) > 1:
+            path = path.rstrip('/')
+        query = ('?' + parsed.query) if parsed.query else ''
+        fragment = ('#' + parsed.fragment) if parsed.fragment else ''
+        return path + query + fragment
+    except Exception:
+        path = raw.split('#', 1)[0].split('?', 1)[0]
+        if not path.startswith('/'):
+            path = '/' + path
+        return path.rstrip('/') or '/'
+
+
+def trim_route_candidate(value):
+    return str(value or '').strip().rstrip('),.;]}')
+
+
+def expected_terminal_route_from_text(value):
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    route_pattern = r'(https?://[^\s"\'<>`]+|/[^\s"\'<>`]+)'
+    patterns = [
+        r'\bexpected\s+(?:terminal\s+|final\s+|after\s+)?(?:url|route|path)\s*(?:is|=|:)\s*' + route_pattern,
+        r'\b(?:terminal|final|after)\s+(?:url|route|path)\s*(?:is|=|:)\s*' + route_pattern,
+        r'\b(?:ends|end|ending|lands|land|landing)\s+(?:at|on)\s*' + route_pattern,
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            route = normalize_route_path(trim_route_candidate(match.group(1)))
+            if route:
+                return route
+    return ''
+
+
+def requested_expected_terminal_route():
+    return (
+        expected_terminal_route_from_text(s.get('success_criteria')) or
+        expected_terminal_route_from_text(s.get('change_request')) or
+        expected_terminal_route_from_text(s.get('context')) or
+        expected_terminal_route_from_text(s.get('assertions_json'))
+    )
+
+
+def apply_interaction_route_contract(start_path):
+    if not interaction_verification_mode():
+        return
+    terminal_path = requested_expected_terminal_route()
+    if not terminal_path:
+        return
+    normalized_start = normalize_route_path(start_path) or '/'
+    s['requested_expected_terminal_path'] = terminal_path
+    s['expected_terminal_path'] = s.get('expected_terminal_path') or terminal_path
+    s['expected_start_path'] = s.get('expected_start_path') or normalized_start
+    contract = s.get('interaction_contract') if isinstance(s.get('interaction_contract'), dict) else {}
+    contract = dict(contract)
+    contract['start_path'] = contract.get('start_path') or normalized_start
+    contract['expected_terminal_path'] = contract.get('expected_terminal_path') or terminal_path
+    s['interaction_contract'] = contract
 
 
 def remote_audit_mode():
@@ -550,6 +620,7 @@ if remote_audit_mode():
     s['allow_code_changes'] = False
     s['server_path'] = s.get('server_path') or target_path
     s['server_path_source'] = s.get('server_path_source') or 'prod_url'
+    apply_interaction_route_contract(s['server_path'])
     s['recon_status'] = 'ready_for_proof_plan'
     s['recon_summary'] = 'Remote audit/no-diff run uses prod_url as the current target and skips repo worktrees.'
     s['recon_hypothesis'] = {

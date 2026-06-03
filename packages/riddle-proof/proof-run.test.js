@@ -39,6 +39,25 @@ function baselineUnderstanding(overrides = {}) {
   };
 }
 
+function assertStrictSchemaRequiredFields(schema, label) {
+  if (!schema || typeof schema !== 'object') return;
+  const properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : null;
+  if (properties && schema.additionalProperties === false) {
+    const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+    for (const key of Object.keys(properties)) {
+      assert(required.has(key), `${label}.${key} must be listed in required for strict structured output schema`);
+    }
+  }
+  if (properties) {
+    for (const [key, value] of Object.entries(properties)) {
+      assertStrictSchemaRequiredFields(value, `${label}.${key}`);
+    }
+  }
+  if (schema.items) {
+    assertStrictSchemaRequiredFields(schema.items, `${label}[]`);
+  }
+}
+
 function setupFixture() {
   mkdirSync(fakePipelineDir, { recursive: true });
   for (const action of ['setup', 'recon', 'author', 'implement', 'verify', 'ship']) {
@@ -408,6 +427,23 @@ async function run() {
   let capturedAuthorRequest = null;
   const interactionAuthorAdapter = codexExecMod.createCodexExecAgentAdapter({}, async (request) => {
     capturedAuthorRequest = request;
+    assertStrictSchemaRequiredFields(request.schema, 'author schema');
+    assert(
+      request.schema.required.includes('expected_terminal_path'),
+      'author schema should require root expected_terminal_path for strict structured output',
+    );
+    assert(
+      request.schema.required.includes('interaction_contract'),
+      'author schema should require root interaction_contract for strict structured output',
+    );
+    assert(
+      request.schema.properties.refined_inputs.required.includes('expected_start_path'),
+      'author schema refined_inputs should require expected_start_path for strict structured output',
+    );
+    assert(
+      request.schema.properties.refined_inputs.required.includes('expected_terminal_path'),
+      'author schema refined_inputs should require expected_terminal_path for strict structured output',
+    );
     assert(
       request.schema.properties.refined_inputs.properties.expected_terminal_path,
       'author schema should allow refined_inputs.expected_terminal_path',
@@ -419,6 +455,10 @@ async function run() {
     assert(
       request.schema.properties.interaction_contract,
       'author schema should allow an interaction_contract',
+    );
+    assert(
+      request.schema.properties.interaction_contract.required.includes('expected_url'),
+      'author schema interaction_contract should require expected_url for strict structured output',
     );
     assert(
       request.prompt.includes('wait-only script is invalid'),
@@ -460,6 +500,7 @@ async function run() {
         interaction_contract: {
           start_path: '/',
           expected_terminal_path: '/proof/',
+          expected_url: 'https://riddledc.com/proof/',
           action: 'click the visible Proof nav link',
           assertions: ['terminal route is /proof/'],
         },
