@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.24
+
+### Patch Changes
+
+- 856da2f: Build the app-contract workspace dependency before Riddle Proof so fresh checkouts can run the package test without prebuilt dependency artifacts.
+
 ## 0.8.23
 
 ### Patch Changes
