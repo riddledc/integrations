@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.25
+
+### Patch Changes
+
+- 1081563: Add a regression-pack CLI runner that validates the bundled local trust-boundary suite and generates a serial OpenClaw handoff report from the same manifest.
+
 ## 0.8.24
 
 ### Patch Changes
