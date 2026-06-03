@@ -82,7 +82,7 @@ function responseSchemaForAuthorPacket() {
       payload: {
         type: "object",
         description:
-          "For decision=author_packet, provide the proof packet itself or {author_packet:{...}} with proof_plan, capture_script, and refined_inputs.expected_terminal_path when the proof changes route, query, or hash.",
+          "For decision=author_packet, provide the proof packet itself or {author_packet:{...}} with proof_plan, capture_script, refined_inputs.expected_terminal_path, and interaction_contract when the proof changes route, query, or hash.",
       },
       reasons: { type: "array", items: { type: "string" } },
       continue_with_stage: { type: "string", enum: ["author", "recon"] },
@@ -461,6 +461,10 @@ export function buildAuthorCheckpointPacket(input: {
       reference: input.request.reference || fullState.reference,
       server_path: fullState.server_path,
       wait_for_selector: fullState.wait_for_selector,
+      expected_start_path: fullState.expected_start_path,
+      expected_terminal_path: fullState.expected_terminal_path,
+      requested_expected_terminal_path: fullState.requested_expected_terminal_path,
+      interaction_contract: jsonCloneRecord(fullState.interaction_contract),
       route_expectation: jsonCloneRecord(fullState.route_expectation),
       author_summary: fullState.author_summary,
       author_request: jsonCloneRecord(authorRequest),
@@ -755,9 +759,27 @@ function defaultContinueStage(packet: RiddleProofCheckpointPacket, decision: str
 
 function templatePayloadFor(packet: RiddleProofCheckpointPacket, decision: string): Record<string, unknown> | undefined {
   if (decision === "author_packet") {
+    const expectedTerminalPath =
+      packet.state_excerpt?.expected_terminal_path ||
+      packet.state_excerpt?.requested_expected_terminal_path ||
+      null;
+    const expectedStartPath = packet.state_excerpt?.expected_start_path || packet.state_excerpt?.server_path || null;
     return {
       proof_plan: "TODO: describe the exact proof plan and stop condition.",
       capture_script: "TODO: provide the capture script that collects required artifacts/evidence.",
+      refined_inputs: {
+        server_path: packet.state_excerpt?.server_path || null,
+        wait_for_selector: packet.state_excerpt?.wait_for_selector || null,
+        reference: packet.state_excerpt?.reference || null,
+        expected_start_path: expectedStartPath,
+        expected_terminal_path: expectedTerminalPath,
+      },
+      interaction_contract: {
+        start_path: expectedStartPath,
+        expected_terminal_path: expectedTerminalPath,
+        action: "TODO: describe the browser interaction, for example click the visible Proof nav link.",
+        assertions: [],
+      },
       summary: "TODO: summarize why this proof packet targets the requested change.",
     };
   }

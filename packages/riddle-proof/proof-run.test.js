@@ -387,6 +387,7 @@ async function run() {
   const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-engine.js')).href);
   const proofSessionMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-session.js')).href);
   const harnessMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'engine-harness.js')).href);
+  const codexExecMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'codex-exec-agent.js')).href);
   const cjsCore = require(path.join(__dirname, 'dist', 'proof-run-core.cjs'));
   const cjsEngineMod = require(path.join(__dirname, 'dist', 'proof-run-engine.cjs'));
   const cjsProofSessionMod = require(path.join(__dirname, 'dist', 'proof-session.cjs'));
@@ -394,6 +395,7 @@ async function run() {
   assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.js should expose createRiddleProofEngine');
   assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
   assert(typeof harnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.js should expose runRiddleProofEngineHarness');
+  assert(typeof codexExecMod.createCodexExecAgentAdapter === 'function', 'dist/codex-exec-agent.js should expose createCodexExecAgentAdapter');
   assert(typeof cjsHarnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.cjs should expose runRiddleProofEngineHarness');
   assert(typeof core.noImplementationModeFor === 'function', 'dist/proof-run-core.js should expose noImplementationModeFor');
   assert(typeof proofSessionMod.buildVisualProofSession === 'function', 'dist/proof-session.js should expose buildVisualProofSession');
@@ -401,6 +403,104 @@ async function run() {
   assert(
     core.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
     'default riddle-proof lookup should prefer the bundled package runtime',
+  );
+
+  let capturedAuthorRequest = null;
+  const interactionAuthorAdapter = codexExecMod.createCodexExecAgentAdapter({}, async (request) => {
+    capturedAuthorRequest = request;
+    assert(
+      request.schema.properties.refined_inputs.properties.expected_terminal_path,
+      'author schema should allow refined_inputs.expected_terminal_path',
+    );
+    assert(
+      request.schema.properties.refined_inputs.properties.expected_start_path,
+      'author schema should allow refined_inputs.expected_start_path',
+    );
+    assert(
+      request.schema.properties.interaction_contract,
+      'author schema should allow an interaction_contract',
+    );
+    assert(
+      request.prompt.includes('wait-only script is invalid'),
+      'author prompt should reject passive interaction capture scripts',
+    );
+    assert(
+      request.prompt.includes('refined_inputs.expected_terminal_path'),
+      'author prompt should require durable expected terminal route fields',
+    );
+    return {
+      ok: true,
+      json: {
+        proof_plan: 'Start at /, click the visible Proof nav link, and verify the terminal /proof/ route.',
+        capture_script: [
+          "const startUrl = page.url();",
+          "await page.getByRole('link', { name: /^Proof$/ }).click();",
+          "await page.waitForURL('**/proof/');",
+          "const terminalUrl = page.url();",
+          "const evidence = { version: 'riddle-proof.interaction.v1', action: 'click Proof nav link', startUrl, terminalUrl, routeMatched: new URL(terminalUrl).pathname === '/proof/', proof_evidence_present: true };",
+          "await saveScreenshot('after-proof');",
+          "return evidence;",
+        ].join('\n'),
+        baseline_understanding_used: baselineUnderstanding({
+          reference: 'prod',
+          target_route: '/',
+          before_evidence_url: 'https://cdn.example.com/prod-home.png',
+          requested_change: 'Verify Home -> Proof navigation without code edits.',
+          proof_focus: 'Click the Proof nav link and verify the terminal route.',
+          stop_condition: 'The structured proof evidence records /proof/ as the terminal route.',
+        }),
+        refined_inputs: {
+          server_path: '/',
+          wait_for_selector: null,
+          reference: 'prod',
+          expected_start_path: '/',
+          expected_terminal_path: '/proof/',
+        },
+        expected_terminal_path: '/proof/',
+        interaction_contract: {
+          start_path: '/',
+          expected_terminal_path: '/proof/',
+          action: 'click the visible Proof nav link',
+          assertions: ['terminal route is /proof/'],
+        },
+        rationale: ['The no-ship interaction proof needs a real browser action and structured terminal route evidence.'],
+        confidence: 'high',
+        summary: 'Route-aware interaction proof packet.',
+      },
+    };
+  });
+  const interactionAuthorPayload = await interactionAuthorAdapter.authorProofPacket({
+    request: {
+      change_request: 'Verify Home -> Proof navigation. Start at https://riddledc.com/. Click the visible Proof nav link. Expected terminal URL is https://riddledc.com/proof/.',
+      prod_url: 'https://riddledc.com/',
+      verification_mode: 'interaction',
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+      success_criteria: 'Terminal URL is https://riddledc.com/proof/ and structured proof evidence is present.',
+    },
+    state: { run_id: 'rp_author_contract' },
+    engineResult: { checkpoint: 'author_supervisor_judgment', state_path: fakeStatePath },
+    fullRiddleState: {
+      verification_mode: 'interaction',
+      server_path: '/',
+      recon_baseline_understanding: baselineUnderstanding({
+        reference: 'prod',
+        target_route: '/',
+        before_evidence_url: 'https://cdn.example.com/prod-home.png',
+      }),
+    },
+    checkpoint: 'author_supervisor_judgment',
+  });
+  assert(capturedAuthorRequest, 'author adapter should call the JSON runner');
+  assert(interactionAuthorPayload.ok === true, 'route-aware interaction author packet should be accepted');
+  assert(
+    interactionAuthorPayload.payload.refined_inputs.expected_terminal_path === '/proof/',
+    'author adapter should preserve expected_terminal_path from route-aware interaction packets',
+  );
+  assert(
+    interactionAuthorPayload.payload.interaction_contract.expected_terminal_path === '/proof/',
+    'author adapter should preserve interaction contract terminal route',
   );
   assert(
     cjsCore.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
@@ -545,6 +645,31 @@ async function run() {
   assert(auditArgs.implementation_mode === 'none', 'setup args should preserve audit/no-diff implementation mode');
   assert(auditArgs.require_diff === false, 'setup args should preserve require_diff=false');
   assert(auditArgs.allow_code_changes === false, 'setup args should preserve allow_code_changes=false');
+
+  const requestedTerminalStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-requested-terminal-')), 'state.json');
+  writeJson(requestedTerminalStatePath, {
+    workspace_ready: true,
+    stage: 'author',
+    repo: 'riddledc/site',
+    branch: 'agent/openclaw/requested-terminal-route',
+    verification_mode: 'interaction',
+    server_path: '/',
+    author_status: 'needs_supervisor_judgment',
+    proof_plan_status: 'needs_supervisor_judgment',
+  });
+  const requestedTerminalState = core.mergeStateFromParams(requestedTerminalStatePath, {
+    action: 'run',
+    change_request: 'Verify Home -> Proof navigation. Start at https://riddledc.com/. Click the visible Proof nav link. Expected terminal URL is https://riddledc.com/proof/.',
+    success_criteria: 'Terminal URL is https://riddledc.com/proof/ and structured proof evidence is present.',
+    verification_mode: 'interaction',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+  });
+  assert(requestedTerminalState.requested_expected_terminal_path === '/proof', 'explicit expected terminal URL should be normalized into requested terminal path');
+  assert(requestedTerminalState.expected_terminal_path === '/proof', 'explicit expected terminal URL should seed expected_terminal_path before authoring');
+  assert(requestedTerminalState.expected_start_path === '/', 'interaction route contract should preserve the start route');
+  assert(requestedTerminalState.interaction_contract.expected_terminal_path === '/proof', 'interaction contract should include requested terminal path');
 
   const patched = core.mergeStateFromParams(fakeStatePath, {
     action: 'author',

@@ -317,6 +317,38 @@ function normalizeRoutePath(value: unknown) {
   }
 }
 
+function trimRouteCandidate(value: string) {
+  return value.trim().replace(/[),.;\]}]+$/g, "");
+}
+
+function expectedTerminalRouteFromText(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) return "";
+  const routePattern = "(https?:\\/\\/[^\\s\"'<>`]+|\\/[^\\s\"'<>`]+)";
+  const patterns = [
+    new RegExp(`\\bexpected\\s+(?:terminal\\s+|final\\s+|after\\s+)?(?:url|route|path)\\s*(?:is|=|:)\\s*${routePattern}`, "i"),
+    new RegExp(`\\b(?:terminal|final|after)\\s+(?:url|route|path)\\s*(?:is|=|:)\\s*${routePattern}`, "i"),
+    new RegExp(`\\b(?:ends|end|ending|lands|land|landing)\\s+(?:at|on)\\s*${routePattern}`, "i"),
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const candidate = trimRouteCandidate(match[1] || "");
+    const normalized = normalizeRoutePath(candidate);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function requestedExpectedTerminalRouteForState(state: Record<string, unknown>) {
+  return (
+    expectedTerminalRouteFromText(state.success_criteria) ||
+    expectedTerminalRouteFromText(state.change_request) ||
+    expectedTerminalRouteFromText(state.context) ||
+    expectedTerminalRouteFromText(state.assertions_json)
+  );
+}
+
 function isInteractionVerificationMode(value: unknown) {
   return INTERACTION_VERIFICATION_MODES.has(typeof value === "string" ? value.trim().toLowerCase() : "");
 }
@@ -332,6 +364,28 @@ function appendStateWarning(state: Record<string, unknown>, key: string, warning
     ? (state[key] as unknown[]).filter((item): item is string => typeof item === "string")
     : [];
   if (!existing.includes(warning)) state[key] = [...existing, warning];
+}
+
+function applyRequestedInteractionRouteContract(state: Record<string, unknown>) {
+  if (!isInteractionVerificationMode(state.verification_mode)) return;
+  const requestedTerminal = requestedExpectedTerminalRouteForState(state);
+  if (!requestedTerminal) return;
+  state.requested_expected_terminal_path = requestedTerminal;
+  if (!stringRecordValue(state, "expected_terminal_path")) {
+    state.expected_terminal_path = requestedTerminal;
+  }
+  const startPath = normalizeRoutePath(state.server_path) || normalizeRoutePath(state.expected_start_path) || "/";
+  if (!stringRecordValue(state, "expected_start_path")) {
+    state.expected_start_path = startPath;
+  }
+  const existingContract = state.interaction_contract && typeof state.interaction_contract === "object"
+    ? state.interaction_contract as Record<string, unknown>
+    : {};
+  state.interaction_contract = {
+    ...existingContract,
+    start_path: stringRecordValue(existingContract, "start_path") || startPath,
+    expected_terminal_path: stringRecordValue(existingContract, "expected_terminal_path") || requestedTerminal,
+  };
 }
 
 function interactionStartPathForAuthorPacket(
@@ -1197,6 +1251,7 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
   if (params.use_auth !== undefined) state.use_auth = params.use_auth ? "true" : "";
   if (params.leave_draft !== undefined) state.leave_draft = params.leave_draft ? "true" : "";
   if (params.advance_stage !== undefined) state.last_requested_advance_stage = params.advance_stage;
+  applyRequestedInteractionRouteContract(state);
 
   if (params.recon_assessment_json !== undefined) {
     const raw = normalizeOptionalString(params.recon_assessment_json) || "";
