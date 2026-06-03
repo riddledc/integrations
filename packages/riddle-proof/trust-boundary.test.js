@@ -160,6 +160,99 @@ function baseRequest(paths, changeRequest) {
 }
 
 {
+  const paths = pathsFor('interaction-missing-proof-evidence');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    verification_mode: 'interaction',
+    verify_status: 'evidence_captured',
+    after_cdn: 'https://cdn.example.com/after-proof.png',
+    evidence_bundle: {
+      verification_mode: 'interaction',
+      after: {
+        observation: { valid: true, telemetry_ready: true, reason: 'screenshot-only capture' },
+        supporting_artifacts: {
+          has_structured_payload: false,
+          proof_evidence_present: false,
+        },
+      },
+    },
+    proof_assessment_request: {
+      status: 'needs_supervising_agent_assessment',
+      structured_evidence: {
+        verification_mode: 'interaction',
+        proof_evidence_present: false,
+        route_expectation_source: 'recon_start_path',
+        expected_url: 'https://riddledc.com/',
+        observed_url: 'https://riddledc.com/',
+      },
+    },
+  });
+  const calls = [];
+  const result = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      ...baseRequest(paths, 'Interaction proof must not pass when capture produced no structured proof evidence.'),
+      verification_mode: 'interaction',
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+    },
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute(params) {
+        calls.push(params);
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_supervisor_judgment',
+          summary: 'Verify captured a screenshot, but no proof evidence was emitted.',
+          checkpointContract: {
+            checkpoint: 'verify_supervisor_judgment',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    agent: {
+      async assessRecon() {
+        throw new Error('recon assessment should not run');
+      },
+      async authorProofPacket() {
+        throw new Error('proof authoring should not run');
+      },
+      async implementChange() {
+        throw new Error('implementation should not run');
+      },
+      async assessProof() {
+        return {
+          ok: true,
+          summary: 'Reviewer attempted to approve screenshot-only interaction evidence.',
+          payload: {
+            decision: 'ready_to_ship',
+            summary: 'Looks good from the screenshot.',
+            recommended_stage: 'ship',
+            continue_with_stage: 'ship',
+            escalation_target: 'agent',
+            reasons: ['The screenshot is visible.'],
+            source: 'supervising_agent',
+          },
+        };
+      },
+    },
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(result.status === 'blocked', `screenshot-only interaction evidence should block, got ${result.status}`);
+  assert(result.blocker?.code === 'proof_hard_blocker', `missing interaction proof evidence blocker should be specific, got ${result.blocker?.code}`);
+  assert(
+    result.blocker?.message.includes('proof_evidence_present=false'),
+    'missing interaction proof evidence blocker should explain proof_evidence_present=false',
+  );
+  assert(calls.length === 1, 'missing interaction proof evidence should not loop');
+  assertNoGenericLifecycleFailure(result, 'interaction missing proof evidence blocker');
+}
+
+{
   const paths = pathsFor('capture-timeout');
   writeJson(paths.engineStatePath, {
     repo: 'riddledc/example',
@@ -286,6 +379,7 @@ console.log(JSON.stringify({
     'valid evidence ready_to_ship',
     'late checkpoint response ignored after ready_to_ship without finalized flag',
     'invalid evidence proof_assessment_blocked',
+    'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
     'no-diff audit completed',
     'late checkpoint response ignored after terminal completion',
