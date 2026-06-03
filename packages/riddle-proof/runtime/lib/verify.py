@@ -3711,7 +3711,47 @@ def build_supervisor_assessment_request(state, payload, after_observation, requi
 s = load_state()
 capture_script = (s.get('capture_script') or '').strip()
 no_implementation_mode = audit_no_diff_mode(s)
-if not capture_script and no_implementation_mode:
+initial_verification_mode = normalized_verification_mode(s.get('verification_mode'))
+if not capture_script and no_implementation_mode and initial_verification_mode in INTERACTION_MODES:
+    s['stage'] = 'verify'
+    s['verify_status'] = 'capture_incomplete'
+    s['merge_recommendation'] = 'do-not-merge'
+    s['structured_interaction_capture_failure_summary'] = (
+        'Interaction verification requires an authored browser interaction capture script; '
+        'the default remote audit current-target capture is passive and cannot prove an interaction.'
+    )
+    s['verify_summary'] = s['structured_interaction_capture_failure_summary']
+    s['proof_summary'] = s['structured_interaction_capture_failure_summary']
+    s['proof_assessment'] = {}
+    s['proof_assessment_source'] = None
+    s['proof_assessment_request'] = {}
+    s['verify_decision_request'] = {
+        'status': s['verify_status'],
+        'summary': s['structured_interaction_capture_failure_summary'],
+        'expected_path': s.get('expected_terminal_path') or s.get('requested_expected_terminal_path') or s.get('server_path') or '/',
+        'expected_start_path': s.get('expected_start_path') or s.get('server_path') or '/',
+        'route_expectation': s.get('route_expectation') or {},
+        'capture_quality': {
+            'decision': 'failed_interaction_capture',
+            'summary': s['structured_interaction_capture_failure_summary'],
+            'recommended_stage': None,
+            'continue_with_stage': None,
+            'blocking': True,
+            'terminal_blocker': True,
+            'reasons': [s['structured_interaction_capture_failure_summary']],
+        },
+        'next_stage_options': ['author', 'verify', 'recon'],
+        'recommended_stage': None,
+        'continue_with_stage': None,
+        'fields_agent_may_update': ['proof_plan', 'capture_script', 'server_path', 'wait_for_selector'],
+        'instructions': [
+            'Author a real Playwright browser interaction capture script before retrying verify.',
+            'Do not use the default remote audit current-target capture for interaction verification.',
+        ],
+    }
+    save_state(s)
+    raise SystemExit(s['structured_interaction_capture_failure_summary'])
+elif not capture_script and no_implementation_mode:
     capture_script = 'await page.waitForTimeout(1500);'
     s['capture_script'] = capture_script
     s['capture_script_source'] = s.get('capture_script_source') or 'default_remote_audit_current_target'

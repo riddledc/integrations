@@ -1658,6 +1658,61 @@ def run_remote_audit_setup_without_repo():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_remote_interaction_audit_setup_requires_authoring():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-remote-interaction-audit-'))
+    args_path = tempdir / 'args.json'
+    state_path = tempdir / 'state.json'
+    try:
+        args_path.write_text(json.dumps({
+            'repo': '',
+            'mode': 'server',
+            'reference': 'both',
+            'prod_url': 'https://riddledc.com/',
+            'change_request': 'Verify Home -> Proof navigation. Start at https://riddledc.com/. Click the visible Proof nav link. Expected terminal URL is https://riddledc.com/proof/.',
+            'commit_message': '',
+            'success_criteria': 'Terminal URL is https://riddledc.com/proof/ and structured proof evidence is present.',
+            'verification_mode': 'interaction',
+            'implementation_mode': 'none',
+            'require_diff': False,
+            'allow_code_changes': False,
+            'server_image': 'node:20-slim',
+            'server_command': 'npm start',
+            'server_port': '3000',
+        }, indent=2))
+        with temporary_env(
+            RIDDLE_PROOF_ARGS_FILE=str(args_path),
+            RIDDLE_PROOF_STATE_FILE=str(state_path),
+        ):
+            sys.modules.pop('util', None)
+            load_module('util_remote_interaction_audit_preflight', UTIL_PATH)
+            load_module('preflight_remote_interaction_audit', PREFLIGHT_PATH)
+            sys.modules.pop('util', None)
+            try:
+                load_module('setup_remote_interaction_audit', SETUP_PATH)
+            except SystemExit as exc:
+                assert exc.code in (0, None), exc
+        state = json.loads(state_path.read_text())
+        assert state['remote_audit'] is True
+        assert state['workspace_ready'] is True
+        assert state['reference'] == 'prod'
+        assert state['implementation_status'] == 'not_required'
+        assert state['server_path'] == '/'
+        assert state['recon_status'] == 'ready_for_proof_plan'
+        assert state['author_status'] == 'needs_authoring'
+        assert state['proof_plan_status'] == 'needs_authoring'
+        assert state.get('capture_script', '') == ''
+        assert state.get('capture_script_source', '') == ''
+        assert 'requires an authored browser interaction capture' in state['author_summary']
+        return {
+            'ok': True,
+            'author_status': state['author_status'],
+            'capture_script_source': state.get('capture_script_source', ''),
+        }
+    finally:
+        sys.modules.pop('util', None)
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_preflight_resumes_visual_proof_session():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-preflight-session-'))
     args_path = tempdir / 'args.json'
@@ -2833,6 +2888,59 @@ def run_remote_audit_verify_uses_default_capture_script():
         shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def run_remote_interaction_audit_verify_rejects_default_capture():
+    tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-remote-interaction-audit-verify-'))
+    state_path = tempdir / 'state.json'
+    try:
+        state = base_state(tempdir, reference='prod', prod_url='https://riddledc.com/')
+        state.update({
+            'remote_audit': True,
+            'workspace_kind': 'remote_audit',
+            'mode': 'server',
+            'recon_status': 'ready_for_proof_plan',
+            'author_status': 'ready',
+            'proof_plan_status': 'ready',
+            'implementation_status': 'not_required',
+            'implementation_mode': 'none',
+            'require_diff': False,
+            'allow_code_changes': False,
+            'verification_mode': 'interaction',
+            'server_path': '/',
+            'expected_start_path': '/',
+            'expected_terminal_path': '/proof',
+            'requested_expected_terminal_path': '/proof',
+            'proof_plan': 'Verify Home -> Proof navigation.',
+            'capture_script': '',
+            'recon_results': {'baselines': {}, 'mode': 'remote_audit'},
+        })
+        write_state(state_path, state)
+        os.environ['RIDDLE_PROOF_STATE_FILE'] = str(state_path)
+
+        fake = FakeRiddle()
+        load_util_with_fake(fake)
+        try:
+            load_module('verify_remote_interaction_audit_rejects_default_capture', VERIFY_PATH)
+        except SystemExit as exc:
+            assert 'requires an authored browser interaction capture script' in str(exc), exc
+        else:
+            raise AssertionError('interaction remote audit verify should reject missing capture_script')
+        after_verify = json.loads(state_path.read_text())
+
+        assert after_verify['verify_status'] == 'capture_incomplete'
+        assert after_verify.get('capture_script', '') == ''
+        assert after_verify.get('capture_script_source', '') == ''
+        assert after_verify['verify_decision_request']['capture_quality']['decision'] == 'failed_interaction_capture'
+        assert after_verify['verify_decision_request']['capture_quality']['blocking'] is True
+        assert 'default remote audit current-target capture is passive' in after_verify['structured_interaction_capture_failure_summary']
+        return {
+            'ok': True,
+            'verify_status': after_verify['verify_status'],
+            'capture_quality': after_verify['verify_decision_request']['capture_quality']['decision'],
+        }
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def run_verify_interaction_terminal_route_from_proof_evidence():
     tempdir = Path(tempfile.mkdtemp(prefix='riddle-proof-interaction-forward-'))
     state_path = tempdir / 'state.json'
@@ -3941,6 +4049,7 @@ if __name__ == '__main__':
     payload = {
         'preflight_reference_skip_reason': run_preflight_records_prod_reference_skip_reason(),
         'remote_audit_setup_without_repo': run_remote_audit_setup_without_repo(),
+        'remote_interaction_audit_setup_requires_authoring': run_remote_interaction_audit_setup_requires_authoring(),
         'preflight_resume_visual_proof_session': run_preflight_resumes_visual_proof_session(),
         'capture_artifact_enrichment': run_capture_artifact_enrichment(),
         'capture_diagnostics_redaction': run_capture_diagnostics_redact_sensitive_values(),
@@ -3966,6 +4075,7 @@ if __name__ == '__main__':
         'verify_preserves_proof_evidence_on_capture_script_error': run_verify_preserves_proof_evidence_on_capture_script_error(),
         'verify_capture_retry': run_verify_capture_retry(),
         'remote_audit_verify_uses_default_capture_script': run_remote_audit_verify_uses_default_capture_script(),
+        'remote_interaction_audit_verify_rejects_default_capture': run_remote_interaction_audit_verify_rejects_default_capture(),
         'verify_interaction_terminal_route_from_proof_evidence': run_verify_interaction_terminal_route_from_proof_evidence(),
         'verify_interaction_iife_structured_evidence_without_screenshot': run_verify_interaction_iife_structured_evidence_without_screenshot(),
         'verify_interaction_proof_evidence_overrides_stale_expected_path': run_verify_interaction_proof_evidence_overrides_stale_expected_path(),

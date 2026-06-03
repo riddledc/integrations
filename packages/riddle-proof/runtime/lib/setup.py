@@ -213,6 +213,16 @@ def audit_no_diff_mode():
     )
 
 
+def interaction_verification_mode():
+    return str(s.get('verification_mode') or '').strip().lower() in (
+        'interaction',
+        'interactive',
+        'user_flow',
+        'user-flow',
+        'workflow',
+    )
+
+
 def remote_audit_mode():
     return bool(s.get('remote_audit')) or (
         not repo
@@ -560,10 +570,19 @@ if remote_audit_mode():
         'keyword_hits': [],
         'max_attempts': 0,
     }
-    s['author_status'] = 'ready'
-    s['proof_plan_status'] = 'ready'
-    s['proof_plan'] = (s.get('proof_plan') or 'Audit the current prod_url target and capture current evidence without requiring a repo diff.').strip()
-    if not (s.get('capture_script') or '').strip():
+    has_capture_script = bool((s.get('capture_script') or '').strip())
+    needs_authored_interaction_capture = interaction_verification_mode() and not has_capture_script
+    if needs_authored_interaction_capture:
+        s['author_status'] = 'needs_authoring'
+        s['proof_plan_status'] = 'needs_authoring'
+        s['proof_plan'] = (s.get('proof_plan') or '').strip()
+        s['author_summary'] = 'Remote interaction audit requires an authored browser interaction capture before verify.'
+        s['capture_script_source'] = ''
+    else:
+        s['author_status'] = 'ready'
+        s['proof_plan_status'] = 'ready'
+        s['proof_plan'] = (s.get('proof_plan') or 'Audit the current prod_url target and capture current evidence without requiring a repo diff.').strip()
+    if not has_capture_script and not needs_authored_interaction_capture:
         s['capture_script'] = 'await page.waitForTimeout(1500);'
         s['capture_script_source'] = 'default_remote_audit_current_target'
     s['dependency_install'] = {
