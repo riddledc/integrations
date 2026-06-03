@@ -48,6 +48,20 @@ const REFINED_INPUTS_SCHEMA = {
     server_path: { type: ["string", "null"] },
     wait_for_selector: { type: ["string", "null"] },
     reference: { enum: ["before", "prod", "both", null] },
+    expected_start_path: { type: ["string", "null"] },
+    expected_terminal_path: { type: ["string", "null"] },
+  },
+};
+
+const INTERACTION_CONTRACT_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    start_path: { type: ["string", "null"] },
+    expected_terminal_path: { type: ["string", "null"] },
+    expected_url: { type: ["string", "null"] },
+    action: { type: ["string", "null"] },
+    assertions: { type: "array", items: { type: "string" } },
   },
 };
 
@@ -120,6 +134,8 @@ const AUTHOR_SCHEMA = {
     capture_script: { type: "string" },
     baseline_understanding_used: BASELINE_UNDERSTANDING_SCHEMA,
     refined_inputs: REFINED_INPUTS_SCHEMA,
+    expected_terminal_path: { type: ["string", "null"] },
+    interaction_contract: INTERACTION_CONTRACT_SCHEMA,
     rationale: { type: "array", items: { type: "string" } },
     confidence: { type: "string", enum: ["low", "medium", "high"] },
     summary: { type: "string" },
@@ -839,7 +855,10 @@ export function createCodexExecAgentAdapter(
           "Do not leave this authoring stage pending for external investigation. Keep any repo inspection brief, do not modify files, and return the JSON proof packet from the available state.",
           "Choose the evidence modality from verification_mode and success_criteria: screenshots for visual/UI proof, interactions plus screenshots for interaction proof, structured metrics/logs/JSON/audio analysis for non-visual proof.",
           "For playable/gameplay proof, treat screenshots as supporting artifacts only: start the game, send keyboard or pointer input, measure state before/after, measure non-HUD canvas/playfield pixel deltas across time, and return playability evidence with version riddle-proof.playability.v1.",
-          "For interaction proof, return a structured evidence object with start route/state, terminal route/state, action, assertions, and matched UI text. Catch waitForURL or selector timeouts and record them as failed assertions instead of throwing before evidence is emitted.",
+          "For interaction proof, author the browser action explicitly in capture_script; a wait-only script is invalid. Return a structured evidence object with start route/state, terminal route/state, action, assertions, and matched UI text.",
+          "For route-changing interaction proof, set refined_inputs.expected_start_path and refined_inputs.expected_terminal_path, and include interaction_contract with start_path, expected_terminal_path, action, and assertions. Keep refined_inputs.server_path on the start route; do not replace it with the terminal route.",
+          "If the original request or success_criteria names an expected terminal URL/path, preserve it exactly in refined_inputs.expected_terminal_path and in interaction_contract.expected_terminal_path, including query and hash.",
+          "Catch waitForURL or selector timeouts and record them as failed assertions instead of throwing before evidence is emitted.",
           "For structured proof, collect meaningful measurements inside page.evaluate, assign them to an evidence variable, and return that object from capture_script. Screenshots are optional supporting context for data/audio/log/metric/custom modes.",
           "Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence in the worker context. Avoid global evidence assignment unless it is inside page.evaluate for compatibility with older packets.",
           "Do not call Playwright page.* APIs inside page.evaluate; page.evaluate runs in the browser page, while page.waitForFunction, page.waitForSelector, page.click, and saveScreenshot belong in the outer capture script.",
@@ -853,7 +872,7 @@ export function createCodexExecAgentAdapter(
           "For visual/UI proof, include saveScreenshot('after-proof') exactly once.",
           "Avoid generic proof language. The packet should be specific enough that verify can tell whether the requested change actually happened.",
           "Echo the baseline understanding you used in baseline_understanding_used so later stages can detect drift.",
-          "Use refined_inputs for server_path, wait_for_selector, or reference when useful; use null values when no refinement is needed.",
+          "Use refined_inputs for server_path, wait_for_selector, reference, expected_start_path, and expected_terminal_path when useful; use null values when no refinement is needed.",
         ].join("\n"),
       });
       return payloadOrBlocker(raw, context.checkpoint);
