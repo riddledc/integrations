@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.28
+
+### Patch Changes
+
+- 7e4dbf4: Require authored browser capture scripts for remote no-diff interaction audits instead of using the passive default audit capture.
+
 ## 0.8.27
 
 ### Patch Changes
