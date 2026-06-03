@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.29
+
+### Patch Changes
+
+- 4eeffb1: Preserve remote interaction terminal routes before authoring and make the proof author schema strict-compatible.
+
 ## 0.8.28
 
 ### Patch Changes
