@@ -89,10 +89,12 @@ def recon_baseline_understanding(state):
     return understanding if isinstance(understanding, dict) else {}
 
 
-def authored_capture_script(existing_script, wait_for_selector=''):
+def authored_capture_script(state, existing_script, wait_for_selector=''):
     script = (existing_script or '').strip()
     if script:
         return script
+    if is_interaction_mode(state):
+        return ''
     steps = ['await page.waitForTimeout(1500);']
     selector = (wait_for_selector or '').strip()
     if selector:
@@ -152,8 +154,10 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'observations': item.get('observations'),
         })
 
-    fallback_capture_script = authored_capture_script(state.get('capture_script'), fallback_selector)
+    fallback_capture_script = authored_capture_script(state, state.get('capture_script'), fallback_selector)
     fallback_proof_plan = authored_proof_plan(state, reference, fallback_path, baselines, fallback_selector)
+    expected_start_path = state.get('expected_start_path') or fallback_path or '/'
+    expected_terminal_path = state.get('expected_terminal_path') or state.get('requested_expected_terminal_path') or ''
 
     return {
         'status': 'needs_supervisor_judgment',
@@ -174,6 +178,8 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
             'wait_for_selector': fallback_selector,
             'capture_script': fallback_capture_script,
             'proof_plan': fallback_proof_plan,
+            'expected_start_path': expected_start_path,
+            'expected_terminal_path': expected_terminal_path,
         },
         'interaction_contract': optional_record(state.get('interaction_contract')),
         'proof_contract': optional_record(state.get('proof_contract')),
@@ -210,6 +216,7 @@ def author_request_payload(state, reference, baselines, current_plan, hypothesis
                 'server_path': 'string',
                 'wait_for_selector': 'string',
                 'reference': 'string',
+                'expected_start_path': 'string',
                 'expected_terminal_path': 'string',
             },
             'interaction_contract': {
@@ -245,7 +252,7 @@ default_path = normalize_path(first_non_empty(before_path, prod_path, current_pa
 
 default_selector = first_non_empty((s.get('wait_for_selector') or '').strip(), (current_plan.get('wait_for_selector') or '').strip())
 default_proof_plan = authored_proof_plan(s, reference, default_path, baselines, default_selector)
-default_capture_script = authored_capture_script(s.get('capture_script'), default_selector)
+default_capture_script = authored_capture_script(s, s.get('capture_script'), default_selector)
 
 supervisor_packet = s.get('supervisor_author_packet') or {}
 if not isinstance(supervisor_packet, dict):
@@ -333,6 +340,7 @@ authored_packet = {
         'server_path': refined_path,
         'wait_for_selector': refined_selector,
         'reference': refined_reference,
+        'expected_start_path': s.get('expected_start_path') or '',
         'expected_terminal_path': expected_terminal_path,
     },
     'interaction_contract': provided_payload['interaction_contract'],

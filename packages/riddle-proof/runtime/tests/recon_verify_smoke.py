@@ -1700,13 +1700,33 @@ def run_remote_interaction_audit_setup_requires_authoring():
         assert state['recon_status'] == 'ready_for_proof_plan'
         assert state['author_status'] == 'needs_authoring'
         assert state['proof_plan_status'] == 'needs_authoring'
+        assert state['requested_expected_terminal_path'] == '/proof'
+        assert state['expected_terminal_path'] == '/proof'
+        assert state['expected_start_path'] == '/'
+        assert state['interaction_contract']['start_path'] == '/'
+        assert state['interaction_contract']['expected_terminal_path'] == '/proof'
         assert state.get('capture_script', '') == ''
         assert state.get('capture_script_source', '') == ''
         assert 'requires an authored browser interaction capture' in state['author_summary']
+
+        with temporary_env(RIDDLE_PROOF_STATE_FILE=str(state_path)):
+            sys.modules.pop('util', None)
+            try:
+                load_module('author_remote_interaction_audit_request', AUTHOR_PATH)
+            except SystemExit as exc:
+                assert exc.code in (0, None), exc
+        after_author = json.loads(state_path.read_text())
+        assert after_author['author_status'] == 'needs_supervisor_judgment'
+        assert after_author['author_request']['fallback_defaults']['server_path'] == '/'
+        assert after_author['author_request']['fallback_defaults']['expected_start_path'] == '/'
+        assert after_author['author_request']['fallback_defaults']['expected_terminal_path'] == '/proof'
+        assert after_author['author_request']['fallback_defaults']['capture_script'] == ''
+        assert after_author['author_request']['interaction_contract']['expected_terminal_path'] == '/proof'
         return {
             'ok': True,
-            'author_status': state['author_status'],
-            'capture_script_source': state.get('capture_script_source', ''),
+            'author_status': after_author['author_status'],
+            'expected_terminal_path': after_author['expected_terminal_path'],
+            'capture_script_source': after_author.get('capture_script_source', ''),
         }
     finally:
         sys.modules.pop('util', None)
@@ -2062,6 +2082,8 @@ def run_recon_then_author_request():
         assert after_author['author_runtime_model_hint'] == 'openai-codex/gpt-5.4'
         assert after_author['author_request']['status'] == 'needs_supervisor_judgment'
         assert after_author['author_request']['fallback_defaults']['server_path'] == '/pricing'
+        assert after_author['author_request']['fallback_defaults']['expected_start_path'] == '/pricing'
+        assert after_author['author_request']['fallback_defaults']['expected_terminal_path'] == ''
         assert 'supervising agent owns proof authoring' in after_author['author_request']['instructions'][0].lower()
 
         return {
@@ -2400,6 +2422,8 @@ def run_author_keeps_interaction_start_route():
         assert after_author['expected_start_path'] == '/'
         assert after_author['expected_terminal_path'] == '/proof/'
         assert after_author['author_packet']['refined_inputs']['server_path'] == '/'
+        assert after_author['author_packet']['refined_inputs']['expected_start_path'] == '/'
+        assert after_author['author_packet']['refined_inputs']['expected_terminal_path'] == '/proof/'
         assert after_author['author_warnings']
         assert 'terminal interaction route' in after_author['author_warnings'][0]
         return {

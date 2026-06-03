@@ -43,7 +43,7 @@ const DEFAULT_PROOF_PACKET_AUTHOR_TIMEOUT_MS = 180_000;
 const REFINED_INPUTS_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["server_path", "wait_for_selector", "reference"],
+  required: ["server_path", "wait_for_selector", "reference", "expected_start_path", "expected_terminal_path"],
   properties: {
     server_path: { type: ["string", "null"] },
     wait_for_selector: { type: ["string", "null"] },
@@ -54,8 +54,9 @@ const REFINED_INPUTS_SCHEMA = {
 };
 
 const INTERACTION_CONTRACT_SCHEMA = {
-  type: "object",
-  additionalProperties: true,
+  type: ["object", "null"],
+  additionalProperties: false,
+  required: ["start_path", "expected_terminal_path", "expected_url", "action", "assertions"],
   properties: {
     start_path: { type: ["string", "null"] },
     expected_terminal_path: { type: ["string", "null"] },
@@ -125,6 +126,8 @@ const AUTHOR_SCHEMA = {
     "capture_script",
     "baseline_understanding_used",
     "refined_inputs",
+    "expected_terminal_path",
+    "interaction_contract",
     "rationale",
     "confidence",
     "summary",
@@ -856,8 +859,8 @@ export function createCodexExecAgentAdapter(
           "Choose the evidence modality from verification_mode and success_criteria: screenshots for visual/UI proof, interactions plus screenshots for interaction proof, structured metrics/logs/JSON/audio analysis for non-visual proof.",
           "For playable/gameplay proof, treat screenshots as supporting artifacts only: start the game, send keyboard or pointer input, measure state before/after, measure non-HUD canvas/playfield pixel deltas across time, and return playability evidence with version riddle-proof.playability.v1.",
           "For interaction proof, author the browser action explicitly in capture_script; a wait-only script is invalid. Return a structured evidence object with start route/state, terminal route/state, action, assertions, and matched UI text.",
-          "For route-changing interaction proof, set refined_inputs.expected_start_path and refined_inputs.expected_terminal_path, and include interaction_contract with start_path, expected_terminal_path, action, and assertions. Keep refined_inputs.server_path on the start route; do not replace it with the terminal route.",
-          "If the original request or success_criteria names an expected terminal URL/path, preserve it exactly in refined_inputs.expected_terminal_path and in interaction_contract.expected_terminal_path, including query and hash.",
+          "For route-changing interaction proof, set refined_inputs.expected_start_path and refined_inputs.expected_terminal_path, and include interaction_contract with start_path, expected_terminal_path, expected_url when known, action, and assertions. Keep refined_inputs.server_path on the start route; do not replace it with the terminal route.",
+          "If the original request or success_criteria names an expected terminal URL/path, preserve it exactly in refined_inputs.expected_terminal_path and in interaction_contract.expected_terminal_path, including query and hash. For non-interaction proof, set expected_terminal_path and interaction_contract to null.",
           "Catch waitForURL or selector timeouts and record them as failed assertions instead of throwing before evidence is emitted.",
           "For structured proof, collect meaningful measurements inside page.evaluate, assign them to an evidence variable, and return that object from capture_script. Screenshots are optional supporting context for data/audio/log/metric/custom modes.",
           "Do not assign globalThis.__riddleProofEvidence, window.__riddleProofEvidence, or self.__riddleProofEvidence in the worker context. Avoid global evidence assignment unless it is inside page.evaluate for compatibility with older packets.",
