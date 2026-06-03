@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.27
+
+### Patch Changes
+
+- 45f14f7: Promote explicit interaction terminal-route requests into the authoring contract and require route-aware structured evidence.
+
 ## 0.8.26
 
 ### Patch Changes
