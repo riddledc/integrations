@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import {
   createDisabledRiddleProofAgentAdapter,
@@ -91,6 +92,7 @@ const KNOWN_CLI_OPTIONS = new Set([
   "intervalMs",
   "job",
   "jobId",
+  "localCore",
   "maxIterations",
   "navigationTimeout",
   "output",
@@ -100,6 +102,8 @@ const KNOWN_CLI_OPTIONS = new Set([
   "pollAttempts",
   "pollIntervalMs",
   "port",
+  "pack",
+  "packFile",
   "profile",
   "progressEveryMs",
   "quiet",
@@ -151,6 +155,7 @@ function usage() {
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -240,6 +245,34 @@ function runProfileViewportNamesOption(options: CliOptions) {
 const DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 90_000;
 const DEFAULT_PROFILE_UNSUBMITTED_RETRIES = 2;
 
+function cliPackageRoot() {
+  const entryPath = process.argv[1]
+    ? (() => {
+        try {
+          return realpathSync(process.argv[1]);
+        } catch {
+          return process.argv[1];
+        }
+      })()
+    : "";
+  const candidates = [
+    entryPath ? path.resolve(path.dirname(entryPath), "..") : "",
+    path.resolve(process.cwd(), "packages", "riddle-proof"),
+    process.cwd(),
+  ].filter(Boolean);
+  for (const candidate of candidates) {
+    if (
+      existsSync(path.join(candidate, "runtime", "tests", "trust_boundary_regression.py")) &&
+      existsSync(path.join(candidate, "examples", "regression-packs"))
+    ) {
+      return candidate;
+    }
+  }
+  return candidates[0] || process.cwd();
+}
+
+const CLI_PACKAGE_ROOT = cliPackageRoot();
+
 function optionNumber(options: CliOptions, ...keys: string[]) {
   for (const key of keys) {
     const value = optionString(options, key);
@@ -321,6 +354,321 @@ function writeRunProfileResult(result: RiddleProofProfileResult, options: CliOpt
   }
   if (format === "compact-json") {
     process.stdout.write(`${JSON.stringify(compactRunProfileResult(result, options), null, 2)}\n`);
+    return;
+  }
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+function regressionPackResultFormatOption(options: CliOptions) {
+  const format = optionString(options, "format") ?? optionString(options, "resultFormat") ?? "json";
+  if (format === "md" || format === "summary") return "markdown";
+  if (format === "json" || format === "compact-json" || format === "markdown") return format;
+  throw new Error("--format must be json, compact-json, or markdown.");
+}
+
+function regressionPackPathForCli(options: CliOptions) {
+  const packFile = optionString(options, "packFile");
+  if (packFile) return path.resolve(packFile);
+  const pack = optionString(options, "pack") || "oc-flow-regression";
+  if (existsSync(pack)) return path.resolve(pack);
+  const normalized = pack.endsWith(".json") ? pack : `${pack}.json`;
+  return path.join(CLI_PACKAGE_ROOT, "examples", "regression-packs", normalized);
+}
+
+function readRegressionPackForCli(options: CliOptions) {
+  const filePath = regressionPackPathForCli(options);
+  if (!existsSync(filePath)) throw new Error(`Regression pack not found: ${filePath}`);
+  const parsed = JSON.parse(readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+  if (parsed.version !== "riddle-proof.regression-pack.v1") {
+    throw new Error(`${filePath} is not a riddle-proof.regression-pack.v1 manifest.`);
+  }
+  return { filePath, pack: parsed };
+}
+
+function regressionPackStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function regressionPackRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function regressionPackCommandForLocalCore(pack: Record<string, unknown>) {
+  const suite = regressionPackRecord(pack.local_core_suite);
+  return cliString(suite.command) || "python3 packages/riddle-proof/runtime/tests/trust_boundary_regression.py";
+}
+
+function regressionPackLocalCoreScriptPath() {
+  return path.join(CLI_PACKAGE_ROOT, "runtime", "tests", "trust_boundary_regression.py");
+}
+
+function tailLines(text: string, limit = 40) {
+  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  return lines.slice(-limit);
+}
+
+function parseRegressionPackLocalCoreStdout(stdout: string) {
+  try {
+    return JSON.parse(stdout) as Record<string, unknown>;
+  } catch {
+    const start = stdout.indexOf("{");
+    const end = stdout.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(stdout.slice(start, end + 1)) as Record<string, unknown>;
+    }
+    throw new Error("Local core suite did not emit parseable JSON.");
+  }
+}
+
+function regressionPackCaseNames(result: Record<string, unknown>) {
+  const results = Array.isArray(result.results) ? result.results : [];
+  return results
+    .map((item) => cliString(regressionPackRecord(item).name))
+    .filter((item): item is string => Boolean(item));
+}
+
+function regressionPackFailedCaseNames(result: Record<string, unknown>) {
+  const failed = Array.isArray(result.failed) ? result.failed : [];
+  const namedFailed = failed
+    .map((item) => cliString(regressionPackRecord(item).name))
+    .filter((item): item is string => Boolean(item));
+  if (namedFailed.length) return namedFailed;
+  const results = Array.isArray(result.results) ? result.results : [];
+  return results
+    .map(regressionPackRecord)
+    .filter((item) => item.ok === false)
+    .map((item) => cliString(item.name))
+    .filter((item): item is string => Boolean(item));
+}
+
+function regressionPackMarkersSeen(result: Record<string, unknown>, markers: string[]) {
+  const encoded = JSON.stringify(result);
+  return markers.filter((marker) => encoded.includes(marker));
+}
+
+function runRegressionPackLocalCore(pack: Record<string, unknown>) {
+  const script = regressionPackLocalCoreScriptPath();
+  const suite = regressionPackRecord(pack.local_core_suite);
+  const requiredCases = regressionPackStringArray(suite.required_cases);
+  const forbiddenMarkers = regressionPackStringArray(pack.forbidden_terminal_markers);
+  const command = regressionPackCommandForLocalCore(pack);
+  const startedAt = new Date().toISOString();
+  if (!existsSync(script)) {
+    return {
+      requested: true,
+      ok: false,
+      command,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      error: `Local core suite script not found: ${script}`,
+      required_cases: requiredCases,
+      missing_required_cases: requiredCases,
+      forbidden_terminal_markers_seen: [],
+    };
+  }
+
+  const child = spawnSync("python3", [script], {
+    cwd: CLI_PACKAGE_ROOT,
+    encoding: "utf-8",
+    timeout: 120_000,
+  });
+  const finishedAt = new Date().toISOString();
+  let parsed: Record<string, unknown> | null = null;
+  let parseError: string | undefined;
+  try {
+    parsed = parseRegressionPackLocalCoreStdout(child.stdout || "");
+  } catch (error) {
+    parseError = error instanceof Error ? error.message : String(error);
+  }
+  const caseNames = parsed ? regressionPackCaseNames(parsed) : [];
+  const missingRequiredCases = requiredCases.filter((caseId) => !caseNames.includes(caseId));
+  const failedCases = parsed ? regressionPackFailedCaseNames(parsed) : [];
+  const markersSeen = parsed ? regressionPackMarkersSeen(parsed, forbiddenMarkers) : [];
+  const ok = child.status === 0 && parsed?.ok === true && !missingRequiredCases.length && !failedCases.length && !markersSeen.length;
+  return {
+    requested: true,
+    ok,
+    command,
+    executed: {
+      binary: "python3",
+      args: [path.relative(CLI_PACKAGE_ROOT, script)],
+      cwd: CLI_PACKAGE_ROOT,
+    },
+    exit_code: child.status,
+    signal: child.signal,
+    started_at: startedAt,
+    finished_at: finishedAt,
+    suite: cliString(parsed?.suite) || null,
+    case_count: typeof parsed?.case_count === "number" ? parsed.case_count : caseNames.length,
+    passed_case_count: caseNames.length - failedCases.length,
+    required_cases: requiredCases,
+    observed_cases: caseNames,
+    missing_required_cases: missingRequiredCases,
+    failed_cases: failedCases,
+    forbidden_terminal_markers_seen: markersSeen,
+    parse_error: parseError,
+    stderr_tail: tailLines(child.stderr || ""),
+    stdout_tail: ok ? undefined : tailLines(child.stdout || ""),
+  };
+}
+
+function openClawHandoffPromptForRegressionPack(pack: Record<string, unknown>, input: {
+  localCoreOk: boolean;
+}) {
+  const minimumVersions = regressionPackRecord(pack.minimum_versions);
+  const runtimeGate = regressionPackRecord(pack.runtime_gate);
+  const liveSuite = regressionPackRecord(pack.openclaw_live_suite);
+  const target = regressionPackRecord(liveSuite.target);
+  const cases = Array.isArray(liveSuite.cases) ? liveSuite.cases.map(regressionPackRecord) : [];
+  const fields = regressionPackStringArray(liveSuite.result_log_fields);
+  const forbiddenMarkers = regressionPackStringArray(pack.forbidden_terminal_markers);
+  const lines = [
+    "Run the Riddle Proof OC flow regression pack in small serial chunks.",
+    "",
+    `First call ${cliString(runtimeGate.tool) || "riddle_proof_status"} and count only fresh loaded-runtime runs. Required loaded versions are at least:`,
+    ...Object.entries(minimumVersions).map(([name, version]) => `- ${name}: ${version}`),
+    "",
+    "Target/default flags:",
+    ...Object.entries(target).map(([key, value]) => `- ${key}: ${JSON.stringify(value)}`),
+    "",
+    "Rules:",
+    "- Run cases serially, not as one broad parallel batch.",
+    "- If loaded metadata is stale, stop and restart/reload the gateway before counting results.",
+    "- If any generic lifecycle marker appears, report the exact marker and artifact, then stop the counted batch.",
+    `- Forbidden terminal markers: ${forbiddenMarkers.join(", ") || "none"}.`,
+    fields.length ? `- Log fields for every counted run: ${fields.join(", ")}.` : "",
+    "",
+    "Cases:",
+    ...cases.map((testCase, index) => {
+      const expect = regressionPackRecord(testCase.expect);
+      return [
+        `${index + 1}. ${cliString(testCase.id) || "unnamed-case"}: ${cliString(testCase.intent) || "no intent"}`,
+        `   Expect: ${JSON.stringify(expect)}`,
+      ].join("\n");
+    }),
+    "",
+    input.localCoreOk
+      ? "Local generic core suite is green, so OC should only be validating wrapper/runtime behavior."
+      : "Local generic core suite is not green or was not run; do not count OC failures as wrapper-only until local core is green.",
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+
+function compactRegressionPackRunResult(result: Record<string, unknown>) {
+  const localCore = regressionPackRecord(result.local_core);
+  const openClaw = regressionPackRecord(result.openclaw_live_suite);
+  return {
+    version: result.version,
+    pack_id: result.pack_id,
+    ok: result.ok,
+    local_core: {
+      requested: localCore.requested,
+      ok: localCore.ok,
+      command: localCore.command,
+      case_count: localCore.case_count,
+      missing_required_cases: localCore.missing_required_cases,
+      failed_cases: localCore.failed_cases,
+      forbidden_terminal_markers_seen: localCore.forbidden_terminal_markers_seen,
+    },
+    openclaw_live_case_count: openClaw.case_count,
+    output_dir: result.output_dir,
+  };
+}
+
+function regressionPackRunMarkdown(result: Record<string, unknown>) {
+  const localCore = regressionPackRecord(result.local_core);
+  const runtimeGate = regressionPackRecord(result.runtime_gate);
+  const minimumVersions = regressionPackRecord(result.minimum_versions);
+  const openClaw = regressionPackRecord(result.openclaw_live_suite);
+  const lines = [
+    `# ${cliString(result.public_name) || cliString(result.pack_id) || "Riddle Proof Regression Pack"}`,
+    "",
+    `Status: ${result.ok ? "passed" : "failed"}`,
+    `Pack: ${cliString(result.pack_id) || "unknown"}`,
+    "",
+    "## Local Core",
+    "",
+    `- requested: ${localCore.requested === true}`,
+    `- ok: ${localCore.ok === true}`,
+    `- command: ${cliString(localCore.command) || "n/a"}`,
+    `- cases: ${localCore.case_count ?? "n/a"}`,
+    `- missing required: ${regressionPackStringArray(localCore.missing_required_cases).join(", ") || "none"}`,
+    `- failed cases: ${regressionPackStringArray(localCore.failed_cases).join(", ") || "none"}`,
+    `- forbidden markers seen: ${regressionPackStringArray(localCore.forbidden_terminal_markers_seen).join(", ") || "none"}`,
+    "",
+    "## Runtime Gate",
+    "",
+    `- tool: ${cliString(runtimeGate.tool) || "n/a"}`,
+    ...Object.entries(minimumVersions).map(([name, version]) => `- ${name}: ${version}`),
+    "",
+    "## OpenClaw Live Suite",
+    "",
+    `- case count: ${openClaw.case_count ?? "n/a"}`,
+    `- result log fields: ${regressionPackStringArray(openClaw.result_log_fields).join(", ") || "n/a"}`,
+    "",
+    "## OC Handoff Prompt",
+    "",
+    "```text",
+    cliString(result.openclaw_handoff_prompt) || "",
+    "```",
+    "",
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+function writeRegressionPackOutput(outputDir: string | undefined, result: Record<string, unknown>) {
+  if (!outputDir) return;
+  mkdirSync(outputDir, { recursive: true });
+  writeFileSync(path.join(outputDir, "regression-pack-result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "summary.md"), regressionPackRunMarkdown(result));
+  writeFileSync(path.join(outputDir, "oc-handoff.md"), `${cliString(result.openclaw_handoff_prompt) || ""}\n`);
+}
+
+function runRegressionPackForCli(options: CliOptions) {
+  const { filePath, pack } = readRegressionPackForCli(options);
+  const localCoreRequested = optionBoolean(options, "localCore") ?? true;
+  const localCore = localCoreRequested
+    ? runRegressionPackLocalCore(pack)
+    : { requested: false, ok: true, command: regressionPackCommandForLocalCore(pack) };
+  const liveSuite = regressionPackRecord(pack.openclaw_live_suite);
+  const liveCases = Array.isArray(liveSuite.cases) ? liveSuite.cases : [];
+  const localCoreRecord = regressionPackRecord(localCore);
+  const localCoreValidated = localCoreRecord.requested === true && localCoreRecord.ok === true;
+  const ok = localCoreRequested ? localCoreValidated : true;
+  const result = {
+    version: "riddle-proof.regression-pack-run-result.v1",
+    ok,
+    local_core_validated: localCoreValidated,
+    generated_at: new Date().toISOString(),
+    pack_path: filePath,
+    pack_id: cliString(pack.pack_id) || null,
+    public_name: cliString(pack.public_name) || null,
+    description: cliString(pack.description) || null,
+    minimum_versions: regressionPackRecord(pack.minimum_versions),
+    runtime_gate: regressionPackRecord(pack.runtime_gate),
+    forbidden_terminal_markers: regressionPackStringArray(pack.forbidden_terminal_markers),
+    local_core: localCore,
+    openclaw_live_suite: {
+      target: regressionPackRecord(liveSuite.target),
+      result_log_fields: regressionPackStringArray(liveSuite.result_log_fields),
+      case_count: liveCases.length,
+      case_ids: liveCases.map((item) => cliString(regressionPackRecord(item).id)).filter(Boolean),
+    },
+    openclaw_handoff_prompt: openClawHandoffPromptForRegressionPack(pack, { localCoreOk: localCoreValidated }),
+    output_dir: profileOutputDirOption(options) || null,
+  };
+  writeRegressionPackOutput(profileOutputDirOption(options), result);
+  return result;
+}
+
+function writeRegressionPackRunResult(result: Record<string, unknown>, options: CliOptions) {
+  const format = regressionPackResultFormatOption(options);
+  if (format === "markdown") {
+    process.stdout.write(regressionPackRunMarkdown(result));
+    return;
+  }
+  if (format === "compact-json") {
+    process.stdout.write(`${JSON.stringify(compactRegressionPackRunResult(result), null, 2)}\n`);
     return;
   }
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
@@ -4921,6 +5269,15 @@ async function main() {
     }
     writeRunProfileResult(result, options);
     process.exitCode = profileStatusExitCode(profile, result.status);
+    return;
+  }
+
+  if (command === "regression-pack") {
+    const action = positional[1] || "run";
+    if (action !== "run") throw new Error("Only `regression-pack run` is supported.");
+    const result = runRegressionPackForCli(options);
+    writeRegressionPackRunResult(result, options);
+    process.exitCode = result.ok ? 0 : 1;
     return;
   }
 
