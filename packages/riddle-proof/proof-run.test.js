@@ -721,6 +721,31 @@ async function run() {
   });
   assert(structuredInteractionAfterGate.ok === true, 'ship gate should accept valid structured interaction evidence without an after screenshot');
 
+  const missingInteractionEvidenceGate = core.validateShipGate({
+    ...makeLoopState(),
+    verification_mode: 'interaction',
+    implementation_status: 'changes_detected',
+    verify_status: 'evidence_captured',
+    after_cdn: 'https://cdn.example.com/after-proof.png',
+    proof_assessment: { decision: 'ready_to_ship', source: 'supervising_agent' },
+    proof_assessment_source: 'supervising_agent',
+    evidence_bundle: {
+      verification_mode: 'interaction',
+      after: {
+        observation: { valid: true, telemetry_ready: true, reason: 'screenshot only' },
+        supporting_artifacts: {
+          has_structured_payload: false,
+          proof_evidence_present: false,
+        },
+      },
+    },
+  });
+  assert(missingInteractionEvidenceGate.ok === false, 'interaction ship gate should reject screenshot-only evidence');
+  assert(
+    missingInteractionEvidenceGate.reasons.some((reason) => reason.includes('proof_evidence_present=false')),
+    'interaction ship gate should explain missing structured proof evidence',
+  );
+
   const visualUnmeasuredGate = core.validateShipGate({
     ...makeLoopState(),
     verification_mode: 'visual',
@@ -1012,6 +1037,39 @@ async function run() {
   const afterAuthored = readJson(reconLoopStatePath);
   assert(afterAuthored.stage_attempts.author.count === 2, 'author request plus author application should both be recorded');
   assert(afterAuthored.author_mode === 'supervising_agent', 'author mode should record supervising_agent ownership');
+
+  const passiveInteractionAuthorStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-passive-interaction-author-')), 'state.json');
+  writeJson(passiveInteractionAuthorStatePath, {
+    ...makeLoopState(),
+    branch: 'agent/openclaw/passive-interaction-author',
+    verification_mode: 'interaction',
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    implementation_status: 'not_required',
+    author_status: 'needs_supervisor_judgment',
+    proof_plan_status: 'needs_supervisor_judgment',
+    active_checkpoint: 'author_supervisor_judgment',
+    active_checkpoint_stage: 'author',
+  });
+  core.mergeStateFromParams(passiveInteractionAuthorStatePath, {
+    action: 'run',
+    author_packet_json: JSON.stringify({
+      proof_plan: 'Click the Proof nav link and verify the terminal route.',
+      capture_script: 'await page.waitForTimeout(1500);',
+      refined_inputs: { server_path: '/', expected_terminal_path: '/proof/' },
+      summary: 'Passive interaction packet',
+    }),
+  });
+  const passiveInteractionAuthorState = readJson(passiveInteractionAuthorStatePath);
+  assert(
+    passiveInteractionAuthorState.author_warnings.some((warning) => warning.includes('appears passive')),
+    'passive interaction capture script should be recorded as an author warning',
+  );
+  assert(
+    passiveInteractionAuthorState.structured_interaction_capture_failure_summary.includes('appears passive'),
+    'passive interaction capture script should create a structured interaction capture blocker',
+  );
 
   const auditNoDiffStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-audit-no-diff-')), 'state.json');
   writeJson(auditNoDiffStatePath, {

@@ -405,6 +405,49 @@ function normalizeCaptureScript(value?: string) {
   return script ? guardProofEvidenceGlobalAssignments(script) : "";
 }
 
+function compactCaptureScriptForHeuristics(script: string) {
+  return script
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function interactionCaptureScriptLooksPassive(script: string) {
+  const text = compactCaptureScriptForHeuristics(script);
+  if (!text) return true;
+  const actionPatterns = [
+    /\bpage\.(click|dblclick|tap|fill|press|type|check|uncheck|selectoption|dispatch(event)?|goto|reload)\s*\(/,
+    /\blocator\s*\([^)]*\)\s*\.\s*(click|dblclick|tap|fill|press|type|check|uncheck|selectoption|dispatch(event)?)\s*\(/,
+    /\b(getby(role|text|label|testid|placeholder|title)|getbyalttext)\s*\([^)]*\)\s*\.\s*(click|dblclick|tap|fill|press|type|check|uncheck|selectoption)\s*\(/,
+    /\bkeyboard\s*\.\s*(press|type|inserttext)\s*\(/,
+    /\bmouse\s*\.\s*(click|dblclick|down|up|move)\s*\(/,
+    /\btouchscreen\s*\.\s*tap\s*\(/,
+  ];
+  if (actionPatterns.some((pattern) => pattern.test(text))) return false;
+  const evidencePatterns = [
+    /\breturn\s+[{[]/,
+    /\breturn\s+\w+/,
+    /__riddleproofevidence/,
+    /\bproof_evidence\b/,
+    /\brouteexpectationsource\b/,
+    /\bexpectedurl\b/,
+    /\bassertions?\b/,
+  ];
+  return !evidencePatterns.some((pattern) => pattern.test(text));
+}
+
+function setStructuredInteractionCaptureFailure(
+  state: Record<string, unknown>,
+  summary: string,
+) {
+  const existing = typeof state.structured_interaction_capture_failure_summary === "string"
+    ? state.structured_interaction_capture_failure_summary.trim()
+    : "";
+  if (!existing) state.structured_interaction_capture_failure_summary = summary;
+}
+
 function appendProofSummaryLine(state: any, line: string) {
   const text = String(line || "").trim();
   if (!text) return;
@@ -711,6 +754,9 @@ export function proofAssessmentHardBlockersForState(state: any = {}) {
   }
   add(state?.structured_interaction_capture_failure_summary);
   add(state?.structured_interaction_failure_summary);
+  if (isInteractionVerificationMode(normalizedVerificationMode(state)) && !stateHasProofEvidence(state)) {
+    add("interaction proof evidence is required before ready_to_ship; proof_evidence_present=false");
+  }
   const mergeRecommendation = String(state?.merge_recommendation || "").trim();
   if (mergeRecommendation === "do-not-merge" && blockers.length) {
     add("merge_recommendation=do-not-merge because the proof bundle contains hard blockers.");
@@ -757,11 +803,28 @@ function stateHasAfterEvidence(state: any = {}) {
     observation.valid === true &&
     (
       supporting.has_structured_payload === true ||
-      supporting.proof_evidence_present === true ||
-      observation.telemetry_ready === true ||
-      Object.keys(objectValue(bundle.proof_evidence)).length > 0 ||
-      Object.keys(objectValue(after.proof_evidence)).length > 0
+      stateHasProofEvidence(state) ||
+      observation.telemetry_ready === true
     ),
+  );
+}
+
+function stateHasProofEvidence(state: any = {}) {
+  if (state?.proof_evidence_present === true) return true;
+  if (state?.proof_evidence !== undefined && state?.proof_evidence !== null) {
+    if (typeof state.proof_evidence !== "object") return true;
+    if (Object.keys(objectValue(state.proof_evidence)).length > 0) return true;
+  }
+  const bundle = objectValue(state?.evidence_bundle);
+  const after = objectValue(bundle.after);
+  const supporting = objectValue(after.supporting_artifacts);
+  const request = objectValue(state?.proof_assessment_request);
+  const structuredEvidence = objectValue(request.structured_evidence);
+  return Boolean(
+    supporting.proof_evidence_present === true ||
+    structuredEvidence.proof_evidence_present === true ||
+    Object.keys(objectValue(bundle.proof_evidence)).length > 0 ||
+    Object.keys(objectValue(after.proof_evidence)).length > 0
   );
 }
 
@@ -1172,6 +1235,14 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       state.supervisor_author_packet = parsed;
       if (typeof parsed?.proof_plan === "string") state.proof_plan = normalizeOptionalString(parsed.proof_plan) || "";
       if (typeof parsed?.capture_script === "string") state.capture_script = normalizeCaptureScript(parsed.capture_script);
+      if (
+        isInteractionVerificationMode(state.verification_mode) &&
+        interactionCaptureScriptLooksPassive(state.capture_script || "")
+      ) {
+        const warning = "Interaction proof capture script appears passive: it does not perform a browser interaction or return structured proof evidence.";
+        appendStateWarning(state, "author_warnings", warning);
+        setStructuredInteractionCaptureFailure(state, warning);
+      }
       if (parsed?.baseline_understanding_used && typeof parsed.baseline_understanding_used === "object") {
         state.author_baseline_understanding_used = parsed.baseline_understanding_used;
       }
