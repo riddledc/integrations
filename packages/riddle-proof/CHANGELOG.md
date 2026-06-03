@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.26
+
+### Patch Changes
+
+- e2743c3: Require structured proof evidence before approving interaction proofs, and flag passive wait-only interaction capture scripts as capture blockers.
+
 ## 0.8.25
 
 ### Patch Changes
