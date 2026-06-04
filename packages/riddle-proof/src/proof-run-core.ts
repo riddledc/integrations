@@ -61,6 +61,7 @@ export interface WorkflowParams {
   auto_approve?: boolean;
   continue_from_checkpoint?: boolean;
   ship_after_verify?: boolean;
+  ship_mode?: "none" | "ship";
   leave_draft?: boolean;
   cleanup_merged_pr?: boolean;
   fetch_base?: boolean;
@@ -275,6 +276,7 @@ export function buildSetupArgs(params: WorkflowParams, config: ReturnType<typeof
     discord_thread_id: params.discord_thread_id || "",
     discord_message_id: params.discord_message_id || "",
     discord_source_url: params.discord_source_url || "",
+    ship_mode: params.ship_mode || "",
     leave_draft: params.leave_draft ? "true" : "",
   };
 }
@@ -1216,6 +1218,7 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
     "proof_plan",
     "implementation_notes",
     "implementation_mode",
+    "ship_mode",
   ] as const;
 
   for (const field of stringFields) {

@@ -200,6 +200,82 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function missingExecutableError(error: any) {
+  return error?.code === "ENOENT" || /\bENOENT\b/.test(String(error?.message || error || ""));
+}
+
+function pythonScriptsForBundledStage(step: WorkflowStage) {
+  if (step === "setup") return ["preflight.py", "setup.py"];
+  if (step === "recon") return ["recon.py"];
+  if (step === "author") return ["author.py"];
+  if (step === "implement") return ["implement.py"];
+  if (step === "verify") return ["verify.py"];
+  if (step === "ship") return ["ship.py"];
+  return [];
+}
+
+function runBundledPythonStage(
+  step: WorkflowStage,
+  runtimeDir: string,
+  env: NodeJS.ProcessEnv,
+): Pick<WorkflowStepResult, "ok" | "raw" | "stdout" | "stderr" | "error"> {
+  const scripts = pythonScriptsForBundledStage(step);
+  if (!scripts.length) {
+    return {
+      ok: false,
+      error: `No bundled Python fallback is defined for ${step}.`,
+    };
+  }
+
+  const pythonCommand = process.env.RIDDLE_PROOF_PYTHON_COMMAND || "python3";
+  const libDir = path.join(runtimeDir, "lib");
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const executed: string[] = [];
+
+  try {
+    for (const script of scripts) {
+      const scriptPath = path.join(libDir, script);
+      if (!existsSync(scriptPath)) {
+        return {
+          ok: false,
+          stdout: stdout.join(""),
+          stderr: stderr.join(""),
+          error: `Riddle Proof bundled Python fallback missing ${scriptPath}`,
+        };
+      }
+      executed.push(script);
+      stdout.push(execFileSync(pythonCommand, [scriptPath], {
+        encoding: "utf-8",
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }));
+    }
+  } catch (error: any) {
+    return {
+      ok: false,
+      stdout: `${stdout.join("")}${String(error?.stdout || "")}`,
+      stderr: `${stderr.join("")}${String(error?.stderr || "")}`,
+      error: error?.message || String(error),
+      raw: {
+        runner: "bundled_python_fallback",
+        scripts: executed,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    stdout: stdout.join(""),
+    stderr: stderr.join(""),
+    raw: {
+      ok: true,
+      runner: "bundled_python_fallback",
+      scripts: executed,
+    },
+  };
+}
+
 function appendRuntimeEventToState(state: any, event: Record<string, unknown>) {
   const events = Array.isArray(state.runtime_events) ? state.runtime_events : [];
   state.runtime_events = [...events, event].slice(-RUNTIME_EVENT_LIMIT);
@@ -853,6 +929,17 @@ export async function executeWorkflow(
         }),
       );
     } catch (error: any) {
+      if (!process.env.RIDDLE_PROOF_LOBSTER_SCRIPT && missingExecutableError(error)) {
+        const fallback = runBundledPythonStage(step, config.riddleProofDir, env);
+        return finishRuntimeStep(config.statePath, action, {
+          ok: fallback.ok,
+          step,
+          raw: fallback.raw,
+          stdout: fallback.stdout,
+          stderr: fallback.stderr,
+          error: fallback.error,
+        }, timer);
+      }
       return finishRuntimeStep(config.statePath, action, {
         ok: false,
         step,

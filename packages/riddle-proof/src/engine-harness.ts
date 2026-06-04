@@ -429,6 +429,7 @@ function initialRunParams(
     auth_headers_json: request.auth_headers_json,
     color_scheme: request.color_scheme,
     wait_for_selector: request.wait_for_selector,
+    ship_mode: request.ship_mode,
     leave_draft: request.leave_draft || undefined,
     discord_channel: request.integration_context?.channel_id,
     discord_thread_id: request.integration_context?.thread_id,
@@ -444,6 +445,23 @@ function effectiveShipMode(
   config?: RiddleProofEngineHarnessConfig,
 ): RiddleProofShipMode {
   return request.ship_mode || config?.defaultShipMode || "ship";
+}
+
+function continuationRequestsShip(next: RiddleProofWorkflowParams | null | undefined) {
+  return Boolean(next && (next.advance_stage === "ship" || next.ship_after_verify === true));
+}
+
+function shipHeldTerminal(
+  state: RiddleProofRunState,
+  result: RiddleProofEngineResult,
+): RiddleProofRunResult {
+  return terminalResult(
+    state,
+    "ready_to_ship",
+    result,
+    result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
+    { ship_held: true },
+  );
 }
 
 function checkpointContinueStage(result: RiddleProofEngineResult) {
@@ -921,7 +939,7 @@ function appendCheckpointResponse(
 function checkpointResponseContinuation(
   state: RiddleProofRunState,
   value?: RiddleProofCheckpointResponse | Record<string, unknown>,
-): { next?: RiddleProofWorkflowParams; blocker?: RiddleProofBlocker } {
+): { next?: RiddleProofWorkflowParams; terminal?: RiddleProofRunResult; blocker?: RiddleProofBlocker } {
   if (!value) return {};
   const packet = state.checkpoint_packet;
   const response = normalizeCheckpointResponse(value);
@@ -1101,6 +1119,28 @@ function checkpointResponseContinuation(
     const assessment = proofAssessmentPayloadFromCheckpointResponse(response);
     if (assessment) {
       appendCheckpointResponse(state, response);
+      if (state.request.ship_mode !== "ship" && proofAssessmentRequestsShip(assessment)) {
+        const result = {
+          ok: true,
+          state_path: state.request.engine_state_path || packet.state_path || "",
+          checkpoint: packet.checkpoint,
+          stage: packet.stage,
+          summary: response.summary,
+          checkpointContract: checkpointContractFromPacket(packet) || null,
+        } as RiddleProofEngineResult;
+        return {
+          terminal: terminalResult(
+            state,
+            "ready_to_ship",
+            result,
+            response.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
+            {
+              ship_held: true,
+              proof_assessment: assessment,
+            },
+          ),
+        };
+      }
       return { next: { ...base, proof_assessment_json: jsonParam(assessment) } };
     }
     if (response.decision === "blocked" || response.decision === "human_review") {
@@ -1388,6 +1428,9 @@ async function routeCheckpoint(
     }
     const next = stageCheckpointContinuation(result);
     if (next) {
+      if (continuationRequestsShip(next) && effectiveShipMode(request, input.config) !== "ship") {
+        return { terminal: shipHeldTerminal(state, result) };
+      }
       recordEvent(state, {
         kind: "checkpoint.recovery_continuation",
         checkpoint,
@@ -1422,6 +1465,9 @@ async function routeCheckpoint(
   }
 
   if (checkpoint === "ship_review") {
+    if (effectiveShipMode(request, input.config) !== "ship") {
+      return { terminal: shipHeldTerminal(state, result) };
+    }
     return {
       terminal: terminalResult(state, "shipped", result, result.summary || "Riddle Proof shipped."),
     };
@@ -1463,9 +1509,7 @@ async function routeCheckpoint(
       return { next: { ...baseContinuation(result), ship_after_verify: true } };
     }
     return {
-      terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.", {
-        ship_held: true,
-      }),
+      terminal: shipHeldTerminal(state, result),
     };
   }
 
@@ -1792,11 +1836,7 @@ async function routeCheckpoint(
     const next = recommendedContinuation(result) || defaultAwaitingStageContinuation(result);
     if (next) {
       if (String(next.advance_stage || "") === "ship" && effectiveShipMode(request, input.config) !== "ship") {
-        return {
-          terminal: terminalResult(state, "ready_to_ship", result, result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.", {
-            ship_held: true,
-          }),
-        };
+        return { terminal: shipHeldTerminal(state, result) };
       }
       return { next };
     }
@@ -1804,7 +1844,12 @@ async function routeCheckpoint(
 
   if (checkpoint.endsWith("_review")) {
     const next = recommendedContinuation(result);
-    if (next) return { next };
+    if (next) {
+      if (continuationRequestsShip(next) && effectiveShipMode(request, input.config) !== "ship") {
+        return { terminal: shipHeldTerminal(state, result) };
+      }
+      return { next };
+    }
   }
 
   return {
@@ -1837,6 +1882,9 @@ export async function runRiddleProofEngineHarness(
   const checkpointContinuation = checkpointResponseContinuation(state, input.checkpoint_response);
   if (checkpointContinuation.blocker) {
     return blockerResult(state, null, checkpointContinuation.blocker);
+  }
+  if (checkpointContinuation.terminal) {
+    return checkpointContinuation.terminal;
   }
   const request = state.request;
   const agent = input.agent || createDisabledRiddleProofAgentAdapter();

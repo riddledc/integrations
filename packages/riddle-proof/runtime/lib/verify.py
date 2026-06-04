@@ -310,12 +310,13 @@ def payload_has_capture_artifacts(payload):
 def capture_payload_error(payload):
     if not isinstance(payload, dict):
         return ''
-    if payload.get('ok') is False and not payload_has_capture_artifacts(payload):
-        for key in ('error', 'stderr', 'stdout'):
+    if payload.get('ok') is False:
+        for key in ('error', 'script_error', 'stderr', 'stdout'):
             value = payload.get(key)
             if value:
                 return str(value).strip()
-        return 'capture tool returned ok=false without artifacts'
+        if not payload_has_capture_artifacts(payload):
+            return 'capture tool returned ok=false without artifacts'
     return ''
 
 
