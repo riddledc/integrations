@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.34
+
+### Patch Changes
+
+- 4fb9704: Prefer GitHub user-attachment uploads for PR proof screenshots and avoid embedding private artifact URLs that render as broken images.
+
 ## 0.8.33
 
 ### Patch Changes
