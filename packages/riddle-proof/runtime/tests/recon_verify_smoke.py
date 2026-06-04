@@ -3709,11 +3709,15 @@ def run_verify_capture_retry_surfaces_script_timeout():
 
         assert after_verify['verify_status'] == 'capture_incomplete'
         capture_quality = after_verify['verify_decision_request']['capture_quality']
-        assert capture_quality['recommended_stage'] in ('author', 'verify')
+        assert capture_quality['recommended_stage'] is None
+        assert capture_quality['continue_with_stage'] is None
+        assert capture_quality['blocking'] is True
+        assert capture_quality['terminal_blocker'] is True
         capture_quality_text = json.dumps(capture_quality, sort_keys=True)
         assert 'locator.click: Timeout 30000ms exceeded' in capture_quality_text
         return {
             'ok': True,
+            'decision': capture_quality['decision'],
             'summary': capture_quality['summary'],
         }
     finally:

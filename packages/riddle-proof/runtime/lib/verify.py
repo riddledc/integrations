@@ -3222,7 +3222,7 @@ def evaluate_capture_quality(payload, expected_path, verification_mode='proof'):
     }
 
 
-def build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker='', route_expectation=None):
+def build_capture_retry_decision(after_observation, required_baseline_present, proof_evidence_blocker='', route_expectation=None, verification_mode=''):
     reasons = []
     if not required_baseline_present:
         reasons.append('Recon baseline is missing, so verify should return to recon instead of guessing a new reference context.')
@@ -3361,6 +3361,17 @@ def build_capture_retry_decision(after_observation, required_baseline_present, p
         elif error_messages:
             reasons.append('Capture script error: ' + error_messages[0][:500])
             summary = 'Verify capture script failed: ' + error_messages[0][:300]
+            reasons.append('The capture script produced a concrete browser/runtime failure, so this run should block with that exact evidence instead of re-authoring in a loop.')
+            return {
+                'decision': 'failed_interaction_capture' if normalized_verification_mode(verification_mode) in INTERACTION_MODES else 'failed_capture',
+                'summary': summary,
+                'recommended_stage': None,
+                'continue_with_stage': None,
+                'blocking': True,
+                'terminal_blocker': True,
+                'reasons': reasons,
+                'mismatch': None,
+            }
         else:
             summary = 'Verify needs another internal capture iteration before the evidence can be judged.'
         reasons.append('The capture plan itself needs revision, so author should tighten the proof script or framing inputs.')
@@ -4248,6 +4259,7 @@ else:
         required_baseline_present,
         proof_evidence_blocker or structured_interaction_capture_failure_summary,
         s.get('route_expectation') or {},
+        s.get('verification_mode') or '',
     )
     if visual_delta_recovery:
         observation_reason = str(after_observation.get('reason') or '')

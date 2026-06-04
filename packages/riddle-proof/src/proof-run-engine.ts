@@ -1684,6 +1684,91 @@ export async function executeWorkflow(
         verifyRes = runOne("verify");
         executed.push(executedStep(verifyRes));
         if (!verifyRes.ok || verifyRes.haltedForApproval) {
+          const failedVerifyState = readState(config.statePath);
+          const failedVerifyStatus = failedVerifyState?.verify_status || "";
+          if (
+            !verifyRes.haltedForApproval &&
+            (failedVerifyStatus === "capture_incomplete" || failedVerifyStatus === "capture_error")
+          ) {
+            const verifyDecisionRequest = failedVerifyState?.verify_decision_request || null;
+            const captureQuality = verifyDecisionRequest?.capture_quality || {};
+            const conclusiveVerifyBlockers = proofAssessmentHardBlockersForState({
+              ...failedVerifyState,
+              structured_interaction_capture_failure_summary:
+                stringValue(verifyDecisionRequest?.structured_interaction_capture_failure_summary)
+                || stringValue(failedVerifyState?.structured_interaction_capture_failure_summary)
+                || undefined,
+              structured_interaction_failure_summary:
+                stringValue(verifyDecisionRequest?.structured_interaction_failure_summary)
+                || stringValue(failedVerifyState?.structured_interaction_failure_summary)
+                || undefined,
+            });
+            const structuredInteractionFailureSummary =
+              stringValue(verifyDecisionRequest?.structured_interaction_capture_failure_summary)
+              || stringValue(verifyDecisionRequest?.structured_interaction_failure_summary)
+              || stringValue(failedVerifyState?.structured_interaction_capture_failure_summary)
+              || stringValue(failedVerifyState?.structured_interaction_failure_summary)
+              || stringValue(conclusiveVerifyBlockers[0]);
+            const captureTerminalBlocker =
+              failedVerifyStatus === "capture_error"
+              || conclusiveVerifyBlockers.length > 0
+              || Boolean(structuredInteractionFailureSummary)
+              || captureQuality?.terminal_blocker === true
+              || captureQuality?.blocking === true;
+            const terminalCaptureQualitySummary =
+              captureQuality?.terminal_blocker === true || captureQuality?.blocking === true
+                ? stringValue(captureQuality?.summary)
+                : "";
+            const checkpointName = captureTerminalBlocker ? "verify_capture_blocked" : "verify_capture_retry";
+            const summary =
+              terminalCaptureQualitySummary
+              || structuredInteractionFailureSummary
+              || stringValue(verifyDecisionRequest?.summary)
+              || stringValue(failedVerifyState?.verify_summary)
+              || stringValue(failedVerifyState?.proof_summary)
+              || stringValue(verifyRes.error)
+              || "Verify capture failed before the evidence could be judged.";
+            const failedVerifyDetails = {
+              executed,
+              verifyStatus: failedVerifyStatus,
+              verifySummary: failedVerifyState?.verify_summary || failedVerifyState?.proof_summary || null,
+              afterCdn: failedVerifyState?.after_cdn || null,
+              mergeRecommendation: failedVerifyState?.merge_recommendation || null,
+              verifyDecisionRequest,
+              conclusiveVerifyBlockers,
+              verifyError: verifyRes.error || null,
+              verifyStdout: verifyRes.stdout || "",
+              verifyStderr: verifyRes.stderr || "",
+            };
+            recordAttempt("verify", "checkpoint", summary, {
+              autoApproved: verifyRes.autoApproved || false,
+              checkpoint: checkpointName,
+              error: verifyRes.error || null,
+              details: failedVerifyDetails,
+            });
+            return checkpoint(
+              "verify",
+              checkpointName,
+              summary,
+              {
+                ok: true,
+                nextActions: captureTerminalBlocker
+                  ? ["inspect_after_capture", "report_specific_browser_evidence_blocker", "start_a_new_run_after_the_product_or_script_is_fixed"]
+                  : ["inspect_after_capture", "continue_internal_loop_with_checkpoint", "return_to_recon_if_baseline_is_wrong"],
+                advanceOptions: needsImplementation ? ["author", "implement", "ship", "verify", "recon"] : ["author", "verify", "recon"],
+                recommendedAdvanceStage: captureTerminalBlocker ? null : (verifyDecisionRequest?.recommended_stage || verifyDecisionRequest?.continue_with_stage || "author"),
+                continueWithStage: captureTerminalBlocker ? null : (verifyDecisionRequest?.continue_with_stage || verifyDecisionRequest?.recommended_stage || "author"),
+                blocking: captureTerminalBlocker,
+                details: failedVerifyDetails,
+                verifyStatus: failedVerifyStatus,
+                verifySummary: failedVerifyDetails.verifySummary,
+                afterCdn: failedVerifyState?.after_cdn || null,
+                mergeRecommendation: failedVerifyState?.merge_recommendation || null,
+                verifyDecisionRequest,
+                executed,
+              },
+            );
+          }
           return failedRun("verify", verifyRes.haltedForApproval ? "verify halted for approval" : "verify failed", verifyRes, {
             checkpoint: "verify_failed",
             details: { executed },
@@ -1756,9 +1841,14 @@ export async function executeWorkflow(
           });
           state = readState(config.statePath);
         }
+        const terminalCaptureQualitySummary =
+          captureQuality?.terminal_blocker === true || captureQuality?.blocking === true
+            ? stringValue(captureQuality?.summary)
+            : "";
         const checkpointName = captureTerminalBlocker ? "verify_capture_blocked" : "verify_capture_retry";
         const summary =
-          structuredInteractionFailureSummary
+          terminalCaptureQualitySummary
+          || structuredInteractionFailureSummary
           || stringValue(proofAssessment.summary)
           || "Verify ran, but the proof packet still needs internal capture-plan work before it should ship.";
         recordAttempt("verify", "checkpoint", summary, {
