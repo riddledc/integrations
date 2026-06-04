@@ -1,7 +1,8 @@
 """Ship: commit, create PR, post proof artifacts, wait for CI, mark ready, cleanup."""
 
-import json, subprocess as sp, time, os, sys, re
+import json, subprocess as sp, time, os, sys, re, shutil, tempfile, hashlib
 import urllib.error
+import urllib.parse
 import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from util import load_state, save_state, invoke, git
@@ -9,6 +10,7 @@ from util import load_state, save_state, invoke, git
 
 DISCORD_API = 'https://discord.com/api/v10'
 SHIP_NOISE_PATHS = ('.codex', '.oc-smoke')
+MAX_GITHUB_PROOF_ARTIFACT_BYTES = 10 * 1024 * 1024
 VISUAL_FIRST_MODES = {
     'visual', 'render', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
@@ -185,6 +187,306 @@ def truthy(value):
     return str(value or '').strip().lower() in ('1', 'true', 'yes', 'y', 'on')
 
 
+def safe_slug(value, fallback='artifact'):
+    slug = re.sub(r'[^a-zA-Z0-9._-]+', '-', str(value or '').strip()).strip('-._')
+    return slug[:80] or fallback
+
+
+def is_http_url(value):
+    text = str(value or '').strip()
+    return text.startswith('https://') or text.startswith('http://')
+
+
+def is_file_url(value):
+    return str(value or '').strip().startswith('file://')
+
+
+def path_from_file_url(url):
+    parsed = urllib.parse.urlparse(str(url or '').strip())
+    if parsed.scheme != 'file':
+        return ''
+    return urllib.request.url2pathname(parsed.path)
+
+
+def local_path_from_artifact(artifact):
+    if not isinstance(artifact, dict):
+        return ''
+    path_value = str(artifact.get('path') or '').strip()
+    if path_value and os.path.exists(path_value):
+        return path_value
+    url = str(artifact.get('url') or '').strip()
+    if is_file_url(url):
+        decoded = path_from_file_url(url)
+        if decoded and os.path.exists(decoded):
+            return decoded
+    return ''
+
+
+def artifact_kind(name, path_value='', url=''):
+    target = (str(name or '') + ' ' + str(path_value or '') + ' ' + str(url or '')).lower()
+    if re.search(r'\.(png|jpe?g|gif|webp|avif|svg)(\?|$|\s)', target):
+        return 'image'
+    if re.search(r'\.(json|har|txt|md|html|log)(\?|$|\s)', target):
+        return 'data'
+    return 'artifact'
+
+
+def artifact_name(name, path_value='', fallback='artifact'):
+    source = str(name or '').strip() or os.path.basename(str(path_value or '').strip()) or fallback
+    source = source.split('?', 1)[0].split('#', 1)[0]
+    return safe_slug(source, fallback)
+
+
+def add_artifact_source(sources, seen, role, name='', url='', path_value='', source='state'):
+    local_path = path_value if path_value and os.path.exists(path_value) else ''
+    if not local_path and is_file_url(url):
+        local_path = path_from_file_url(url)
+    key = local_path or str(url or '').strip()
+    if not key or key in seen:
+        return
+    seen.add(key)
+    kind = artifact_kind(name, local_path, url)
+    sources.append({
+        'role': role,
+        'name': artifact_name(name, local_path, role + '-artifact'),
+        'url': str(url or '').strip(),
+        'path': local_path,
+        'kind': kind,
+        'source': source,
+    })
+
+
+def collect_proof_artifact_sources(state):
+    sources = []
+    seen = set()
+    for role, key in (('before', 'before_cdn'), ('prod', 'prod_cdn'), ('after', 'after_cdn')):
+        value = str(state.get(key) or '').strip()
+        if value:
+            add_artifact_source(sources, seen, role, os.path.basename(path_from_file_url(value)) if is_file_url(value) else role + '.png', value, '', key)
+
+    verify_results = state.get('verify_results') or {}
+    after = verify_results.get('after') if isinstance(verify_results, dict) else {}
+    raw = after.get('raw') if isinstance(after, dict) else {}
+    if isinstance(raw, dict):
+        for artifact in raw.get('outputs') or []:
+            if isinstance(artifact, dict):
+                add_artifact_source(sources, seen, 'after', artifact.get('name', ''), artifact.get('url', ''), local_path_from_artifact(artifact), 'verify_results.after.raw.outputs')
+        for artifact in raw.get('screenshots') or []:
+            if isinstance(artifact, dict):
+                add_artifact_source(sources, seen, 'after', artifact.get('name', ''), artifact.get('url', ''), local_path_from_artifact(artifact), 'verify_results.after.raw.screenshots')
+
+    bundle = state.get('evidence_bundle') or {}
+    bundle_after = bundle.get('after') if isinstance(bundle, dict) else {}
+    supporting = bundle_after.get('supporting_artifacts') if isinstance(bundle_after, dict) else {}
+    if isinstance(supporting, dict):
+        for field, kind_role in (('image_outputs', 'after'), ('data_outputs', 'after'), ('other_outputs', 'after')):
+            for artifact in supporting.get(field) or []:
+                if isinstance(artifact, dict):
+                    add_artifact_source(sources, seen, kind_role, artifact.get('name', ''), artifact.get('url', ''), local_path_from_artifact(artifact), 'evidence_bundle.after.supporting_artifacts.' + field)
+
+    request = state.get('proof_assessment_request') or {}
+    request_supporting = request.get('supporting_artifacts') if isinstance(request, dict) else {}
+    if isinstance(request_supporting, dict):
+        for field, kind_role in (('image_outputs', 'after'), ('data_outputs', 'after'), ('other_outputs', 'after')):
+            for artifact in request_supporting.get(field) or []:
+                if isinstance(artifact, dict):
+                    add_artifact_source(sources, seen, kind_role, artifact.get('name', ''), artifact.get('url', ''), local_path_from_artifact(artifact), 'proof_assessment_request.supporting_artifacts.' + field)
+
+    return sources
+
+
+def local_proof_artifact_sources(state):
+    return [artifact for artifact in collect_proof_artifact_sources(state) if artifact.get('path') and os.path.exists(artifact.get('path'))]
+
+
+def local_artifact_sources_fingerprint(local_sources):
+    digest = hashlib.sha256()
+    for artifact in sorted(local_sources, key=lambda item: item.get('path') or ''):
+        path_value = artifact.get('path') or ''
+        if not path_value or not os.path.exists(path_value):
+            continue
+        digest.update(path_value.encode('utf-8'))
+        digest.update(str(artifact.get('name') or '').encode('utf-8'))
+        digest.update(str(os.path.getsize(path_value)).encode('utf-8'))
+        with open(path_value, 'rb') as f:
+            while True:
+                chunk = f.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
+def public_proof_artifacts(state):
+    published = state.get('proof_artifact_publication') or {}
+    artifacts = published.get('artifacts') if isinstance(published, dict) else []
+    public = [artifact for artifact in artifacts or [] if isinstance(artifact, dict) and (artifact.get('raw_url') or artifact.get('html_url'))]
+    for artifact in collect_proof_artifact_sources(state):
+        url = str(artifact.get('url') or '').strip()
+        if is_http_url(url):
+            public.append({
+                **artifact,
+                'raw_url': url,
+                'html_url': url,
+                'published': False,
+            })
+    deduped = []
+    seen = set()
+    for artifact in public:
+        key = artifact.get('raw_url') or artifact.get('html_url') or artifact.get('url')
+        if key and key not in seen:
+            seen.add(key)
+            deduped.append(artifact)
+    return deduped
+
+
+def first_public_artifact_url(state, role, kind=None):
+    for artifact in public_proof_artifacts(state):
+        if artifact.get('role') != role:
+            continue
+        if kind and artifact.get('kind') != kind:
+            continue
+        return artifact.get('raw_url') or artifact.get('html_url') or artifact.get('url') or ''
+    return ''
+
+
+def resolve_github_repo_name(repo_dir):
+    result = sp.run(['gh', 'repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'],
+                    cwd=repo_dir, capture_output=True, text=True, timeout=30)
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    remote = git_stdout(['config', '--get', 'remote.origin.url'], repo_dir)
+    match = re.search(r'github\.com[:/]([^/]+)/([^/.]+)(?:\.git)?$', remote)
+    if match:
+        return match.group(1) + '/' + match.group(2)
+    return ''
+
+
+def write_artifact_readme(path_value, state, artifacts):
+    lines = [
+        '# Riddle Proof Artifacts',
+        '',
+        'Run id: `' + str(state.get('run_id') or '') + '`',
+        'PR: ' + str(state.get('pr_url') or ''),
+        'Goal: ' + str(state.get('change_request') or ''),
+        'Verification mode: ' + str(state.get('verification_mode') or 'proof'),
+        '',
+        '## Artifacts',
+        '',
+    ]
+    for artifact in artifacts:
+        rel = artifact.get('filename') or artifact.get('published_path') or ''
+        label = artifact.get('role', 'artifact') + ' / ' + artifact.get('name', rel)
+        if artifact.get('kind') == 'image':
+            lines.append('- ' + label + ': `'+ rel + '`')
+            lines.append('')
+            lines.append('  ![' + label + '](' + rel + ')')
+            lines.append('')
+        else:
+            lines.append('- [' + label + '](' + rel + ')')
+    with open(path_value, 'w') as f:
+        f.write('\n'.join(lines).rstrip() + '\n')
+
+
+def publish_local_proof_artifacts_to_github(state, repo_dir, pr_num):
+    local_sources = local_proof_artifact_sources(state)
+    if not local_sources:
+        state['proof_artifact_publication'] = {'ok': True, 'skipped': True, 'reason': 'no local file artifacts'}
+        save_state(state)
+        return state['proof_artifact_publication']
+
+    source_fingerprint = local_artifact_sources_fingerprint(local_sources)
+    existing = state.get('proof_artifact_publication') or {}
+    if existing.get('ok') and existing.get('artifacts') and existing.get('source_fingerprint') == source_fingerprint:
+        return existing
+
+    repo_name = resolve_github_repo_name(repo_dir)
+    if not repo_name:
+        raise SystemExit('Could not resolve GitHub repository name for proof artifact publication.')
+
+    run_id = safe_slug(state.get('run_id') or str(int(time.time())), 'run')
+    pr_slug = safe_slug('pr-' + str(pr_num or 'unknown'), 'pr')
+    artifact_branch = safe_slug('riddle-proof-artifacts-' + pr_slug + '-' + run_id, 'riddle-proof-artifacts')
+    artifact_dir_name = 'riddle-proof/' + run_id
+    tmp = tempfile.mkdtemp(prefix='riddle-proof-gh-artifacts-')
+    published = []
+    try:
+        git_checked(['init'], tmp)
+        origin = git_stdout(['config', '--get', 'remote.origin.url'], repo_dir)
+        git_checked(['remote', 'add', 'origin', origin], tmp)
+        git_checked(['checkout', '-b', artifact_branch], tmp)
+        git_checked(['config', 'user.name', 'Riddle Proof'], tmp)
+        git_checked(['config', 'user.email', 'riddle-proof@riddledc.com'], tmp)
+        target_dir = os.path.join(tmp, artifact_dir_name)
+        os.makedirs(target_dir, exist_ok=True)
+        used_names = set()
+        for artifact in local_sources:
+            source_path = artifact.get('path')
+            try:
+                size = os.path.getsize(source_path)
+            except Exception:
+                continue
+            if size > MAX_GITHUB_PROOF_ARTIFACT_BYTES:
+                published.append({**artifact, 'published': False, 'skipped': True, 'reason': 'artifact exceeds size limit'})
+                continue
+            base_name = artifact_name(artifact.get('name'), source_path, artifact.get('role', 'artifact') + '-artifact')
+            filename = base_name
+            stem, ext = os.path.splitext(base_name)
+            counter = 2
+            while filename in used_names:
+                filename = stem + '-' + str(counter) + ext
+                counter += 1
+            used_names.add(filename)
+            dest = os.path.join(target_dir, filename)
+            shutil.copyfile(source_path, dest)
+            published_path = artifact_dir_name + '/' + filename
+            digest = hashlib.sha256(open(source_path, 'rb').read()).hexdigest()
+            published.append({
+                **artifact,
+                'filename': filename,
+                'published_path': published_path,
+                'size_bytes': size,
+                'sha256': digest,
+                'published': True,
+            })
+        write_artifact_readme(os.path.join(target_dir, 'README.md'), state, [a for a in published if a.get('published')])
+        with open(os.path.join(target_dir, 'proof-artifacts.json'), 'w') as f:
+            json.dump({
+                'version': 'riddle-proof.github-artifacts.v1',
+                'run_id': state.get('run_id', ''),
+                'pr_url': state.get('pr_url', ''),
+                'artifacts': published,
+            }, f, indent=2)
+        git_checked(['add', '.'], tmp)
+        git_checked(['commit', '-m', 'Publish Riddle Proof artifacts'], tmp)
+        commit = git_stdout(['rev-parse', 'HEAD'], tmp)
+        push = sp.run(['git', 'push', 'origin', 'HEAD:refs/heads/' + artifact_branch, '--force'],
+                      cwd=tmp, capture_output=True, text=True, timeout=120)
+        if push.returncode != 0:
+            raise SystemExit('Failed to push proof artifact branch: ' + push.stderr[:300])
+        for artifact in published:
+            if artifact.get('published'):
+                published_path = artifact.get('published_path')
+                artifact['raw_url'] = 'https://raw.githubusercontent.com/' + repo_name + '/' + commit + '/' + published_path
+                artifact['html_url'] = 'https://github.com/' + repo_name + '/blob/' + commit + '/' + published_path
+        publication = {
+            'ok': True,
+            'branch': artifact_branch,
+            'commit': commit,
+            'repo': repo_name,
+            'html_url': 'https://github.com/' + repo_name + '/tree/' + commit + '/' + artifact_dir_name,
+            'manifest_url': 'https://github.com/' + repo_name + '/blob/' + commit + '/' + artifact_dir_name + '/proof-artifacts.json',
+            'readme_url': 'https://github.com/' + repo_name + '/blob/' + commit + '/' + artifact_dir_name + '/README.md',
+            'source_fingerprint': source_fingerprint,
+            'artifacts': published,
+        }
+        state['proof_artifact_publication'] = publication
+        save_state(state)
+        return publication
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def is_temp_proof_branch(branch):
     return str(branch or '').strip().startswith('riddle-proof/')
 
@@ -271,6 +573,10 @@ def build_ship_report(state, marked_ready=None):
     branch = state.get('target_branch') or state.get('branch') or ''
     if marked_ready is None:
         marked_ready = state.get('marked_ready')
+    before_artifact_url = first_public_artifact_url(state, 'before', 'image') or state.get('before_cdn', '')
+    prod_artifact_url = first_public_artifact_url(state, 'prod', 'image') or state.get('prod_cdn', '')
+    after_artifact_url = first_public_artifact_url(state, 'after', 'image') or state.get('after_cdn', '')
+    artifact_publication = state.get('proof_artifact_publication') or {}
     return {
         'pr_url': state.get('pr_url', ''),
         'pr_branch': branch,
@@ -282,9 +588,12 @@ def build_ship_report(state, marked_ready=None):
         'ci_status': state.get('ci_status', ''),
         'proof_comment_url': state.get('proof_comment_url', ''),
         'proof_assessment_comment_url': state.get('proof_assessment_comment_url', ''),
-        'before_artifact_url': state.get('before_cdn', ''),
-        'prod_artifact_url': state.get('prod_cdn', ''),
-        'after_artifact_url': state.get('after_cdn', ''),
+        'before_artifact_url': before_artifact_url,
+        'prod_artifact_url': prod_artifact_url,
+        'after_artifact_url': after_artifact_url,
+        'proof_artifacts_url': artifact_publication.get('html_url', '') if isinstance(artifact_publication, dict) else '',
+        'proof_artifacts_manifest_url': artifact_publication.get('manifest_url', '') if isinstance(artifact_publication, dict) else '',
+        'proof_artifact_publication': artifact_publication if isinstance(artifact_publication, dict) else {},
     }
 
 
@@ -515,12 +824,15 @@ def post_discord_ready_message(state, marked_ready):
     else:
         ci_line = 'CI was not confirmed green yet; review the PR checks before merging.'
     proof_bits = []
-    if state.get('before_cdn'):
-        proof_bits.append('before: ' + state['before_cdn'])
-    if state.get('prod_cdn'):
-        proof_bits.append('prod: ' + state['prod_cdn'])
-    if state.get('after_cdn'):
-        proof_bits.append('after: ' + state['after_cdn'])
+    before_url = first_public_artifact_url(state, 'before', 'image') or state.get('before_cdn')
+    prod_url = first_public_artifact_url(state, 'prod', 'image') or state.get('prod_cdn')
+    after_url = first_public_artifact_url(state, 'after', 'image') or state.get('after_cdn')
+    if before_url:
+        proof_bits.append('before: ' + before_url)
+    if prod_url:
+        proof_bits.append('prod: ' + prod_url)
+    if after_url:
+        proof_bits.append('after: ' + after_url)
     elif state_has_after_evidence(state):
         proof_bits.append('after: structured evidence bundle')
 
@@ -671,6 +983,8 @@ if s.get('finalized') and s.get('pr_url') and existing_after_dir and not os.path
         'proof_comment_url': report.get('proof_comment_url', ''),
         'before_artifact_url': report.get('before_artifact_url', ''),
         'after_artifact_url': report.get('after_artifact_url', ''),
+        'proof_artifacts_url': report.get('proof_artifacts_url', ''),
+        'proof_artifacts_manifest_url': report.get('proof_artifacts_manifest_url', ''),
         'finalized_retry': True,
         'proof_assessment_comment_posted': bool(s.get('proof_assessment_comment_posted')),
         'discord_notification': s.get('discord_notification'),
@@ -755,6 +1069,12 @@ pr_num = s.get('pr_number', '')
 if not pr_num:
     raise SystemExit('No PR created. Check gh auth.')
 
+publication = publish_local_proof_artifacts_to_github(s, repo_dir, pr_num)
+if publication.get('ok') and not publication.get('skipped'):
+    print('Proof artifacts published: ' + publication.get('html_url', ''))
+elif publication.get('skipped'):
+    print('Proof artifact publication skipped: ' + publication.get('reason', 'unknown'))
+
 # Post proof comment on PR
 body = '## Riddle Proof — Proof of Fix\n\n'
 body += '**Goal:** ' + s.get('change_request', '') + '\n\n'
@@ -762,14 +1082,39 @@ if s.get('success_criteria'):
     body += '**Success criteria:** ' + s['success_criteria'] + '\n\n'
 body += '**Verification mode:** ' + s.get('verification_mode', 'proof') + '\n\n'
 body += '**Merge recommendation:** ' + effective_merge_recommendation(s) + '\n\n'
-if before_cdn:
-    body += '### Before\n![' + 'before' + '](' + before_cdn + ')\n\n'
-if prod_cdn:
-    body += '### Prod\n![' + 'prod' + '](' + prod_cdn + ')\n\n'
-if after_cdn:
-    body += '### After\n![' + 'after' + '](' + after_cdn + ')\n\n'
+
+public_artifacts = public_proof_artifacts(s)
+if publication.get('ok') and not publication.get('skipped'):
+    body += '**Proof artifacts:** '
+    body += '[bundle](' + publication.get('html_url', '') + ')'
+    if publication.get('manifest_url'):
+        body += ' | [manifest](' + publication.get('manifest_url', '') + ')'
+    body += '\n\n'
+
+before_image = first_public_artifact_url(s, 'before', 'image')
+prod_image = first_public_artifact_url(s, 'prod', 'image')
+after_image = first_public_artifact_url(s, 'after', 'image')
+if before_image:
+    body += '### Before\n![before](' + before_image + ')\n\n'
+if prod_image:
+    body += '### Prod\n![prod](' + prod_image + ')\n\n'
+if after_image:
+    body += '### After\n![after](' + after_image + ')\n\n'
 else:
     body += '### After evidence\nNo after screenshot was captured for this verification mode; structured evidence is summarized below.\n\n'
+
+data_artifacts = [
+    artifact for artifact in public_artifacts
+    if artifact.get('kind') != 'image' and (artifact.get('html_url') or artifact.get('raw_url'))
+]
+if data_artifacts:
+    body += '### Structured artifacts\n'
+    for artifact in data_artifacts[:12]:
+        label = artifact.get('name') or artifact.get('filename') or artifact.get('kind') or 'artifact'
+        url = artifact.get('html_url') or artifact.get('raw_url')
+        body += '- [' + str(label) + '](' + str(url) + ')\n'
+    body += '\n'
+
 bundle_text = evidence_bundle_text(s)
 if bundle_text:
     body += '### Evidence bundle\n```\n' + bundle_text + '\n```\n\n'
@@ -904,5 +1249,7 @@ print(json.dumps({
     'before_artifact_url': report.get('before_artifact_url', ''),
     'prod_artifact_url': report.get('prod_artifact_url', ''),
     'after_artifact_url': report.get('after_artifact_url', ''),
+    'proof_artifacts_url': report.get('proof_artifacts_url', ''),
+    'proof_artifacts_manifest_url': report.get('proof_artifacts_manifest_url', ''),
     'ship_report': report,
 }))

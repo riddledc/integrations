@@ -12,7 +12,17 @@ steps:
       import json, os
       state_file = os.environ.get('RIDDLE_PROOF_STATE_FILE', '/tmp/riddle-proof-state.json')
       s = json.load(open(state_file))
-      if not s.get('after_cdn'):
+      after = ((s.get('evidence_bundle') or {}).get('after') or {})
+      observation = after.get('observation') or {}
+      supporting = after.get('supporting_artifacts') or {}
+      has_structured_after = bool(
+          observation.get('valid') and (
+              supporting.get('has_structured_payload') or
+              supporting.get('proof_evidence_present') or
+              observation.get('telemetry_ready')
+          )
+      )
+      if not s.get('after_cdn') and not has_structured_after:
           raise SystemExit('No after evidence. Run verify first.')
       print('SHIP')
       print('  Proof goal: ' + s.get('change_request', ''))
