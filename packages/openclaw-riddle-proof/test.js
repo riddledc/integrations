@@ -3053,13 +3053,16 @@ const reviewResumed = await submitOpenClawRiddleProofReview(
   },
 );
 assert.equal(reviewResumed.status, "ready_to_ship");
-assert.equal(reviewResumeEngineCalls.length, 1);
-assert.ok(reviewResumeEngineCalls[0].proof_assessment_json);
-const reviewResumedPayload = JSON.parse(reviewResumeEngineCalls[0].proof_assessment_json);
-assert.equal(reviewResumedPayload.source, "supervising_agent");
-assert.equal(reviewResumedPayload.continue_with_stage, "ship");
+assert.equal(reviewResumeEngineCalls.length, 0);
 const reviewResumedState = JSON.parse(readFileSync(reviewWrapperStatePath, "utf-8"));
+const reviewResumedEvent = reviewResumedState.events.find((event) => event.kind === "agent.checkpoint_response.submitted");
+assert.equal(reviewResumedEvent.details.response.decision, "ready_to_ship");
+assert.equal(reviewResumedEvent.details.response.continue_with_stage, "ship");
 assert.equal(reviewResumedState.finalized, true);
+const reviewResumedStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+assert.equal(reviewResumedStatus?.pr_handoff_policy?.state, "proof_complete_ship_disabled");
+assert.equal(reviewResumedStatus?.pr_handoff_policy?.merge_ready, false);
+assert.equal(reviewResumedStatus?.pr_handoff_policy?.normal_pr_allowed, false);
 
 const syncFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-sync-"));
 const syncStatePath = path.join(syncFixture, "riddle-state.json");
