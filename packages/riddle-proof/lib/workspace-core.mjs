@@ -5,6 +5,7 @@ import {
   copyFileSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   realpathSync,
@@ -18,7 +19,7 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_RIDDLE_PROOF_SCRATCH_ROOT = "/var/tmp/riddle-proof";
 
 function commandEnv() {
-  return { ...process.env, HOME: "/root" };
+  return { ...process.env, HOME: process.env.HOME || "/root" };
 }
 
 export function shellQuote(value) {
@@ -373,6 +374,53 @@ function writeDepsManifest(projectDir, fingerprint, installCmd) {
   writeFileSync(manifestPath, JSON.stringify({ fingerprint, install_cmd: installCmd }, null, 2));
 }
 
+function hasOwnProperties(value) {
+  return Boolean(value && typeof value === "object" && Object.keys(value).length);
+}
+
+function installExpectsPackages(projectDir) {
+  try {
+    const packageJsonPath = path.join(projectDir, "package.json");
+    if (existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
+      for (const key of ["dependencies", "devDependencies", "optionalDependencies", "bundleDependencies", "bundledDependencies"]) {
+        if (hasOwnProperties(packageJson[key])) return true;
+      }
+    }
+  } catch {
+    return true;
+  }
+
+  try {
+    const packageLockPath = path.join(projectDir, "package-lock.json");
+    if (existsSync(packageLockPath)) {
+      const packageLock = JSON.parse(readFileSync(packageLockPath, "utf-8"));
+      if (hasOwnProperties(packageLock.packages)) {
+        return Object.keys(packageLock.packages).some((key) => key.startsWith("node_modules/"));
+      }
+      if (hasOwnProperties(packageLock.dependencies)) return true;
+    }
+  } catch {
+    return true;
+  }
+
+  return false;
+}
+
+function nodeModulesUsable(projectDir) {
+  const projectModules = path.join(projectDir, "node_modules");
+  if (!existsSync(projectModules)) return !installExpectsPackages(projectDir);
+  try {
+    const hasInstalledEntries = readdirSync(projectModules).some((entry) => {
+      if (!entry || entry === DEPS_MANIFEST || entry === ".package-lock.json") return false;
+      return true;
+    });
+    return hasInstalledEntries || !installExpectsPackages(projectDir);
+  } catch {
+    return false;
+  }
+}
+
 function dependencyCacheRoot(projectDir) {
   if (process.env.RIDDLE_PROOF_DISABLE_DEPS_CACHE === "1") return "";
   const configured = (process.env.RIDDLE_PROOF_DEPS_CACHE_ROOT || "").trim();
@@ -438,7 +486,7 @@ function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
   const cacheDir = path.join(cacheRoot, dependencyCacheKey(fingerprint, installCmd));
   const cacheModules = path.join(cacheDir, "node_modules");
   const cacheManifest = readDepsManifest(cacheDir);
-  if (cacheManifest.fingerprint === fingerprint && cacheManifest.install_cmd === installCmd && existsSync(cacheModules)) {
+  if (cacheManifest.fingerprint === fingerprint && cacheManifest.install_cmd === installCmd && nodeModulesUsable(cacheDir)) {
     materializeNodeModules(projectDir, cacheModules);
     return `reused_cache:${cacheDir}`;
   }
@@ -449,8 +497,12 @@ function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
     removePath(tempCacheDir);
     copyDependencyInputs(projectDir, tempCacheDir);
 
-    const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, tempCacheDir, dependencyInstallTimeoutMs());
+    const installResult = runSafe(installCmd, tempCacheDir, dependencyInstallTimeoutMs());
     if (!installResult.ok) {
+      removePath(tempCacheDir);
+      return "";
+    }
+    if (!nodeModulesUsable(tempCacheDir)) {
       removePath(tempCacheDir);
       return "";
     }
@@ -467,7 +519,7 @@ function tryEnsureCachedDeps({ projectDir, fingerprint, installCmd }) {
     }
 
     const finalManifest = readDepsManifest(cacheDir);
-    if (finalManifest.fingerprint === fingerprint && finalManifest.install_cmd === installCmd && existsSync(cacheModules)) {
+    if (finalManifest.fingerprint === fingerprint && finalManifest.install_cmd === installCmd && nodeModulesUsable(cacheDir)) {
       materializeNodeModules(projectDir, cacheModules);
       return `cached:${installCmd}`;
     }
@@ -487,7 +539,7 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
   if (!fingerprint) return "no_package_json";
 
   const existingManifest = readDepsManifest(projectDir);
-  if (existingManifest.fingerprint === fingerprint && existsSync(path.join(projectDir, "node_modules"))) {
+  if (existingManifest.fingerprint === fingerprint && nodeModulesUsable(projectDir)) {
     return "already_installed";
   }
 
@@ -495,7 +547,7 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
     const sourceFingerprint = computeDependencyFingerprint(reuseFrom);
     const sourceManifest = readDepsManifest(reuseFrom);
     const sourceModules = path.join(reuseFrom, "node_modules");
-    if (sourceFingerprint === fingerprint && sourceManifest.fingerprint === fingerprint && existsSync(sourceModules)) {
+    if (sourceFingerprint === fingerprint && sourceManifest.fingerprint === fingerprint && nodeModulesUsable(reuseFrom)) {
       materializeNodeModules(projectDir, sourceModules);
       return `reused_from:${reuseFrom}`;
     }
@@ -507,9 +559,12 @@ export function ensureDeps({ projectDir, reuseFrom = "" } = {}) {
   if (cachedStatus) return cachedStatus;
 
   removePath(path.join(projectDir, "node_modules"));
-  const installResult = runSafe(`${installCmd} 2>&1 | tail -5`, projectDir, dependencyInstallTimeoutMs());
+  const installResult = runSafe(installCmd, projectDir, dependencyInstallTimeoutMs());
   if (!installResult.ok) {
     throw new Error(`dependency install failed in ${projectDir}: ${installResult.output.slice(0, 300)}`);
+  }
+  if (!nodeModulesUsable(projectDir)) {
+    throw new Error(`dependency install produced no usable node_modules in ${projectDir}`);
   }
   writeDepsManifest(projectDir, fingerprint, installCmd);
   return installCmd;

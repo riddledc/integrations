@@ -621,37 +621,65 @@ def nested_non_riddle_enabled():
 def invoke_riddle_core(tool, args, timeout=180):
     """Call Riddle's shared core package directly, without nested OpenClaw tool invocation."""
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'riddle_core_call.mjs')
+    result_file = tempfile.NamedTemporaryFile(prefix='riddle-proof-direct-', suffix='.json', delete=False).name
+    stderr_file = tempfile.NamedTemporaryFile(prefix='riddle-proof-direct-', suffix='.stderr', delete=False).name
+    env = dict(os.environ)
+    env['RIDDLE_PROOF_DIRECT_RESULT_FILE'] = result_file
+    stderr_text = ''
     try:
-        r = sp.run(
-            ['node', script, tool, json.dumps(args)],
-            capture_output=True, text=True, timeout=timeout
-        )
+        with open(stderr_file, 'w', encoding='utf-8') as stderr_handle:
+            r = sp.run(
+                ['node', script, tool, json.dumps(args)],
+                stdout=sp.DEVNULL, stderr=stderr_handle, text=True, timeout=timeout, env=env
+            )
     except sp.TimeoutExpired as e:
         print('direct_riddle(' + tool + ') TIMED OUT after ' + str(timeout) + 's')
-        if e.stdout:
-            print('  stdout: ' + e.stdout[:500])
-        if e.stderr:
-            print('  stderr: ' + e.stderr[:500])
+        try:
+            with open(stderr_file, 'r', encoding='utf-8') as f:
+                stderr_text = f.read()[:500]
+        except Exception:
+            stderr_text = ''
+        if stderr_text:
+            print('  stderr: ' + stderr_text)
         return {
             'ok': False,
             'timeout': True,
             'error': f'direct_riddle({tool}) timed out after {timeout}s',
-            'stdout': (e.stdout or '')[:500],
-            'stderr': (e.stderr or '')[:500],
+            'stderr': stderr_text[:500],
         }
+    finally:
+        if 'r' not in locals():
+            for temp_path in (result_file, stderr_file):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+    try:
+        with open(stderr_file, 'r', encoding='utf-8') as f:
+            stderr_text = f.read()
+    except Exception:
+        stderr_text = ''
 
     if r.returncode != 0:
         print('direct_riddle(' + tool + ') FAILED rc=' + str(r.returncode))
-        print('  stdout: ' + r.stdout[:500])
-        print('  stderr: ' + r.stderr[:500])
+        print('  stderr: ' + stderr_text[:500])
 
     try:
-        return json.loads(r.stdout)
-    except:
+        with open(result_file, 'r', encoding='utf-8') as f:
+            return json.loads(f.read())
+    except Exception:
         print('direct_riddle(' + tool + ') JSON parse failed')
-        print('  stdout: ' + r.stdout[:500])
-        print('  stderr: ' + r.stderr[:500])
-        return {'ok': False, 'error': r.stdout[:300], 'stderr': r.stderr[:300]}
+        print('  stderr: ' + stderr_text[:500])
+        return {'ok': False, 'error': 'direct_riddle result file missing or invalid', 'stderr': stderr_text[:300]}
+    finally:
+        try:
+            os.unlink(result_file)
+        except Exception:
+            pass
+        try:
+            os.unlink(stderr_file)
+        except Exception:
+            pass
 
 
 def invoke(tool, args, timeout=180):
@@ -771,7 +799,12 @@ def invoke_retry(tool, args, retries=3, timeout=180):
         result = invoke(tool, args, timeout=timeout)
         last_result = result
         # Check for success indicators
-        if result.get('ok') or result.get('outputs') or result.get('screenshots'):
+        if result.get('ok'):
+            return result
+        if tool == 'riddle_script' and (result.get('error') or result.get('script_error')):
+            print('invoke_retry(riddle_script) stopping early for deterministic script error')
+            return result
+        if result.get('outputs') or result.get('screenshots'):
             return result
         print(f'invoke_retry({tool}) attempt {attempt}/{retries} failed: {str(result.get("error", "no output"))[:200]}')
         if tool == 'riddle_script' and non_retryable_riddle_script_error(result):
@@ -909,6 +942,39 @@ def summarize_capture_artifact_item(item):
     if isinstance(metadata, dict):
         summary['metadata_keys'] = sorted(metadata.keys())
     return {key: value for key, value in summary.items() if value not in (None, '')}
+
+
+def capture_screenshot_url(payload, label=''):
+    if not isinstance(payload, dict):
+        return ''
+    enriched = enrich_capture_payload(payload)
+    candidates = []
+    for key in ('screenshots', 'outputs', 'artifacts'):
+        values = enriched.get(key) or []
+        if isinstance(values, list):
+            candidates.extend([item for item in values if isinstance(item, dict)])
+
+    requested = (label or '').strip()
+    expected_names = set()
+    if requested:
+        expected_names.update({
+            requested,
+            requested + '.png',
+            requested + '.jpg',
+            requested + '.jpeg',
+            requested + '.webp',
+        })
+    for item in candidates:
+        name = str(item.get('name') or '')
+        url = str(item.get('url') or '')
+        if url and expected_names and name in expected_names:
+            return url
+    for item in candidates:
+        url = str(item.get('url') or '')
+        name = str(item.get('name') or '')
+        if url and (not name or re.search(r'\.(png|jpe?g|webp|gif)$', name, re.I)):
+            return url
+    return ''
 
 
 def git(cmd, cwd):
@@ -1152,7 +1218,7 @@ def build_capture_script(url, capture_script, label, wait_for_selector='', viewp
     effective_viewport_matrix = None if script_handles_viewport_matrix else viewport_matrix
     pieces = [
         *viewport_matrix_setup_js(effective_viewport_matrix),
-        'await page.goto(' + json.dumps(url) + ');',
+        'await page.goto(' + json.dumps(url) + ', { waitUntil: "domcontentloaded", timeout: 30000 });',
     ]
     selector = (wait_for_selector or '').strip()
     if selector:
@@ -1179,33 +1245,44 @@ def capture_static_preview(state, project_dir, label, capture_script, timeout=30
             'raw': {'ok': False, 'error': 'No static build output found. Tried configured build_output, dist, build, out.'},
         }
 
-    preview = invoke_retry('riddle_preview', {'directory': build_dir, 'label': label}, retries=3, timeout=timeout)
-    if not preview.get('ok'):
-        return {
-            'ok': False,
-            'preview_id': preview.get('id', ''),
-            'preview_url': preview.get('preview_url') or preview.get('previewUrl') or '',
-            'url': '',
-            'raw': preview,
-        }
-    preview_url = preview.get('preview_url') or preview.get('previewUrl') or ''
-    preview_id = preview.get('id', '')
-    capture_url = join_url_path(preview_url, target_path or state.get('server_path', ''))
-
-    script = build_capture_script(capture_url, capture_script, label, state.get('wait_for_selector', ''), state.get('viewport_matrix'))
-    args = {'script': script, 'timeout_sec': 60}
+    static_server_command = (
+        (state.get('static_server_command') or '').strip()
+        or os.environ.get('RIDDLE_PROOF_STATIC_SERVER_COMMAND', '').strip()
+        or 'python3 -m http.server "$PORT" --bind 127.0.0.1'
+    )
+    target = target_path or state.get('server_path', '') or '/'
+    args = {
+        'directory': build_dir,
+        'command': static_server_command,
+        'port': int(state.get('server_port') or 3000),
+        'wait_until': 'domcontentloaded',
+        'readiness_timeout': 60,
+        'timeout': max(60, min(int(timeout or 300), 300)),
+        'path': target,
+        'readiness_path': '/',
+        'script': capture_script,
+    }
+    if state.get('wait_for_selector'):
+        args['wait_for_selector'] = state.get('wait_for_selector')
+    if state.get('color_scheme'):
+        args['color_scheme'] = state.get('color_scheme')
     apply_auth_context(state, args)
-    shot = invoke_retry('riddle_script', args, retries=3, timeout=max(timeout, 120))
+    shot = invoke_retry('riddle_server_preview', args, retries=2, timeout=max(timeout, 120))
     screenshots = shot.get('screenshots') or []
-    url = screenshots[0].get('url', '') if screenshots else ''
+    url = screenshots[0].get('url', '') if screenshots else capture_screenshot_url(shot, label)
     return {
         'ok': bool(url),
-        'preview_id': preview_id,
-        'preview_url': preview_url,
-        'capture_url': capture_url,
+        'preview_id': '',
+        'preview_url': shot.get('preview_url') or '',
+        'capture_url': shot.get('target_url') or target,
         'url': url,
         'raw': {
-            'preview': preview,
+            'preview': {
+                'ok': shot.get('ok'),
+                'runner': shot.get('runner'),
+                'preview_url': shot.get('preview_url') or '',
+                'target_url': shot.get('target_url') or '',
+            },
             'capture': shot,
         },
     }

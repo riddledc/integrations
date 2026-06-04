@@ -89,6 +89,138 @@ class FakeRiddle:
                 'id': f'pv-{label}',
                 'preview_url': f'https://preview.example.com/{label}/',
             }
+        if tool == 'riddle_server_preview':
+            script = args.get('script', '')
+            target_path = args.get('path') or '/'
+            path_only, _, query = str(target_path).partition('?')
+            search = '?' + query if query else ''
+            delegated_markers = [
+                'after-proof',
+                'audioNoProof',
+                'audioFailedProof',
+                'throwAfterProofEvidence',
+                'attack_ms_after',
+                'window.__riddleProofEvidence',
+                'globalThis.__riddleProofEvidence',
+                'clickedSkipHashNavigation',
+                'pricingQueryHashDropsTerminal',
+                'pricingQueryHashStructuredNegativeControl',
+                'pricingQueryHashPassesWithPageStateHashGap',
+                'clickedProofNavigation',
+                'clickedHomeNavigation',
+                'skipLinkTimeout',
+                'interactionThrownAfterFailedEvidence',
+                'interactionThrownError',
+            ]
+            if any(marker in script for marker in delegated_markers):
+                return self.invoke_retry('riddle_script', {'script': script}, retries=retries, timeout=timeout)
+            if path_only == '/wrong' or '/wrong' in script:
+                return {
+                    'ok': True,
+                    'runner': 'local-server-preview',
+                    'target_url': 'http://127.0.0.1:3000/wrong',
+                    'screenshots': [{'url': 'https://cdn.example.com/wrong.png'}],
+                    'outputs': [{'name': 'wrong.png', 'url': 'https://cdn.example.com/wrong.png'}],
+                    'console': ['RIDDLE_PROOF_STATE:{"bodyTextLength":5,"interactiveElements":0,"pathname":"/wrong","title":"Wrong"}'],
+                }
+            if '/games/drum-sequencer' in path_only:
+                page_state = {
+                    'bodyTextLength': 240,
+                    'visibleTextSample': 'Neon Step Sequencer Monkberry Moon Delight Mix Board Play All',
+                    'interactiveElements': 8,
+                    'visibleInteractiveElements': 8,
+                    'pathname': '/games/drum-sequencer',
+                    'search': search,
+                    'title': 'Neon Step Sequencer',
+                    'buttons': ['Play All', 'Shuffle'],
+                    'headings': ['Neon Step Sequencer'],
+                    'links': [],
+                    'canvasCount': 1,
+                    'largeVisibleElements': [{'tag': 'canvas', 'text': ''}],
+                }
+                return {
+                    'ok': True,
+                    'runner': 'local-server-preview',
+                    'target_url': 'http://127.0.0.1:3000' + str(target_path),
+                    'screenshots': [{'url': 'https://cdn.example.com/sequencer-before.png'}],
+                    'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/sequencer-before.png'}],
+                    'console': state_console(page_state),
+                }
+            if '/games/tic-tac-toe' in path_only:
+                return {
+                    'ok': True,
+                    'runner': 'local-server-preview',
+                    'target_url': 'http://127.0.0.1:3000' + str(target_path),
+                    'screenshots': [{'url': 'https://cdn.example.com/tictactoe-before.png'}],
+                    'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/tictactoe-before.png'}],
+                    'console': state_console({
+                        'bodyTextLength': 220,
+                        'visibleTextSample': 'LilArcade Tic Tac Toe Player X Reset Game',
+                        'interactiveElements': 5,
+                        'visibleInteractiveElements': 5,
+                        'pathname': '/games/tic-tac-toe',
+                        'title': 'TicTacToe',
+                        'buttons': ['Reset Game'],
+                        'headings': ['Tic Tac Toe'],
+                        'links': [],
+                        'canvasCount': 0,
+                        'largeVisibleElements': [{'tag': 'button', 'text': 'Reset Game'}],
+                    }),
+                }
+            if 'after-proof' in script:
+                after_url = 'https://cdn.example.com/after-artifact' if 'noVisualDelta' in script else 'https://cdn.example.com/after.png'
+                outputs = [{'name': 'after.png', 'url': after_url}]
+                if 'proof-session' in script:
+                    outputs.append({'name': 'proof-session.json', 'url': 'https://cdn.example.com/proof-session.json'})
+                payload = {
+                    'ok': True,
+                    'runner': 'local-server-preview',
+                    'target_url': 'http://127.0.0.1:3000' + str(target_path),
+                    'screenshots': [{'url': after_url}],
+                    'outputs': outputs,
+                    'console': state_console({
+                        'bodyTextLength': 180,
+                        'visibleTextSample': 'Pricing CTA Buy Now',
+                        'interactiveElements': 4,
+                        'visibleInteractiveElements': 4,
+                        'pathname': path_only or '/pricing',
+                        'search': search,
+                        'title': 'After',
+                        'buttons': ['Buy Now'],
+                        'headings': ['Pricing'],
+                        'links': [],
+                        'canvasCount': 0,
+                        'largeVisibleElements': [{'tag': 'button', 'text': 'Buy Now'}],
+                    }),
+                }
+                if 'noVisualDelta' not in script:
+                    payload['visual_diff'] = {
+                        'diffPercentage': 1.2,
+                        'differentPixels': 12000,
+                        'totalPixels': 972000,
+                    }
+                return payload
+            return {
+                'ok': True,
+                'runner': 'local-server-preview',
+                'target_url': 'http://127.0.0.1:3000' + str(target_path),
+                'screenshots': [{'url': 'https://cdn.example.com/home-before.png'}],
+                'outputs': [{'name': 'before.png', 'url': 'https://cdn.example.com/home-before.png'}],
+                'console': state_console({
+                    'bodyTextLength': 180,
+                    'visibleTextSample': 'Riddle Proof homepage hero Start Free',
+                    'interactiveElements': 4,
+                    'visibleInteractiveElements': 4,
+                    'pathname': path_only or '/',
+                    'search': search,
+                    'title': 'Riddle',
+                    'buttons': ['Start Free'],
+                    'headings': ['Riddle Proof'],
+                    'links': [],
+                    'canvasCount': 0,
+                    'largeVisibleElements': [{'tag': 'button', 'text': 'Start Free'}],
+                }),
+            }
         if tool == 'riddle_script':
             script = args.get('script', '')
             if 'preview.example.com' in script and '/wrong' in script:

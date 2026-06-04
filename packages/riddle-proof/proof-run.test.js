@@ -24,6 +24,75 @@ function writeJson(file, payload) {
   writeFileSync(file, JSON.stringify(payload, null, 2));
 }
 
+{
+  const isolatedHome = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-direct-riddle-home-'));
+  const output = execFileSync(process.execPath, [
+    path.join(__dirname, 'runtime', 'lib', 'riddle_core_call.mjs'),
+    'riddle_script',
+    JSON.stringify({ script: 'return true;' }),
+  ], {
+    cwd: __dirname,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OPENCLAW_HOME: isolatedHome,
+      OPENCLAW_CONFIG: path.join(isolatedHome, 'missing-openclaw.json'),
+      RIDDLE_API_KEY: '',
+      RIDDLE_API_KEY_FILE: path.join(isolatedHome, 'missing-riddle-api-key'),
+      RIDDLE_PROOF_DISABLE_LOCAL_RIDDLE_SCRIPT: '1',
+    },
+  });
+  const result = JSON.parse(output);
+  assert(result.ok === false, 'direct Riddle bridge should report missing API key when no key is configured');
+  assert(String(result.error || '').includes('Missing Riddle API key'), 'direct Riddle bridge should explain the missing key');
+  assert(!String(result.error || '').includes('openclaw-riddledc'), 'direct Riddle bridge must not require the OpenClaw core package');
+}
+
+{
+  const isolatedHome = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-direct-server-home-'));
+  const serverDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-direct-server-'));
+  const artifactDir = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-direct-server-artifacts-'));
+  writeFileSync(path.join(serverDir, 'server.js'), `
+const http = require('node:http');
+const port = Number(process.env.PORT || 3000);
+http.createServer((req, res) => {
+  res.writeHead(200, { 'content-type': 'text/html' });
+  res.end('<!doctype html><html><body><main id="marker">direct server preview ok</main></body></html>');
+}).listen(port, '127.0.0.1');
+`);
+  const output = execFileSync(process.execPath, [
+    path.join(__dirname, 'runtime', 'lib', 'riddle_core_call.mjs'),
+    'riddle_server_preview',
+    JSON.stringify({
+      directory: serverDir,
+      command: 'node server.js',
+      port: 3400,
+      path: '/proof/',
+      readiness_timeout: 10,
+      timeout: 10,
+      wait_for_selector: '#marker',
+      script: "const text = await page.textContent('#marker'); await saveScreenshot('after-proof'); return { text, href: page.url() };",
+    }),
+  ], {
+    cwd: __dirname,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      OPENCLAW_HOME: isolatedHome,
+      OPENCLAW_CONFIG: path.join(isolatedHome, 'missing-openclaw.json'),
+      RIDDLE_API_KEY: '',
+      RIDDLE_API_KEY_FILE: path.join(isolatedHome, 'missing-riddle-api-key'),
+      RIDDLE_PROOF_LOCAL_ARTIFACT_DIR: artifactDir,
+    },
+  });
+  const result = JSON.parse(output);
+  assert(result.ok === true, 'direct Riddle server preview should run through the local bridge');
+  assert(result.runner === 'local-server-preview', 'direct Riddle server preview should identify the local server runner');
+  assert(result.result?.text === 'direct server preview ok', 'direct server preview should return capture script data');
+  assert(String(result.result?.href || '').includes('/proof/'), 'direct server preview should open the requested route before capture');
+  assert(result.screenshots?.[0]?.url?.startsWith('file://'), 'direct server preview should produce local screenshot artifacts');
+}
+
 function baselineUnderstanding(overrides = {}) {
   return {
     reference: 'before',
@@ -608,6 +677,69 @@ async function run() {
     String(missingWorkflowResult.error || '').includes('Riddle Proof workflow file missing for verify'),
     'missing workflow failure should name the missing verify pipeline',
   );
+
+  const pythonFallbackRoot = mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-python-fallback-'));
+  mkdirSync(path.join(pythonFallbackRoot, 'pipelines'), { recursive: true });
+  mkdirSync(path.join(pythonFallbackRoot, 'lib'), { recursive: true });
+  writeFileSync(path.join(pythonFallbackRoot, 'pipelines', 'riddle-proof-setup.lobster'), 'name: riddle-proof-setup\nsteps: []\n');
+  writeFileSync(path.join(pythonFallbackRoot, 'lib', 'preflight.py'), [
+    'import json, os',
+    "args = json.load(open(os.environ['RIDDLE_PROOF_ARGS_FILE']))",
+    "args['preflight_seen'] = True",
+    "json.dump(args, open(os.environ['RIDDLE_PROOF_STATE_FILE'], 'w'), indent=2)",
+    "print('preflight ok')",
+    '',
+  ].join('\n'));
+  writeFileSync(path.join(pythonFallbackRoot, 'lib', 'setup.py'), [
+    'import json, os',
+    "state = json.load(open(os.environ['RIDDLE_PROOF_STATE_FILE']))",
+    "state['workspace_ready'] = True",
+    "state['stage'] = 'setup'",
+    "state['python_fallback_seen'] = True",
+    "json.dump(state, open(os.environ['RIDDLE_PROOF_STATE_FILE'], 'w'), indent=2)",
+    "print('setup ok')",
+    '',
+  ].join('\n'));
+  const pythonFallbackStatePath = path.join(pythonFallbackRoot, 'state.json');
+  const pythonFallbackConfig = core.resolveConfig(
+    { riddleProofDir: pythonFallbackRoot, statePath: pythonFallbackStatePath, defaultReviewer: 'octocat' },
+    { action: 'setup', state_path: pythonFallbackStatePath },
+  );
+  const originalFallbackLobsterCommand = process.env.RIDDLE_PROOF_LOBSTER_COMMAND;
+  const originalFallbackLobsterScript = process.env.RIDDLE_PROOF_LOBSTER_SCRIPT;
+  process.env.RIDDLE_PROOF_LOBSTER_COMMAND = path.join(pythonFallbackRoot, 'missing-lobster-binary');
+  delete process.env.RIDDLE_PROOF_LOBSTER_SCRIPT;
+  try {
+    const pythonFallbackResult = await engineMod.executeWorkflow(
+      {
+        action: 'setup',
+        state_path: pythonFallbackStatePath,
+        repo: 'riddledc/example',
+        change_request: 'Exercise bundled Python fallback.',
+      },
+      { riddleProofDir: pythonFallbackRoot, statePath: pythonFallbackStatePath, defaultReviewer: 'octocat' },
+      pythonFallbackConfig,
+    );
+    assert(pythonFallbackResult.ok === true, 'missing lobster should fall back to bundled Python setup scripts');
+    const pythonFallbackState = readJson(pythonFallbackStatePath);
+    assert(pythonFallbackState.preflight_seen === true, 'fallback should run preflight.py before setup.py');
+    assert(pythonFallbackState.python_fallback_seen === true, 'fallback should run setup.py');
+    assert(
+      pythonFallbackState.last_runtime_step?.status === 'completed',
+      'fallback should preserve the normal runtime step completion shape',
+    );
+  } finally {
+    if (originalFallbackLobsterCommand === undefined) {
+      delete process.env.RIDDLE_PROOF_LOBSTER_COMMAND;
+    } else {
+      process.env.RIDDLE_PROOF_LOBSTER_COMMAND = originalFallbackLobsterCommand;
+    }
+    if (originalFallbackLobsterScript === undefined) {
+      delete process.env.RIDDLE_PROOF_LOBSTER_SCRIPT;
+    } else {
+      process.env.RIDDLE_PROOF_LOBSTER_SCRIPT = originalFallbackLobsterScript;
+    }
+  }
 
   const visualSessionInput = {
     run_id: 'rp_test_visual',
@@ -1437,6 +1569,44 @@ async function run() {
   assert(auditComplete.status === 'completed', 'verify_audit_complete should be a terminal completed audit, not an unhandled blocker');
   assert(!auditComplete.blocker, 'verify_audit_complete should not create a wrapper blocker');
   assert(auditComplete.raw.audit_complete === true, 'audit completion should be labeled in terminal metadata');
+
+  const noShipReviewHarnessStatePath = path.join(checkpointHarnessDir, 'no-ship-review-wrapper-state.json');
+  const noShipReviewEngineStatePath = path.join(checkpointHarnessDir, 'no-ship-review-engine-state.json');
+  const noShipReviewEngineCalls = [];
+  const noShipReview = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      repo: 'riddledc/example',
+      change_request: 'Hold a ready proof before ship.',
+      engine_state_path: noShipReviewEngineStatePath,
+      harness_state_path: noShipReviewHarnessStatePath,
+      ship_mode: 'none',
+    },
+    state_path: noShipReviewHarnessStatePath,
+    engine: {
+      async execute(params) {
+        noShipReviewEngineCalls.push(params);
+        return {
+          ok: true,
+          state_path: noShipReviewEngineStatePath,
+          checkpoint: 'ship_review',
+          stage: 'ship',
+          summary: 'Proof is ready but should be held by no-ship policy.',
+          checkpointContract: {
+            resume: {
+              action: 'run',
+              state_path: noShipReviewEngineStatePath,
+              continue_from_checkpoint: true,
+              continue_with_stage: 'ship',
+            },
+          },
+        };
+      },
+    },
+    config: { defaultShipMode: 'none' },
+  });
+  assert(noShipReview.status === 'ready_to_ship', 'ship_review continuation must be held when ship_mode=none');
+  assert(noShipReview.raw.ship_held === true, 'held ship_review result should expose ship_held metadata');
+  assert(noShipReviewEngineCalls.length === 1, 'ship_mode=none should not follow ship_review into a ship continuation');
 
   const duplicateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: {
