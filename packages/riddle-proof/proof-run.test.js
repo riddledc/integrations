@@ -301,12 +301,15 @@ if (stage === 'verify') {
   const structuredInteractionFailureSummary = (state.simulate_structured_interaction_failure_summary || '').trim();
   const structuredInteractionCaptureFailureSummary = (state.simulate_structured_interaction_capture_failure_summary || '').trim();
   const proofAssessmentHardBlocker = (state.simulate_proof_assessment_hard_blocker || '').trim();
+  const captureQualitySummary = (state.simulate_capture_quality_summary || '').trim();
+  const captureQualityBlocking = state.simulate_capture_quality_blocking === true;
+  const captureQualityDecision = (state.simulate_capture_quality_decision || '').trim() || (captureQualityBlocking ? 'failed_capture' : 'revise_capture');
   state.structured_interaction_capture_failure_summary = structuredInteractionCaptureFailureSummary || undefined;
   state.structured_interaction_failure_summary = structuredInteractionFailureSummary || undefined;
   state.verify_status = verifyStatus;
   if (verifyStatus === 'capture_incomplete') {
     state.after_cdn = '';
-    state.verify_summary = structuredInteractionCaptureFailureSummary || 'Verify did not capture a usable proof packet yet.';
+    state.verify_summary = structuredInteractionCaptureFailureSummary || captureQualitySummary || 'Verify did not capture a usable proof packet yet.';
     state.merge_recommendation = 'do-not-merge';
     state.proof_assessment = {};
     state.proof_assessment_request = proofAssessmentHardBlocker
@@ -321,13 +324,16 @@ if (stage === 'verify') {
       summary: state.verify_summary,
       structured_interaction_capture_failure_summary: structuredInteractionCaptureFailureSummary || undefined,
       next_stage_options: ['author', 'verify', 'implement', 'recon'],
-      recommended_stage: 'author',
-      continue_with_stage: 'author',
+      recommended_stage: captureQualityBlocking ? null : 'author',
+      continue_with_stage: captureQualityBlocking ? null : 'author',
       capture_quality: {
-        decision: 'revise_capture',
-        recommended_stage: 'author',
-        continue_with_stage: 'author',
-        reasons: ['The after-proof is missing or low quality.'],
+        decision: captureQualityDecision,
+        summary: captureQualitySummary || state.verify_summary,
+        recommended_stage: captureQualityBlocking ? null : 'author',
+        continue_with_stage: captureQualityBlocking ? null : 'author',
+        blocking: captureQualityBlocking || undefined,
+        terminal_blocker: captureQualityBlocking || undefined,
+        reasons: [captureQualitySummary || 'The after-proof is missing or low quality.'],
       },
     };
   } else {
@@ -358,6 +364,10 @@ if (stage === 'verify') {
     };
   }
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  if (state.simulate_verify_nonzero_exit) {
+    process.stderr.write(state.simulate_verify_nonzero_exit_message || state.verify_summary || 'simulated verify nonzero exit');
+    process.exit(1);
+  }
   process.stdout.write(JSON.stringify({ ok: true, stage, verify_status: verifyStatus }));
   process.exit(0);
 }
@@ -1735,6 +1745,39 @@ async function run() {
     'failed structured interaction capture should not reset authoring state for a retry',
   );
   assert(afterFailedCaptureInteraction.merge_recommendation === 'do-not-merge', 'failed structured interaction capture should stay do-not-merge');
+
+  const nonzeroCaptureStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-nonzero-capture-blocker-')), 'state.json');
+  writeJson(nonzeroCaptureStatePath, {
+    ...makeLoopState(),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+    verification_mode: 'interaction',
+    server_path: '/',
+    simulate_verify_status: 'capture_incomplete',
+    simulate_capture_quality_blocking: true,
+    simulate_capture_quality_decision: 'failed_interaction_capture',
+    simulate_capture_quality_summary: 'page.waitForSelector: Timeout 30000ms exceeded waiting for locator(\'#riddle-proof-missing-selector-timeout-smoke\')',
+    simulate_verify_nonzero_exit: true,
+    simulate_verify_nonzero_exit_message: 'page.waitForSelector: Timeout 30000ms exceeded waiting for locator(\'#riddle-proof-missing-selector-timeout-smoke\')',
+  });
+  const nonzeroCaptureBlocked = await localEngine.execute({ action: 'run', state_path: nonzeroCaptureStatePath, advance_stage: 'verify' });
+  assert(
+    nonzeroCaptureBlocked.checkpoint === 'verify_capture_blocked',
+    `nonzero verify capture failure should block at verify_capture_blocked, got ${nonzeroCaptureBlocked.checkpoint}`,
+  );
+  assert(nonzeroCaptureBlocked.blocking === true, 'nonzero verify capture failure should be blocking');
+  assert(
+    nonzeroCaptureBlocked.summary.includes('page.waitForSelector: Timeout 30000ms exceeded'),
+    'nonzero verify capture blocker should preserve the exact Playwright timeout',
+  );
+  assert(
+    nonzeroCaptureBlocked.checkpoint !== 'verify_failed',
+    'nonzero verify capture failure should not surface as generic verify_failed',
+  );
+  const afterNonzeroCapture = readJson(nonzeroCaptureStatePath);
+  assert(afterNonzeroCapture.stage_attempts.verify.count === 1, 'nonzero verify capture attempt should be recorded once');
+  assert(afterNonzeroCapture.stage_decision_request.checkpoint === 'verify_capture_blocked', 'nonzero verify state should persist native capture blocked checkpoint');
 
   const hardBlockedCaptureStatePath = path.join(mkdtempSync(path.join(os.tmpdir(), 'riddle-proof-hard-blocked-capture-')), 'state.json');
   writeJson(hardBlockedCaptureStatePath, {
