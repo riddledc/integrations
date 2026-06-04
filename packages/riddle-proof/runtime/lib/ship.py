@@ -320,7 +320,20 @@ def local_artifact_sources_fingerprint(local_sources):
 def public_proof_artifacts(state):
     published = state.get('proof_artifact_publication') or {}
     artifacts = published.get('artifacts') if isinstance(published, dict) else []
-    public = [artifact for artifact in artifacts or [] if isinstance(artifact, dict) and (artifact.get('raw_url') or artifact.get('html_url'))]
+    attachments = state.get('proof_image_attachments') or {}
+    attachment_artifacts = attachments.get('artifacts') if isinstance(attachments, dict) else []
+    public = [
+        {
+            **artifact,
+            'raw_url': artifact.get('attachment_url'),
+            'html_url': artifact.get('attachment_url'),
+            'embeddable': True,
+            'attachment': True,
+        }
+        for artifact in attachment_artifacts or []
+        if isinstance(artifact, dict) and artifact.get('attachment_url')
+    ]
+    public.extend([artifact for artifact in artifacts or [] if isinstance(artifact, dict) and (artifact.get('raw_url') or artifact.get('html_url'))])
     for artifact in collect_proof_artifact_sources(state):
         url = str(artifact.get('url') or '').strip()
         if is_http_url(url):
@@ -328,6 +341,7 @@ def public_proof_artifacts(state):
                 **artifact,
                 'raw_url': url,
                 'html_url': url,
+                'embeddable': True,
                 'published': False,
             })
     deduped = []
@@ -346,6 +360,8 @@ def first_public_artifact_url(state, role, kind=None):
             continue
         if kind and artifact.get('kind') != kind:
             continue
+        if artifact.get('kind') == 'image' and artifact.get('embeddable') is False:
+            continue
         return artifact.get('raw_url') or artifact.get('html_url') or artifact.get('url') or ''
     return ''
 
@@ -362,9 +378,90 @@ def resolve_github_repo_name(repo_dir):
     return ''
 
 
+def resolve_github_repo_private(repo_dir):
+    result = sp.run(['gh', 'repo', 'view', '--json', 'isPrivate', '--jq', '.isPrivate'],
+                    cwd=repo_dir, capture_output=True, text=True, timeout=30)
+    if result.returncode == 0:
+        text = result.stdout.strip().lower()
+        if text in ('true', 'false'):
+            return text == 'true'
+    return None
+
+
 def github_file_url(repo_name, ref, path_value, mode='blob'):
     safe_path = urllib.parse.quote(str(path_value or '').lstrip('/'), safe='/._-')
     return 'https://github.com/' + repo_name + '/' + mode + '/' + ref + '/' + safe_path
+
+
+def parse_github_image_markdown(line):
+    match = re.search(r'!\[[^\]]*\]\((https://github\.com/user-attachments/assets/[^)\s]+)\)', str(line or '').strip())
+    return match.group(1) if match else ''
+
+
+def upload_local_images_to_github_attachments(state, repo_dir):
+    if truthy(os.environ.get('RIDDLE_PROOF_DISABLE_GITHUB_IMAGE_ATTACHMENTS')):
+        state['proof_image_attachments'] = {'ok': False, 'skipped': True, 'reason': 'disabled'}
+        save_state(state)
+        return state['proof_image_attachments']
+
+    image_sources = [
+        artifact for artifact in local_proof_artifact_sources(state)
+        if artifact.get('kind') == 'image' and artifact.get('path')
+    ]
+    if not image_sources:
+        state['proof_image_attachments'] = {'ok': True, 'skipped': True, 'reason': 'no local image artifacts'}
+        save_state(state)
+        return state['proof_image_attachments']
+
+    repo_name = resolve_github_repo_name(repo_dir)
+    if not repo_name:
+        state['proof_image_attachments'] = {'ok': False, 'skipped': True, 'reason': 'repo name unavailable'}
+        save_state(state)
+        return state['proof_image_attachments']
+
+    timeout_seconds = int(os.environ.get('RIDDLE_PROOF_GH_IMAGE_TIMEOUT_SECONDS') or '15')
+    command = ['gh', 'image'] + [artifact.get('path') for artifact in image_sources] + ['--repo', repo_name]
+    try:
+        result = sp.run(command, cwd=repo_dir, capture_output=True, text=True, timeout=timeout_seconds)
+    except sp.TimeoutExpired:
+        state['proof_image_attachments'] = {'ok': False, 'skipped': True, 'reason': 'gh image timed out'}
+        save_state(state)
+        return state['proof_image_attachments']
+
+    if result.returncode != 0:
+        state['proof_image_attachments'] = {
+            'ok': False,
+            'skipped': True,
+            'reason': 'gh image failed',
+            'stderr': (result.stderr or result.stdout or '')[:500],
+        }
+        save_state(state)
+        return state['proof_image_attachments']
+
+    urls = [parse_github_image_markdown(line) for line in result.stdout.splitlines()]
+    urls = [url for url in urls if url]
+    if not urls:
+        state['proof_image_attachments'] = {'ok': False, 'skipped': True, 'reason': 'gh image returned no attachment URLs'}
+        save_state(state)
+        return state['proof_image_attachments']
+
+    artifacts = []
+    for index, artifact in enumerate(image_sources):
+        if index >= len(urls):
+            break
+        artifacts.append({
+            **artifact,
+            'attachment_url': urls[index],
+            'attachment': True,
+            'embeddable': True,
+        })
+    state['proof_image_attachments'] = {
+        'ok': True,
+        'repo': repo_name,
+        'artifacts': artifacts,
+    }
+    save_state(state)
+    return state['proof_image_attachments']
 
 
 def write_artifact_readme(path_value, state, artifacts):
@@ -408,6 +505,7 @@ def publish_local_proof_artifacts_to_github(state, repo_dir, pr_num):
     repo_name = resolve_github_repo_name(repo_dir)
     if not repo_name:
         raise SystemExit('Could not resolve GitHub repository name for proof artifact publication.')
+    repo_private = resolve_github_repo_private(repo_dir)
 
     run_id = safe_slug(state.get('run_id') or str(int(time.time())), 'run')
     pr_slug = safe_slug('pr-' + str(pr_num or 'unknown'), 'pr')
@@ -474,11 +572,13 @@ def publish_local_proof_artifacts_to_github(state, repo_dir, pr_num):
                 published_path = artifact.get('published_path')
                 artifact['raw_url'] = github_file_url(repo_name, commit, published_path, 'raw')
                 artifact['html_url'] = github_file_url(repo_name, commit, published_path, 'blob')
+                artifact['embeddable'] = False if repo_private is True and artifact.get('kind') == 'image' else True
         publication = {
             'ok': True,
             'branch': artifact_branch,
             'commit': commit,
             'repo': repo_name,
+            'repo_private': repo_private,
             'html_url': github_file_url(repo_name, commit, artifact_dir_name, 'tree'),
             'manifest_url': github_file_url(repo_name, commit, artifact_dir_name + '/proof-artifacts.json', 'blob'),
             'readme_url': github_file_url(repo_name, commit, artifact_dir_name + '/README.md', 'blob'),
@@ -1080,6 +1180,12 @@ if publication.get('ok') and not publication.get('skipped'):
 elif publication.get('skipped'):
     print('Proof artifact publication skipped: ' + publication.get('reason', 'unknown'))
 
+image_attachments = upload_local_images_to_github_attachments(s, repo_dir)
+if image_attachments.get('ok') and not image_attachments.get('skipped'):
+    print('Proof images attached: ' + str(len(image_attachments.get('artifacts') or [])))
+elif image_attachments.get('skipped'):
+    print('Proof image attachment skipped: ' + image_attachments.get('reason', 'unknown'))
+
 # Post proof comment on PR
 body = '## Riddle Proof — Proof of Fix\n\n'
 body += '**Goal:** ' + s.get('change_request', '') + '\n\n'
@@ -1099,14 +1205,33 @@ if publication.get('ok') and not publication.get('skipped'):
 before_image = first_public_artifact_url(s, 'before', 'image')
 prod_image = first_public_artifact_url(s, 'prod', 'image')
 after_image = first_public_artifact_url(s, 'after', 'image')
+linked_image_artifacts = [
+    artifact for artifact in public_artifacts
+    if artifact.get('kind') == 'image'
+    and artifact.get('embeddable') is False
+    and (artifact.get('html_url') or artifact.get('raw_url'))
+]
 if before_image:
     body += '### Before\n![before](' + before_image + ')\n\n'
 if prod_image:
     body += '### Prod\n![prod](' + prod_image + ')\n\n'
 if after_image:
     body += '### After\n![after](' + after_image + ')\n\n'
+elif linked_image_artifacts:
+    body += '### After evidence\nA screenshot artifact was captured, but GitHub attachment upload was unavailable; linked image artifacts are listed below.\n\n'
 else:
     body += '### After evidence\nNo after screenshot was captured for this verification mode; structured evidence is summarized below.\n\n'
+
+if linked_image_artifacts:
+    body += '### Image artifacts\n'
+    for artifact in linked_image_artifacts[:12]:
+        label = artifact.get('name') or artifact.get('filename') or 'image'
+        url = artifact.get('html_url') or artifact.get('raw_url')
+        body += '- [' + str(label) + '](' + str(url) + ')'
+        if artifact.get('role'):
+            body += ' (' + str(artifact.get('role')) + ')'
+        body += '\n'
+    body += '\n'
 
 data_artifacts = [
     artifact for artifact in public_artifacts
