@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.30
+
+### Patch Changes
+
+- a8fe571: Terminalize concrete verify capture errors as native blockers instead of generic verify failures or author retries.
+
 ## 0.8.29
 
 ### Patch Changes
