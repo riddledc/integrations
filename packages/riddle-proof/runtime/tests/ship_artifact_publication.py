@@ -163,13 +163,16 @@ def main():
         assert publication.get("ok") is True, "proof artifact publication should be recorded"
         assert publication.get("artifacts"), "published artifact list should be recorded"
         assert updated.get("ship_report", {}).get("after_artifact_url", "").startswith(
-            "https://raw.githubusercontent.com/example/test-repo/"
-        ), "ship report should expose a public after artifact URL"
+            "https://github.com/example/test-repo/raw/"
+        ), "ship report should expose a GitHub-hosted after artifact URL"
 
         comment = comment_body_path.read_text(encoding="utf-8")
         assert "file://" not in comment, "PR proof comment must not expose local file URLs"
-        assert "![after](https://raw.githubusercontent.com/example/test-repo/" in comment, (
-            "PR proof comment should embed the GitHub-hosted after screenshot"
+        assert "raw.githubusercontent.com" not in comment, (
+            "PR proof comment must not depend on unauthenticated raw GitHub URLs"
+        )
+        assert "![after](https://github.com/example/test-repo/raw/" in comment, (
+            "PR proof comment should embed the GitHub-hosted after screenshot using a private-repo-safe URL"
         )
         assert "[proof.json](https://github.com/example/test-repo/blob/" in comment, (
             "PR proof comment should link the structured proof JSON"

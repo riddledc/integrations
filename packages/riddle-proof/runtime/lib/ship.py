@@ -362,6 +362,11 @@ def resolve_github_repo_name(repo_dir):
     return ''
 
 
+def github_file_url(repo_name, ref, path_value, mode='blob'):
+    safe_path = urllib.parse.quote(str(path_value or '').lstrip('/'), safe='/._-')
+    return 'https://github.com/' + repo_name + '/' + mode + '/' + ref + '/' + safe_path
+
+
 def write_artifact_readme(path_value, state, artifacts):
     lines = [
         '# Riddle Proof Artifacts',
@@ -467,16 +472,16 @@ def publish_local_proof_artifacts_to_github(state, repo_dir, pr_num):
         for artifact in published:
             if artifact.get('published'):
                 published_path = artifact.get('published_path')
-                artifact['raw_url'] = 'https://raw.githubusercontent.com/' + repo_name + '/' + commit + '/' + published_path
-                artifact['html_url'] = 'https://github.com/' + repo_name + '/blob/' + commit + '/' + published_path
+                artifact['raw_url'] = github_file_url(repo_name, commit, published_path, 'raw')
+                artifact['html_url'] = github_file_url(repo_name, commit, published_path, 'blob')
         publication = {
             'ok': True,
             'branch': artifact_branch,
             'commit': commit,
             'repo': repo_name,
-            'html_url': 'https://github.com/' + repo_name + '/tree/' + commit + '/' + artifact_dir_name,
-            'manifest_url': 'https://github.com/' + repo_name + '/blob/' + commit + '/' + artifact_dir_name + '/proof-artifacts.json',
-            'readme_url': 'https://github.com/' + repo_name + '/blob/' + commit + '/' + artifact_dir_name + '/README.md',
+            'html_url': github_file_url(repo_name, commit, artifact_dir_name, 'tree'),
+            'manifest_url': github_file_url(repo_name, commit, artifact_dir_name + '/proof-artifacts.json', 'blob'),
+            'readme_url': github_file_url(repo_name, commit, artifact_dir_name + '/README.md', 'blob'),
             'source_fingerprint': source_fingerprint,
             'artifacts': published,
         }
