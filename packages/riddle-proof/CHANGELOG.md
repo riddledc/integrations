@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.32
+
+### Patch Changes
+
+- 0e4c5b9: Publish local proof artifacts to a GitHub-backed artifact branch during ship and embed the after screenshot inline in the PR proof comment.
+
 ## 0.8.31
 
 ### Patch Changes
