@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.33
+
+### Patch Changes
+
+- 953f0a2: Use GitHub raw page URLs for PR proof image embeds so private-repo proof artifacts render with normal GitHub browser authentication.
+
 ## 0.8.32
 
 ### Patch Changes
