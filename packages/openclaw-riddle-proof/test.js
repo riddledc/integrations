@@ -3300,6 +3300,31 @@ try {
 } finally {
   process.chdir(originalCwd);
 }
+const originalOpenClawHome = process.env.OPENCLAW_HOME;
+const fakeOpenClawHome = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-home-metadata-"));
+const fakeOpenClawExtensionDir = path.join(fakeOpenClawHome, "extensions", "openclaw-riddle-proof");
+const fakeOpenClawDependencyDir = path.join(fakeOpenClawExtensionDir, "node_modules", "@riddledc", "riddle-proof");
+mkdirSync(fakeOpenClawDependencyDir, { recursive: true });
+writeFileSync(path.join(fakeOpenClawExtensionDir, "package.json"), JSON.stringify({
+  name: "@riddledc/openclaw-riddle-proof",
+  version: "9.8.9-openclaw-home",
+}, null, 2));
+writeFileSync(path.join(fakeOpenClawDependencyDir, "package.json"), JSON.stringify({
+  name: "@riddledc/riddle-proof",
+  version: "9.8.10-openclaw-home",
+}, null, 2));
+try {
+  process.env.OPENCLAW_HOME = fakeOpenClawHome;
+  const openClawHomeMetadataStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath);
+  assert.equal(openClawHomeMetadataStatus.package_metadata.plugin_version, openclawRiddleProofPackageJson.version);
+  assert.equal(openClawHomeMetadataStatus.package_metadata.dependency_version, "9.8.10-openclaw-home");
+} finally {
+  if (originalOpenClawHome === undefined) {
+    delete process.env.OPENCLAW_HOME;
+  } else {
+    process.env.OPENCLAW_HOME = originalOpenClawHome;
+  }
+}
 const fakeGatewayRoot = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-module-metadata-"));
 const fakeGatewayWrapperDist = path.join(fakeGatewayRoot, "node_modules", "@riddledc", "openclaw-riddle-proof", "dist");
 const fakeGatewayDependencyDir = path.join(fakeGatewayRoot, "node_modules", "@riddledc", "riddle-proof");
