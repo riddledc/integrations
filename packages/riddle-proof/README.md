@@ -968,6 +968,27 @@ way to a ready PR after proof and CI; `leave_draft: true` is only an explicit
 debug or user-request escape hatch. The notification adapter is where a host
 updates Discord, OpenClaw, GitHub, or another integration.
 
+## PR Proof Comments
+
+Use `pr-comment` when a project already has a PR and a Riddle Proof output
+directory, but is not using the full ship loop. It reads
+`riddle-run-response.json` and `result.json`, builds a managed GitHub comment,
+embeds the primary hosted screenshot when available, links structured artifacts,
+summarizes check counts, and updates the existing Riddle Proof comment on
+reruns.
+
+```sh
+riddle-proof-loop pr-comment \
+  --proof-dir test-results/riddle-proof-docs \
+  --pr 228 \
+  --repo davisdiehl/riddle-site
+```
+
+Use `--dry-run` to print the exact Markdown without touching GitHub, or
+`--body-file proof-comment.md` to save the generated body for another tool. The
+markdown builder is also exported from `@riddledc/riddle-proof/pr-comment` for
+host integrations that want to post comments themselves.
+
 ## Runtime Scratch Space
 
 The packaged proof-run setup uses isolated git worktrees for before and after
