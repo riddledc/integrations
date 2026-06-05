@@ -399,9 +399,11 @@ try {
 const riddlePreviewDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-client-preview-"));
 writeFileSync(path.join(riddlePreviewDir, "index.html"), "<!doctype html><title>Riddle Preview</title>");
 const riddleClientCalls = [];
+const riddlePreviewProgress = [];
 const riddleClient = createRiddleApiClient({
   apiKey: "test-riddle-key",
   apiBaseUrl: "https://api.test",
+  onPreviewProgress: (snapshot) => riddlePreviewProgress.push(snapshot),
   fetchImpl: async (url, init = {}) => {
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
     riddleClientCalls.push({
@@ -468,14 +470,25 @@ assert.equal(riddleClientCalls.find((call) => call.url === "https://api.test/v1/
 assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/ps_test/");
 assert.equal(deployedPreview.file_count, 1);
 assert.equal(deployedPreview.framework, "static");
+assert.deepEqual(
+  riddlePreviewProgress
+    .filter((snapshot) => snapshot.id === "ps_test" || snapshot.stage === "validating" || snapshot.stage === "creating")
+    .map((snapshot) => snapshot.stage),
+  ["validating", "creating", "created", "archiving", "archived", "uploading", "uploaded", "publishing", "ready"],
+);
+assert.equal(riddlePreviewProgress.find((snapshot) => snapshot.stage === "creating")?.file_count, 1);
+assert.equal(riddlePreviewProgress.find((snapshot) => snapshot.stage === "creating")?.total_bytes, 44);
+assert.equal(riddlePreviewProgress.find((snapshot) => snapshot.stage === "ready" && snapshot.id === "ps_test")?.preview_url, "https://preview.riddledc.com/s/ps_test/");
 const deployedSpaPreview = await riddleClient.deployPreview(riddlePreviewDir, "unit-spa-preview", "spa");
 const previewCreateCalls = riddleClientCalls.filter((call) => call.url === "https://api.test/v1/preview");
 assert.equal(previewCreateCalls.at(-1)?.body?.framework, "spa");
 assert.equal(deployedSpaPreview.framework, "spa");
 const recoveredPreviewCalls = [];
+const recoveredPreviewProgress = [];
 const recoveredPreviewClient = createRiddleApiClient({
   apiKey: "test-riddle-key",
   apiBaseUrl: "https://api.recovered-preview.test",
+  onPreviewProgress: (snapshot) => recoveredPreviewProgress.push(snapshot),
   fetchImpl: async (url, init = {}) => {
     recoveredPreviewCalls.push({ url: String(url), method: init.method || "GET" });
     if (String(url) === "https://api.recovered-preview.test/v1/preview") {
@@ -508,6 +521,25 @@ assert.equal(recoveredPreview.preview_url, "https://preview.riddledc.com/s/ps_re
 assert.equal(recoveredPreview.file_count, 3);
 assert.equal(recoveredPreview.publish_recovered, true);
 assert.match(recoveredPreview.publish_error, /HTTP 503/);
+assert.deepEqual(
+  recoveredPreviewProgress.map((snapshot) => snapshot.stage),
+  [
+    "validating",
+    "creating",
+    "created",
+    "archiving",
+    "archived",
+    "uploading",
+    "uploaded",
+    "publishing",
+    "publish_recovering",
+    "checking_status",
+    "ready",
+  ],
+);
+assert.match(recoveredPreviewProgress.find((snapshot) => snapshot.stage === "publish_recovering")?.publish_error || "", /HTTP 503/);
+assert.equal(recoveredPreviewProgress.find((snapshot) => snapshot.stage === "checking_status")?.status, "ready");
+assert.equal(recoveredPreviewProgress.find((snapshot) => snapshot.stage === "ready")?.preview_url, "https://preview.riddledc.com/s/ps_recovered/");
 assert.deepEqual(
   recoveredPreviewCalls.map((call) => `${call.method} ${call.url}`),
   [
