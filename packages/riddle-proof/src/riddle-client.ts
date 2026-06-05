@@ -13,6 +13,7 @@ export interface RiddleClientConfig {
   apiKeyFile?: string;
   apiBaseUrl?: string;
   fetchImpl?: RiddleFetch;
+  onPreviewProgress?: (snapshot: RiddlePreviewDeployProgressSnapshot) => void | Promise<void>;
 }
 
 export interface RiddleApiKeySource {
@@ -67,6 +68,37 @@ export interface RiddlePollJobOptions {
 }
 
 export type RiddlePreviewFramework = "spa" | "static";
+export type RiddlePreviewDeployStage =
+  | "validating"
+  | "creating"
+  | "created"
+  | "archiving"
+  | "archived"
+  | "uploading"
+  | "uploaded"
+  | "publishing"
+  | "publish_recovering"
+  | "checking_status"
+  | "ready";
+
+export interface RiddlePreviewDeployProgressSnapshot {
+  stage: RiddlePreviewDeployStage;
+  label: string;
+  framework: RiddlePreviewFramework;
+  directory: string;
+  elapsed_ms: number;
+  id?: string;
+  preview_url?: string;
+  file_count?: number;
+  total_bytes?: number;
+  tarball_bytes?: number;
+  attempt?: number;
+  attempts?: number;
+  status?: string | null;
+  publish_error?: string;
+  warnings?: string[];
+  message?: string;
+}
 
 export interface RiddlePreviewDeployResult {
   ok: true;
@@ -149,6 +181,11 @@ export class RiddleApiError extends Error {
 const PREVIEW_PUBLISH_RECOVERY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const PREVIEW_PUBLISH_RECOVERY_ATTEMPTS = 30;
 const PREVIEW_PUBLISH_RECOVERY_INTERVAL_MS = 2000;
+
+interface RiddlePreviewDirectorySummary {
+  file_count: number;
+  total_bytes: number;
+}
 
 function normalizeBaseUrl(value?: string) {
   return (value || DEFAULT_RIDDLE_API_BASE_URL).replace(/\/$/, "");
@@ -237,6 +274,50 @@ function canRecoverPreviewPublish(error: unknown): error is RiddleApiError {
   return error instanceof RiddleApiError && PREVIEW_PUBLISH_RECOVERY_STATUSES.has(error.status);
 }
 
+function summarizePreviewDirectory(directory: string): RiddlePreviewDirectorySummary {
+  const stack = [directory];
+  let fileCount = 0;
+  let totalBytes = 0;
+  while (stack.length) {
+    const current = stack.pop()!;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const stat = statSync(fullPath);
+      fileCount += 1;
+      totalBytes += stat.size;
+    }
+  }
+  return { file_count: fileCount, total_bytes: totalBytes };
+}
+
+function previewProgressEmitter(
+  config: RiddleClientConfig,
+  base: {
+    label: string;
+    framework: RiddlePreviewFramework;
+    directory: string;
+    startedAt: number;
+    warnings?: string[];
+  },
+) {
+  return async (snapshot: Omit<RiddlePreviewDeployProgressSnapshot, "label" | "framework" | "directory" | "elapsed_ms">) => {
+    if (!config.onPreviewProgress) return;
+    await config.onPreviewProgress({
+      label: base.label,
+      framework: base.framework,
+      directory: base.directory,
+      elapsed_ms: Math.max(0, Date.now() - base.startedAt),
+      warnings: base.warnings?.length ? base.warnings : undefined,
+      ...snapshot,
+    });
+  };
+}
+
 async function waitForPublishedPreview(
   config: RiddleClientConfig,
   input: {
@@ -246,11 +327,38 @@ async function waitForPublishedPreview(
     expiresAt?: string;
     publishError: RiddleApiError;
     warnings?: string[];
+    localSummary?: RiddlePreviewDirectorySummary;
+    emitProgress?: ReturnType<typeof previewProgressEmitter>;
   },
 ) {
+  await input.emitProgress?.({
+    stage: "publish_recovering",
+    id: input.id,
+    file_count: input.localSummary?.file_count,
+    total_bytes: input.localSummary?.total_bytes,
+    publish_error: input.publishError.message,
+    message: `publish returned ${input.publishError.status}; polling preview status`,
+  });
   for (let attempt = 1; attempt <= PREVIEW_PUBLISH_RECOVERY_ATTEMPTS; attempt += 1) {
     const status = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${input.id}`);
+    await input.emitProgress?.({
+      stage: "checking_status",
+      id: input.id,
+      attempt,
+      attempts: PREVIEW_PUBLISH_RECOVERY_ATTEMPTS,
+      status: typeof status.status === "string" ? status.status : null,
+      preview_url: typeof status.preview_url === "string" ? status.preview_url : undefined,
+      file_count: typeof status.file_count === "number" ? status.file_count : input.localSummary?.file_count,
+      total_bytes: typeof status.total_bytes === "number" ? status.total_bytes : input.localSummary?.total_bytes,
+    });
     if (String(status.status || "") === "ready" && String(status.preview_url || "").trim()) {
+      await input.emitProgress?.({
+        stage: "ready",
+        id: input.id,
+        preview_url: String(status.preview_url),
+        file_count: typeof status.file_count === "number" ? status.file_count : input.localSummary?.file_count,
+        total_bytes: typeof status.total_bytes === "number" ? status.total_bytes : input.localSummary?.total_bytes,
+      });
       return previewDeployResultFromRecord({
         record: status,
         id: input.id,
@@ -278,7 +386,17 @@ export async function deployRiddlePreview(
   if (!directory?.trim()) throw new Error("directory is required");
   if (!label?.trim()) throw new Error("label is required");
   if (framework !== "spa" && framework !== "static") throw new Error("framework must be spa or static");
+  const startedAt = Date.now();
   const warnings = collectRiddlePreviewDeployWarnings(directory, framework);
+  const emitProgress = previewProgressEmitter(config, { label, framework, directory, startedAt, warnings });
+  await emitProgress({ stage: "validating", message: "checking preview input directory" });
+  const localSummary = summarizePreviewDirectory(directory);
+  await emitProgress({
+    stage: "creating",
+    file_count: localSummary.file_count,
+    total_bytes: localSummary.total_bytes,
+    message: "creating preview upload target",
+  });
 
   const created = await riddleRequestJson<Record<string, unknown>>(config, "/v1/preview", {
     method: "POST",
@@ -287,11 +405,43 @@ export async function deployRiddlePreview(
   const id = String(created.id || "");
   const uploadUrl = String(created.upload_url || "");
   if (!id || !uploadUrl) throw new Error("Riddle preview create response was missing id or upload_url.");
+  await emitProgress({
+    stage: "created",
+    id,
+    file_count: localSummary.file_count,
+    total_bytes: localSummary.total_bytes,
+    message: "preview upload target created",
+  });
 
   const scratch = mkdtempSync(path.join(tmpdir(), "riddle-preview-upload-"));
   const tarball = path.join(scratch, `${id}.tar.gz`);
+  let tarballBytes = 0;
   try {
+    await emitProgress({
+      stage: "archiving",
+      id,
+      file_count: localSummary.file_count,
+      total_bytes: localSummary.total_bytes,
+      message: "creating preview archive",
+    });
     execFileSync("tar", ["czf", tarball, "-C", directory, "."], { stdio: "pipe" });
+    tarballBytes = statSync(tarball).size;
+    await emitProgress({
+      stage: "archived",
+      id,
+      file_count: localSummary.file_count,
+      total_bytes: localSummary.total_bytes,
+      tarball_bytes: tarballBytes,
+      message: "preview archive created",
+    });
+    await emitProgress({
+      stage: "uploading",
+      id,
+      file_count: localSummary.file_count,
+      total_bytes: localSummary.total_bytes,
+      tarball_bytes: tarballBytes,
+      message: "uploading preview archive",
+    });
     const upload = await fetchFor(config)(uploadUrl, {
       method: "PUT",
       headers: { "Content-Type": "application/gzip" },
@@ -300,14 +450,37 @@ export async function deployRiddlePreview(
     if (!upload.ok) {
       throw new RiddleApiError(uploadUrl, upload.status, await upload.text());
     }
+    await emitProgress({
+      stage: "uploaded",
+      id,
+      file_count: localSummary.file_count,
+      total_bytes: localSummary.total_bytes,
+      tarball_bytes: tarballBytes,
+      message: "preview archive uploaded",
+    });
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
 
   const expiresAt = typeof created.expires_at === "string" ? created.expires_at : undefined;
   try {
+    await emitProgress({
+      stage: "publishing",
+      id,
+      file_count: localSummary.file_count,
+      total_bytes: localSummary.total_bytes,
+      tarball_bytes: tarballBytes || undefined,
+      message: "publishing preview",
+    });
     const published = await riddleRequestJson<Record<string, unknown>>(config, `/v1/preview/${id}/publish`, {
       method: "POST",
+    });
+    await emitProgress({
+      stage: "ready",
+      id,
+      preview_url: String(published.preview_url || ""),
+      file_count: typeof published.file_count === "number" ? published.file_count : localSummary.file_count,
+      total_bytes: typeof published.total_bytes === "number" ? published.total_bytes : localSummary.total_bytes,
     });
     return previewDeployResultFromRecord({ record: published, id, label, framework, expiresAt, warnings });
   } catch (error) {
@@ -319,6 +492,8 @@ export async function deployRiddlePreview(
       expiresAt,
       publishError: error,
       warnings,
+      localSummary,
+      emitProgress,
     });
   }
 }

@@ -23,6 +23,7 @@ import {
   type RiddlePollJobOptions,
   type RiddlePollProgressSnapshot,
   type RiddlePollSummary,
+  type RiddlePreviewDeployProgressSnapshot,
   type RiddleBalanceResult,
   type RiddleClientConfig,
 } from "./riddle-client";
@@ -159,7 +160,7 @@ function usage() {
     "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
-    "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
+    "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static] [--quiet]",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
     "  riddle-proof-loop riddle-poll <job-id> [--wait] [--attempts n] [--quiet]",
@@ -1019,6 +1020,19 @@ function formatPollDuration(ms: number | null | undefined) {
   return minutes > 0 ? `${minutes}m${String(remainder).padStart(2, "0")}s` : `${seconds}s`;
 }
 
+function formatByteCount(bytes: number | null | undefined) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "n/a";
+  if (bytes < 1024) return `${bytes}B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)}${units[unitIndex]}`;
+}
+
 function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
   const submittedAt = snapshot.submitted_at || "not-submitted";
   const queuePart = snapshot.running_without_submission
@@ -1035,6 +1049,19 @@ function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
     `elapsed=${formatPollDuration(snapshot.elapsed_ms)}`,
     `submitted_at=${submittedAt}${queuePart}${terminalPart}`,
   ].join(" ");
+}
+
+function riddlePreviewProgressLine(snapshot: RiddlePreviewDeployProgressSnapshot) {
+  const idPart = snapshot.id ? ` id=${snapshot.id}` : "";
+  const statusPart = snapshot.status ? ` status=${snapshot.status}` : "";
+  const attemptPart = snapshot.attempt && snapshot.attempts ? ` attempt=${snapshot.attempt}/${snapshot.attempts}` : "";
+  const previewPart = snapshot.preview_url ? ` url=${snapshot.preview_url}` : "";
+  const filePart = typeof snapshot.file_count === "number" ? ` files=${snapshot.file_count}` : "";
+  const totalPart = typeof snapshot.total_bytes === "number" ? ` bytes=${formatByteCount(snapshot.total_bytes)}` : "";
+  const archivePart = typeof snapshot.tarball_bytes === "number" ? ` archive=${formatByteCount(snapshot.tarball_bytes)}` : "";
+  const recoveryPart = snapshot.publish_error ? ` publish_error=${JSON.stringify(snapshot.publish_error)}` : "";
+  const messagePart = snapshot.message ? ` ${snapshot.message}` : "";
+  return `[riddle-preview] ${snapshot.stage}${idPart}${statusPart}${attemptPart} elapsed=${formatPollDuration(snapshot.elapsed_ms)} label=${snapshot.label} framework=${snapshot.framework}${filePart}${totalPart}${archivePart}${previewPart}${recoveryPart}${messagePart}`;
 }
 
 function readJsonValue(value: string | undefined, label: string): Record<string, unknown> {
@@ -5637,7 +5664,13 @@ async function main() {
   if (command === "riddle-preview-deploy") {
     const buildDir = positional[1];
     const label = positional[2];
-    const result = await createRiddleApiClient(riddleClientConfig(options)).deployPreview(buildDir, label, previewFrameworkOption(options));
+    const clientConfig = riddleClientConfig(options);
+    if (options.quiet !== true) {
+      clientConfig.onPreviewProgress = (snapshot) => {
+        process.stderr.write(`${riddlePreviewProgressLine(snapshot)}\n`);
+      };
+    }
+    const result = await createRiddleApiClient(clientConfig).deployPreview(buildDir, label, previewFrameworkOption(options));
     for (const warning of result.warnings ?? []) {
       process.stderr.write(`Warning: ${warning}\n`);
     }
