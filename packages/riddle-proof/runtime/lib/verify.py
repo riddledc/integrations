@@ -2610,17 +2610,93 @@ def assertion_item_label(item, fallback):
     return fallback
 
 
-def collect_interaction_failed_assertions(value, prefix='', depth=0):
+def assertion_route_value_equivalent(expected, actual):
+    expected_candidate = path_candidate(expected)
+    actual_candidate = path_candidate(actual)
+    if expected_candidate and actual_candidate:
+        return normalize_observed_path(expected_candidate) == normalize_observed_path(actual_candidate)
+    return expected == actual
+
+
+EXPECTED_ACTUAL_ROUTE_KEY_ALIASES = {
+    'expected_path': ('path', 'pathname', 'terminal_path', 'after_path', 'final_path', 'observed_path', 'actual_path'),
+    'expected_url': ('url', 'href', 'terminal_url', 'terminal_href', 'after_url', 'after_href', 'final_url', 'final_href', 'observed_url', 'actual_url'),
+    'expected_href': ('href', 'url', 'terminal_href', 'terminal_url', 'after_href', 'after_url', 'final_href', 'final_url', 'observed_href', 'actual_href'),
+    'expected_route': ('route', 'path', 'pathname', 'terminal_route', 'terminal_path', 'after_route', 'after_path', 'final_route', 'final_path'),
+    'expected_terminal_path': ('terminal_path', 'path', 'pathname', 'after_path', 'final_path', 'observed_path', 'actual_path'),
+    'expected_terminal_url': ('terminal_url', 'url', 'href', 'after_url', 'final_url', 'observed_url', 'actual_url'),
+    'expected_terminal_href': ('terminal_href', 'href', 'url', 'after_href', 'final_href', 'observed_href', 'actual_href'),
+    'expected_terminal_route': ('terminal_route', 'terminal_path', 'route', 'path', 'pathname', 'after_route', 'after_path', 'final_route', 'final_path'),
+    'expected_after_path': ('after_path', 'path', 'pathname', 'terminal_path', 'final_path', 'observed_path', 'actual_path'),
+    'expected_after_url': ('after_url', 'url', 'href', 'terminal_url', 'final_url', 'observed_url', 'actual_url'),
+    'expected_after_href': ('after_href', 'href', 'url', 'terminal_href', 'final_href', 'observed_href', 'actual_href'),
+    'expected_after_route': ('after_route', 'after_path', 'route', 'path', 'pathname', 'terminal_route', 'terminal_path', 'final_route', 'final_path'),
+    'expected_final_path': ('final_path', 'path', 'pathname', 'terminal_path', 'after_path', 'observed_path', 'actual_path'),
+    'expected_final_url': ('final_url', 'url', 'href', 'terminal_url', 'after_url', 'observed_url', 'actual_url'),
+    'expected_final_href': ('final_href', 'href', 'url', 'terminal_href', 'after_href', 'observed_href', 'actual_href'),
+    'expected_final_route': ('final_route', 'final_path', 'route', 'path', 'pathname', 'terminal_route', 'terminal_path', 'after_route', 'after_path'),
+}
+
+
+def assertion_expected_actual_equivalent(expected, actual):
+    if isinstance(expected, str) and isinstance(actual, str):
+        return assertion_route_value_equivalent(expected, actual)
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        for expected_key, expected_value in expected.items():
+            actual_keys = (expected_key,) + EXPECTED_ACTUAL_ROUTE_KEY_ALIASES.get(expected_key, ())
+            matched = False
+            for actual_key in actual_keys:
+                if actual_key not in actual:
+                    continue
+                if assertion_expected_actual_equivalent(expected_value, actual.get(actual_key)):
+                    matched = True
+                    break
+            if not matched:
+                return False
+        return True
+    return expected == actual
+
+
+def assertion_failure_is_route_equivalent(item):
+    if not isinstance(item, dict):
+        return False
+    has_failure_flag = any(item.get(key) is False for key in INTERACTION_FAILURE_FLAG_KEYS)
+    status = str(item.get('status') or item.get('result') or '').strip().lower()
+    if status in INTERACTION_FAILURE_STATUS_VALUES:
+        has_failure_flag = True
+    if not has_failure_flag or 'expected' not in item or 'actual' not in item:
+        return False
+    return assertion_expected_actual_equivalent(item.get('expected'), item.get('actual'))
+
+
+def collect_interaction_failed_assertions_internal(value, prefix='', depth=0):
     if depth > 6:
-        return []
+        return [], False
     failures = []
+    ignored_route_equivalent_failure = False
     if isinstance(value, dict):
+        pending_aggregate_failures = []
+        has_assertion_container = any(
+            isinstance(value.get(key), (dict, list))
+            for key in INTERACTION_ASSERTION_CONTAINER_KEYS
+        )
+        route_equivalent_failure = assertion_failure_is_route_equivalent(value)
         for key in INTERACTION_FAILURE_FLAG_KEYS:
             if value.get(key) is False:
-                failures.append(failure_label(prefix, key))
+                if route_equivalent_failure or has_assertion_container:
+                    ignored_route_equivalent_failure = ignored_route_equivalent_failure or route_equivalent_failure
+                    if has_assertion_container and not route_equivalent_failure:
+                        pending_aggregate_failures.append(failure_label(prefix, key))
+                else:
+                    failures.append(failure_label(prefix, key))
         status = str(value.get('status') or value.get('result') or '').strip().lower()
         if status in INTERACTION_FAILURE_STATUS_VALUES:
-            failures.append(failure_label(prefix, assertion_item_label(value, 'status')))
+            if route_equivalent_failure or has_assertion_container:
+                ignored_route_equivalent_failure = ignored_route_equivalent_failure or route_equivalent_failure
+                if has_assertion_container and not route_equivalent_failure:
+                    pending_aggregate_failures.append(failure_label(prefix, assertion_item_label(value, 'status')))
+            else:
+                failures.append(failure_label(prefix, assertion_item_label(value, 'status')))
         for key in INTERACTION_ASSERTION_CONTAINER_KEYS:
             checks = value.get(key)
             container_prefix = failure_label(prefix, key)
@@ -2629,39 +2705,55 @@ def collect_interaction_failed_assertions(value, prefix='', depth=0):
                     if check_value is False:
                         failures.append(failure_label(container_prefix, check_key))
                     elif isinstance(check_value, dict):
-                        nested = collect_interaction_failed_assertions(
+                        nested, nested_ignored = collect_interaction_failed_assertions_internal(
                             check_value,
                             failure_label(container_prefix, check_key),
                             depth + 1,
                         )
                         failures.extend(nested)
+                        ignored_route_equivalent_failure = ignored_route_equivalent_failure or nested_ignored
                     elif isinstance(check_value, list):
-                        failures.extend(collect_interaction_failed_assertions(
+                        nested, nested_ignored = collect_interaction_failed_assertions_internal(
                             check_value,
                             failure_label(container_prefix, check_key),
                             depth + 1,
-                        ))
+                        )
+                        failures.extend(nested)
+                        ignored_route_equivalent_failure = ignored_route_equivalent_failure or nested_ignored
             elif isinstance(checks, list):
                 for index, item in enumerate(checks):
                     if item is False:
                         failures.append(failure_label(container_prefix, str(index)))
                     elif isinstance(item, dict):
                         item_label = assertion_item_label(item, str(index))
-                        failures.extend(collect_interaction_failed_assertions(
+                        nested, nested_ignored = collect_interaction_failed_assertions_internal(
                             item,
                             failure_label(container_prefix, item_label),
                             depth + 1,
-                        ))
+                        )
+                        failures.extend(nested)
+                        ignored_route_equivalent_failure = ignored_route_equivalent_failure or nested_ignored
         for key in EVIDENCE_CONTAINER_KEYS:
             nested = value.get(key)
             if isinstance(nested, (dict, list)):
-                failures.extend(collect_interaction_failed_assertions(nested, failure_label(prefix, key), depth + 1))
+                nested_failures, nested_ignored = collect_interaction_failed_assertions_internal(nested, failure_label(prefix, key), depth + 1)
+                failures.extend(nested_failures)
+                ignored_route_equivalent_failure = ignored_route_equivalent_failure or nested_ignored
+        if pending_aggregate_failures and not failures and not ignored_route_equivalent_failure:
+            failures.extend(pending_aggregate_failures)
     elif isinstance(value, list):
         for index, item in enumerate(value):
             if item is False:
                 failures.append(failure_label(prefix, str(index)))
             elif isinstance(item, (dict, list)):
-                failures.extend(collect_interaction_failed_assertions(item, prefix, depth + 1))
+                nested_failures, nested_ignored = collect_interaction_failed_assertions_internal(item, prefix, depth + 1)
+                failures.extend(nested_failures)
+                ignored_route_equivalent_failure = ignored_route_equivalent_failure or nested_ignored
+    return failures, ignored_route_equivalent_failure
+
+
+def collect_interaction_failed_assertions(value, prefix='', depth=0):
+    failures, _ignored_route_equivalent_failure = collect_interaction_failed_assertions_internal(value, prefix, depth)
     deduped = []
     seen = set()
     for failure in failures:
