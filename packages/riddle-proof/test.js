@@ -320,10 +320,13 @@ const prCommentCli = await runCli([
   prCommentBodyFile,
   "--summary",
   "Attach hosted proof to the PR.",
+  "--success-criteria",
+  "The generated comment preserves success criteria.",
 ]);
 assert.equal(prCommentCli.stdout, readFileSync(prCommentBodyFile, "utf-8"));
 assert.match(prCommentCli.stdout, /Riddle Proof Evidence/);
 assert.match(prCommentCli.stdout, /job_prcomment/);
+assert.match(prCommentCli.stdout, /The generated comment preserves success criteria/);
 
 const unknownOptionCli = await runCli([
   "profile-body-assertions",
