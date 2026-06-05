@@ -200,6 +200,44 @@ The package should call configured services and credentials at runtime; it must
 not publish Riddle server secrets, Discord credentials, GitHub tokens, or
 OpenClaw-instance-specific configuration.
 
+## OpenClaw Host Updates
+
+On OpenClaw hosts, do not assume the visible extension root is the only loaded
+copy of this package. The gateway may load tools from a managed npm project
+under:
+
+```text
+$OPENCLAW_HOME/npm/projects/riddledc-openclaw-riddle-proof-*/node_modules/@riddledc/openclaw-riddle-proof
+```
+
+while an extension root also exists at:
+
+```text
+$OPENCLAW_HOME/extensions/openclaw-riddle-proof
+```
+
+Update both locations before judging `riddle_proof_status` package metadata.
+Running `npm install @riddledc/openclaw-riddle-proof@...` inside the extension
+root is not enough; it nests the wrapper as a dependency instead of replacing
+the extension root package.
+
+From this repository, run the host-side helper on the OpenClaw machine:
+
+```bash
+scripts/update-openclaw-riddle-proof-host.sh 0.4.152 0.8.40
+```
+
+The first argument is the wrapper version. The optional second argument updates
+the shared OpenClaw npm install of `@riddledc/riddle-proof`. The script replaces
+the extension root from the npm tarball, updates any managed npm project whose
+name matches `riddledc-openclaw-riddle-proof-*`, restarts
+`openclaw-gateway.service`, and prints package readback for both install
+surfaces.
+
+After deployment, verify with a live `riddle_proof_status` tool call. Disk
+readback alone is insufficient because a stale managed npm project can continue
+serving older tool metadata.
+
 ## Local Exec Adapter
 
 The optional adapter lives in `@riddledc/riddle-proof/local-agent`; this
