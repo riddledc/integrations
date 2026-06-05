@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.39
+
+### Patch Changes
+
+- d371caf: Allow `pr-comment` to accept the documented `--success-criteria` and `--title` flags.
+
 ## 0.8.38
 
 ### Patch Changes
