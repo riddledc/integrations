@@ -40,6 +40,204 @@
       "no-diff-prod-audit-default-capture-pass"
     ]
   },
+  "hosted_riddle_suite": {
+    "runner": "riddle",
+    "target": {
+      "url": "https://riddledc.com/"
+    },
+    "result_log_fields": [
+      "case_id",
+      "profile_name",
+      "profile_status",
+      "route",
+      "riddle.job_id",
+      "riddle.status",
+      "artifacts",
+      "environment_blocker"
+    ],
+    "cases": [
+      {
+        "id": "hosted-home-to-proof-route-change-pass",
+        "intent": "Run the generic hosted Riddle profile runner against production home, click Proof, and prove terminal /proof/ before involving OC.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-home-to-proof",
+          "target": {
+            "route": "/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
+            "setup_actions": [
+              { "type": "click", "selector": "a[href*='/proof']", "after_ms": 750 }
+            ]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/proof/" },
+            { "type": "selector_visible", "selector": "main#main-content" },
+            { "type": "text_visible", "text": "Proof" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "passed" }
+      },
+      {
+        "id": "hosted-proof-to-home-route-change-pass",
+        "intent": "Run the generic hosted Riddle profile runner from /proof/, click the root/Home link, and prove terminal /.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-proof-to-home",
+          "target": {
+            "route": "/proof/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
+            "setup_actions": [
+              { "type": "click", "selector": "a[href='/'], a[href='https://riddledc.com/']", "after_ms": 750 }
+            ]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/" },
+            { "type": "selector_visible", "selector": "main#main-content" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "passed" }
+      },
+      {
+        "id": "hosted-pricing-query-hash-positive-pass",
+        "intent": "Run the hosted profile runner directly against Pricing with query/hash and prove slash, query, and hash are preserved.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-pricing-query-hash",
+          "target": {
+            "route": "/pricing/?rp_probe=1#pricing-probe",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
+            "setup_actions": [
+              {
+                "type": "window_eval",
+                "script": "return window.location.hash;",
+                "expect_return": "#pricing-probe",
+                "store_return_to": "__riddleProof.pricingHash",
+                "capture_return": true
+              }
+            ]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/pricing/" },
+            { "type": "url_search_param_equals", "param": "rp_probe", "expected_value": "1" },
+            { "type": "selector_visible", "selector": "main#main-content" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "passed" }
+      },
+      {
+        "id": "hosted-pricing-query-hash-dropped-blocker",
+        "intent": "Run a hosted negative control where Pricing lacks the expected query/hash and require a product_regression profile result.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-pricing-query-hash-dropped",
+          "target": {
+            "route": "/pricing/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/pricing/" },
+            { "type": "url_search_param_equals", "param": "rp_probe", "expected_value": "1" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "product_regression" }
+      },
+      {
+        "id": "hosted-no-diff-prod-audit-pass",
+        "intent": "Run a hosted no-diff production audit profile with no implementation or OC wrapper involved.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-no-diff-prod-audit",
+          "target": {
+            "route": "/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/" },
+            { "type": "selector_visible", "selector": "main#main-content" },
+            { "type": "no_fatal_console_errors" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "passed" }
+      },
+      {
+        "id": "hosted-missing-selector-timeout-blocker",
+        "intent": "Run a hosted profile with a missing selector and require a clean product_regression result, not a lifecycle failure.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-missing-selector",
+          "target": {
+            "route": "/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }]
+          },
+          "checks": [
+            { "type": "selector_visible", "selector": "#riddle-proof-missing-selector-timeout-smoke-20260604" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": { "profile_status": "product_regression" }
+      },
+      {
+        "id": "hosted-thrown-error-specific-blocker",
+        "intent": "Run a hosted profile whose setup action throws a marker and require the marker to surface as a product_regression result.",
+        "profile": {
+          "version": "riddle-proof.profile.v1",
+          "name": "riddle-site-hosted-thrown-error",
+          "target": {
+            "route": "/",
+            "wait_for_selector": "main#main-content",
+            "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
+            "setup_actions": [
+              {
+                "type": "window_eval",
+                "script": "throw new Error('RIDDLE_PROOF_HOSTED_THROWN_ERROR_SMOKE_20260604');",
+                "timeout_ms": 1000
+              }
+            ]
+          },
+          "checks": [
+            { "type": "route_loaded", "expected_path": "/" }
+          ],
+          "metadata": {
+            "pack_id": "riddle_proof_hosted_flow",
+            "pack_public_name": "Riddle Proof Hosted Flow"
+          }
+        },
+        "expect": {
+          "profile_status": "product_regression",
+          "message_contains": "RIDDLE_PROOF_HOSTED_THROWN_ERROR_SMOKE_20260604"
+        }
+      }
+    ]
+  },
   "openclaw_live_suite": {
     "target": {
       "repo": "davisdiehl/riddle-site",
