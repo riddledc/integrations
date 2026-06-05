@@ -122,6 +122,8 @@ export type OpenClawRiddleProofPackageMetadata = {
 };
 
 declare const __RIDDLE_PROOF_PACKAGE_METADATA__: OpenClawRiddleProofPackageMetadata;
+declare const __dirname: string | undefined;
+declare const __filename: string | undefined;
 
 function runtimePackageVersion(packageName: string) {
   const readVersion = (packageJsonPath: string) => {
@@ -133,7 +135,30 @@ function runtimePackageVersion(packageName: string) {
     }
     return null;
   };
+  const readNamedVersion = (packageJsonPath: string) => {
+    try {
+      const parsed = JSON.parse(readFileSync(packageJsonPath, "utf8")) as { name?: unknown; version?: unknown };
+      if (parsed.name !== packageName) return null;
+      if (typeof parsed.version === "string" && parsed.version.trim()) return parsed.version.trim();
+    } catch {
+      return null;
+    }
+    return null;
+  };
   const packagePathParts = packageName.split("/");
+  const packageDirName = packagePathParts[packagePathParts.length - 1] || "";
+  const pluginPackageDirName = __RIDDLE_PROOF_PACKAGE_METADATA__.plugin_package?.split("/").pop() || "";
+  const uniqueNames = (values: string[]) => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const value of values) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      names.push(trimmed);
+    }
+    return names;
+  };
   const uniquePaths = (values: string[]) => {
     const seen = new Set<string>();
     const paths: string[] = [];
@@ -160,6 +185,9 @@ function runtimePackageVersion(packageName: string) {
   };
   const installedPackageVersion = (roots: string[]) => {
     for (const root of roots) {
+      const rootPackageVersion = readNamedVersion(path.join(root, "package.json"));
+      if (rootPackageVersion) return rootPackageVersion;
+
       const nodeModulesPackageJson = path.join(root, "node_modules", ...packagePathParts, "package.json");
       const nodeModulesVersion = readVersion(nodeModulesPackageJson);
       if (nodeModulesVersion) return nodeModulesVersion;
@@ -186,6 +214,20 @@ function runtimePackageVersion(packageName: string) {
     }
     return null;
   };
+  const openClawExtensionDirNames = uniqueNames([packageDirName, pluginPackageDirName]);
+  const openClawHomeRoots = uniquePaths([
+    ...openClawExtensionDirNames.map((dirName) => (
+      process.env.OPENCLAW_HOME ? path.join(process.env.OPENCLAW_HOME, "extensions", dirName) : ""
+    )),
+    ...openClawExtensionDirNames.map((dirName) => (
+      process.env.HOME ? path.join(process.env.HOME, ".openclaw", "extensions", dirName) : ""
+    )),
+    process.env.OPENCLAW_PLUGIN_DIR || "",
+    process.env.OPENCLAW_EXTENSION_DIR || "",
+  ]);
+  const openClawInstalledVersion = installedPackageVersion(openClawHomeRoots);
+  if (openClawInstalledVersion) return openClawInstalledVersion;
+
   const cwdRoots = uniquePaths([process.cwd()]);
   const argvRoots = uniquePaths([path.dirname(process.argv[1] || process.cwd())]);
   const processSearchRoots = uniquePaths([
@@ -198,8 +240,11 @@ function runtimePackageVersion(packageName: string) {
   if (processInstalledVersion) return processInstalledVersion;
 
   const moduleUrl = typeof import.meta === "object" && typeof import.meta.url === "string" ? import.meta.url : "";
+  const cjsDirname = typeof __dirname === "string" ? __dirname : "";
+  const cjsFilenameDir = typeof __filename === "string" ? path.dirname(__filename) : "";
   const moduleDir = moduleUrl ? path.dirname(fileURLToPath(moduleUrl)) : "";
-  const moduleSearchRoots = moduleDir ? uniquePaths([moduleDir, ...ancestors(moduleDir)]) : [];
+  const moduleDirs = uniquePaths([moduleDir, cjsDirname, cjsFilenameDir]);
+  const moduleSearchRoots = uniquePaths(moduleDirs.flatMap((root) => [root, ...ancestors(root)]));
   const workspacePackageDir = packagePathParts[packagePathParts.length - 1] || "";
   for (const root of uniquePaths([...processSearchRoots, ...moduleSearchRoots])) {
     if (!workspacePackageDir || path.basename(root) !== "packages") continue;
