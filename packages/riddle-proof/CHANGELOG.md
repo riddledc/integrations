@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.37
+
+### Patch Changes
+
+- 18c72f4: Add static Preview deploy progress callbacks and CLI progress output so long archive, upload, publish, and publish-recovery phases no longer appear stalled.
+
 ## 0.8.36
 
 ### Patch Changes
