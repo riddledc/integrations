@@ -43,6 +43,30 @@ for (const caseId of requiredCoreCases) {
 
 const liveCases = pack.openclaw_live_suite.cases;
 const liveCaseIds = liveCases.map((testCase) => testCase.id);
+const hostedCases = pack.hosted_riddle_suite.cases;
+const hostedCaseIds = hostedCases.map((testCase) => testCase.id);
+assert.equal(pack.hosted_riddle_suite.runner, "riddle");
+assert.equal(pack.hosted_riddle_suite.target.url, "https://riddledc.com/");
+assert.equal(new Set(hostedCaseIds).size, hostedCaseIds.length, "hosted case ids must be unique");
+assert.deepEqual(hostedCaseIds, [
+  "hosted-home-to-proof-route-change-pass",
+  "hosted-proof-to-home-route-change-pass",
+  "hosted-pricing-query-hash-positive-pass",
+  "hosted-pricing-query-hash-dropped-blocker",
+  "hosted-no-diff-prod-audit-pass",
+  "hosted-missing-selector-timeout-blocker",
+  "hosted-thrown-error-specific-blocker",
+]);
+const hostedExpectById = new Map(hostedCases.map((testCase) => [testCase.id, testCase.expect]));
+assert.equal(hostedExpectById.get("hosted-home-to-proof-route-change-pass").profile_status, "passed");
+assert.equal(hostedExpectById.get("hosted-pricing-query-hash-dropped-blocker").profile_status, "product_regression");
+assert.equal(hostedExpectById.get("hosted-thrown-error-specific-blocker").message_contains, "RIDDLE_PROOF_HOSTED_THROWN_ERROR_SMOKE_20260604");
+for (const testCase of hostedCases) {
+  assert.equal(typeof testCase.intent, "string", `${testCase.id} needs an intent`);
+  assert.ok(testCase.profile, `${testCase.id} needs a hosted profile`);
+  assert.ok(["passed", "product_regression"].includes(testCase.expect.profile_status), `${testCase.id} has invalid hosted status ${testCase.expect.profile_status}`);
+}
+
 assert.equal(new Set(liveCaseIds).size, liveCaseIds.length, "live case ids must be unique");
 assert.deepEqual(liveCaseIds, [
   "home-to-proof-route-change-pass",
@@ -104,6 +128,9 @@ assert.equal(cliCompact.local_core.ok, true);
 assert.equal(cliCompact.local_core.missing_required_cases.length, 0);
 assert.equal(cliCompact.local_core.failed_cases.length, 0);
 assert.equal(cliCompact.local_core.forbidden_terminal_markers_seen.length, 0);
+assert.equal(cliCompact.hosted_riddle.requested, false);
+assert.equal(cliCompact.hosted_riddle.configured, true);
+assert.equal(cliCompact.hosted_riddle.case_count, hostedCases.length);
 
 const outputDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-regression-pack-test-"));
 const cliNoLocalCore = JSON.parse(execFileSync(process.execPath, [
@@ -125,7 +152,11 @@ const cliNoLocalCore = JSON.parse(execFileSync(process.execPath, [
 assert.equal(cliNoLocalCore.ok, true);
 assert.equal(cliNoLocalCore.local_core.requested, false);
 assert.equal(cliNoLocalCore.local_core_validated, false);
+assert.equal(cliNoLocalCore.hosted_riddle.requested, false);
+assert.equal(cliNoLocalCore.hosted_riddle.configured, true);
 assert.match(cliNoLocalCore.openclaw_handoff_prompt, /Local generic core suite is not green or was not run/);
+assert.match(cliNoLocalCore.openclaw_handoff_prompt, /Local generic core suite is not green or was not run/);
+assert.match(readFileSync(path.join(outputDir, "hosted-riddle-handoff.md"), "utf8"), /Run the hosted Riddle generic regression suite/);
 assert.match(readFileSync(path.join(outputDir, "oc-handoff.md"), "utf8"), /Run the Riddle Proof OC flow regression pack/);
 assert.equal(JSON.parse(readFileSync(path.join(outputDir, "regression-pack-result.json"), "utf8")).pack_id, "riddle-proof-oc-flow-2026-06");
 
@@ -134,5 +165,6 @@ console.log(JSON.stringify({
   suite: "riddle-proof.regression-packs",
   pack_id: pack.pack_id,
   live_case_count: liveCases.length,
+  hosted_case_count: hostedCases.length,
   core_case_count: pack.local_core_suite.required_cases.length,
 }));

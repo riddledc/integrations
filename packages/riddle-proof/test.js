@@ -5412,6 +5412,80 @@ try {
   ]);
   assert.equal(cliProfileNoResult.stdout, "");
 
+  const hostedRegressionPackFile = path.join(riddlePreviewDir, "cli-hosted-riddle-regression-pack.json");
+  const hostedRegressionOutputDir = path.join(riddlePreviewDir, "cli-hosted-riddle-regression-pack-output");
+  writeFileSync(hostedRegressionPackFile, JSON.stringify({
+    version: "riddle-proof.regression-pack.v1",
+    pack_id: "cli-hosted-riddle-pack",
+    public_name: "CLI Hosted Riddle Pack",
+    forbidden_terminal_markers: [],
+    local_core_suite: {
+      command: "python3 packages/riddle-proof/runtime/tests/trust_boundary_regression.py",
+      required_cases: [],
+    },
+    hosted_riddle_suite: {
+      runner: "riddle",
+      target: { url: "https://example.com" },
+      cases: [{
+        id: "hosted-profile-progress",
+        intent: "Run a hosted profile case from a regression pack before OC handoff.",
+        profile: {
+          version: "riddle-proof.profile.v1",
+          name: "cli-profile-progress",
+          target: {
+            route: "/profile",
+            viewports: [{ name: "desktop", width: 1280, height: 900 }],
+          },
+          checks: [{ type: "route_loaded", expected_path: "/profile" }],
+        },
+        expect: { profile_status: "passed" },
+      }],
+    },
+    openclaw_live_suite: {
+      target: {},
+      result_log_fields: [],
+      cases: [],
+    },
+  }));
+  const hostedRegressionRequestStart = cliRunProfileRequests.length;
+  const hostedRegressionResult = await runCli([
+    "regression-pack",
+    "run",
+    "--pack-file",
+    hostedRegressionPackFile,
+    "--local-core",
+    "false",
+    "--hosted-riddle",
+    "true",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--output-dir",
+    hostedRegressionOutputDir,
+    "--format",
+    "compact-json",
+    "--pollAttempts",
+    "4",
+    "--interval-ms",
+    "0",
+    "--progress-every-ms",
+    "0",
+    "--quiet",
+  ]);
+  const parsedHostedRegressionResult = JSON.parse(hostedRegressionResult.stdout);
+  assert.equal(parsedHostedRegressionResult.ok, true);
+  assert.equal(parsedHostedRegressionResult.local_core.requested, false);
+  assert.equal(parsedHostedRegressionResult.hosted_riddle.requested, true);
+  assert.equal(parsedHostedRegressionResult.hosted_riddle.ok, true);
+  assert.equal(parsedHostedRegressionResult.hosted_riddle.case_count, 1);
+  assert.equal(parsedHostedRegressionResult.hosted_riddle.failed_cases.length, 0);
+  assert.equal(cliRunProfileRequests.length, hostedRegressionRequestStart + 1);
+  assert.equal(cliRunProfileRequests[hostedRegressionRequestStart].body.url, "https://example.com/profile");
+  assert.equal(JSON.parse(readFileSync(path.join(hostedRegressionOutputDir, "hosted-riddle", "hosted-profile-progress", "profile-result.json"), "utf8")).status, "passed");
+  assert.match(readFileSync(path.join(hostedRegressionOutputDir, "summary.md"), "utf8"), /## Hosted Riddle/);
+  assert.match(readFileSync(path.join(hostedRegressionOutputDir, "oc-handoff.md"), "utf8"), /Local generic core suite is not green or was not run/);
+
   const balancedSetupProfileFile = path.join(riddlePreviewDir, "cli-balanced-setup-summary.json");
   const balancedSetupOutputDir = path.join(riddlePreviewDir, "cli-balanced-setup-summary-output");
   writeFileSync(balancedSetupProfileFile, JSON.stringify({

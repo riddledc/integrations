@@ -83,6 +83,7 @@ const KNOWN_CLI_OPTIONS = new Set([
   "format",
   "framework",
   "help",
+  "hostedRiddle",
   "image",
   "input",
   "inputDir",
@@ -155,7 +156,7 @@ function usage() {
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
-    "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
+    "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static]",
@@ -512,8 +513,273 @@ function runRegressionPackLocalCore(pack: Record<string, unknown>) {
   };
 }
 
+function regressionPackHostedRiddleRequested(options: CliOptions) {
+  return optionBoolean(options, "hostedRiddle") ?? false;
+}
+
+function regressionPackHostedRiddleSuite(pack: Record<string, unknown>) {
+  return regressionPackRecord(pack.hosted_riddle_suite);
+}
+
+function regressionPackHostedRiddleCases(pack: Record<string, unknown>): Record<string, unknown>[] {
+  const suite = regressionPackHostedRiddleSuite(pack);
+  return Array.isArray(suite.cases) ? suite.cases.map(regressionPackRecord) : [];
+}
+
+function regressionPackHostedRiddleExpectedStatus(testCase: Record<string, unknown>) {
+  const expect = regressionPackRecord(testCase.expect);
+  return cliString(expect.profile_status) || cliString(expect.status);
+}
+
+function regressionPackHostedRiddleExpectedMessage(testCase: Record<string, unknown>) {
+  const expect = regressionPackRecord(testCase.expect);
+  return cliString(expect.message_contains);
+}
+
+function regressionPackHostedRiddlePlan(pack: Record<string, unknown>) {
+  const suite = regressionPackHostedRiddleSuite(pack);
+  const cases = regressionPackHostedRiddleCases(pack);
+  return {
+    requested: false,
+    configured: cases.length > 0,
+    ok: true,
+    runner: cliString(suite.runner) || "riddle",
+    target: regressionPackRecord(suite.target),
+    case_count: cases.length,
+    case_ids: cases.map((item) => cliString(item.id)).filter(Boolean),
+  };
+}
+
+function regressionPackHostedRiddleCaseOutputDir(outputDir: string | undefined, caseId: string) {
+  return outputDir ? path.join(outputDir, "hosted-riddle", safeProfileOutputSegment(caseId)) : undefined;
+}
+
+function compactHostedRiddleCaseResult(testCase: Record<string, unknown>, result: RiddleProofProfileResult, ok: boolean) {
+  const expectedMessage = regressionPackHostedRiddleExpectedMessage(testCase);
+  return {
+    id: cliString(testCase.id) || result.profile_name,
+    intent: cliString(testCase.intent) || null,
+    ok,
+    expected_status: regressionPackHostedRiddleExpectedStatus(testCase) || null,
+    expected_message_contains: expectedMessage || null,
+    expected_message_found: expectedMessage ? JSON.stringify(result).includes(expectedMessage) : undefined,
+    status: result.status,
+    profile_name: result.profile_name,
+    summary: result.summary,
+    route: result.route,
+    riddle: result.riddle,
+    artifacts: result.artifacts,
+    environment_blocker: result.environment_blocker,
+    error: result.error,
+  };
+}
+
+function hostedRiddleBlockedCaseResult(testCase: Record<string, unknown>, error: string, environmentBlocker: Record<string, JsonValue>) {
+  const rawProfile = regressionPackRecord(testCase.profile);
+  return {
+    id: cliString(testCase.id) || cliString(rawProfile.name) || "hosted-riddle-case",
+    intent: cliString(testCase.intent) || null,
+    ok: false,
+    expected_status: regressionPackHostedRiddleExpectedStatus(testCase) || null,
+    expected_message_contains: regressionPackHostedRiddleExpectedMessage(testCase) || null,
+    status: "environment_blocked",
+    profile_name: cliString(rawProfile.name) || null,
+    summary: error,
+    environment_blocker: environmentBlocker,
+    error,
+  };
+}
+
+async function hostedRiddleSuiteEnvironmentBlocker(
+  cases: Record<string, unknown>[],
+  options: CliOptions,
+): Promise<{ error: string; environment_blocker: Record<string, JsonValue> } | undefined> {
+  if (!runProfileBalancePreflightOption(options) || !cases.length) return undefined;
+  const client = createRiddleApiClient(riddleClientConfig(options));
+  const requiredSeconds = cases.length * RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB;
+  let balance: RiddleBalanceResult;
+  try {
+    balance = await client.getBalance();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      error: message,
+      environment_blocker: {
+        source: "riddle_api",
+        endpoint: "/v1/balance",
+        reason: "balance_preflight_failed",
+        balance_preflight: true,
+        job_count: cases.length,
+        seconds_per_job: RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB,
+        required_seconds: requiredSeconds,
+        ...riddleApiErrorBlockerMetadata(error),
+        ...apiKeySourceBlockerMetadata(client),
+      },
+    };
+  }
+
+  const availableSeconds = riddleBalanceAvailableSeconds(balance);
+  if (availableSeconds === undefined || availableSeconds >= requiredSeconds) return undefined;
+  const reservedSeconds = cliFiniteNumber(balance.reserved_seconds);
+  const totalSeconds = cliFiniteNumber(balance.total_seconds);
+  const holdsCount = cliFiniteNumber(balance.holds_count);
+  return {
+    error: `Riddle hosted regression balance preflight failed: ${availableSeconds}s available for ${cases.length} serial hosted job(s), minimum ${requiredSeconds}s required.`,
+    environment_blocker: {
+      source: "riddle_api",
+      endpoint: "/v1/balance",
+      reason: "insufficient_balance",
+      error: "Insufficient available balance",
+      balance_preflight: true,
+      job_count: cases.length,
+      seconds_per_job: RIDDLE_PROFILE_BALANCE_PREFLIGHT_MIN_SECONDS_PER_JOB,
+      required_seconds: requiredSeconds,
+      available_seconds: availableSeconds,
+      deficit_seconds: requiredSeconds - availableSeconds,
+      ...(reservedSeconds === undefined ? {} : { reserved_seconds: reservedSeconds }),
+      ...(totalSeconds === undefined ? {} : { total_seconds: totalSeconds }),
+      ...(holdsCount === undefined ? {} : { holds_count: holdsCount }),
+      ...apiKeySourceBlockerMetadata(client),
+    },
+  };
+}
+
+async function runRegressionPackHostedRiddle(pack: Record<string, unknown>, options: CliOptions) {
+  const suite = regressionPackHostedRiddleSuite(pack);
+  const cases = regressionPackHostedRiddleCases(pack);
+  const runner = cliString(suite.runner) || "riddle";
+  const target = regressionPackRecord(suite.target);
+  const baseUrl = cliString(target.url) || cliString(target.base_url) || cliString(target.baseUrl) || optionString(options, "url") || optionString(options, "baseUrl");
+  const outputDir = profileOutputDirOption(options);
+  const startedAt = new Date().toISOString();
+  const results: Record<string, unknown>[] = [];
+  const suiteBlocker = await hostedRiddleSuiteEnvironmentBlocker(cases, options);
+  if (suiteBlocker) {
+    const blockedCases = cases.map((testCase) => hostedRiddleBlockedCaseResult(testCase, suiteBlocker.error, suiteBlocker.environment_blocker));
+    return {
+      requested: true,
+      configured: cases.length > 0,
+      ok: false,
+      runner,
+      target,
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      case_count: cases.length,
+      passed_case_count: 0,
+      failed_cases: blockedCases.map((item) => cliString(item.id)).filter((item): item is string => Boolean(item)),
+      environment_blocked_cases: blockedCases.map((item) => cliString(item.id)).filter((item): item is string => Boolean(item)),
+      environment_blocker: suiteBlocker.environment_blocker,
+      error: suiteBlocker.error,
+      cases: blockedCases,
+    };
+  }
+
+  for (const testCase of cases) {
+    const caseId = cliString(testCase.id) || `case-${results.length + 1}`;
+    const rawProfile = regressionPackRecord(testCase.profile);
+    if (!Object.keys(rawProfile).length) {
+      results.push({
+        id: caseId,
+        intent: cliString(testCase.intent) || null,
+        ok: false,
+        expected_status: regressionPackHostedRiddleExpectedStatus(testCase) || null,
+        status: "configuration_error",
+        error: "hosted_riddle_suite case requires profile.",
+      });
+      continue;
+    }
+
+    let result: RiddleProofProfileResult;
+    const caseOutputDir = regressionPackHostedRiddleCaseOutputDir(outputDir, caseId);
+    const caseOptions: CliOptions = {
+      ...options,
+      runner,
+      ...(caseOutputDir ? { output: caseOutputDir, outputDir: caseOutputDir } : {}),
+    };
+    try {
+      const profile = profileWithSelectedViewportNamesForCli(
+        normalizeRiddleProofProfile(rawProfile, { url: baseUrl }),
+        options,
+      );
+      result = await runProfileForCli(profile, caseOptions);
+      writeProfileOutput(caseOutputDir, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.push({
+        id: caseId,
+        intent: cliString(testCase.intent) || null,
+        ok: false,
+        expected_status: regressionPackHostedRiddleExpectedStatus(testCase) || null,
+        status: "configuration_error",
+        error: message,
+        output_dir: caseOutputDir || null,
+      });
+      continue;
+    }
+
+    const expectedStatus = regressionPackHostedRiddleExpectedStatus(testCase);
+    const expectedMessage = regressionPackHostedRiddleExpectedMessage(testCase);
+    const statusOk = expectedStatus ? result.status === expectedStatus : result.status === "passed";
+    const messageOk = expectedMessage ? JSON.stringify(result).includes(expectedMessage) : true;
+    const ok = statusOk && messageOk;
+    results.push({
+      ...compactHostedRiddleCaseResult(testCase, result, ok),
+      output_dir: caseOutputDir || null,
+    });
+  }
+
+  const failedCases = results
+    .filter((item) => item.ok !== true)
+    .map((item) => cliString(item.id))
+    .filter((item): item is string => Boolean(item));
+  const environmentBlockedCases = results
+    .filter((item) => cliString(item.status) === "environment_blocked")
+    .map((item) => cliString(item.id))
+    .filter((item): item is string => Boolean(item));
+  return {
+    requested: true,
+    configured: cases.length > 0,
+    ok: cases.length > 0 && !failedCases.length,
+    runner,
+    target,
+    started_at: startedAt,
+    finished_at: new Date().toISOString(),
+    case_count: cases.length,
+    passed_case_count: results.length - failedCases.length,
+    failed_cases: failedCases,
+    environment_blocked_cases: environmentBlockedCases,
+    cases: results,
+  };
+}
+
+function hostedRiddleHandoffPromptForRegressionPack(pack: Record<string, unknown>) {
+  const cases = regressionPackHostedRiddleCases(pack);
+  const suite = regressionPackHostedRiddleSuite(pack);
+  const target = regressionPackRecord(suite.target);
+  const lines = [
+    "Run the hosted Riddle generic regression suite before involving OpenClaw.",
+    "",
+    "Command:",
+    "riddle-proof-loop regression-pack run --pack oc-flow-regression --local-core true --hosted-riddle true --format markdown --output-dir artifacts/riddle-proof/hosted-regression",
+    "",
+    "Target:",
+    ...Object.entries(target).map(([key, value]) => `- ${key}: ${JSON.stringify(value)}`),
+    "",
+    "Cases:",
+    ...cases.map((testCase, index) => {
+      const expect = regressionPackRecord(testCase.expect);
+      return `${index + 1}. ${cliString(testCase.id) || "unnamed-case"}: ${cliString(testCase.intent) || "no intent"}\n   Expect: ${JSON.stringify(expect)}`;
+    }),
+    "",
+    "Only pass the batch to OC after local_core.ok and hosted_riddle.ok are both true.",
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+
 function openClawHandoffPromptForRegressionPack(pack: Record<string, unknown>, input: {
   localCoreOk: boolean;
+  hostedRiddleOk: boolean;
+  hostedRiddleRequested: boolean;
 }) {
   const minimumVersions = regressionPackRecord(pack.minimum_versions);
   const runtimeGate = regressionPackRecord(pack.runtime_gate);
@@ -535,6 +801,13 @@ function openClawHandoffPromptForRegressionPack(pack: Record<string, unknown>, i
     "- Run cases serially, not as one broad parallel batch.",
     "- If loaded metadata is stale, stop and restart/reload the gateway before counting results.",
     "- If any generic lifecycle marker appears, report the exact marker and artifact, then stop the counted batch.",
+    input.localCoreOk
+      ? input.hostedRiddleOk
+        ? "- Generic local core and hosted Riddle suites are green; OC should only validate wrapper/runtime adapter behavior."
+        : input.hostedRiddleRequested
+          ? "- Hosted Riddle generic suite did not pass; do not treat OC failures as wrapper-only until it is green."
+          : "- Hosted Riddle generic suite was not run in this regression-pack invocation; run it before counting OC as the late adapter gate."
+      : "- Local generic core suite is not green or was not run; keep OC as blocked-on-generic until local core is green.",
     `- Forbidden terminal markers: ${forbiddenMarkers.join(", ") || "none"}.`,
     fields.length ? `- Log fields for every counted run: ${fields.join(", ")}.` : "",
     "",
@@ -548,7 +821,7 @@ function openClawHandoffPromptForRegressionPack(pack: Record<string, unknown>, i
     }),
     "",
     input.localCoreOk
-      ? "Local generic core suite is green, so OC should only be validating wrapper/runtime behavior."
+      ? "Local generic core suite is green."
       : "Local generic core suite is not green or was not run; do not count OC failures as wrapper-only until local core is green.",
   ].filter((line) => line !== "");
   return lines.join("\n");
@@ -556,6 +829,7 @@ function openClawHandoffPromptForRegressionPack(pack: Record<string, unknown>, i
 
 function compactRegressionPackRunResult(result: Record<string, unknown>) {
   const localCore = regressionPackRecord(result.local_core);
+  const hostedRiddle = regressionPackRecord(result.hosted_riddle);
   const openClaw = regressionPackRecord(result.openclaw_live_suite);
   return {
     version: result.version,
@@ -570,6 +844,15 @@ function compactRegressionPackRunResult(result: Record<string, unknown>) {
       failed_cases: localCore.failed_cases,
       forbidden_terminal_markers_seen: localCore.forbidden_terminal_markers_seen,
     },
+    hosted_riddle: {
+      requested: hostedRiddle.requested,
+      configured: hostedRiddle.configured,
+      ok: hostedRiddle.ok,
+      runner: hostedRiddle.runner,
+      case_count: hostedRiddle.case_count,
+      failed_cases: hostedRiddle.failed_cases,
+      environment_blocked_cases: hostedRiddle.environment_blocked_cases,
+    },
     openclaw_live_case_count: openClaw.case_count,
     output_dir: result.output_dir,
   };
@@ -577,6 +860,7 @@ function compactRegressionPackRunResult(result: Record<string, unknown>) {
 
 function regressionPackRunMarkdown(result: Record<string, unknown>) {
   const localCore = regressionPackRecord(result.local_core);
+  const hostedRiddle = regressionPackRecord(result.hosted_riddle);
   const runtimeGate = regressionPackRecord(result.runtime_gate);
   const minimumVersions = regressionPackRecord(result.minimum_versions);
   const openClaw = regressionPackRecord(result.openclaw_live_suite);
@@ -596,6 +880,16 @@ function regressionPackRunMarkdown(result: Record<string, unknown>) {
     `- failed cases: ${regressionPackStringArray(localCore.failed_cases).join(", ") || "none"}`,
     `- forbidden markers seen: ${regressionPackStringArray(localCore.forbidden_terminal_markers_seen).join(", ") || "none"}`,
     "",
+    "## Hosted Riddle",
+    "",
+    `- requested: ${hostedRiddle.requested === true}`,
+    `- configured: ${hostedRiddle.configured === true}`,
+    `- ok: ${hostedRiddle.ok === true}`,
+    `- runner: ${cliString(hostedRiddle.runner) || "n/a"}`,
+    `- cases: ${hostedRiddle.case_count ?? "n/a"}`,
+    `- failed cases: ${regressionPackStringArray(hostedRiddle.failed_cases).join(", ") || "none"}`,
+    `- environment blocked cases: ${regressionPackStringArray(hostedRiddle.environment_blocked_cases).join(", ") || "none"}`,
+    "",
     "## Runtime Gate",
     "",
     `- tool: ${cliString(runtimeGate.tool) || "n/a"}`,
@@ -605,6 +899,12 @@ function regressionPackRunMarkdown(result: Record<string, unknown>) {
     "",
     `- case count: ${openClaw.case_count ?? "n/a"}`,
     `- result log fields: ${regressionPackStringArray(openClaw.result_log_fields).join(", ") || "n/a"}`,
+    "",
+    "## Hosted Riddle Handoff",
+    "",
+    "```text",
+    cliString(result.hosted_riddle_handoff_prompt) || "",
+    "```",
     "",
     "## OC Handoff Prompt",
     "",
@@ -621,24 +921,32 @@ function writeRegressionPackOutput(outputDir: string | undefined, result: Record
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(path.join(outputDir, "regression-pack-result.json"), `${JSON.stringify(result, null, 2)}\n`);
   writeFileSync(path.join(outputDir, "summary.md"), regressionPackRunMarkdown(result));
+  writeFileSync(path.join(outputDir, "hosted-riddle-handoff.md"), `${cliString(result.hosted_riddle_handoff_prompt) || ""}\n`);
   writeFileSync(path.join(outputDir, "oc-handoff.md"), `${cliString(result.openclaw_handoff_prompt) || ""}\n`);
 }
 
-function runRegressionPackForCli(options: CliOptions) {
+async function runRegressionPackForCli(options: CliOptions) {
   const { filePath, pack } = readRegressionPackForCli(options);
   const localCoreRequested = optionBoolean(options, "localCore") ?? true;
+  const hostedRiddleRequested = regressionPackHostedRiddleRequested(options);
   const localCore = localCoreRequested
     ? runRegressionPackLocalCore(pack)
     : { requested: false, ok: true, command: regressionPackCommandForLocalCore(pack) };
+  const hostedRiddle = hostedRiddleRequested
+    ? await runRegressionPackHostedRiddle(pack, options)
+    : regressionPackHostedRiddlePlan(pack);
   const liveSuite = regressionPackRecord(pack.openclaw_live_suite);
   const liveCases = Array.isArray(liveSuite.cases) ? liveSuite.cases : [];
   const localCoreRecord = regressionPackRecord(localCore);
+  const hostedRiddleRecord = regressionPackRecord(hostedRiddle);
   const localCoreValidated = localCoreRecord.requested === true && localCoreRecord.ok === true;
-  const ok = localCoreRequested ? localCoreValidated : true;
+  const hostedRiddleValidated = hostedRiddleRecord.requested === true && hostedRiddleRecord.ok === true;
+  const ok = (localCoreRequested ? localCoreValidated : true) && (hostedRiddleRequested ? hostedRiddleValidated : true);
   const result = {
     version: "riddle-proof.regression-pack-run-result.v1",
     ok,
     local_core_validated: localCoreValidated,
+    hosted_riddle_validated: hostedRiddleValidated,
     generated_at: new Date().toISOString(),
     pack_path: filePath,
     pack_id: cliString(pack.pack_id) || null,
@@ -648,13 +956,19 @@ function runRegressionPackForCli(options: CliOptions) {
     runtime_gate: regressionPackRecord(pack.runtime_gate),
     forbidden_terminal_markers: regressionPackStringArray(pack.forbidden_terminal_markers),
     local_core: localCore,
+    hosted_riddle: hostedRiddle,
     openclaw_live_suite: {
       target: regressionPackRecord(liveSuite.target),
       result_log_fields: regressionPackStringArray(liveSuite.result_log_fields),
       case_count: liveCases.length,
       case_ids: liveCases.map((item) => cliString(regressionPackRecord(item).id)).filter(Boolean),
     },
-    openclaw_handoff_prompt: openClawHandoffPromptForRegressionPack(pack, { localCoreOk: localCoreValidated }),
+    hosted_riddle_handoff_prompt: hostedRiddleHandoffPromptForRegressionPack(pack),
+    openclaw_handoff_prompt: openClawHandoffPromptForRegressionPack(pack, {
+      localCoreOk: localCoreValidated,
+      hostedRiddleOk: hostedRiddleValidated,
+      hostedRiddleRequested,
+    }),
     output_dir: profileOutputDirOption(options) || null,
   };
   writeRegressionPackOutput(profileOutputDirOption(options), result);
@@ -5275,7 +5589,7 @@ async function main() {
   if (command === "regression-pack") {
     const action = positional[1] || "run";
     if (action !== "run") throw new Error("Only `regression-pack run` is supported.");
-    const result = runRegressionPackForCli(options);
+    const result = await runRegressionPackForCli(options);
     writeRegressionPackRunResult(result, options);
     process.exitCode = result.ok ? 0 : 1;
     return;
