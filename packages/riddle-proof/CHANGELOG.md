@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.38
+
+### Patch Changes
+
+- 39d49b2: Add a first-class PR proof comment command and exported markdown builder for hosted Riddle proof artifacts.
+
 ## 0.8.37
 
 ### Patch Changes
