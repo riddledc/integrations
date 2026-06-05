@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.152
+
+### Patch Changes
+
+- 258b73c: Read runtime dependency metadata from the active OpenClaw extension install so status and inspect report the package version actually loaded beside the wrapper.
+
 ## 0.4.151
 
 ### Patch Changes
