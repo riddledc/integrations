@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.40
+
+### Patch Changes
+
+- 1d2e7a1: Treat route-equivalent structured interaction assertion failures as passing when the durable route expectation already normalizes them to the same path or URL.
+
 ## 0.8.39
 
 ### Patch Changes
