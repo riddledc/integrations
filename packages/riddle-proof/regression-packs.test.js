@@ -58,9 +58,18 @@ assert.deepEqual(hostedCaseIds, [
   "hosted-thrown-error-specific-blocker",
 ]);
 const hostedExpectById = new Map(hostedCases.map((testCase) => [testCase.id, testCase.expect]));
+const hostedById = new Map(hostedCases.map((testCase) => [testCase.id, testCase]));
 assert.equal(hostedExpectById.get("hosted-home-to-proof-route-change-pass").profile_status, "passed");
 assert.equal(hostedExpectById.get("hosted-pricing-query-hash-dropped-blocker").profile_status, "product_regression");
 assert.equal(hostedExpectById.get("hosted-thrown-error-specific-blocker").message_contains, "RIDDLE_PROOF_HOSTED_THROWN_ERROR_SMOKE_20260604");
+assert.equal(
+  hostedById.get("hosted-home-to-proof-route-change-pass").profile.target.setup_actions[0].expected_path,
+  "/proof/",
+);
+assert.equal(
+  hostedById.get("hosted-proof-to-home-route-change-pass").profile.target.setup_actions[0].expected_path,
+  "/",
+);
 for (const testCase of hostedCases) {
   assert.equal(typeof testCase.intent, "string", `${testCase.id} needs an intent`);
   assert.ok(testCase.profile, `${testCase.id} needs a hosted profile`);
