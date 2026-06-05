@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.35
+
+### Patch Changes
+
+- 33b13c9: Add a hosted Riddle regression-pack gate that can run serial generic profile cases before OpenClaw adapter validation.
+
 ## 0.8.34
 
 ### Patch Changes
