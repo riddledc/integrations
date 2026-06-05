@@ -50,6 +50,11 @@ import {
   type RiddleProofProfileViewport,
 } from "./profile";
 import type { JsonValue, RiddleProofCheckpointResponse, RiddleProofRunParams, RiddleProofRunState } from "./types";
+import {
+  buildRiddleProofPrCommentMarkdown,
+  RIDDLE_PROOF_PR_COMMENT_MARKER,
+  summarizeRiddleProofPrComment,
+} from "./pr-comment";
 
 type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
@@ -75,11 +80,14 @@ const KNOWN_CLI_OPTIONS = new Set([
   "codexSandbox",
   "codexTimeoutMs",
   "command",
+  "commentMode",
   "continueWithStage",
   "createdAt",
   "decision",
   "defaultReviewer",
   "defaultShipMode",
+  "bodyFile",
+  "dryRun",
   "exclude",
   "format",
   "framework",
@@ -107,20 +115,25 @@ const KNOWN_CLI_OPTIONS = new Set([
   "pack",
   "packFile",
   "profile",
+  "proofDir",
+  "pr",
   "progressEveryMs",
   "quiet",
   "readinessPath",
   "readinessTimeout",
   "reasonsJson",
+  "repo",
   "requestJson",
   "requiredJson",
   "responseJson",
   "resultFormat",
+  "resultJson",
   "resultsDir",
   "riddleEngineModuleUrl",
   "riddleProofDir",
   "route",
   "runDir",
+  "runResponse",
   "runner",
   "scriptFile",
   "sourceKind",
@@ -158,6 +171,7 @@ function usage() {
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
+    "  riddle-proof-loop pr-comment --proof-dir <dir>|--run-response <file> [--result-json <file>] --pr <number|url> [--repo owner/name] [--dry-run] [--body-file <file>] [--comment-mode update|append]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
     "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static] [--quiet]",
@@ -1062,6 +1076,87 @@ function riddlePreviewProgressLine(snapshot: RiddlePreviewDeployProgressSnapshot
   const recoveryPart = snapshot.publish_error ? ` publish_error=${JSON.stringify(snapshot.publish_error)}` : "";
   const messagePart = snapshot.message ? ` ${snapshot.message}` : "";
   return `[riddle-preview] ${snapshot.stage}${idPart}${statusPart}${attemptPart} elapsed=${formatPollDuration(snapshot.elapsed_ms)} label=${snapshot.label} framework=${snapshot.framework}${filePart}${totalPart}${archivePart}${previewPart}${recoveryPart}${messagePart}`;
+}
+
+function readJsonFileIfExists(filePath: string | undefined): Record<string, unknown> | undefined {
+  if (!filePath || !existsSync(filePath)) return undefined;
+  return readJsonValue(filePath, filePath);
+}
+
+function defaultProofDirJsonPath(proofDir: string | undefined, filename: string) {
+  return proofDir ? path.join(proofDir, filename) : undefined;
+}
+
+function prNumberFromValue(value: string | undefined) {
+  const text = value?.trim();
+  if (!text) return "";
+  const match = text.match(/\/pull\/(\d+)(?:\/|$)/) || text.match(/^#?(\d+)$/);
+  return match ? match[1] : text;
+}
+
+function ghJson(args: string[], input?: unknown): Record<string, unknown> | Record<string, unknown>[] {
+  const result = spawnSync("gh", args, {
+    input: typeof input === "undefined" ? undefined : `${JSON.stringify(input)}\n`,
+    encoding: "utf-8",
+    timeout: 90_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    throw new Error(`gh ${args.join(" ")} failed${detail ? `: ${detail}` : ""}`);
+  }
+  const stdout = (result.stdout || "").trim();
+  return stdout ? JSON.parse(stdout) : {};
+}
+
+function resolveGhRepoName(repoOption: string | undefined) {
+  if (repoOption?.trim()) return repoOption.trim();
+  const result = spawnSync("gh", ["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], {
+    encoding: "utf-8",
+    timeout: 30_000,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0 || !result.stdout.trim()) {
+    const detail = (result.stderr || result.stdout || "").trim();
+    throw new Error(`Could not resolve GitHub repository. Pass --repo owner/name.${detail ? ` gh said: ${detail}` : ""}`);
+  }
+  return result.stdout.trim();
+}
+
+function findManagedPrComment(repo: string, prNumber: string) {
+  const comments = ghJson(["api", `repos/${repo}/issues/${prNumber}/comments`, "--paginate"]) as Record<string, unknown>[];
+  return comments.find((comment) => typeof comment.body === "string" && comment.body.includes(RIDDLE_PROOF_PR_COMMENT_MARKER));
+}
+
+function upsertPrComment(input: { repo: string; prNumber: string; body: string; mode: string }) {
+  const payload = { body: input.body };
+  if (input.mode !== "append") {
+    const existing = findManagedPrComment(input.repo, input.prNumber);
+    if (existing?.id) {
+      return {
+        action: "updated",
+        comment: ghJson([
+          "api",
+          `repos/${input.repo}/issues/comments/${existing.id}`,
+          "-X",
+          "PATCH",
+          "--input",
+          "-",
+        ], payload) as Record<string, unknown>,
+      };
+    }
+  }
+  return {
+    action: "created",
+    comment: ghJson([
+      "api",
+      `repos/${input.repo}/issues/${input.prNumber}/comments`,
+      "-X",
+      "POST",
+      "--input",
+      "-",
+    ], payload) as Record<string, unknown>,
+  };
 }
 
 function readJsonValue(value: string | undefined, label: string): Record<string, unknown> {
@@ -5619,6 +5714,47 @@ async function main() {
     const result = await runRegressionPackForCli(options);
     writeRegressionPackRunResult(result, options);
     process.exitCode = result.ok ? 0 : 1;
+    return;
+  }
+
+  if (command === "pr-comment") {
+    const proofDir = optionString(options, "proofDir") || optionString(options, "outputDir") || positional[1];
+    const runResponsePath = optionString(options, "runResponse") || defaultProofDirJsonPath(proofDir, "riddle-run-response.json");
+    const resultJsonPath = optionString(options, "resultJson") || defaultProofDirJsonPath(proofDir, "result.json");
+    const runResponse = readJsonFileIfExists(runResponsePath);
+    const result = readJsonFileIfExists(resultJsonPath);
+    if (!runResponse && !result) {
+      throw new Error("pr-comment requires --proof-dir with riddle-run-response.json/result.json or explicit --run-response/--result-json.");
+    }
+    const body = buildRiddleProofPrCommentMarkdown({
+      title: optionString(options, "title"),
+      goal: optionString(options, "summary"),
+      successCriteria: optionString(options, "successCriteria"),
+      runResponse,
+      result,
+    });
+    const bodyFile = optionString(options, "bodyFile");
+    if (bodyFile) writeFileSync(bodyFile, body);
+    if (optionBoolean(options, "dryRun")) {
+      process.stdout.write(body);
+      return;
+    }
+    const prNumber = prNumberFromValue(optionString(options, "pr"));
+    if (!prNumber) throw new Error("pr-comment requires --pr <number|url> unless --dry-run is used.");
+    const commentMode = optionString(options, "commentMode") || "update";
+    if (!["update", "append"].includes(commentMode)) throw new Error("--comment-mode must be update or append.");
+    const repo = resolveGhRepoName(optionString(options, "repo"));
+    const resultPayload = upsertPrComment({ repo, prNumber, body, mode: commentMode });
+    const comment = resultPayload.comment as Record<string, unknown>;
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      action: resultPayload.action,
+      repo,
+      pr: prNumber,
+      comment_url: cliString(comment.html_url) || null,
+      summary: summarizeRiddleProofPrComment({ runResponse, result }),
+      body_file: bodyFile || null,
+    }, null, 2)}\n`);
     return;
   }
 

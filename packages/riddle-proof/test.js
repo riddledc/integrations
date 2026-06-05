@@ -55,9 +55,12 @@ import {
   summarizeCaptureArtifacts,
   createRiddleApiClient,
   collectRiddlePreviewDeployWarnings,
+  buildRiddleProofPrCommentMarkdown,
   deployRiddlePreview,
   deployRiddleStaticPreview,
   parseRiddleViewport,
+  RIDDLE_PROOF_PR_COMMENT_MARKER,
+  summarizeRiddleProofPrComment,
   RIDDLE_PROOF_PROFILE_CHECK_TYPES,
   RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES,
 } from "./dist/index.js";
@@ -106,6 +109,8 @@ assert.equal(typeof cjs.createRiddleApiClient, "function");
 assert.equal(typeof cjs.collectRiddlePreviewDeployWarnings, "function");
 assert.equal(typeof cjs.deployRiddlePreview, "function");
 assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
+assert.equal(typeof cjs.buildRiddleProofPrCommentMarkdown, "function");
+assert.equal(typeof cjs.summarizeRiddleProofPrComment, "function");
 
 function runCli(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -253,6 +258,72 @@ const artifactAssertionCliJson = JSON.parse(artifactAssertionCli.stdout);
 assert.equal(artifactAssertionCliJson.ok, true);
 assert.deepEqual(artifactAssertionCliJson.body_contains, ["product_regression", "partial results available"]);
 assert.deepEqual(artifactAssertionCliJson.missing_candidates, ["completed_timeout"]);
+
+const prCommentDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-pr-comment-"));
+const prCommentRunResponse = {
+  preview: {
+    ok: true,
+    id: "ps_prcomment",
+    preview_url: "https://preview.riddledc.com/s/ps_prcomment/",
+    publish_recovered: true,
+    publish_error: "HTTP 503",
+  },
+  proofUrl: "https://preview.riddledc.com/s/ps_prcomment/docs/riddle-proof/index.html",
+  proofResult: {
+    job_id: "job_prcomment",
+    status: "completed",
+    duration_ms: 12_345,
+    outputs: [
+      { name: "after-proof.png", url: "https://cdn.riddledc.com/scripts/job_prcomment/after-proof.png", size: 1234 },
+      { name: "proof.json", url: "https://cdn.riddledc.com/scripts/job_prcomment/proof.json", size: 456 },
+      { name: "console.json", url: "https://cdn.riddledc.com/scripts/job_prcomment/console.json", size: 789 },
+    ],
+  },
+};
+const prCommentResult = {
+  ok: true,
+  pages: [
+    { route: "/docs/riddle-proof", checks: { heading: true, trustBoundary: true, staleCopy: false } },
+    { route: "/pricing", checks: { heading: true } },
+  ],
+  publicPageSmoke: { ok: true },
+};
+writeFileSync(path.join(prCommentDir, "riddle-run-response.json"), JSON.stringify(prCommentRunResponse, null, 2));
+writeFileSync(path.join(prCommentDir, "result.json"), JSON.stringify(prCommentResult, null, 2));
+const prCommentSummary = summarizeRiddleProofPrComment({
+  runResponse: prCommentRunResponse,
+  result: prCommentResult,
+});
+assert.equal(prCommentSummary.ok, true);
+assert.equal(prCommentSummary.job_id, "job_prcomment");
+assert.equal(prCommentSummary.primary_image?.url, "https://cdn.riddledc.com/scripts/job_prcomment/after-proof.png");
+assert.equal(prCommentSummary.passed_checks, 3);
+assert.equal(prCommentSummary.failed_checks, 1);
+const prCommentMarkdown = buildRiddleProofPrCommentMarkdown({
+  goal: "Attach hosted proof to the PR.",
+  successCriteria: "The comment embeds the screenshot and links structured artifacts.",
+  runResponse: prCommentRunResponse,
+  result: prCommentResult,
+});
+assert.match(prCommentMarkdown, new RegExp(RIDDLE_PROOF_PR_COMMENT_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+assert.match(prCommentMarkdown, /!\[after-proof\.png\]\(https:\/\/cdn\.riddledc\.com\/scripts\/job_prcomment\/after-proof\.png\)/);
+assert.match(prCommentMarkdown, /\[proof\.json\]\(https:\/\/cdn\.riddledc\.com\/scripts\/job_prcomment\/proof\.json\)/);
+assert.match(prCommentMarkdown, /Preview publish recovery/);
+assert.match(prCommentMarkdown, /3 passed \/ 1 failed/);
+const prCommentBodyFile = path.join(prCommentDir, "comment.md");
+const prCommentCli = await runCli([
+  "pr-comment",
+  "--proof-dir",
+  prCommentDir,
+  "--dry-run",
+  "--body-file",
+  prCommentBodyFile,
+  "--summary",
+  "Attach hosted proof to the PR.",
+]);
+assert.equal(prCommentCli.stdout, readFileSync(prCommentBodyFile, "utf-8"));
+assert.match(prCommentCli.stdout, /Riddle Proof Evidence/);
+assert.match(prCommentCli.stdout, /job_prcomment/);
 
 const unknownOptionCli = await runCli([
   "profile-body-assertions",
