@@ -67,7 +67,14 @@
             "wait_for_selector": "main#main-content",
             "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
             "setup_actions": [
-              { "type": "click", "selector": "a[href*='/proof']", "after_ms": 750 }
+              {
+                "type": "click",
+                "selector": "a[href*='/proof']",
+                "text": "Proof",
+                "expected_path": "/proof/",
+                "timeout_ms": 10000,
+                "after_ms": 750
+              }
             ]
           },
           "checks": [
@@ -93,7 +100,14 @@
             "wait_for_selector": "main#main-content",
             "viewports": [{ "name": "desktop", "width": 1280, "height": 900 }],
             "setup_actions": [
-              { "type": "click", "selector": "a[href='/'], a[href='https://riddledc.com/']", "after_ms": 750 }
+              {
+                "type": "click",
+                "selector": "a[href='/'], a[href='https://riddledc.com/']",
+                "text": "Riddle",
+                "expected_path": "/",
+                "timeout_ms": 10000,
+                "after_ms": 750
+              }
             ]
           },
           "checks": [

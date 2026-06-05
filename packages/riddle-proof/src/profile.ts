@@ -295,6 +295,8 @@ export interface RiddleProofProfileSetupAction {
   expect_changed?: boolean;
   until_path?: string;
   until_expected_value?: JsonValue;
+  expected_path?: string;
+  expected_url?: string;
   max_calls?: number;
   tap_burst_size?: number;
   settle_ms?: number;
@@ -2062,6 +2064,8 @@ function normalizeSetupAction(input: unknown, index: number): RiddleProofProfile
     expect_changed: booleanValue(valueFromOwn(input, "expect_changed", "expectChanged", "should_change", "shouldChange", "changed")),
     until_path: untilPath,
     until_expected_value: hasUntilExpectedValue ? toJsonValue(valueFromOwn(input, "until_expected_value", "untilExpectedValue", "until_expected", "untilExpected", "until_value", "untilValue", "expected_value", "expectedValue", "expected")) : undefined,
+    expected_path: stringFromOwn(input, "expected_path", "expectedPath", "expected_terminal_path", "expectedTerminalPath"),
+    expected_url: stringFromOwn(input, "expected_url", "expectedUrl", "expected_terminal_url", "expectedTerminalUrl"),
     max_calls: maxCalls,
     tap_burst_size: tapBurstSize,
     settle_ms: settleMs,
@@ -4972,6 +4976,80 @@ function routePathMatches(observed, expected, targetUrl) {
   if (normalizedObserved === normalizedExpected) return true;
   return normalizedObserved === normalizeRoutePath(mountedExpectedRoutePath(targetUrl, expected));
 }
+function setupActionExpectedRoute(action) {
+  const expectedUrl = typeof action.expected_url === "string" && action.expected_url.trim()
+    ? action.expected_url.trim()
+    : typeof action.expectedUrl === "string" && action.expectedUrl.trim()
+      ? action.expectedUrl.trim()
+      : "";
+  const expectedPath = typeof action.expected_path === "string" && action.expected_path.trim()
+    ? action.expected_path.trim()
+    : typeof action.expectedPath === "string" && action.expectedPath.trim()
+      ? action.expectedPath.trim()
+      : "";
+  if (!expectedUrl && !expectedPath) return null;
+  return { expected_url: expectedUrl || undefined, expected_path: expectedPath || undefined };
+}
+function setupUrlMatchesExpectedRoute(href, expected) {
+  if (!expected) return true;
+  let observedUrl;
+  try {
+    observedUrl = new URL(href, targetUrl);
+  } catch {
+    return false;
+  }
+  if (expected.expected_url) {
+    let expectedUrl;
+    try {
+      expectedUrl = new URL(expected.expected_url, targetUrl);
+    } catch {
+      return false;
+    }
+    return observedUrl.href === expectedUrl.href;
+  }
+  const expectedPath = expected.expected_path || "/";
+  if (/[?#]/.test(expectedPath)) {
+    const observedRoute = observedUrl.pathname + observedUrl.search + observedUrl.hash;
+    const normalizedObservedRoute = observedRoute === "/" ? "/" : observedRoute.replace(/\/+(?=[?#]|$)/, "");
+    const normalizedExpectedRoute = expectedPath === "/" ? "/" : expectedPath.replace(/\/+(?=[?#]|$)/, "");
+    return normalizedObservedRoute === normalizedExpectedRoute;
+  }
+  return routePathMatches(observedUrl.pathname, expectedPath, targetUrl);
+}
+function setupObservedRouteEvidence(expected, waitError) {
+  let observedUrl = page.url();
+  let observedPath = "";
+  let observedRoute = "";
+  try {
+    const url = new URL(observedUrl, targetUrl);
+    observedUrl = url.href;
+    observedPath = url.pathname;
+    observedRoute = url.pathname + url.search + url.hash;
+  } catch {
+    observedPath = "";
+    observedRoute = "";
+  }
+  return {
+    expected_url: expected && expected.expected_url || undefined,
+    expected_path: expected && expected.expected_path || undefined,
+    observed_url: observedUrl,
+    observed_path: observedPath,
+    observed_route: observedRoute,
+    route_matched: setupUrlMatchesExpectedRoute(observedUrl, expected),
+    route_wait_error: waitError ? String(waitError && waitError.message ? waitError.message : waitError).slice(0, 1000) : undefined,
+  };
+}
+async function waitForSetupActionRoute(action, timeout) {
+  const expected = setupActionExpectedRoute(action);
+  if (!expected) return null;
+  let waitError;
+  try {
+    await page.waitForURL((url) => setupUrlMatchesExpectedRoute(url.href, expected), { timeout: Math.min(timeout, 20000) });
+  } catch (error) {
+    waitError = error;
+  }
+  return setupObservedRouteEvidence(expected, waitError);
+}
 function routeOk(route, targetUrl) {
   return Boolean(route && (route.matched || routePathMatches(route.observed, route.expected_path, targetUrl)) && !route.error && (route.http_status == null || route.http_status < 400));
 }
@@ -7866,11 +7944,22 @@ async function executeSetupAction(action, ordinal, viewport) {
       const prepared = await resolveSetupTapTarget(action, base, scope, timeout);
       if (prepared.result) return prepared.result;
       await dispatchSetupTapPoint(prepared.target.point, prepared.target.pointerType, prepared.target.durationMs);
+      const routeEvidence = await waitForSetupActionRoute(action, timeout);
+      if (routeEvidence && !routeEvidence.route_matched) {
+        return {
+          ...base,
+          ...setupScopeEvidence(scope),
+          ...setupTapTargetEvidence(prepared.target),
+          ...routeEvidence,
+          reason: "expected_route_not_reached",
+        };
+      }
       return {
         ...base,
         ...setupScopeEvidence(scope),
         ok: true,
         ...setupTapTargetEvidence(prepared.target),
+        ...routeEvidence,
       };
     }
     if (type === "tap_until") {
@@ -8731,6 +8820,26 @@ async function executeSetupAction(action, ordinal, viewport) {
           : { x: box.x + box.width / 2, y: box.y + box.height / 2 };
         if (clickCount > 1) await page.mouse.click(fallbackPoint.x, fallbackPoint.y, { clickCount });
         else await page.mouse.click(fallbackPoint.x, fallbackPoint.y);
+        const routeEvidence = await waitForSetupActionRoute(action, timeout);
+        if (routeEvidence && !routeEvidence.route_matched) {
+          return {
+            ...base,
+            ...setupScopeEvidence(scope),
+            count,
+            target_index: targetIndex,
+            text: matchedText,
+            force: action.force === true || undefined,
+            fallback_to_tap: true,
+            input_dispatch: "playwright_mouse",
+            click_error: String(error && error.message ? error.message : error).slice(0, 1000),
+            click_count: clickCount > 1 ? clickCount : undefined,
+            coordinate_mode: mode,
+            x: position ? fromX : undefined,
+            y: position ? fromY : undefined,
+            ...routeEvidence,
+            reason: "expected_route_not_reached",
+          };
+        }
         return {
           ...base,
           ...setupScopeEvidence(scope),
@@ -8746,6 +8855,24 @@ async function executeSetupAction(action, ordinal, viewport) {
           coordinate_mode: mode,
           x: position ? fromX : undefined,
           y: position ? fromY : undefined,
+          ...routeEvidence,
+        };
+      }
+      const routeEvidence = await waitForSetupActionRoute(action, timeout);
+      if (routeEvidence && !routeEvidence.route_matched) {
+        return {
+          ...base,
+          ...setupScopeEvidence(scope),
+          count,
+          target_index: targetIndex,
+          text: matchedText,
+          force: action.force === true || undefined,
+          click_count: clickCount > 1 ? clickCount : undefined,
+          coordinate_mode: mode,
+          x: position ? fromX : undefined,
+          y: position ? fromY : undefined,
+          ...routeEvidence,
+          reason: "expected_route_not_reached",
         };
       }
       return {
@@ -8760,6 +8887,7 @@ async function executeSetupAction(action, ordinal, viewport) {
         coordinate_mode: mode,
         x: position ? fromX : undefined,
         y: position ? fromY : undefined,
+        ...routeEvidence,
       };
     }
     if (type === "fill" || type === "set_input_value") {

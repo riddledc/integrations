@@ -8176,6 +8176,16 @@ const clickTargetIndexAliasProfile = normalizeRiddleProofProfile({
   checks: [{ type: "route_loaded", expected_path: "/toolbar" }],
 }, { url: "https://example.com" });
 assert.equal(clickTargetIndexAliasProfile.target.setup_actions[0].index, 2);
+const clickExpectedRouteProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "setup-click-expected-route-profile",
+  target: {
+    route: "/",
+    setup_actions: [{ type: "click", selector: "a[href='/proof/']", expected_path: "/proof/" }],
+  },
+  checks: [{ type: "route_loaded", expected_path: "/proof/" }],
+}, { url: "https://example.com" });
+assert.equal(clickExpectedRouteProfile.target.setup_actions[0].expected_path, "/proof/");
 const clickCoordinateProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "setup-click-coordinate-profile",
@@ -8191,6 +8201,10 @@ assert.equal(clickCoordinateProfile.target.setup_actions[0].from_y, 0.55);
 const clickCountProfileScript = buildRiddleProofProfileScript(clickCountSetupProfile);
 assert.ok(clickCountProfileScript.includes("action.click_count"));
 assert.ok(clickCountProfileScript.includes("clickOptions.clickCount = clickCount"));
+const clickExpectedRouteProfileScript = buildRiddleProofProfileScript(clickExpectedRouteProfile);
+assert.ok(clickExpectedRouteProfileScript.includes("waitForSetupActionRoute"));
+assert.ok(clickExpectedRouteProfileScript.includes("expected_route_not_reached"));
+assert.ok(clickExpectedRouteProfileScript.includes("route_matched"));
 const clickCoordinateProfileScript = buildRiddleProofProfileScript(clickCoordinateProfile);
 assert.ok(clickCoordinateProfileScript.includes("clickOptions.position = position"));
 assert.ok(clickCoordinateProfileScript.includes("missing_click_coordinates"));
