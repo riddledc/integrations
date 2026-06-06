@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.41
+
+### Patch Changes
+
+- feeb7b5: Preserve terminal checkpoint metadata when ignoring late OpenClaw checkpoint responses, and pin the OC flow thrown-error regression case to a higher iteration cap.
+
 ## 0.8.40
 
 ### Patch Changes
