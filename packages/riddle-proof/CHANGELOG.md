@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.42
+
+### Patch Changes
+
+- 2c58507: Capture remote production baselines on the explicit interaction start route instead of always using the prod URL root.
+
 ## 0.8.41
 
 ### Patch Changes

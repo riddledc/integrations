@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.154
+
+### Patch Changes
+
+- 2c58507: Capture remote production baselines on the explicit interaction start route instead of always using the prod URL root.
+- Updated dependencies [2c58507]
+  - @riddledc/riddle-proof@0.8.42
+
 ## 0.4.153
 
 ### Patch Changes
