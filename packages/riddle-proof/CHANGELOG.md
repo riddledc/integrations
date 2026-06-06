@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.43
+
+### Patch Changes
+
+- 621e216: Tighten the OC flow regression pack so passive no-diff audits cannot invent browser interactions and stale-checkpoint probes pin the Home to Proof terminal route before injecting a late checkpoint response.
+
 ## 0.8.42
 
 ### Patch Changes
