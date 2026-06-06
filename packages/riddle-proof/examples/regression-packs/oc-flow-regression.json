@@ -444,6 +444,7 @@
           "verification_mode": "interaction",
           "server_path": "/",
           "wait_for_selector": "main#main-content",
+          "max_iterations": 6,
           "capture_script_contract": [
             "throw intentional-riddle-proof-regression-thrown-error from the capture script",
             "preserve the exact marker in terminal evidence",

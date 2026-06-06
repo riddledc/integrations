@@ -621,14 +621,19 @@ function ignoredTerminalCheckpointResponseResult(
   if (!isProtectedTerminalWrapperState(state) || state.checkpoint_packet) return null;
   const status = state.status;
   if (status !== "ready_to_ship" && status !== "shipped" && status !== "completed") return null;
+  const preservedCheckpoint = state.last_checkpoint || state.blocker?.checkpoint || "terminal_status";
+  const ignoredResponseCheckpoint =
+    stringValue((response as Record<string, unknown>).checkpoint) || "checkpoint_response";
   state.blocker = undefined;
   appendRunEvent(state, {
     kind: "agent.checkpoint_response.ignored",
-    checkpoint: stringValue((response as Record<string, unknown>).checkpoint) || state.last_checkpoint || "checkpoint_response",
+    checkpoint: preservedCheckpoint,
     stage: state.current_stage || null,
     summary: "Ignored stale checkpoint response because the wrapper run is already terminal.",
     details: {
       response,
+      ignored_response_checkpoint: ignoredResponseCheckpoint,
+      preserved_checkpoint: preservedCheckpoint,
       preserved_status: status,
       finalized: state.finalized === true,
       checkpoint_summary: checkpointSummaryFromState(state),
