@@ -20,6 +20,12 @@ def load_smoke_module():
 
 CASES = [
     {
+        'name': 'recon-remote-prod-captures-interaction-start-route',
+        'covers': ['route-changing interactions', 'no-diff prod audits'],
+        'function': 'run_recon_remote_prod_capture_uses_interaction_start_route',
+        'expected_terminal': 'pass',
+    },
+    {
         'name': 'route-change-forward-pass',
         'covers': ['route-changing interactions', 'proof-evidence-present'],
         'function': 'run_verify_interaction_terminal_route_from_proof_evidence',

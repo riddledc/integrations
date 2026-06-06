@@ -70,6 +70,35 @@ def load_module(name: str, path: Path):
     return module
 
 
+def run_recon_remote_prod_capture_uses_interaction_start_route():
+    util = load_module('riddle_proof_util_route_target_smoke', UTIL_PATH)
+    cases = [
+        (
+            util.compose_remote_capture_url('https://riddledc.com/', '/proof/', explicit_target=True),
+            'https://riddledc.com/proof/',
+        ),
+        (
+            util.compose_remote_capture_url('https://riddledc.com/', '/pricing/?rp_probe=1#pricing-probe', explicit_target=True),
+            'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
+        ),
+        (
+            util.compose_remote_capture_url('https://riddledc.com/proof/', '/', explicit_target=True),
+            'https://riddledc.com/',
+        ),
+        (
+            util.compose_remote_capture_url('https://riddledc.com/proof/', '/', explicit_target=False),
+            'https://riddledc.com/proof/',
+        ),
+    ]
+    for observed, expected in cases:
+        assert observed == expected, f'expected {expected}, got {observed}'
+    return {
+        'ok': True,
+        'remote_start_route': 'https://riddledc.com/proof/',
+        'query_hash_route': 'https://riddledc.com/pricing/?rp_probe=1#pricing-probe',
+    }
+
+
 class FakeRiddle:
     def __init__(self):
         self.calls = []

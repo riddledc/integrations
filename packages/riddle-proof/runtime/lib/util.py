@@ -1,7 +1,7 @@
 """Shared helpers for Riddle Proof pipeline."""
 
 import hashlib, json, os, re, shlex, subprocess as sp, tempfile, time
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 from urllib.request import urlopen
 
 STATE_FILE = os.environ.get('RIDDLE_PROOF_STATE_FILE', '/tmp/riddle-proof-state.json')
@@ -84,6 +84,44 @@ def normalize_browser_path(value):
     if len(value) > 1:
         value = value.rstrip('/')
     return value.lower() or '/'
+
+
+def compose_remote_capture_url(base_url, target_path='', explicit_target=False):
+    """Resolve a remote capture URL against an explicit browser route.
+
+    prod_url identifies the deployed origin, but interaction proofs may start on
+    a route such as /proof/ before navigating elsewhere. In that case recon must
+    capture the start route, not merely the prod_url root.
+    """
+    base = str(base_url or '').strip()
+    target = str(target_path or '').strip()
+    if not base or not target.startswith('/'):
+        return base
+
+    parsed_base = urlparse(base)
+    if not parsed_base.scheme or not parsed_base.netloc:
+        return base
+
+    parsed_target = urlparse(target)
+    target_browser_path = parsed_target.path or '/'
+    if not target_browser_path.startswith('/'):
+        target_browser_path = '/' + target_browser_path.lstrip('/')
+
+    if not explicit_target:
+        base_browser_path = parsed_base.path or '/'
+        if normalize_browser_path(target_browser_path) in ('', '/') and normalize_browser_path(base_browser_path) != '/':
+            return base
+        if normalize_browser_path(target_browser_path) == normalize_browser_path(base_browser_path):
+            return base
+
+    return urlunparse((
+        parsed_base.scheme,
+        parsed_base.netloc,
+        target_browser_path,
+        '',
+        parsed_target.query,
+        parsed_target.fragment,
+    ))
 
 
 def extract_browser_paths(text):

@@ -20,6 +20,7 @@ from util import (  # noqa: E402
     build_capture_script,
     capture_static_preview,
     capture_viewport_matrix_status,
+    compose_remote_capture_url,
     enrich_capture_payload,
     has_auth_context,
     invoke_retry,
@@ -41,6 +42,7 @@ MIN_CANVAS_AREA = 50000
 HYDRATION_WAIT_MS = 1500
 PAGE_STATE_PREFIX = 'RIDDLE_PROOF_STATE:'
 PROOF_EVIDENCE_PREFIX = 'RIDDLE_PROOF_EVIDENCE:'
+INTERACTION_VERIFICATION_MODES = {'interaction', 'flow', 'browser_interaction'}
 
 s = load_state()
 after_dir = (s.get('after_worktree') or '').strip()
@@ -808,7 +810,7 @@ def capture_workspace_baseline(project_dir, label, plan, capture_script=''):
 
 
 def capture_prod_baseline(prod_url, plan, capture_script=''):
-    target_url = (prod_url or '').strip()
+    target_url = prod_capture_target_url(prod_url, plan)
     if not target_url:
         raise SystemExit('Requested prod baseline in recon, but prod_url is missing.')
     wait_for_selector = (plan.get('wait_for_selector') or '').strip()
@@ -821,7 +823,7 @@ def capture_prod_baseline(prod_url, plan, capture_script=''):
     append_capture_diagnostic(s, 'prod', 'riddle_script', args, shot)
     record_recon_phase('prod_capture', 'completed', 'Production recon baseline capture completed.')
     return {
-        'source': 'prod_url',
+        'source': 'prod_url_with_target_path' if target_url != (prod_url or '').strip() else 'prod_url',
         'mode': 'remote',
         'path': normalize_observed_path(target_url) or (plan.get('target_path') or '/'),
         'capture_url': target_url,
@@ -829,6 +831,19 @@ def capture_prod_baseline(prod_url, plan, capture_script=''):
         'static_fallback_reason': '',
         'raw': shot,
     }
+
+
+def interaction_verification_mode():
+    return str(s.get('verification_mode') or '').strip().lower() in INTERACTION_VERIFICATION_MODES
+
+
+def prod_capture_target_url(prod_url, plan):
+    target_path = str((plan or {}).get('target_path') or '').strip()
+    has_explicit_start_route = bool(
+        str(s.get('server_path') or s.get('expected_start_path') or '').strip()
+        and (str(s.get('server_path_source') or '').strip() or interaction_verification_mode())
+    )
+    return compose_remote_capture_url(prod_url, target_path, explicit_target=has_explicit_start_route)
 
 
 def baseline_record(capture, observation):
@@ -1066,7 +1081,7 @@ for label in required_baselines:
             expected_path = current_plan['target_path']
         else:
             capture = capture_prod_baseline(s.get('prod_url', ''), current_plan, capture_script='')
-            expected_path = urlparse(s.get('prod_url', '')).path or current_plan['target_path']
+            expected_path = normalize_observed_path(capture.get('capture_url')) or current_plan['target_path']
         observation = build_observation_packet(label, expected_path, capture=capture)
     except SystemExit:
         raise
