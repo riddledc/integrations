@@ -9,8 +9,8 @@ const packageDir = new URL(".", import.meta.url);
 
 assert.equal(pack.version, "riddle-proof.regression-pack.v1");
 assert.equal(pack.pack_id, "riddle-proof-oc-flow-2026-06");
-assert.equal(pack.minimum_versions["@riddledc/openclaw-riddle-proof"], "0.4.146");
-assert.equal(pack.minimum_versions["@riddledc/riddle-proof"], "0.8.18");
+assert.equal(pack.minimum_versions["@riddledc/openclaw-riddle-proof"], "0.4.155");
+assert.equal(pack.minimum_versions["@riddledc/riddle-proof"], "0.8.43");
 assert.equal(pack.runtime_gate.tool, "riddle_proof_status");
 assert.equal(pack.runtime_gate.require_loaded_metadata, true);
 
@@ -89,16 +89,26 @@ assert.deepEqual(liveCaseIds, [
 ]);
 
 const expectById = new Map(liveCases.map((testCase) => [testCase.id, testCase.expect]));
+const liveById = new Map(liveCases.map((testCase) => [testCase.id, testCase]));
 assert.equal(expectById.get("home-to-proof-route-change-pass").terminal_status, "ready_to_ship");
+assert.equal(expectById.get("home-to-proof-route-change-pass").route_expectation_source, "expected_terminal_path");
 assert.equal(expectById.get("proof-to-home-route-change-pass").terminal_path, "/");
+assert.equal(expectById.get("proof-to-home-route-change-pass").route_expectation_source, "expected_terminal_path");
 assert.equal(expectById.get("pricing-query-hash-positive-pass").terminal_url, "https://riddledc.com/pricing/?rp_probe=1#pricing-probe");
 assert.equal(expectById.get("pricing-query-hash-dropped-blocker").last_checkpoint, "verify_capture_blocked");
 assert.equal(expectById.get("pricing-query-hash-dropped-blocker").capture_decision, "failed_interaction_capture");
 assert.equal(expectById.get("no-diff-prod-audit-pass").implementation_attempted, false);
+assert.equal(expectById.get("no-diff-prod-audit-pass").proof_evidence_required, false);
+assert.equal(expectById.get("no-diff-prod-audit-pass").screenshot_required, true);
+assert.equal(expectById.get("no-diff-prod-audit-pass").browser_interaction_performed, false);
 assert.equal(expectById.get("late-stale-checkpoint-ignored").ignored_checkpoint_response, true);
 assert.equal(expectById.get("late-stale-checkpoint-ignored").background_resume_started, false);
 
-const liveById = new Map(liveCases.map((testCase) => [testCase.id, testCase]));
+const noDiffCase = liveById.get("no-diff-prod-audit-pass");
+assert.equal(noDiffCase.params.verification_mode, "visual");
+assert.match(noDiffCase.params.capture_script_contract.join("\n"), /do not click, type, submit, copy, navigate, or interact/);
+assert.match(noDiffCase.params.capture_script_contract.join("\n"), /passive visual\/no-diff audit/);
+assert.doesNotMatch(noDiffCase.params.capture_script_contract.join("\n"), /structured interaction/i);
 assert.equal(liveById.get("thrown-error-specific-blocker").params.max_iterations, 6);
 
 for (const testCase of liveCases) {
@@ -113,6 +123,12 @@ for (const testCase of liveCases) {
 const staleCheckpointCase = liveCases.find((testCase) => testCase.id === "late-stale-checkpoint-ignored");
 assert.equal(staleCheckpointCase.steps.length, 2);
 assert.equal(staleCheckpointCase.steps[0].tool, "riddle_proof_change");
+assert.equal(staleCheckpointCase.steps[0].params.expected_terminal_url, "https://riddledc.com/proof/");
+assert.match(staleCheckpointCase.steps[0].params.capture_script_contract.join("\n"), /Proof nav link only/);
+assert.match(staleCheckpointCase.steps[0].params.capture_script_contract.join("\n"), /do not click Docs/);
+assert.equal(staleCheckpointCase.steps[0].expect.terminal_url, "https://riddledc.com/proof/");
+assert.equal(staleCheckpointCase.steps[0].expect.terminal_path, "/proof");
+assert.equal(staleCheckpointCase.steps[0].expect.route_expectation_source, "expected_terminal_path");
 assert.equal(staleCheckpointCase.steps[1].tool, "riddle_proof_review");
 assert.equal(staleCheckpointCase.steps[1].params_template.state_path, "${state_path}");
 assert.equal(staleCheckpointCase.steps[1].params_template.checkpoint_response.run_id, "${run_id}");

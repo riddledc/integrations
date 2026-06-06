@@ -4,8 +4,8 @@
   "public_name": "Riddle Proof OC Flow Regression Pack",
   "description": "Reusable regression pack for the trust boundary between browser evidence, verifier judgment, retry policy, wrapper checkpoint handling, and terminal status.",
   "minimum_versions": {
-    "@riddledc/openclaw-riddle-proof": "0.4.146",
-    "@riddledc/riddle-proof": "0.8.18"
+    "@riddledc/openclaw-riddle-proof": "0.4.155",
+    "@riddledc/riddle-proof": "0.8.43"
   },
   "runtime_gate": {
     "tool": "riddle_proof_status",
@@ -287,7 +287,7 @@
             "wait for main#main-content",
             "click a visible Proof link whose href includes /proof",
             "wait for terminal URL https://riddledc.com/proof/",
-            "return riddle-proof.interaction.v1 evidence with start, action, terminal, assertions, and routeExpectationSource=capture_script.expectedUrl",
+            "return riddle-proof.interaction.v1 evidence with start, action, terminal, assertions, and routeExpectationSource=expected_terminal_path",
             "save screenshot after-proof"
           ]
         },
@@ -295,7 +295,7 @@
           "terminal_status": "ready_to_ship",
           "terminal_path": "/proof/",
           "proof_evidence_present": true,
-          "route_expectation_source": "capture_script.expectedUrl",
+          "route_expectation_source": "expected_terminal_path",
           "forbidden_terminal_markers": []
         }
       },
@@ -321,7 +321,7 @@
           "terminal_status": "ready_to_ship",
           "terminal_path": "/",
           "proof_evidence_present": true,
-          "route_expectation_source": "capture_script.expectedUrl",
+          "route_expectation_source": "expected_terminal_path",
           "forbidden_terminal_markers": []
         }
       },
@@ -386,9 +386,9 @@
       {
         "id": "no-diff-prod-audit-pass",
         "tool": "riddle_proof_change",
-        "intent": "Audit the live production home page without implementation or PR handoff, and prove the current target evidence directly.",
+        "intent": "Audit the live production home page without implementation or PR handoff, and prove the current target visually without any browser interaction.",
         "params": {
-          "verification_mode": "interaction",
+          "verification_mode": "visual",
           "implementation_mode": "none",
           "require_diff": false,
           "allow_code_changes": false,
@@ -398,15 +398,18 @@
           "capture_script_contract": [
             "use the current production target only",
             "do not request implementation or git diff",
+            "do not click, type, submit, copy, navigate, or interact with any button or link",
             "prove main#main-content and expected home-page content are visible",
-            "return structured evidence and save screenshot after-proof"
+            "save screenshot after-proof and treat this as a passive visual/no-diff audit, not an interaction proof"
           ]
         },
         "expect": {
           "terminal_status": "ready_to_ship",
           "ship_handoff": "none",
           "implementation_attempted": false,
-          "proof_evidence_present": true,
+          "proof_evidence_required": false,
+          "screenshot_required": true,
+          "browser_interaction_performed": false,
           "forbidden_terminal_markers": []
         }
       },
@@ -473,16 +476,22 @@
               "verification_mode": "interaction",
               "server_path": "/",
               "wait_for_selector": "main#main-content",
+              "expected_terminal_url": "https://riddledc.com/proof/",
               "checkpoint_mode": "terminal_only",
               "report_mode": "terminal_only",
               "capture_script_contract": [
-                "complete the Home -> Proof route proof",
+                "complete the Home -> Proof route proof by clicking the visible Proof nav link only",
+                "do not click Docs, Pricing, MCP, Blog, Playground, Copy, or any other link or button",
+                "terminal URL must be https://riddledc.com/proof/ and terminal path must be /proof",
                 "terminalize as ready_to_ship before any manual checkpoint injection",
                 "record state_path and run_id from riddle_proof_status"
               ]
             },
             "expect": {
               "terminal_status": "ready_to_ship",
+              "terminal_url": "https://riddledc.com/proof/",
+              "terminal_path": "/proof",
+              "route_expectation_source": "expected_terminal_path",
               "proof_evidence_present": true
             }
           },
