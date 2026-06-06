@@ -98,6 +98,9 @@ assert.equal(expectById.get("no-diff-prod-audit-pass").implementation_attempted,
 assert.equal(expectById.get("late-stale-checkpoint-ignored").ignored_checkpoint_response, true);
 assert.equal(expectById.get("late-stale-checkpoint-ignored").background_resume_started, false);
 
+const liveById = new Map(liveCases.map((testCase) => [testCase.id, testCase]));
+assert.equal(liveById.get("thrown-error-specific-blocker").params.max_iterations, 6);
+
 for (const testCase of liveCases) {
   assert.equal(typeof testCase.intent, "string", `${testCase.id} needs an intent`);
   assert.ok(testCase.expect, `${testCase.id} needs expectations`);

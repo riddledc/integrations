@@ -2210,15 +2210,20 @@ const lateCheckpointIgnored = await submitOpenClawRiddleProofReview(
 );
 assert.equal(lateCheckpointIgnored.status, "ready_to_ship");
 assert.equal(lateCheckpointIgnored.raw?.ignored_checkpoint_response, true);
+assert.equal(lateCheckpointIgnored.last_checkpoint, "verify_supervisor_judgment");
 assert.equal(lateCheckpointEngineCalled, false);
 const lateCheckpointStatus = readOpenClawRiddleProofStatus(lateCheckpointWrapperStatePath);
 assert.equal(lateCheckpointStatus?.status, "ready_to_ship");
+assert.equal(lateCheckpointStatus?.last_checkpoint, "verify_supervisor_judgment");
 assert.equal(lateCheckpointStatus?.blocker, undefined);
 const lateCheckpointState = JSON.parse(readFileSync(lateCheckpointWrapperStatePath, "utf-8"));
 assert.equal(lateCheckpointState.status, "ready_to_ship");
 assert.equal(lateCheckpointState.finalized, false);
 assert.equal(lateCheckpointState.blocker, undefined);
+assert.equal(lateCheckpointState.last_checkpoint, "verify_supervisor_judgment");
 assert.equal(lateCheckpointState.events.at(-1).kind, "agent.checkpoint_response.ignored");
+assert.equal(lateCheckpointState.events.at(-1).checkpoint, "verify_supervisor_judgment");
+assert.equal(lateCheckpointState.events.at(-1).details.ignored_response_checkpoint, "author_supervisor_judgment");
 
 const checkpointProtocolBlockedDuplicateEngineStatePath = path.join(checkpointProtocolFixture, "riddle-state-blocked-duplicate.json");
 const checkpointProtocolBlockedDuplicateWrapperStatePath = path.join(checkpointProtocolFixture, "wrapper-state-blocked-duplicate.json");
