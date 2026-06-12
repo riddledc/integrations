@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.50
+
+### Patch Changes
+
+- d2ec367: Add TypeScript/Python ship-gate parity coverage and align Python public ship-gate reasons with the shared gate contract.
+
 ## 0.8.49
 
 ### Patch Changes
