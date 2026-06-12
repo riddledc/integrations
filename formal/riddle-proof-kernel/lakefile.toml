@@ -1,0 +1,6 @@
+name = "riddle_proof_lean_kernel"
+version = "0.1.0"
+defaultTargets = ["RiddleProofKernel"]
+
+[[lean_lib]]
+name = "RiddleProofKernel"

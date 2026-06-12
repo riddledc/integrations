@@ -1,0 +1,6 @@
+{"version": "1.2.0",
+ "packagesDir": ".lake/packages",
+ "packages": [],
+ "name": "riddle_proof_lean_kernel",
+ "lakeDir": ".lake",
+ "fixedToolchain": false}
