@@ -293,11 +293,11 @@ function stageFromCheckpoint(checkpoint: string): RiddleProofStage {
 }
 
 function allowedDecisionsForStage(stage: RiddleProofStage, checkpoint: string) {
-  if (stage === "recon") return ["ready_for_author", "retry_recon", "recon_stuck", "blocked", "human_review"];
+  if (stage === "recon") return ["ready_for_author", "retry_recon", "recon_stuck", "needs_recon", "blocked", "human_review"];
   if (stage === "implement") return ["implementation_complete", "needs_author", "needs_recon", "blocked", "human_review"];
-  if (stage === "ship") return ["continue_stage", "needs_implementation", "needs_recon", "blocked", "human_review"];
-  if (checkpoint === "awaiting_stage_advance") return ["continue_stage", "retry_stage", "blocked", "human_review"];
-  return ["continue_stage", "needs_recon", "needs_implementation", "blocked", "human_review"];
+  if (stage === "ship") return ["continue_stage", "retry_stage", "needs_implementation", "needs_recon", "blocked", "human_review"];
+  if (checkpoint === "awaiting_stage_advance") return ["continue_stage", "retry_stage", "needs_recon", "needs_implementation", "blocked", "human_review"];
+  return ["continue_stage", "retry_stage", "needs_recon", "needs_implementation", "blocked", "human_review"];
 }
 
 function packetKindForStage(stage: RiddleProofStage, checkpoint: string): RiddleProofCheckpointPacket["kind"] {
