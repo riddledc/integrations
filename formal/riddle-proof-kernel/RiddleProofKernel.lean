@@ -1239,6 +1239,70 @@ theorem checkpoint_lifecycle_summary_projects_state
         state.duplicateResponseCount := by
   simp [checkpointLifecycleSummary]
 
+structure CheckpointTokenMatchInput where
+  packetHasToken : Bool
+  responseSeen : Bool
+  responseHasToken : Bool
+  tokenValuesEqual : Bool
+  deriving Repr, DecidableEq
+
+def checkpointTokenMatchSummary (input : CheckpointTokenMatchInput) : Option Bool :=
+  if input.responseSeen = false then
+    none
+  else if input.packetHasToken && input.responseHasToken then
+    some input.tokenValuesEqual
+  else if input.packetHasToken || input.responseHasToken then
+    some false
+  else
+    none
+
+/-!
+The old projection treated a pending packet token without any response as a
+token mismatch. That is not a comparison result; it means no response has been
+seen yet.
+-/
+def checkpointTokenMatchSummaryBeforePendingGuard
+    (input : CheckpointTokenMatchInput) : Option Bool :=
+  if input.packetHasToken && input.responseHasToken then
+    some input.tokenValuesEqual
+  else if input.packetHasToken || input.responseHasToken then
+    some false
+  else
+    none
+
+theorem pending_packet_without_response_has_no_token_match_verdict :
+    checkpointTokenMatchSummary {
+      packetHasToken := true
+      responseSeen := false
+      responseHasToken := false
+      tokenValuesEqual := false
+    } = none
+      ∧ checkpointTokenMatchSummaryBeforePendingGuard {
+        packetHasToken := true
+        responseSeen := false
+        responseHasToken := false
+        tokenValuesEqual := false
+      } = some false := by
+  native_decide
+
+theorem matching_response_token_reports_true :
+    checkpointTokenMatchSummary {
+      packetHasToken := true
+      responseSeen := true
+      responseHasToken := true
+      tokenValuesEqual := true
+    } = some true := by
+  native_decide
+
+theorem mismatched_response_token_reports_false :
+    checkpointTokenMatchSummary {
+      packetHasToken := true
+      responseSeen := true
+      responseHasToken := true
+      tokenValuesEqual := false
+    } = some false := by
+  native_decide
+
 def examplePendingCheckpointLifecycle : CheckpointLifecycleState where
   pendingPacket := true
   acceptedResponseCount := 0
