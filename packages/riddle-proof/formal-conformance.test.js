@@ -24,6 +24,7 @@ import {
   buildAuthorCheckpointPacket,
   buildProofAssessmentCheckpointPacket,
   buildStageCheckpointPacket,
+  checkpointSummaryFromState,
   createCheckpointResponseTemplate,
 } from "./dist/checkpoint.js";
 
@@ -263,6 +264,109 @@ const proofAssessmentPacket = buildProofAssessmentCheckpointPacket({
 });
 assertDecisionContract(proofAssessmentPacket, "proof assessment checkpoint");
 
+const pendingCheckpointSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: reconPacket,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }],
+  events: [],
+});
+assert.equal(pendingCheckpointSummary.pending, true);
+assert.equal(pendingCheckpointSummary.packet_count, 1);
+assert.equal(pendingCheckpointSummary.response_count, 0);
+assert.equal(pendingCheckpointSummary.duplicate_response_count, 0);
+assert.equal(pendingCheckpointSummary.latest_decision, undefined);
+
+const acceptedAdvancingSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: undefined,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }, {
+    ts: "2026-06-12T00:06:00.000Z",
+    response: reconRetryResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:06:00.000Z",
+    kind: "checkpoint.response.accepted",
+  }],
+});
+assert.equal(acceptedAdvancingSummary.pending, false);
+assert.equal(acceptedAdvancingSummary.response_count, 1);
+assert.equal(acceptedAdvancingSummary.duplicate_response_count, 0);
+assert.equal(acceptedAdvancingSummary.latest_decision, "needs_recon");
+assert.equal(acceptedAdvancingSummary.token_matches, true);
+
+const blockedCheckpointResponse = createCheckpointResponseTemplate(reconPacket, {
+  decision: "blocked",
+  summary: "Keep the recon checkpoint pending for manual inspection.",
+  reasons: ["formal lifecycle conformance"],
+  created_at: "2026-06-12T00:07:00.000Z",
+});
+const acceptedBlockingSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: reconPacket,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }, {
+    ts: "2026-06-12T00:07:00.000Z",
+    response: blockedCheckpointResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:07:00.000Z",
+    kind: "checkpoint.response.accepted",
+  }],
+});
+assert.equal(acceptedBlockingSummary.pending, true);
+assert.equal(acceptedBlockingSummary.response_count, 1);
+assert.equal(acceptedBlockingSummary.duplicate_response_count, 0);
+assert.equal(acceptedBlockingSummary.latest_decision, "blocked");
+assert.equal(acceptedBlockingSummary.token_matches, true);
+
+const rejectedCheckpointSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: reconPacket,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }],
+  events: [{
+    ts: "2026-06-12T00:08:00.000Z",
+    kind: "checkpoint.response.rejected",
+  }],
+});
+assert.equal(rejectedCheckpointSummary.pending, true);
+assert.equal(rejectedCheckpointSummary.response_count, 0);
+assert.equal(rejectedCheckpointSummary.duplicate_response_count, 0);
+assert.equal(rejectedCheckpointSummary.latest_decision, undefined);
+
+const duplicateCheckpointSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: reconPacket,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }, {
+    ts: "2026-06-12T00:07:00.000Z",
+    response: blockedCheckpointResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:07:00.000Z",
+    kind: "checkpoint.response.accepted",
+  }, {
+    ts: "2026-06-12T00:08:00.000Z",
+    kind: "checkpoint.response.duplicate",
+  }],
+});
+assert.equal(duplicateCheckpointSummary.pending, true);
+assert.equal(duplicateCheckpointSummary.response_count, 1);
+assert.equal(duplicateCheckpointSummary.duplicate_response_count, 1);
+assert.equal(duplicateCheckpointSummary.latest_decision, "blocked");
+
 const lifecycleRequest = {
   repo: "riddledc/example",
   branch: "formal-lifecycle",
@@ -366,6 +470,7 @@ console.log(JSON.stringify({
     shipGateDecision: true,
     shipGateHardBlockers: true,
     checkpointDecisionContracts: true,
+    checkpointLifecycleSummary: true,
     runCardProjection: true,
     runResultStatusProjection: true,
     staleRunCardSnapshotRefresh: true,

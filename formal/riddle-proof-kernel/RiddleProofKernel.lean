@@ -1091,6 +1091,178 @@ theorem advertised_retry_stage_response_is_accepted :
   native_decide
 
 /-!
+Layer 4.5: checkpoint lifecycle summary semantics.
+
+Once a checkpoint response passes the active-packet guard above, the runtime also
+projects a compact lifecycle summary from durable state. This model keeps that
+post-admission contract separate from the parser/identity guard:
+
+- accepted advancing responses count once and clear the pending packet
+- accepted blocking/manual-stop responses count once and retain the packet
+- rejected responses are blockers, not accepted responses
+- duplicate responses are tracked separately and do not replay acceptance
+-/
+
+inductive CheckpointLifecycleResponse where
+  | acceptedAdvancing
+  | acceptedBlocking
+  | rejected
+  | duplicate
+  deriving Repr, DecidableEq
+
+structure CheckpointLifecycleState where
+  pendingPacket : Bool
+  acceptedResponseCount : Nat
+  duplicateResponseCount : Nat
+  deriving Repr, DecidableEq
+
+structure CheckpointLifecycleSummary where
+  pending : Bool
+  responseCount : Nat
+  duplicateResponseCount : Nat
+  deriving Repr, DecidableEq
+
+def checkpointLifecycleSummary (state : CheckpointLifecycleState) : CheckpointLifecycleSummary where
+  pending := state.pendingPacket
+  responseCount := state.acceptedResponseCount
+  duplicateResponseCount := state.duplicateResponseCount
+
+def applyCheckpointLifecycleResponse
+    (state : CheckpointLifecycleState)
+    (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
+  match response with
+  | CheckpointLifecycleResponse.acceptedAdvancing =>
+      { state with
+        pendingPacket := false
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | CheckpointLifecycleResponse.acceptedBlocking =>
+      { state with
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | CheckpointLifecycleResponse.rejected =>
+      state
+  | CheckpointLifecycleResponse.duplicate =>
+      { state with
+        duplicateResponseCount := state.duplicateResponseCount + 1 }
+
+/-!
+Two intentionally broken lifecycle projections. The first clears the pending
+packet after a blocking response; the second counts rejected blockers as
+accepted responses.
+-/
+def checkpointLifecycleClearsBlocking
+    (state : CheckpointLifecycleState)
+    (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
+  match response with
+  | CheckpointLifecycleResponse.acceptedAdvancing =>
+      { state with
+        pendingPacket := false
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | CheckpointLifecycleResponse.acceptedBlocking =>
+      { state with
+        pendingPacket := false
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | CheckpointLifecycleResponse.rejected =>
+      state
+  | CheckpointLifecycleResponse.duplicate =>
+      { state with
+        duplicateResponseCount := state.duplicateResponseCount + 1 }
+
+def checkpointLifecycleCountsRejected
+    (state : CheckpointLifecycleState)
+    (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
+  match response with
+  | CheckpointLifecycleResponse.rejected =>
+      { state with
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | _ =>
+      applyCheckpointLifecycleResponse state response
+
+theorem accepted_advancing_response_clears_pending_packet
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.acceptedAdvancing).pendingPacket = false := by
+  rfl
+
+theorem accepted_advancing_response_increments_response_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.acceptedAdvancing).acceptedResponseCount =
+        state.acceptedResponseCount + 1 := by
+  rfl
+
+theorem accepted_blocking_response_retains_pending_packet
+    (state : CheckpointLifecycleState)
+    (hPending : state.pendingPacket = true) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.acceptedBlocking).pendingPacket = true := by
+  simp [applyCheckpointLifecycleResponse, hPending]
+
+theorem accepted_blocking_response_increments_response_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.acceptedBlocking).acceptedResponseCount =
+        state.acceptedResponseCount + 1 := by
+  rfl
+
+theorem rejected_response_preserves_lifecycle_state
+    (state : CheckpointLifecycleState) :
+    applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.rejected = state := by
+  rfl
+
+theorem duplicate_response_does_not_increment_response_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.duplicate).acceptedResponseCount =
+        state.acceptedResponseCount := by
+  rfl
+
+theorem duplicate_response_increments_duplicate_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.duplicate).duplicateResponseCount =
+        state.duplicateResponseCount + 1 := by
+  rfl
+
+theorem checkpoint_lifecycle_summary_projects_state
+    (state : CheckpointLifecycleState) :
+    (checkpointLifecycleSummary state).pending = state.pendingPacket
+      ∧ (checkpointLifecycleSummary state).responseCount = state.acceptedResponseCount
+      ∧ (checkpointLifecycleSummary state).duplicateResponseCount =
+        state.duplicateResponseCount := by
+  simp [checkpointLifecycleSummary]
+
+def examplePendingCheckpointLifecycle : CheckpointLifecycleState where
+  pendingPacket := true
+  acceptedResponseCount := 0
+  duplicateResponseCount := 0
+
+theorem clearing_blocking_response_loses_pending_packet :
+    (applyCheckpointLifecycleResponse
+      examplePendingCheckpointLifecycle
+      CheckpointLifecycleResponse.acceptedBlocking).pendingPacket = true
+      ∧ (checkpointLifecycleClearsBlocking
+        examplePendingCheckpointLifecycle
+        CheckpointLifecycleResponse.acceptedBlocking).pendingPacket = false := by
+  native_decide
+
+theorem counting_rejected_response_inflates_accepted_count :
+    (applyCheckpointLifecycleResponse
+      examplePendingCheckpointLifecycle
+      CheckpointLifecycleResponse.rejected).acceptedResponseCount = 0
+      ∧ (checkpointLifecycleCountsRejected
+        examplePendingCheckpointLifecycle
+        CheckpointLifecycleResponse.rejected).acceptedResponseCount = 1 := by
+  native_decide
+
+/-!
 Layer 5: run lifecycle and run-card projection.
 
 The runtime has a durable run state plus derived public surfaces: status

@@ -111,10 +111,18 @@ It models these obligations:
 - accepted responses must match the active packet's run/checkpoint identity
 - accepted responses must match the active packet's resume token
 - accepted responses must use a decision advertised by `allowed_decisions`
+- accepted advancing responses clear the pending packet and count once
+- accepted blocking/manual-stop responses count once and retain the pending
+  packet
+- rejected responses keep the packet pending and do not count as accepted
+- duplicate responses increment duplicate count, not accepted response count
 
 The theorem `accepted_response_has_matching_advertised_packet` proves that an
 accepted checkpoint response implies the packet identity, resume token, and
-advertised decision checks all held.
+advertised decision checks all held. The theorem
+`checkpoint_lifecycle_summary_projects_state` proves that the compact checkpoint
+summary projects pending, accepted-response, and duplicate-response state without
+inventing acceptance.
 
 ## Layer 5: Run Lifecycle and Run-Card Projection
 
@@ -206,6 +214,10 @@ Layer 4 adds checkpoint contract counterexamples:
 - `advertised_recon_response_is_accepted` and
   `advertised_retry_stage_response_is_accepted` are the positive post-fix
   checks: the same responses are accepted once the packet advertises them.
+- `clearing_blocking_response_loses_pending_packet` shows why blocking/manual
+  checkpoint responses must retain the pending packet.
+- `counting_rejected_response_inflates_accepted_count` shows why rejected
+  checkpoint responses must not be folded into accepted response count.
 
 Layer 5 adds run lifecycle projection checks:
 
