@@ -160,6 +160,81 @@ function baseRequest(paths, changeRequest) {
 }
 
 {
+  const paths = pathsFor('unadvertised-checkpoint-decision');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    recon_status: 'needs_supervisor_judgment',
+  });
+  const yieldedRecon = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Recon checkpoint should reject unadvertised author packets.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'recon_supervisor_judgment',
+          stage: 'recon',
+          summary: 'Recon needs supervising judgment.',
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yieldedRecon.status === 'awaiting_checkpoint', `recon checkpoint should yield, got ${yieldedRecon.status}`);
+  assert(yieldedRecon.checkpoint_packet?.stage === 'recon', 'yielded checkpoint should be a recon checkpoint');
+  assert(!yieldedRecon.checkpoint_packet.allowed_decisions.includes('author_packet'), 'recon checkpoint should not advertise author_packet');
+
+  const forgedAuthorPacketResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Forged author packet should not bypass recon checkpoint decisions.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('unadvertised checkpoint response should not resume the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: yieldedRecon.run_id,
+      checkpoint: yieldedRecon.checkpoint_packet.checkpoint,
+      resume_token: yieldedRecon.checkpoint_packet.resume_token,
+      decision: 'author_packet',
+      summary: 'Forged author packet at a recon checkpoint.',
+      payload: {
+        proof_plan: 'Bypass recon and author proof directly.',
+        capture_script: "return { forgedAuthorPacket: true };",
+      },
+      created_at: '2026-06-12T12:00:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(forgedAuthorPacketResponse.status === 'blocked', `forged decision should block, got ${forgedAuthorPacketResponse.status}`);
+  assert(
+    forgedAuthorPacketResponse.blocker?.code === 'checkpoint_response_decision_not_allowed',
+    `forged decision should report decision_not_allowed, got ${forgedAuthorPacketResponse.blocker?.code}`,
+  );
+  assert(
+    forgedAuthorPacketResponse.blocker.details.allowed_decisions.includes('ready_for_author'),
+    'blocker should expose advertised decisions',
+  );
+  assert(
+    !forgedAuthorPacketResponse.blocker.details.allowed_decisions.includes('author_packet'),
+    'blocker should not add forged decision to advertised decisions',
+  );
+  const persistedForgedState = readJson(paths.harnessStatePath);
+  assert(persistedForgedState.checkpoint_packet, 'rejected unadvertised response should keep the pending checkpoint packet visible');
+  assert(persistedForgedState.checkpoint_summary.pending === true, 'checkpoint summary should remain pending after rejected unadvertised response');
+  assert(persistedForgedState.checkpoint_summary.response_count === 0, 'rejected unadvertised response should not count as accepted');
+  assertNoGenericLifecycleFailure(forgedAuthorPacketResponse, 'unadvertised checkpoint decision blocker');
+}
+
+{
   const paths = pathsFor('interaction-missing-proof-evidence');
   writeJson(paths.engineStatePath, {
     repo: 'riddledc/example',
@@ -379,6 +454,7 @@ console.log(JSON.stringify({
     'valid evidence ready_to_ship',
     'late checkpoint response ignored after ready_to_ship without finalized flag',
     'invalid evidence proof_assessment_blocked',
+    'unadvertised checkpoint response decision blocked',
     'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
     'no-diff audit completed',

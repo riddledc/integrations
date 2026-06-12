@@ -1019,6 +1019,21 @@ function checkpointResponseContinuation(
       },
     };
   }
+  if (!packet.allowed_decisions.includes(response.decision)) {
+    return {
+      blocker: {
+        code: "checkpoint_response_decision_not_allowed",
+        checkpoint: packet.checkpoint,
+        message: "Checkpoint response decision is not advertised by the pending checkpoint packet.",
+        details: {
+          stage: packet.stage,
+          decision: response.decision,
+          allowed_decisions: packet.allowed_decisions,
+          response,
+        },
+      },
+    };
+  }
 
   const base = {
     action: "run",

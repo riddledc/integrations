@@ -8,6 +8,19 @@ import {
   validateShipGate,
 } from "./dist/proof-run-core.js";
 import {
+  createRunResult,
+  isSuccessfulStatus,
+  isTerminalStatus,
+} from "./dist/result.js";
+import {
+  createRiddleProofRunCard,
+} from "./dist/run-card.js";
+import {
+  createRunState,
+  createRunStatusSnapshot,
+  setRunStatus,
+} from "./dist/state.js";
+import {
   buildAuthorCheckpointPacket,
   buildProofAssessmentCheckpointPacket,
   buildStageCheckpointPacket,
@@ -250,6 +263,98 @@ const proofAssessmentPacket = buildProofAssessmentCheckpointPacket({
 });
 assertDecisionContract(proofAssessmentPacket, "proof assessment checkpoint");
 
+const lifecycleRequest = {
+  repo: "riddledc/example",
+  branch: "formal-lifecycle",
+  change_request: "Exercise run lifecycle projection semantics.",
+  engine_state_path: "/tmp/riddle-proof-lifecycle-engine.json",
+  harness_state_path: "/tmp/riddle-proof-lifecycle-wrapper.json",
+  ship_mode: "none",
+};
+
+const lifecycleStatuses = [
+  "running",
+  "awaiting_checkpoint",
+  "blocked",
+  "failed",
+  "ready_to_ship",
+  "shipped",
+  "completed",
+];
+
+for (const status of lifecycleStatuses) {
+  const runState = createRunState({
+    request: lifecycleRequest,
+    run_id: `run_formal_lifecycle_${status}`,
+    created_at: "2026-06-12T01:00:00.000Z",
+  });
+  if (status === "blocked" || status === "failed") {
+    runState.blocker = {
+      code: `formal_${status}`,
+      checkpoint: "verify",
+      message: `Formal lifecycle ${status}.`,
+    };
+  }
+  setRunStatus(runState, status, "2026-06-12T01:00:10.000Z");
+  runState.run_card = createRiddleProofRunCard(runState, { at: "2026-06-12T01:00:10.000Z" });
+
+  assert.equal(runState.run_card.status, status);
+  assert.equal(runState.run_card.stop_condition.status, status);
+  assert.equal(runState.run_card.stop_condition.terminal, isTerminalStatus(status));
+  assert.equal(runState.run_card.stop_condition.monitor_should_continue, !isTerminalStatus(status));
+
+  const runResult = createRunResult({
+    state: runState,
+    status,
+    last_summary: `Lifecycle status ${status}.`,
+  });
+  assert.equal(runResult.status, status);
+  assert.equal(runResult.ok, isSuccessfulStatus(status));
+  assert.equal(runResult.run_card.status, status);
+  assert.equal(runResult.run_card.stop_condition.status, status);
+  assert.equal(runResult.run_card.stop_condition.terminal, isTerminalStatus(status));
+}
+
+const staleCardState = createRunState({
+  request: lifecycleRequest,
+  run_id: "run_formal_lifecycle_stale_card",
+  created_at: "2026-06-12T01:10:00.000Z",
+});
+staleCardState.run_card = createRiddleProofRunCard(staleCardState, { at: "2026-06-12T01:10:00.000Z" });
+staleCardState.blocker = {
+  code: "formal_blocker",
+  checkpoint: "verify",
+  message: "Formal lifecycle blocker.",
+};
+setRunStatus(staleCardState, "blocked", "2026-06-12T01:10:10.000Z");
+const staleCardSnapshot = createRunStatusSnapshot(staleCardState, "2026-06-12T01:10:10.000Z");
+assert.equal(staleCardSnapshot.status, "blocked");
+assert.equal(staleCardSnapshot.is_terminal, true);
+assert.equal(staleCardSnapshot.monitor_should_continue, false);
+assert.equal(staleCardSnapshot.run_card.status, "blocked");
+assert.equal(staleCardSnapshot.run_card.stop_condition.status, "blocked");
+assert.equal(staleCardSnapshot.run_card.stop_condition.terminal, true);
+assert.equal(staleCardSnapshot.run_card.stop_condition.monitor_should_continue, false);
+assert.equal(staleCardSnapshot.run_card.stop_condition.blocker_code, "formal_blocker");
+
+const richCurrentCardState = createRunState({
+  request: lifecycleRequest,
+  run_id: "run_formal_lifecycle_current_rich_card",
+  created_at: "2026-06-12T01:20:00.000Z",
+});
+richCurrentCardState.run_card = createRiddleProofRunCard(richCurrentCardState, {
+  at: "2026-06-12T01:20:00.000Z",
+  fullRiddleState: {
+    before_cdn: "https://cdn.example.com/formal-before.png",
+  },
+});
+const richCurrentCardSnapshot = createRunStatusSnapshot(richCurrentCardState, "2026-06-12T01:20:10.000Z");
+assert.equal(richCurrentCardSnapshot.status, "running");
+assert.equal(
+  richCurrentCardSnapshot.run_card.latest_evidence.before_url,
+  "https://cdn.example.com/formal-before.png",
+);
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.formal-conformance",
@@ -261,5 +366,9 @@ console.log(JSON.stringify({
     shipGateDecision: true,
     shipGateHardBlockers: true,
     checkpointDecisionContracts: true,
+    runCardProjection: true,
+    runResultStatusProjection: true,
+    staleRunCardSnapshotRefresh: true,
+    currentRunCardSnapshotPreservesRichProjection: true,
   },
 }));

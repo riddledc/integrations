@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has five layers.
+The model in `RiddleProofKernel.lean` now has six layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -116,6 +116,30 @@ The theorem `accepted_response_has_matching_advertised_packet` proves that an
 accepted checkpoint response implies the packet identity, resume token, and
 advertised decision checks all held.
 
+## Layer 5: Run Lifecycle and Run-Card Projection
+
+The Layer 5 model covers durable run status and the public status surfaces
+derived from it.
+
+It models these obligations:
+
+- protected final statuses are `ready_to_ship`, `shipped`, and `completed`
+- terminal application of a protected final status marks the run finalized
+- a finalized protected state is not overwritten by a stale non-final incoming
+  state
+- the intentional `ready_to_ship -> shipped` finalized transition remains
+  allowed
+- run cards project status, terminal, and monitor-continuation fields from the
+  durable run state
+- run results project status and `ok` from the same state predicates
+- a run-card pass claim requires the ship gate and trusted proof decision facts
+
+The theorem `run_result_run_card_projects_state` proves that a constructed
+result's run card projects the same durable state. The counterexample
+`independent_run_card_can_invent_success` shows why generated cards must be
+tied to state: an independent card can claim `ready_to_ship` while the state is
+still running and ungated.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -176,9 +200,22 @@ Layer 4 adds checkpoint contract counterexamples:
   when the active packet did not advertise that decision.
 - `unadvertised_retry_stage_was_accepted_without_allowed_guard` shows the same
   drift for generic `retry_stage` responses.
+- `forged_author_packet_recon_response_requires_allowed_guard` shows that a
+  matching run/checkpoint/resume-token response can still be invalid when it
+  uses a decision the active packet did not advertise.
 - `advertised_recon_response_is_accepted` and
   `advertised_retry_stage_response_is_accepted` are the positive post-fix
   checks: the same responses are accepted once the packet advertises them.
+
+Layer 5 adds run lifecycle projection checks:
+
+- `independent_run_card_can_invent_success` shows that a detached run card can
+  claim terminal success independently of the durable run state.
+- `projected_run_card_rejects_forged_success` shows that the projection
+  contract rejects that detached card.
+- Runtime conformance caught and fixed a stale snapshot issue: status snapshots
+  now regenerate the run card from the current state instead of reusing an
+  embedded stale card.
 
 ## Build
 
