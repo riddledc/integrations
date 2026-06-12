@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.44
+
+### Patch Changes
+
+- c3c0be7: Treat passed profile results with missing required Riddle artifacts as proof insufficient.
+
 ## 0.8.43
 
 ### Patch Changes
