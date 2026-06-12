@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.49
+
+### Patch Changes
+
+- feaf56d: Project public ship reports from the same ship-gate facts used by runtime shipping, and reject unsupported reference modes or proof hard blockers before publishing a pass report.
+
 ## 0.8.48
 
 ### Patch Changes
