@@ -200,6 +200,9 @@ Layer 4 adds checkpoint contract counterexamples:
   when the active packet did not advertise that decision.
 - `unadvertised_retry_stage_was_accepted_without_allowed_guard` shows the same
   drift for generic `retry_stage` responses.
+- `forged_author_packet_recon_response_requires_allowed_guard` shows that a
+  matching run/checkpoint/resume-token response can still be invalid when it
+  uses a decision the active packet did not advertise.
 - `advertised_recon_response_is_accepted` and
   `advertised_retry_stage_response_is_accepted` are the positive post-fix
   checks: the same responses are accepted once the packet advertises them.

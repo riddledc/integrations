@@ -981,6 +981,12 @@ def exampleReconNeedsReconResponse : CheckpointResponse where
   resumeToken := some 19
   decision := CheckpointDecision.needsRecon
 
+def exampleReconForgedAuthorPacketResponse : CheckpointResponse where
+  runId := 7
+  checkpointId := 11
+  resumeToken := some 19
+  decision := CheckpointDecision.authorPacket
+
 def exampleReconBeforeAllowedState : CheckpointRunState where
   status := CheckpointRunStatus.awaitingCheckpoint
   packet := some exampleReconPacketBeforeAllowedFix
@@ -1035,6 +1041,8 @@ def exampleGenericAfterRetryAllowedState : CheckpointRunState where
 #eval checkpointResponseOutcomeWithoutAllowedGuard exampleReconBeforeAllowedState exampleReconNeedsReconResponse
 #eval checkpointResponseOutcome exampleReconBeforeAllowedState exampleReconNeedsReconResponse
 #eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconNeedsReconResponse
+#eval checkpointResponseOutcomeWithoutAllowedGuard exampleReconAfterAllowedState exampleReconForgedAuthorPacketResponse
+#eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconForgedAuthorPacketResponse
 
 #eval checkpointResponseOutcomeWithoutAllowedGuard exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
 #eval checkpointResponseOutcome exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
@@ -1054,6 +1062,16 @@ theorem advertised_recon_response_is_accepted :
     checkpointResponseOutcome
       exampleReconAfterAllowedState
       exampleReconNeedsReconResponse = CheckpointResponseOutcome.accepted := by
+  native_decide
+
+theorem forged_author_packet_recon_response_requires_allowed_guard :
+    checkpointResponseOutcomeWithoutAllowedGuard
+        exampleReconAfterAllowedState
+        exampleReconForgedAuthorPacketResponse = CheckpointResponseOutcome.accepted
+      ∧ checkpointResponseOutcome
+        exampleReconAfterAllowedState
+        exampleReconForgedAuthorPacketResponse =
+          CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed := by
   native_decide
 
 theorem unadvertised_retry_stage_was_accepted_without_allowed_guard :
