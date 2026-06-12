@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.46
+
+### Patch Changes
+
+- 8249bc1: Advertise all checkpoint response decisions that the runtime continuation path accepts, including recon `needs_recon` and generic `retry_stage`, and add formal/runtime conformance coverage for checkpoint response semantics.
+
 ## 0.8.45
 
 ### Patch Changes
