@@ -278,6 +278,7 @@ assert.equal(pendingCheckpointSummary.packet_count, 1);
 assert.equal(pendingCheckpointSummary.response_count, 0);
 assert.equal(pendingCheckpointSummary.duplicate_response_count, 0);
 assert.equal(pendingCheckpointSummary.latest_decision, undefined);
+assert.equal(pendingCheckpointSummary.token_matches, undefined);
 
 const acceptedAdvancingSummary = checkpointSummaryFromState({
   ...checkpointRunState,

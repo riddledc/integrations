@@ -869,9 +869,10 @@ export function checkpointSummaryFromState(
   const latestResumeToken = latestPacket?.resume_token || null;
   const latestResponseToken = latestResponse?.resume_token || null;
   const tokenMatches =
-    latestResumeToken && latestResponseToken ? latestResumeToken === latestResponseToken :
-      latestResumeToken || latestResponseToken ? false :
-        null;
+    !latestResponse ? null :
+      latestResumeToken && latestResponseToken ? latestResumeToken === latestResponseToken :
+        latestResumeToken || latestResponseToken ? false :
+          null;
   return compactRecord({
     pending: Boolean(state.checkpoint_packet),
     packet_count: packets.length,

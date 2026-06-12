@@ -2067,7 +2067,7 @@ function presentCheckpointSummary(summary: unknown) {
   const latestResumeToken = stringValue(record.latest_resume_token);
   const latestResponseToken = stringValue(record.latest_response_token);
   const next = { ...record };
-  if (pending && latestResumeToken && !latestResponseToken && record.token_matches === false) {
+  if (pending && latestResumeToken && !latestResponseToken && record.token_matches !== true) {
     delete next.token_matches;
     next.token_status = "awaiting_response";
     next.token_note = "Token match is evaluated after a checkpoint response is submitted.";

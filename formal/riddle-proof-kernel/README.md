@@ -116,13 +116,17 @@ It models these obligations:
   packet
 - rejected responses keep the packet pending and do not count as accepted
 - duplicate responses increment duplicate count, not accepted response count
+- pending packets without a response do not report a token mismatch verdict
 
 The theorem `accepted_response_has_matching_advertised_packet` proves that an
 accepted checkpoint response implies the packet identity, resume token, and
 advertised decision checks all held. The theorem
 `checkpoint_lifecycle_summary_projects_state` proves that the compact checkpoint
 summary projects pending, accepted-response, and duplicate-response state without
-inventing acceptance.
+inventing acceptance. The theorem
+`pending_packet_without_response_has_no_token_match_verdict` proves that a
+pending packet token is not treated as a response-token mismatch before any
+response has been seen.
 
 ## Layer 5: Run Lifecycle and Run-Card Projection
 
@@ -218,6 +222,9 @@ Layer 4 adds checkpoint contract counterexamples:
   checkpoint responses must retain the pending packet.
 - `counting_rejected_response_inflates_accepted_count` shows why rejected
   checkpoint responses must not be folded into accepted response count.
+- `pending_packet_without_response_has_no_token_match_verdict` caught a runtime
+  summary bug: a pending tokenized packet with no response was reported as
+  `token_matches: false` instead of leaving the comparison unset.
 
 Layer 5 adds run lifecycle projection checks:
 
