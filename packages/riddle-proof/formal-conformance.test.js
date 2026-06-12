@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   assessRiddleProofProfileEvidence,
@@ -27,6 +30,64 @@ import {
   checkpointSummaryFromState,
   createCheckpointResponseTemplate,
 } from "./dist/checkpoint.js";
+
+const packageRoot = fileURLToPath(new URL(".", import.meta.url));
+const shipPyPath = path.join(packageRoot, "runtime", "lib", "ship.py");
+
+function pythonShipGateReportFacts(state) {
+  const script = `
+import json
+import sys
+from pathlib import Path
+
+ship_path = Path(${JSON.stringify(shipPyPath)})
+source = ship_path.read_text(encoding='utf-8')
+helpers_source = source.split('\\ns = load_state()', 1)[0]
+namespace = {'__file__': str(ship_path)}
+exec(compile(helpers_source, str(ship_path), 'exec'), namespace)
+state = json.loads(sys.stdin.read())
+print(json.dumps(namespace['ship_gate_report_facts'](state), sort_keys=True))
+`;
+  const result = spawnSync("python3", ["-c", script], {
+    cwd: packageRoot,
+    input: JSON.stringify(state),
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`python ship gate failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
+function sortedStrings(value) {
+  return Array.isArray(value) ? value.map(String).sort() : [];
+}
+
+function normalizedShipGateForParity(gate, source) {
+  const evidence = gate?.evidence || {};
+  return {
+    ok: Boolean(gate?.ok),
+    reasons: sortedStrings(gate?.reasons),
+    required_baselines: sortedStrings(gate?.required_baselines),
+    evidence: {
+      reference: evidence.reference ?? null,
+      verification_mode: evidence.verification_mode ?? null,
+      prod_url_present: source === "ts" ? Boolean(evidence.prod_url) : Boolean(evidence.prod_url_present),
+      before_present: source === "ts" ? Boolean(evidence.before_cdn) : Boolean(evidence.before_present),
+      prod_present: source === "ts" ? Boolean(evidence.prod_cdn) : Boolean(evidence.prod_present),
+      after_artifact_url_present: source === "ts"
+        ? Boolean(evidence.after_cdn)
+        : Boolean(evidence.after_artifact_url_present),
+      verify_status: evidence.verify_status ?? null,
+      proof_assessment_decision: evidence.proof_assessment_decision ?? null,
+      proof_assessment_source: evidence.proof_assessment_source ?? null,
+      visual_delta_required: Boolean(evidence.visual_delta_required),
+      visual_delta_status: evidence.visual_delta_status ?? null,
+      visual_delta_passed: evidence.visual_delta_passed ?? null,
+      hard_blockers: sortedStrings(evidence.hard_blockers),
+    },
+  };
+}
 
 const profile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
@@ -154,6 +215,108 @@ const hardBlockerGate = validateShipGate({
 });
 assert.equal(hardBlockerGate.ok, false);
 assert.ok(hardBlockerGate.reasons.includes("proof hard blocker prevents ready_to_ship: structured proof assertion failed"));
+
+const shipGateParityCases = [
+  ["clean before", baseShipState],
+  ["clean both", {
+    ...baseShipState,
+    reference: "both",
+    prod_url: "https://prod.example.com/",
+    prod_cdn: "https://cdn.example.com/prod.png",
+  }],
+  ["invalid reference", {
+    ...baseShipState,
+    requested_reference: "none",
+    reference: "none",
+  }],
+  ["missing before baseline", {
+    ...baseShipState,
+    before_cdn: "",
+  }],
+  ["missing prod url", {
+    ...baseShipState,
+    reference: "prod",
+    prod_cdn: "https://cdn.example.com/prod.png",
+  }],
+  ["missing prod baseline", {
+    ...baseShipState,
+    reference: "prod",
+    prod_url: "https://prod.example.com/",
+    prod_cdn: "",
+  }],
+  ["missing after evidence", {
+    ...baseShipState,
+    after_cdn: "",
+  }],
+  ["structured after evidence without screenshot", {
+    ...baseShipState,
+    after_cdn: "",
+    evidence_bundle: {
+      verification_mode: "proof",
+      after: {
+        observation: { valid: true, telemetry_ready: true },
+        supporting_artifacts: { has_structured_payload: true },
+      },
+    },
+  }],
+  ["capture incomplete", {
+    ...baseShipState,
+    verify_status: "capture_incomplete",
+  }],
+  ["runner assessment", {
+    ...baseShipState,
+    proof_assessment: {
+      source: "runner",
+      decision: "ready_to_ship",
+    },
+    proof_assessment_source: "runner",
+  }],
+  ["needs richer proof", {
+    ...baseShipState,
+    proof_assessment: {
+      source: "supervising_agent",
+      decision: "needs_richer_proof",
+    },
+  }],
+  ["hard blocker", {
+    ...baseShipState,
+    proof_assessment_request: {
+      hard_blockers: ["structured proof assertion failed"],
+    },
+  }],
+  ["visual delta unmeasured", {
+    ...baseShipState,
+    verification_mode: "visual",
+    evidence_bundle: {
+      verification_mode: "visual",
+      after: {
+        visual_delta: { status: "unmeasured", reason: "comparator unavailable" },
+      },
+    },
+  }],
+  ["visual delta measured failure", {
+    ...baseShipState,
+    verification_mode: "visual",
+    evidence_bundle: {
+      verification_mode: "visual",
+      after: {
+        visual_delta: { status: "measured", passed: false },
+      },
+    },
+  }],
+  ["interaction missing proof evidence", {
+    ...baseShipState,
+    verification_mode: "interaction",
+  }],
+];
+
+for (const [name, state] of shipGateParityCases) {
+  assert.deepEqual(
+    normalizedShipGateForParity(pythonShipGateReportFacts(state), "python"),
+    normalizedShipGateForParity(validateShipGate(state), "ts"),
+    `TS/Python ship gate parity failed for ${name}`,
+  );
+}
 
 const checkpointRequest = {
   repo: "riddledc/example",
@@ -470,6 +633,7 @@ console.log(JSON.stringify({
     shipGateSupervisor: true,
     shipGateDecision: true,
     shipGateHardBlockers: true,
+    shipGateRuntimeParity: true,
     checkpointDecisionContracts: true,
     checkpointLifecycleSummary: true,
     runCardProjection: true,

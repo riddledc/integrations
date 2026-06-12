@@ -1715,6 +1715,28 @@ theorem public_report_from_flow_pass_implies_ship_gate_ok
     public_ship_gate_projection_from_flow_matches_ship_gate
   ] using hProjected
 
+/-!
+Layer 7: ship-gate implementation parity.
+
+Riddle Proof currently has more than one implementation surface for the same
+semantic gate: the TypeScript engine gate and the Python runtime ship/report
+gate. The formal obligation is not that their JSON shapes are byte-identical;
+it is that their semantic gate projections agree.
+-/
+
+theorem ship_gate_projection_parity_implies_ok_agreement
+    (engine runtime : PublicShipGateProjection)
+    (hParity : engine = runtime) :
+    publicShipGateProjectionOk engine =
+      publicShipGateProjectionOk runtime := by
+  rw [hParity]
+
+def runtimeProjectionWithoutReferenceOrHardBlockers
+    (projection : PublicShipGateProjection) : PublicShipGateProjection :=
+  { projection with
+    referenceValid := true
+    hardBlockersClear := true }
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
@@ -1806,6 +1828,9 @@ def exampleWholeFlowRunnerAssessment : WholeFlowState :=
 def exampleWholeFlowUnknownArtifactManifest : WholeFlowState :=
   { exampleWholeFlowClean with artifactManifest := ArtifactManifest.unknown }
 
+def exampleWholeFlowInvalidReference : WholeFlowState :=
+  { exampleWholeFlowClean with reference := FlowReference.invalid }
+
 def exampleWholeFlowHardBlocker : WholeFlowState :=
   { exampleWholeFlowClean with hardBlockersPresent := true }
 
@@ -1831,6 +1856,11 @@ def exampleStatusOnlyPublishedPass : StatusOnlyPublicReport where
 #eval publicShipReportVerdict
   (publicShipReportFromFlow exampleWholeFlowHardBlocker PublicReportStatus.publishedPass)
 #eval statusOnlyPublicReportVerdict exampleStatusOnlyPublishedPass
+#eval publicShipGateProjectionOk
+  (runtimeProjectionWithoutReferenceOrHardBlockers
+    (publicShipGateProjectionFromFlow exampleWholeFlowInvalidReference))
+#eval publicShipGateProjectionOk
+  (publicShipGateProjectionFromFlow exampleWholeFlowInvalidReference)
 
 theorem missing_recon_gate_allows_pass_without_ship_gate :
     wholeFlowVerdictWithoutShipGate exampleWholeFlowMissingReconBaseline = Verdict.passed
@@ -1858,6 +1888,19 @@ theorem status_only_public_report_can_invent_pass :
         (publicShipReportFromFlow exampleWholeFlowHardBlocker PublicReportStatus.publishedPass)
           = Verdict.proofInsufficient
       ∧ wholeFlowShipGateOk exampleWholeFlowHardBlocker = false := by
+  native_decide
+
+theorem runtime_projection_without_reference_or_hard_blockers_can_disagree :
+    publicShipGateProjectionOk
+      (runtimeProjectionWithoutReferenceOrHardBlockers
+        (publicShipGateProjectionFromFlow exampleWholeFlowInvalidReference)) = true
+      ∧ publicShipGateProjectionOk
+        (publicShipGateProjectionFromFlow exampleWholeFlowInvalidReference) = false
+      ∧ publicShipGateProjectionOk
+        (runtimeProjectionWithoutReferenceOrHardBlockers
+          (publicShipGateProjectionFromFlow exampleWholeFlowHardBlocker)) = true
+      ∧ publicShipGateProjectionOk
+        (publicShipGateProjectionFromFlow exampleWholeFlowHardBlocker) = false := by
   native_decide
 
 def exampleAuthoringDropProcess : RiddleProofProcess where
