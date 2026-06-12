@@ -1570,6 +1570,151 @@ theorem projected_run_card_rejects_forged_success :
     ¬ runCardProjectsState exampleRunningUngatedState independentReadyRunCard := by
   simp [runCardProjectsState, exampleRunningUngatedState, independentReadyRunCard]
 
+/-!
+Layer 6: published report projection.
+
+The ship runtime publishes public surfaces: PR comments, proof artifact links,
+hosted proof views, and terminal `ship_report` JSON. The semantic contract is
+that a published pass report is still a projection of ship-gate facts. It must
+not be a second status-only surface that can independently claim success.
+-/
+
+inductive PublicReportStatus where
+  | notPublished
+  | publishedPass
+  | publishedBlocked
+  deriving Repr, DecidableEq, BEq
+
+structure PublicShipGateProjection where
+  authoredRequirementsPreserved : Bool
+  referenceValid : Bool
+  requiredBaselinesPresent : Bool
+  reconRequiredBaselinesPresent : Bool
+  reconBaselineUnderstandingPresent : Bool
+  authorProofPlanPresent : Bool
+  authorCaptureScriptPresent : Bool
+  implementationOk : Bool
+  afterEvidencePresent : Bool
+  verifyCaptured : Bool
+  trustedAssessmentSourceAccepted : Bool
+  proofAssessmentReady : Bool
+  visualDeltaOk : Bool
+  hardBlockersClear : Bool
+  artifactManifestKnown : Bool
+  requiredArtifactsComplete : Bool
+  deriving Repr
+
+def publicShipGateProjectionOk (projection : PublicShipGateProjection) : Bool :=
+  projection.authoredRequirementsPreserved
+    && projection.referenceValid
+    && projection.requiredBaselinesPresent
+    && projection.reconRequiredBaselinesPresent
+    && projection.reconBaselineUnderstandingPresent
+    && projection.authorProofPlanPresent
+    && projection.authorCaptureScriptPresent
+    && projection.implementationOk
+    && projection.afterEvidencePresent
+    && projection.verifyCaptured
+    && projection.trustedAssessmentSourceAccepted
+    && projection.proofAssessmentReady
+    && projection.visualDeltaOk
+    && projection.hardBlockersClear
+    && projection.artifactManifestKnown
+    && projection.requiredArtifactsComplete
+
+def publicShipGateProjectionFromFlow (flow : WholeFlowState) : PublicShipGateProjection where
+  authoredRequirementsPreserved := flow.authoredRequirementsPreserved
+  referenceValid := referenceValid flow.reference
+  requiredBaselinesPresent := requiredFlowBaselinesPresent flow
+  reconRequiredBaselinesPresent := flow.reconRequiredBaselinesPresent
+  reconBaselineUnderstandingPresent := flow.reconBaselineUnderstandingPresent
+  authorProofPlanPresent := flow.authorProofPlanPresent
+  authorCaptureScriptPresent := flow.authorCaptureScriptPresent
+  implementationOk := flow.implementationOk
+  afterEvidencePresent := flow.afterEvidencePresent
+  verifyCaptured := flow.verifyStatus == VerifyStatus.evidenceCaptured
+  trustedAssessmentSourceAccepted := supervisorSourceAccepted flow.proofAssessmentSource
+  proofAssessmentReady := flow.proofAssessmentDecision == ProofAssessmentDecision.readyToShip
+  visualDeltaOk := flow.visualDeltaOk
+  hardBlockersClear := !flow.hardBlockersPresent
+  artifactManifestKnown := artifactManifestKnown flow.artifactManifest
+  requiredArtifactsComplete := decide (missingRequiredArtifact (wholeFlowVerdictInput flow) ≠ true)
+
+structure PublicShipReport where
+  status : PublicReportStatus
+  shipGate : PublicShipGateProjection
+  deriving Repr
+
+def publicShipReportPassClaim (report : PublicShipReport) : Bool :=
+  (report.status == PublicReportStatus.publishedPass)
+    && publicShipGateProjectionOk report.shipGate
+
+def publicShipReportVerdict (report : PublicShipReport) : Verdict :=
+  if publicShipReportPassClaim report then
+    Verdict.passed
+  else
+    Verdict.proofInsufficient
+
+def publicShipReportFromFlow
+    (flow : WholeFlowState)
+    (status : PublicReportStatus) : PublicShipReport where
+  status := status
+  shipGate := publicShipGateProjectionFromFlow flow
+
+structure StatusOnlyPublicReport where
+  status : PublicReportStatus
+  deriving Repr
+
+def statusOnlyPublicReportVerdict (report : StatusOnlyPublicReport) : Verdict :=
+  if report.status == PublicReportStatus.publishedPass then
+    Verdict.passed
+  else
+    Verdict.proofInsufficient
+
+theorem public_report_pass_implies_projected_ship_gate_ok
+    (report : PublicShipReport)
+    (hPassed : publicShipReportVerdict report = Verdict.passed) :
+    publicShipGateProjectionOk report.shipGate = true := by
+  have hPassClaim : publicShipReportPassClaim report = true := by
+    cases hClaim : publicShipReportPassClaim report with
+    | false =>
+        simp [publicShipReportVerdict, hClaim] at hPassed
+    | true =>
+        rfl
+  cases hStatus : report.status == PublicReportStatus.publishedPass with
+  | false =>
+      simp [publicShipReportPassClaim, hStatus] at hPassClaim
+  | true =>
+      simpa [publicShipReportPassClaim, hStatus] using hPassClaim
+
+theorem public_ship_gate_projection_from_flow_matches_ship_gate
+    (flow : WholeFlowState) :
+    publicShipGateProjectionOk (publicShipGateProjectionFromFlow flow)
+      = wholeFlowShipGateOk flow := by
+  simp [
+    publicShipGateProjectionOk,
+    publicShipGateProjectionFromFlow,
+    wholeFlowShipGateOk
+  ]
+
+theorem public_report_from_flow_pass_implies_ship_gate_ok
+    (flow : WholeFlowState)
+    (hPassed :
+      publicShipReportVerdict
+        (publicShipReportFromFlow flow PublicReportStatus.publishedPass)
+          = Verdict.passed) :
+    wholeFlowShipGateOk flow = true := by
+  have hProjected :
+      publicShipGateProjectionOk
+        (publicShipReportFromFlow flow PublicReportStatus.publishedPass).shipGate = true :=
+    public_report_pass_implies_projected_ship_gate_ok
+      (publicShipReportFromFlow flow PublicReportStatus.publishedPass)
+      hPassed
+  simpa [
+    publicShipReportFromFlow,
+    public_ship_gate_projection_from_flow_matches_ship_gate
+  ] using hProjected
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
@@ -1661,6 +1806,12 @@ def exampleWholeFlowRunnerAssessment : WholeFlowState :=
 def exampleWholeFlowUnknownArtifactManifest : WholeFlowState :=
   { exampleWholeFlowClean with artifactManifest := ArtifactManifest.unknown }
 
+def exampleWholeFlowHardBlocker : WholeFlowState :=
+  { exampleWholeFlowClean with hardBlockersPresent := true }
+
+def exampleStatusOnlyPublishedPass : StatusOnlyPublicReport where
+  status := PublicReportStatus.publishedPass
+
 #eval wholeFlowVerdict exampleWholeFlowClean
 
 #eval wholeFlowVerdictWithoutShipGate exampleWholeFlowMissingReconBaseline
@@ -1674,6 +1825,12 @@ def exampleWholeFlowUnknownArtifactManifest : WholeFlowState :=
 
 #eval wholeFlowVerdictWithoutShipGate exampleWholeFlowUnknownArtifactManifest
 #eval wholeFlowVerdict exampleWholeFlowUnknownArtifactManifest
+
+#eval publicShipReportVerdict
+  (publicShipReportFromFlow exampleWholeFlowClean PublicReportStatus.publishedPass)
+#eval publicShipReportVerdict
+  (publicShipReportFromFlow exampleWholeFlowHardBlocker PublicReportStatus.publishedPass)
+#eval statusOnlyPublicReportVerdict exampleStatusOnlyPublishedPass
 
 theorem missing_recon_gate_allows_pass_without_ship_gate :
     wholeFlowVerdictWithoutShipGate exampleWholeFlowMissingReconBaseline = Verdict.passed
@@ -1693,6 +1850,14 @@ theorem runner_assessment_allows_pass_without_ship_gate :
 theorem unknown_artifact_manifest_blocks_even_without_ship_gate :
     wholeFlowVerdictWithoutShipGate exampleWholeFlowUnknownArtifactManifest = Verdict.proofInsufficient
       ∧ wholeFlowVerdict exampleWholeFlowUnknownArtifactManifest = Verdict.proofInsufficient := by
+  native_decide
+
+theorem status_only_public_report_can_invent_pass :
+    statusOnlyPublicReportVerdict exampleStatusOnlyPublishedPass = Verdict.passed
+      ∧ publicShipReportVerdict
+        (publicShipReportFromFlow exampleWholeFlowHardBlocker PublicReportStatus.publishedPass)
+          = Verdict.proofInsufficient
+      ∧ wholeFlowShipGateOk exampleWholeFlowHardBlocker = false := by
   native_decide
 
 def exampleAuthoringDropProcess : RiddleProofProcess where

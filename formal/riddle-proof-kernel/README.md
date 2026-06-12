@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has six layers.
+The model in `RiddleProofKernel.lean` now has seven named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -152,6 +152,24 @@ result's run card projects the same durable state. The counterexample
 tied to state: an independent card can claim `ready_to_ship` while the state is
 still running and ungated.
 
+## Layer 6: Published Report Projection
+
+The Layer 6 model covers the public ship surfaces: PR proof comments, hosted
+proof artifact links, and terminal `ship_report` JSON.
+
+It models these obligations:
+
+- a public pass report must carry a ship-gate projection
+- the public ship-gate projection matches the internal whole-flow ship gate
+- a published pass report generated from a flow implies the flow's ship gate was
+  OK
+- a status-only public report can invent success if it is not tied to gate facts
+
+The theorem `public_report_from_flow_pass_implies_ship_gate_ok` proves that a
+published pass report projected from a flow cannot pass unless the same flow's
+ship gate is true. The counterexample `status_only_public_report_can_invent_pass`
+shows why the public report must not be reduced to a naked status string.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -235,6 +253,14 @@ Layer 5 adds run lifecycle projection checks:
 - Runtime conformance caught and fixed a stale snapshot issue: status snapshots
   now regenerate the run card from the current state instead of reusing an
   embedded stale card.
+
+Layer 6 adds the public-report projection counterexample:
+
+- `status_only_public_report_can_invent_pass` shows that a naked published-pass
+  status can claim success even when the real whole-flow gate is blocked by a
+  hard blocker. The public report now carries a `ship_gate` projection, and
+  Python `ship.py` rejects unsupported reference modes and proof hard blockers
+  before publishing a pass report.
 
 ## Build
 

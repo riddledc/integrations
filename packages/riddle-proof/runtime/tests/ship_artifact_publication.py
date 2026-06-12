@@ -18,6 +18,13 @@ def run(args, cwd, env=None):
     return result
 
 
+def run_failure(args, cwd, env=None):
+    result = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
+    if result.returncode == 0:
+        raise AssertionError(f"{' '.join(args)} unexpectedly succeeded\nstdout:\n{result.stdout}")
+    return result
+
+
 def write_fake_gh(path):
     path.write_text(
         """#!/usr/bin/env python3
@@ -90,12 +97,15 @@ def main():
         (repo / "README.md").write_text("changed\n", encoding="utf-8")
 
         # Tiny valid PNG header/body is enough for GitHub Markdown image embedding.
+        png_bytes = bytes.fromhex(
+            "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+            "0000000c49444154789c63606060000000040001f61738550000000049454e44ae426082"
+        )
+        before_screenshot = artifacts / "before-proof.png"
+        before_screenshot.write_bytes(png_bytes)
         screenshot = artifacts / "after-proof.png"
         screenshot.write_bytes(
-            bytes.fromhex(
-                "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
-                "0000000c49444154789c63606060000000040001f61738550000000049454e44ae426082"
-            )
+            png_bytes
         )
         proof_json = artifacts / "proof.json"
         proof_json.write_text(
@@ -119,9 +129,10 @@ def main():
             "commit_message": "Test proof artifact publication",
             "success_criteria": "The PR proof comment embeds a GitHub-hosted image.",
             "verification_mode": "proof",
-            "requested_reference": "none",
-            "reference": "none",
+            "requested_reference": "before",
+            "reference": "before",
             "verify_status": "evidence_captured",
+            "before_cdn": before_screenshot.as_uri(),
             "after_cdn": screenshot.as_uri(),
             "assertion_status": "passed",
             "proof_summary": "All assertions passed.",
@@ -170,9 +181,29 @@ def main():
         publication = updated.get("proof_artifact_publication") or {}
         assert publication.get("ok") is True, "proof artifact publication should be recorded"
         assert publication.get("artifacts"), "published artifact list should be recorded"
-        assert updated.get("ship_report", {}).get("after_artifact_url", "").startswith(
+        ship_report = updated.get("ship_report", {})
+        assert ship_report.get("after_artifact_url", "").startswith(
             "https://github.com/user-attachments/assets/"
         ), "ship report should expose a GitHub-hosted attachment URL for the after artifact"
+        ship_gate = ship_report.get("ship_gate") or {}
+        assert ship_gate.get("ok") is True, "public ship report should expose a passing ship gate"
+        assert ship_gate.get("required_baselines") == ["before"], (
+            "public ship report should expose required baseline obligations"
+        )
+        gate_evidence = ship_gate.get("evidence") or {}
+        assert gate_evidence.get("reference") == "before", "ship gate should expose the reference mode"
+        assert gate_evidence.get("before_present") is True, "ship gate should expose baseline presence"
+        assert gate_evidence.get("after_present") is True, "ship gate should expose after evidence presence"
+        assert gate_evidence.get("verify_status") == "evidence_captured", (
+            "ship gate should expose verify status"
+        )
+        assert gate_evidence.get("proof_assessment_source") == "supervising_agent", (
+            "ship gate should expose trusted proof source"
+        )
+        assert gate_evidence.get("proof_assessment_decision") == "ready_to_ship", (
+            "ship gate should expose proof decision"
+        )
+        assert gate_evidence.get("hard_blockers") == [], "ship gate should expose hard blockers"
 
         comment = comment_body_path.read_text(encoding="utf-8")
         assert "file://" not in comment, "PR proof comment must not expose local file URLs"
@@ -186,10 +217,32 @@ def main():
             "PR proof comment should link the structured proof JSON"
         )
         assert "Proof artifacts:" in comment, "PR proof comment should link the artifact bundle"
+        assert "### Ship gate" in comment, "PR proof comment should include the public ship gate"
+        assert "Status: ok" in comment, "PR proof comment should expose passing ship gate status"
+        assert "Required baselines: before" in comment, (
+            "PR proof comment should expose required baseline obligations"
+        )
 
         artifact_branch = publication.get("branch")
         refs = run(["git", f"--git-dir={origin}", "show-ref", f"refs/heads/{artifact_branch}"], cwd=root)
         assert artifact_branch in refs.stdout, "artifact branch should be pushed to origin"
+
+        invalid_reference_state = {**state, "requested_reference": "none", "reference": "none"}
+        state_path.write_text(json.dumps(invalid_reference_state, indent=2), encoding="utf-8")
+        invalid_reference = run_failure(["python3", str(SHIP)], cwd=repo, env=env)
+        assert "reference must be before, prod, or both; got none" in invalid_reference.stderr, (
+            "ship.py should reject unsupported public report reference modes"
+        )
+
+        hard_blocker_state = {
+            **state,
+            "proof_assessment_request": {"hard_blockers": ["structured proof assertion failed"]},
+        }
+        state_path.write_text(json.dumps(hard_blocker_state, indent=2), encoding="utf-8")
+        hard_blocker = run_failure(["python3", str(SHIP)], cwd=repo, env=env)
+        assert "proof hard blocker prevents ready_to_ship: structured proof assertion failed" in hard_blocker.stderr, (
+            "ship.py should reject hard blockers before publishing a pass report"
+        )
 
 
 if __name__ == "__main__":
