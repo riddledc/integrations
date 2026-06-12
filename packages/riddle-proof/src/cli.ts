@@ -5437,7 +5437,7 @@ async function runSingleRiddleProfileForCli(
             applyRiddleProofProfileArtifactCompleteness(
               profile,
               withProfileMetadata(profile, directResult),
-              createdArtifacts.length ? createdArtifacts : undefined,
+              createdArtifacts,
             ),
             { artifacts: createdArtifacts },
           )
