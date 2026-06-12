@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has four layers.
+The model in `RiddleProofKernel.lean` now has five layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -99,6 +99,23 @@ It models these obligations:
 The theorem `reported_whole_flow_passed_implies_ship_gate_ok` proves that the
 reported verdict cannot be `passed` unless the whole ship gate is true.
 
+## Layer 4: Checkpoint Semantics
+
+The Layer 4 model covers the active checkpoint packet and response handoff.
+
+It models these obligations:
+
+- a late non-duplicate response after `ready_to_ship` is ignored
+- a late non-duplicate response after terminal `completed` is ignored
+- duplicate checkpoint responses are blocked before they can replay work
+- accepted responses must match the active packet's run/checkpoint identity
+- accepted responses must match the active packet's resume token
+- accepted responses must use a decision advertised by `allowed_decisions`
+
+The theorem `accepted_response_has_matching_advertised_packet` proves that an
+accepted checkpoint response implies the packet identity, resume token, and
+advertised decision checks all held.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -151,6 +168,17 @@ Layer 3 adds whole-flow final-report counterexamples:
 - `unknown_artifact_manifest_blocks_even_without_ship_gate` is a positive check:
   the contract-level artifact verdict blocks unknown manifests even before the
   whole-flow ship gate.
+
+Layer 4 adds checkpoint contract counterexamples:
+
+- `unadvertised_recon_response_was_accepted_without_allowed_guard` shows that a
+  recon `needs_recon` response could be accepted by continuation logic even
+  when the active packet did not advertise that decision.
+- `unadvertised_retry_stage_was_accepted_without_allowed_guard` shows the same
+  drift for generic `retry_stage` responses.
+- `advertised_recon_response_is_accepted` and
+  `advertised_retry_stage_response_is_accepted` are the positive post-fix
+  checks: the same responses are accepted once the packet advertises them.
 
 ## Build
 

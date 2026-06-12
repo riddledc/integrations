@@ -729,6 +729,349 @@ theorem reported_whole_flow_passed_implies_ship_gate_ok
   whole_flow_passed_implies_ship_gate_ok flow (by
     simpa [reportedWholeFlowVerdict] using hPassed)
 
+/-!
+Layer 4: checkpoint response semantics.
+
+The runtime checkpoint protocol has two visible JSON surfaces:
+
+- `riddle-proof.checkpoint.v1`, the active packet with run/checkpoint identity,
+  an optional resume token, and an advertised `allowed_decisions` list.
+- `riddle-proof.checkpoint_response.v1`, the supervising response.
+
+The semantic contract is narrower than JSON shape validation: an accepted
+response must match the active packet and must use a decision advertised by
+that packet. Late responses after protected terminal states are ignored rather
+than reopening the run.
+-/
+
+inductive CheckpointDecision where
+  | continueStage
+  | retryStage
+  | readyForAuthor
+  | retryRecon
+  | reconStuck
+  | needsRecon
+  | needsImplementation
+  | needsAuthor
+  | implementationComplete
+  | authorPacket
+  | readyToShip
+  | needsRicherProof
+  | reviseCapture
+  | blocked
+  | humanReview
+  deriving Repr, DecidableEq
+
+inductive CheckpointRunStatus where
+  | running
+  | awaitingCheckpoint
+  | readyToShip
+  | completed
+  | blocked
+  deriving Repr, DecidableEq
+
+inductive CheckpointBlocker where
+  | duplicate
+  | withoutPacket
+  | mismatch
+  | resumeTokenMismatch
+  | decisionNotAllowed
+  deriving Repr, DecidableEq
+
+inductive CheckpointResponseOutcome where
+  | accepted
+  | ignoredFinal
+  | blocked (reason : CheckpointBlocker)
+  deriving Repr, DecidableEq
+
+structure CheckpointPacket where
+  runId : Nat
+  checkpointId : Nat
+  resumeToken : Option Nat
+  allowedDecisions : List CheckpointDecision
+  deriving Repr
+
+structure CheckpointResponse where
+  runId : Nat
+  checkpointId : Nat
+  resumeToken : Option Nat
+  decision : CheckpointDecision
+  deriving Repr
+
+structure CheckpointRunState where
+  status : CheckpointRunStatus
+  packet : Option CheckpointPacket
+  responseAlreadyAccepted : Bool
+  deriving Repr
+
+def protectedFinalStatus : CheckpointRunStatus → Bool
+  | CheckpointRunStatus.readyToShip => true
+  | CheckpointRunStatus.completed => true
+  | _ => false
+
+def decisionAdvertised
+    (decision : CheckpointDecision)
+    (allowed : List CheckpointDecision) : Bool :=
+  match allowed with
+  | [] => false
+  | head :: tail =>
+      if head = decision then
+        true
+      else
+        decisionAdvertised decision tail
+
+def sameRunAndCheckpoint (packet : CheckpointPacket) (response : CheckpointResponse) : Bool :=
+  packet.runId = response.runId && packet.checkpointId = response.checkpointId
+
+def resumeTokenMatches (packet : CheckpointPacket) (response : CheckpointResponse) : Bool :=
+  match packet.resumeToken with
+  | none => true
+  | some token => response.resumeToken = some token
+
+def activePacketAccepts (packet : CheckpointPacket) (response : CheckpointResponse) : Bool :=
+  sameRunAndCheckpoint packet response
+    && resumeTokenMatches packet response
+    && decisionAdvertised response.decision packet.allowedDecisions
+
+def checkpointResponseOutcome
+    (state : CheckpointRunState)
+    (response : CheckpointResponse) : CheckpointResponseOutcome :=
+  if state.responseAlreadyAccepted then
+    CheckpointResponseOutcome.blocked CheckpointBlocker.duplicate
+  else if protectedFinalStatus state.status && state.packet.isNone then
+    CheckpointResponseOutcome.ignoredFinal
+  else
+    match state.packet with
+    | none =>
+        CheckpointResponseOutcome.blocked CheckpointBlocker.withoutPacket
+    | some packet =>
+        if sameRunAndCheckpoint packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.mismatch
+        else if resumeTokenMatches packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.resumeTokenMismatch
+        else if decisionAdvertised response.decision packet.allowedDecisions = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed
+        else
+          CheckpointResponseOutcome.accepted
+
+/-!
+An intentionally incomplete acceptance model. It matches the active packet and
+resume token but forgets to require the decision to be advertised by the packet.
+This mirrors the class of drift where response parsing/continuation accepts a
+decision that `allowed_decisions` did not expose.
+-/
+def checkpointResponseOutcomeWithoutAllowedGuard
+    (state : CheckpointRunState)
+    (response : CheckpointResponse) : CheckpointResponseOutcome :=
+  if state.responseAlreadyAccepted then
+    CheckpointResponseOutcome.blocked CheckpointBlocker.duplicate
+  else if protectedFinalStatus state.status && state.packet.isNone then
+    CheckpointResponseOutcome.ignoredFinal
+  else
+    match state.packet with
+    | none =>
+        CheckpointResponseOutcome.blocked CheckpointBlocker.withoutPacket
+    | some packet =>
+        if sameRunAndCheckpoint packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.mismatch
+        else if resumeTokenMatches packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.resumeTokenMismatch
+        else
+          CheckpointResponseOutcome.accepted
+
+theorem ready_to_ship_without_packet_ignores_nonduplicate_response
+    (response : CheckpointResponse) :
+    checkpointResponseOutcome {
+      status := CheckpointRunStatus.readyToShip
+      packet := none
+      responseAlreadyAccepted := false
+    } response = CheckpointResponseOutcome.ignoredFinal := by
+  simp [checkpointResponseOutcome, protectedFinalStatus]
+
+theorem completed_without_packet_ignores_nonduplicate_response
+    (response : CheckpointResponse) :
+    checkpointResponseOutcome {
+      status := CheckpointRunStatus.completed
+      packet := none
+      responseAlreadyAccepted := false
+    } response = CheckpointResponseOutcome.ignoredFinal := by
+  simp [checkpointResponseOutcome, protectedFinalStatus]
+
+theorem duplicate_response_blocks_before_final_ignore
+    (status : CheckpointRunStatus)
+    (response : CheckpointResponse) :
+    checkpointResponseOutcome {
+      status := status
+      packet := none
+      responseAlreadyAccepted := true
+    } response =
+      CheckpointResponseOutcome.blocked CheckpointBlocker.duplicate := by
+  simp [checkpointResponseOutcome]
+
+theorem active_packet_accepts_implies_identity_and_advertised
+    (packet : CheckpointPacket)
+    (response : CheckpointResponse)
+    (hAccepted : activePacketAccepts packet response = true) :
+    sameRunAndCheckpoint packet response = true
+      ∧ resumeTokenMatches packet response = true
+      ∧ decisionAdvertised response.decision packet.allowedDecisions = true := by
+  simp [activePacketAccepts] at hAccepted
+  exact ⟨hAccepted.1.1, hAccepted.1.2, hAccepted.2⟩
+
+theorem accepted_response_has_matching_advertised_packet
+    (packet : CheckpointPacket)
+    (response : CheckpointResponse)
+    (hAccepted :
+      checkpointResponseOutcome {
+        status := CheckpointRunStatus.awaitingCheckpoint
+        packet := some packet
+        responseAlreadyAccepted := false
+      } response = CheckpointResponseOutcome.accepted) :
+    sameRunAndCheckpoint packet response = true
+      ∧ resumeTokenMatches packet response = true
+      ∧ decisionAdvertised response.decision packet.allowedDecisions = true := by
+  by_cases hSame : sameRunAndCheckpoint packet response = false
+  · simp [checkpointResponseOutcome, hSame] at hAccepted
+  · have hSameTrue : sameRunAndCheckpoint packet response = true := by
+      cases h : sameRunAndCheckpoint packet response with
+      | false => contradiction
+      | true => rfl
+    by_cases hToken : resumeTokenMatches packet response = false
+    · simp [checkpointResponseOutcome, hSameTrue, hToken] at hAccepted
+    · have hTokenTrue : resumeTokenMatches packet response = true := by
+        cases h : resumeTokenMatches packet response with
+        | false => contradiction
+        | true => rfl
+      by_cases hAllowed : decisionAdvertised response.decision packet.allowedDecisions = false
+      · simp [checkpointResponseOutcome, hSameTrue, hTokenTrue, hAllowed] at hAccepted
+      · have hAllowedTrue : decisionAdvertised response.decision packet.allowedDecisions = true := by
+          cases h : decisionAdvertised response.decision packet.allowedDecisions with
+          | false => contradiction
+          | true => rfl
+        exact ⟨hSameTrue, hTokenTrue, hAllowedTrue⟩
+
+def exampleReconPacketBeforeAllowedFix : CheckpointPacket where
+  runId := 7
+  checkpointId := 11
+  resumeToken := some 19
+  allowedDecisions := [
+    CheckpointDecision.readyForAuthor,
+    CheckpointDecision.retryRecon,
+    CheckpointDecision.reconStuck,
+    CheckpointDecision.blocked,
+    CheckpointDecision.humanReview
+  ]
+
+def exampleReconPacketAfterAllowedFix : CheckpointPacket where
+  runId := 7
+  checkpointId := 11
+  resumeToken := some 19
+  allowedDecisions := [
+    CheckpointDecision.readyForAuthor,
+    CheckpointDecision.retryRecon,
+    CheckpointDecision.reconStuck,
+    CheckpointDecision.needsRecon,
+    CheckpointDecision.blocked,
+    CheckpointDecision.humanReview
+  ]
+
+def exampleReconNeedsReconResponse : CheckpointResponse where
+  runId := 7
+  checkpointId := 11
+  resumeToken := some 19
+  decision := CheckpointDecision.needsRecon
+
+def exampleReconBeforeAllowedState : CheckpointRunState where
+  status := CheckpointRunStatus.awaitingCheckpoint
+  packet := some exampleReconPacketBeforeAllowedFix
+  responseAlreadyAccepted := false
+
+def exampleReconAfterAllowedState : CheckpointRunState where
+  status := CheckpointRunStatus.awaitingCheckpoint
+  packet := some exampleReconPacketAfterAllowedFix
+  responseAlreadyAccepted := false
+
+def exampleGenericPacketBeforeRetryAllowedFix : CheckpointPacket where
+  runId := 8
+  checkpointId := 13
+  resumeToken := some 21
+  allowedDecisions := [
+    CheckpointDecision.continueStage,
+    CheckpointDecision.needsRecon,
+    CheckpointDecision.needsImplementation,
+    CheckpointDecision.blocked,
+    CheckpointDecision.humanReview
+  ]
+
+def exampleGenericPacketAfterRetryAllowedFix : CheckpointPacket where
+  runId := 8
+  checkpointId := 13
+  resumeToken := some 21
+  allowedDecisions := [
+    CheckpointDecision.continueStage,
+    CheckpointDecision.retryStage,
+    CheckpointDecision.needsRecon,
+    CheckpointDecision.needsImplementation,
+    CheckpointDecision.blocked,
+    CheckpointDecision.humanReview
+  ]
+
+def exampleGenericRetryStageResponse : CheckpointResponse where
+  runId := 8
+  checkpointId := 13
+  resumeToken := some 21
+  decision := CheckpointDecision.retryStage
+
+def exampleGenericBeforeRetryAllowedState : CheckpointRunState where
+  status := CheckpointRunStatus.awaitingCheckpoint
+  packet := some exampleGenericPacketBeforeRetryAllowedFix
+  responseAlreadyAccepted := false
+
+def exampleGenericAfterRetryAllowedState : CheckpointRunState where
+  status := CheckpointRunStatus.awaitingCheckpoint
+  packet := some exampleGenericPacketAfterRetryAllowedFix
+  responseAlreadyAccepted := false
+
+#eval checkpointResponseOutcomeWithoutAllowedGuard exampleReconBeforeAllowedState exampleReconNeedsReconResponse
+#eval checkpointResponseOutcome exampleReconBeforeAllowedState exampleReconNeedsReconResponse
+#eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconNeedsReconResponse
+
+#eval checkpointResponseOutcomeWithoutAllowedGuard exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
+#eval checkpointResponseOutcome exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
+#eval checkpointResponseOutcome exampleGenericAfterRetryAllowedState exampleGenericRetryStageResponse
+
+theorem unadvertised_recon_response_was_accepted_without_allowed_guard :
+    checkpointResponseOutcomeWithoutAllowedGuard
+        exampleReconBeforeAllowedState
+        exampleReconNeedsReconResponse = CheckpointResponseOutcome.accepted
+      ∧ checkpointResponseOutcome
+        exampleReconBeforeAllowedState
+        exampleReconNeedsReconResponse =
+          CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed := by
+  native_decide
+
+theorem advertised_recon_response_is_accepted :
+    checkpointResponseOutcome
+      exampleReconAfterAllowedState
+      exampleReconNeedsReconResponse = CheckpointResponseOutcome.accepted := by
+  native_decide
+
+theorem unadvertised_retry_stage_was_accepted_without_allowed_guard :
+    checkpointResponseOutcomeWithoutAllowedGuard
+        exampleGenericBeforeRetryAllowedState
+        exampleGenericRetryStageResponse = CheckpointResponseOutcome.accepted
+      ∧ checkpointResponseOutcome
+        exampleGenericBeforeRetryAllowedState
+        exampleGenericRetryStageResponse =
+          CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed := by
+  native_decide
+
+theorem advertised_retry_stage_response_is_accepted :
+    checkpointResponseOutcome
+      exampleGenericAfterRetryAllowedState
+      exampleGenericRetryStageResponse = CheckpointResponseOutcome.accepted := by
+  native_decide
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2

@@ -7,6 +7,12 @@ import {
 import {
   validateShipGate,
 } from "./dist/proof-run-core.js";
+import {
+  buildAuthorCheckpointPacket,
+  buildProofAssessmentCheckpointPacket,
+  buildStageCheckpointPacket,
+  createCheckpointResponseTemplate,
+} from "./dist/checkpoint.js";
 
 const profile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
@@ -135,6 +141,115 @@ const hardBlockerGate = validateShipGate({
 assert.equal(hardBlockerGate.ok, false);
 assert.ok(hardBlockerGate.reasons.includes("proof hard blocker prevents ready_to_ship: structured proof assertion failed"));
 
+const checkpointRequest = {
+  repo: "riddledc/example",
+  change_request: "Exercise checkpoint contract conformance.",
+  engine_state_path: "/tmp/riddle-proof-engine-state.json",
+  harness_state_path: "/tmp/riddle-proof-wrapper-state.json",
+  ship_mode: "none",
+};
+
+const checkpointRunState = {
+  version: "riddle-proof.run-state.v1",
+  run_id: "run_formal_checkpoint",
+  status: "running",
+  created_at: "2026-06-12T00:00:00.000Z",
+  updated_at: "2026-06-12T00:00:00.000Z",
+  request: checkpointRequest,
+  iterations: 0,
+  events: [],
+};
+
+function decisionEnumFor(packet) {
+  const decision = packet.response_schema?.properties?.decision;
+  return Array.isArray(decision?.enum) ? decision.enum : [];
+}
+
+function assertDecisionContract(packet, label) {
+  assert.deepEqual(
+    [...packet.allowed_decisions].sort(),
+    [...decisionEnumFor(packet)].sort(),
+    `${label} allowed_decisions must match response_schema decision enum`,
+  );
+}
+
+const reconPacket = buildStageCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "recon_supervisor_judgment",
+    stage: "recon",
+    summary: "Recon needs supervising judgment.",
+  },
+});
+assertDecisionContract(reconPacket, "recon checkpoint");
+const reconRetryResponse = createCheckpointResponseTemplate(reconPacket, {
+  decision: "needs_recon",
+  summary: "Retry recon from the supervising checkpoint.",
+});
+assert.equal(reconRetryResponse.decision, "needs_recon");
+
+const defaultStagePacket = buildStageCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "setup_supervisor_judgment",
+    stage: "setup",
+    summary: "Setup needs supervising judgment.",
+  },
+});
+assertDecisionContract(defaultStagePacket, "default stage checkpoint");
+assert.ok(defaultStagePacket.allowed_decisions.includes("retry_stage"));
+
+const shipPacket = buildStageCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "ship_review",
+    stage: "ship",
+    summary: "Ship needs supervising judgment.",
+  },
+});
+assertDecisionContract(shipPacket, "ship checkpoint");
+assert.ok(shipPacket.allowed_decisions.includes("retry_stage"));
+
+const implementPacket = buildStageCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "implement_supervisor_judgment",
+    stage: "implement",
+    summary: "Implement needs supervising judgment.",
+  },
+});
+assertDecisionContract(implementPacket, "implement checkpoint");
+
+const authorPacket = buildAuthorCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "author_supervisor_judgment",
+    summary: "Author needs a proof packet.",
+  },
+});
+assertDecisionContract(authorPacket, "author checkpoint");
+
+const proofAssessmentPacket = buildProofAssessmentCheckpointPacket({
+  request: checkpointRequest,
+  runState: checkpointRunState,
+  engineResult: {
+    checkpoint: "verify_supervisor_judgment",
+    summary: "Verify needs proof assessment.",
+  },
+  fullRiddleState: {
+    verify_status: "evidence_captured",
+    proof_assessment_request: {
+      status: "needs_supervising_agent_assessment",
+    },
+  },
+});
+assertDecisionContract(proofAssessmentPacket, "proof assessment checkpoint");
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.formal-conformance",
@@ -145,5 +260,6 @@ console.log(JSON.stringify({
     shipGateSupervisor: true,
     shipGateDecision: true,
     shipGateHardBlockers: true,
+    checkpointDecisionContracts: true,
   },
 }));
