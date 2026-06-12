@@ -1167,6 +1167,7 @@ function cliBalancedSetupSummaryResult() {
       http_status: 200,
     },
     artifacts: { screenshots: [], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["balanced-setup-summary"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -1257,6 +1258,7 @@ function cliOfflineAudioMetricsSummaryResult({ nested = false, silent = false } 
       http_status: 200,
     },
     artifacts: { screenshots: ["offline-audio-metrics-desktop"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["offline-audio-metrics-desktop"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -1354,6 +1356,7 @@ function cliStateHygieneOutcomeSummaryResult({ missingLoss = false } = {}) {
       http_status: 200,
     },
     artifacts: { screenshots: ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["state-hygiene-outcome-ready", "state-hygiene-outcome-loss", "state-hygiene-outcome-success"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -1598,6 +1601,7 @@ function cliStateHygienePlayabilityInputSummaryResult() {
       http_status: 200,
     },
     artifacts: { screenshots: ["playability-active", "playability-started"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["playability-active", "playability-started"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -1718,6 +1722,7 @@ function cliStateHygieneRuntimeMetricSummaryResult() {
       http_status: 200,
     },
     artifacts: { screenshots: ["runtime-active", "runtime-cleanup"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["runtime-active", "runtime-cleanup"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -1818,6 +1823,7 @@ function cliStateHygieneSolveMetricSummaryResult() {
       http_status: 200,
     },
     artifacts: { screenshots: ["solve-initial", "solve-complete"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["solve-initial", "solve-complete"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -2025,6 +2031,7 @@ function cliStateHygieneRecoveryActionSummaryResult({ missingRecovered = false, 
       http_status: 200,
     },
     artifacts: { screenshots: ["state-hygiene-invalid", "state-hygiene-recovered"], proof_json: "proof.json" },
+    outputs: cliProfileArtifacts("proof.json", ["state-hygiene-invalid", "state-hygiene-recovered"]),
     checks: [
       {
         type: "setup_actions_succeeded",
@@ -2218,6 +2225,59 @@ const cliRunProfileServer = createServer((request, response) => {
         sendJson({ job_id: "job_cli_profile_timeout_artifacts" });
         return;
       }
+      if (String(body.url || "").includes("/direct-no-artifacts-profile")) {
+        sendJson({
+          version: "riddle-proof.profile-result.v1",
+          profile_name: "cli-profile-direct-no-artifacts",
+          runner: "riddle",
+          status: "passed",
+          summary: "cli-profile-direct-no-artifacts passed.",
+          baseline_policy: "invariant_only",
+          route: {
+            requested: "https://example.com/direct-no-artifacts-profile",
+            observed: "/direct-no-artifacts-profile",
+            expected_path: "/direct-no-artifacts-profile",
+            matched: true,
+            http_status: 200,
+          },
+          artifacts: {
+            screenshots: ["direct-no-artifacts-desktop"],
+            proof_json: "proof.json",
+            console: "console.json",
+            dom_summary: "dom-summary.json",
+          },
+          checks: [
+            {
+              type: "route_loaded",
+              label: "route_loaded",
+              status: "passed",
+              evidence: {
+                expected_path: "/direct-no-artifacts-profile",
+                observed_paths: ["/direct-no-artifacts-profile"],
+                http_statuses: [200],
+              },
+            },
+          ],
+          evidence: {
+            target_url: "https://example.com/direct-no-artifacts-profile",
+            viewports: [{
+              name: "desktop",
+              width: 1280,
+              height: 900,
+              route: {
+                requested: "https://example.com/direct-no-artifacts-profile",
+                observed: "/direct-no-artifacts-profile",
+                expected_path: "/direct-no-artifacts-profile",
+                matched: true,
+                http_status: 200,
+              },
+              screenshot_label: "direct-no-artifacts-desktop",
+            }],
+            dom_summary: { viewport_count: 1 },
+          },
+        });
+        return;
+      }
       if (String(body.url || "").includes("/unsubmitted-artifact-recovery-profile")) {
         cliRunProfileUnsubmittedArtifactRecoveryRunCount += 1;
         sendJson({ job_id: "job_cli_profile_unsubmitted_artifact_recovery" });
@@ -2305,6 +2365,13 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "sequence-ready",
+            "sequence-input-ready",
+            "sequence-success",
+            "sequence-restart-ready",
+            "cli-sequence-memory-receipt-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -2515,6 +2582,7 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", ["semantic-state-winning-board"]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -2733,6 +2801,11 @@ const cliRunProfileServer = createServer((request, response) => {
             proof_json: "proof.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "cleanup-boundary-pre-cleanup",
+            "cleanup-boundary-post-cleanup",
+            "cli-cleanup-boundary-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -2992,6 +3065,7 @@ const cliRunProfileServer = createServer((request, response) => {
             http_status: 200,
           },
           artifacts: { screenshots: ["route-exit-home"], proof_json: "proof.json" },
+          outputs: cliProfileArtifacts("proof.json", ["route-exit-home"]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3086,6 +3160,7 @@ const cliRunProfileServer = createServer((request, response) => {
             http_status: 200,
           },
           artifacts: { screenshots: ["click-fallback-home"], proof_json: "proof.json" },
+          outputs: cliProfileArtifacts("proof.json", ["click-fallback-home"]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3181,6 +3256,11 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "keyboard-boost-before",
+            "keyboard-boost-after",
+            "cli-keyboard-boost-receipt-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3339,6 +3419,12 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "economy-start",
+            "economy-passive-income",
+            "economy-home-stable",
+            "economy-returned",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3528,6 +3614,11 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "responsive-reachability-initial",
+            "responsive-reachability-after-add",
+            "cli-responsive-reachability-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3672,6 +3763,11 @@ const cliRunProfileServer = createServer((request, response) => {
             proof_json: "proof.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "workflow-generated-output-before",
+            "workflow-generated-output-after",
+            "cli-workflow-generated-output-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3800,6 +3896,7 @@ const cliRunProfileServer = createServer((request, response) => {
             http_status: 200,
           },
           artifacts: { screenshots: ["cli-workflow-truth-summary-desktop"], proof_json: "proof.json" },
+          outputs: cliProfileArtifacts("proof.json", ["cli-workflow-truth-summary-desktop"]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -3937,6 +4034,7 @@ const cliRunProfileServer = createServer((request, response) => {
             http_status: 200,
           },
           artifacts: { screenshots: ["cli-natural-input-summary-desktop"], proof_json: "proof.json" },
+          outputs: cliProfileArtifacts("proof.json", ["cli-natural-input-summary-desktop"]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -4331,6 +4429,13 @@ const cliRunProfileServer = createServer((request, response) => {
             console: "console.json",
             dom_summary: "dom-summary.json",
           },
+          outputs: cliProfileArtifacts("proof.json", [
+            "state-hygiene-initial",
+            "state-hygiene-progress",
+            "state-hygiene-reset-control",
+            "state-hygiene-post-cleanup",
+            "cli-state-hygiene-passed-cleanup-summary-desktop",
+          ]),
           checks: [
             {
               type: "setup_actions_succeeded",
@@ -5582,6 +5687,39 @@ try {
   assert.equal(JSON.parse(readFileSync(path.join(hostedRegressionOutputDir, "hosted-riddle", "hosted-profile-progress", "profile-result.json"), "utf8")).status, "passed");
   assert.match(readFileSync(path.join(hostedRegressionOutputDir, "summary.md"), "utf8"), /## Hosted Riddle/);
   assert.match(readFileSync(path.join(hostedRegressionOutputDir, "oc-handoff.md"), "utf8"), /Local generic core suite is not green or was not run/);
+
+  const directNoArtifactsProfileFile = path.join(riddlePreviewDir, "cli-profile-direct-no-artifacts.json");
+  writeFileSync(directNoArtifactsProfileFile, JSON.stringify({
+    version: "riddle-proof.profile.v1",
+    name: "cli-profile-direct-no-artifacts",
+    target: {
+      route: "/direct-no-artifacts-profile",
+      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+    },
+    checks: [{ type: "route_loaded", expected_path: "/direct-no-artifacts-profile" }],
+    artifacts: ["screenshot", "console", "dom_summary", "proof_json"],
+  }));
+  const directNoArtifactsResult = await runCli([
+    "run-profile",
+    "--api-base-url",
+    `http://127.0.0.1:${address.port}`,
+    "--api-key",
+    "cli-riddle-key",
+    "--profile",
+    directNoArtifactsProfileFile,
+    "--url",
+    "https://example.com",
+    "--runner",
+    "riddle",
+    "--sync",
+    "--quiet",
+    "--result-format",
+    "json",
+  ], { expectFailure: true });
+  const parsedDirectNoArtifactsResult = JSON.parse(directNoArtifactsResult.stdout);
+  assert.equal(parsedDirectNoArtifactsResult.status, "proof_insufficient");
+  assert.match(parsedDirectNoArtifactsResult.error, /Missing required profile artifact\(s\): screenshot:direct-no-artifacts-desktop/);
+  assert.deepEqual(parsedDirectNoArtifactsResult.artifacts.riddle_artifacts, []);
 
   const balancedSetupProfileFile = path.join(riddlePreviewDir, "cli-balanced-setup-summary.json");
   const balancedSetupOutputDir = path.join(riddlePreviewDir, "cli-balanced-setup-summary-output");
