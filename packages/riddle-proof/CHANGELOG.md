@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.45
+
+### Patch Changes
+
+- 27f149b: Treat direct profile results without required artifact refs as proof insufficient.
+
 ## 0.8.44
 
 ### Patch Changes
