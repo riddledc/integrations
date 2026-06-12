@@ -257,6 +257,14 @@ export function appendStageHeartbeat<T extends RiddleProofRunState>(state: T, in
 export function createRunStatusSnapshot(state: RiddleProofRunState, at = timestamp()): RiddleProofRunStatusSnapshot {
   const latestEvent = state.events[state.events.length - 1];
   const runId = state.run_id || "unknown";
+  const existingRunCardCurrent =
+    state.run_card?.status === state.status &&
+    state.run_card.stop_condition?.status === state.status &&
+    state.run_card.stop_condition?.terminal === isTerminalStatus(state.status) &&
+    state.run_card.stop_condition?.monitor_should_continue === !isTerminalStatus(state.status);
+  const runCard = existingRunCardCurrent
+    ? state.run_card
+    : createRiddleProofRunCard(state, { at });
   return compactRecord({
     run_id: runId,
     status: state.status,
@@ -286,7 +294,7 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     checkpoint_summary: state.checkpoint_summary,
     state_paths: state.state_paths,
     proof_contract: state.proof_contract,
-    run_card: state.run_card || createRiddleProofRunCard(state, { at }),
+    run_card: runCard,
     viewport_matrix_status: state.viewport_matrix_status,
     latest_event: latestEvent,
   }) as RiddleProofRunStatusSnapshot;

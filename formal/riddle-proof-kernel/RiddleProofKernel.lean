@@ -1072,6 +1072,250 @@ theorem advertised_retry_stage_response_is_accepted :
       exampleGenericRetryStageResponse = CheckpointResponseOutcome.accepted := by
   native_decide
 
+/-!
+Layer 5: run lifecycle and run-card projection.
+
+The runtime has a durable run state plus derived public surfaces: status
+snapshots, run cards, and terminal results. The semantic contract is that those
+public surfaces are projections of the run state. They cannot invent a
+successful terminal status independently of the state, and finalized protected
+states cannot be reopened by stale lower-priority updates.
+-/
+
+inductive RunLifecycleStatus where
+  | running
+  | awaitingCheckpoint
+  | blocked
+  | failed
+  | readyToShip
+  | shipped
+  | completed
+  deriving Repr, DecidableEq, BEq
+
+def isProtectedLifecycleFinalStatus : RunLifecycleStatus → Bool
+  | RunLifecycleStatus.readyToShip => true
+  | RunLifecycleStatus.shipped => true
+  | RunLifecycleStatus.completed => true
+  | _ => false
+
+def isRunLifecycleTerminal : RunLifecycleStatus → Bool
+  | RunLifecycleStatus.blocked => true
+  | RunLifecycleStatus.failed => true
+  | RunLifecycleStatus.readyToShip => true
+  | RunLifecycleStatus.shipped => true
+  | RunLifecycleStatus.completed => true
+  | _ => false
+
+def isRunLifecycleSuccessful : RunLifecycleStatus → Bool
+  | RunLifecycleStatus.blocked => false
+  | RunLifecycleStatus.failed => false
+  | _ => true
+
+structure RunLifecycleState where
+  status : RunLifecycleStatus
+  finalized : Bool
+  blockerVisible : Bool
+  proofDecisionReady : Bool
+  mergeRecommendationReady : Bool
+  shipGateOk : Bool
+  deriving Repr
+
+def applyTerminalRunStatus
+    (state : RunLifecycleState)
+    (status : RunLifecycleStatus) : RunLifecycleState :=
+  { state with
+    status := status
+    finalized := state.finalized || isProtectedLifecycleFinalStatus status }
+
+def shouldPreserveFinalizedRunState
+    (existing incoming : RunLifecycleState) : Bool :=
+  if existing.finalized && isProtectedLifecycleFinalStatus existing.status then
+    if !incoming.finalized then
+      true
+    else if existing.status = incoming.status then
+      false
+    else
+      !(existing.status = RunLifecycleStatus.readyToShip
+        && incoming.status = RunLifecycleStatus.shipped)
+  else
+    false
+
+theorem protected_terminal_run_status_finalizes
+    (state : RunLifecycleState)
+    (status : RunLifecycleStatus)
+    (hProtected : isProtectedLifecycleFinalStatus status = true) :
+    (applyTerminalRunStatus state status).finalized = true := by
+  simp [applyTerminalRunStatus, hProtected]
+
+theorem finalized_protected_state_preserves_nonfinal_incoming
+    (existing incoming : RunLifecycleState)
+    (hExistingFinal : existing.finalized = true)
+    (hProtected : isProtectedLifecycleFinalStatus existing.status = true)
+    (hIncomingFinal : incoming.finalized = false) :
+    shouldPreserveFinalizedRunState existing incoming = true := by
+  simp [
+    shouldPreserveFinalizedRunState,
+    hExistingFinal,
+    hProtected,
+    hIncomingFinal
+  ]
+
+theorem finalized_ready_to_ship_allows_shipped_transition
+    (existing incoming : RunLifecycleState)
+    (hExistingStatus : existing.status = RunLifecycleStatus.readyToShip)
+    (hIncomingStatus : incoming.status = RunLifecycleStatus.shipped)
+    (hExistingFinal : existing.finalized = true)
+    (hIncomingFinal : incoming.finalized = true) :
+    shouldPreserveFinalizedRunState existing incoming = false := by
+  simp [
+    shouldPreserveFinalizedRunState,
+    hExistingStatus,
+    hIncomingStatus,
+    hExistingFinal,
+    hIncomingFinal,
+    isProtectedLifecycleFinalStatus
+  ]
+
+structure RunCardSummary where
+  status : RunLifecycleStatus
+  terminal : Bool
+  monitorShouldContinue : Bool
+  blockerVisible : Bool
+  proofDecisionReady : Bool
+  deriving Repr
+
+def runCardSummaryFromState (state : RunLifecycleState) : RunCardSummary where
+  status := state.status
+  terminal := isRunLifecycleTerminal state.status
+  monitorShouldContinue := !isRunLifecycleTerminal state.status
+  blockerVisible := state.blockerVisible
+  proofDecisionReady := state.proofDecisionReady
+
+def runCardProjectsState
+    (state : RunLifecycleState)
+    (card : RunCardSummary) : Prop :=
+  card.status = state.status
+    ∧ card.terminal = isRunLifecycleTerminal state.status
+    ∧ card.monitorShouldContinue = !isRunLifecycleTerminal state.status
+
+def runCardPassClaim
+    (state : RunLifecycleState)
+    (card : RunCardSummary) : Prop :=
+  runCardProjectsState state card
+    ∧ card.terminal = true
+    ∧ isRunLifecycleSuccessful state.status = true
+    ∧ state.shipGateOk = true
+    ∧ state.proofDecisionReady = true
+
+structure RunResultSummary where
+  status : RunLifecycleStatus
+  ok : Bool
+  finalized : Bool
+  runCard : RunCardSummary
+  deriving Repr
+
+def runResultSummaryFromState (state : RunLifecycleState) : RunResultSummary where
+  status := state.status
+  ok := isRunLifecycleSuccessful state.status
+  finalized := state.finalized
+  runCard := runCardSummaryFromState state
+
+theorem run_card_status_projects_state_status
+    (state : RunLifecycleState) :
+    (runCardSummaryFromState state).status = state.status := by
+  rfl
+
+theorem run_card_terminal_projects_state_status
+    (state : RunLifecycleState) :
+    (runCardSummaryFromState state).terminal =
+      isRunLifecycleTerminal state.status := by
+  rfl
+
+theorem run_card_projects_state
+    (state : RunLifecycleState) :
+    runCardProjectsState state (runCardSummaryFromState state) := by
+  exact ⟨rfl, rfl, rfl⟩
+
+theorem run_card_pass_claim_requires_ship_gate
+    (state : RunLifecycleState)
+    (hPass : runCardPassClaim state (runCardSummaryFromState state)) :
+    state.shipGateOk = true :=
+  hPass.2.2.2.1
+
+theorem run_card_pass_claim_requires_trusted_decision
+    (state : RunLifecycleState)
+    (hPass : runCardPassClaim state (runCardSummaryFromState state)) :
+    state.proofDecisionReady = true :=
+  hPass.2.2.2.2
+
+theorem run_result_status_projects_state_status
+    (state : RunLifecycleState) :
+    (runResultSummaryFromState state).status = state.status := by
+  rfl
+
+theorem run_result_ok_projects_success_predicate
+    (state : RunLifecycleState) :
+    (runResultSummaryFromState state).ok =
+      isRunLifecycleSuccessful state.status := by
+  rfl
+
+theorem run_result_run_card_projects_state
+    (state : RunLifecycleState) :
+    runCardProjectsState state (runResultSummaryFromState state).runCard :=
+  run_card_projects_state state
+
+def exampleRunningUngatedState : RunLifecycleState where
+  status := RunLifecycleStatus.running
+  finalized := false
+  blockerVisible := false
+  proofDecisionReady := false
+  mergeRecommendationReady := false
+  shipGateOk := false
+
+def independentReadyRunCard : RunCardSummary where
+  status := RunLifecycleStatus.readyToShip
+  terminal := true
+  monitorShouldContinue := false
+  blockerVisible := false
+  proofDecisionReady := true
+
+def exampleCompletedFinalState : RunLifecycleState where
+  status := RunLifecycleStatus.completed
+  finalized := true
+  blockerVisible := false
+  proofDecisionReady := true
+  mergeRecommendationReady := true
+  shipGateOk := true
+
+def exampleReadyIncomingFinalState : RunLifecycleState where
+  status := RunLifecycleStatus.readyToShip
+  finalized := true
+  blockerVisible := false
+  proofDecisionReady := true
+  mergeRecommendationReady := true
+  shipGateOk := true
+
+#eval shouldPreserveFinalizedRunState exampleCompletedFinalState exampleReadyIncomingFinalState
+#eval runCardSummaryFromState exampleRunningUngatedState
+#eval independentReadyRunCard
+
+theorem finalized_completed_blocks_ready_to_ship_overwrite :
+    shouldPreserveFinalizedRunState
+      exampleCompletedFinalState
+      exampleReadyIncomingFinalState = true := by
+  native_decide
+
+theorem independent_run_card_can_invent_success :
+    independentReadyRunCard.status = RunLifecycleStatus.readyToShip
+      ∧ independentReadyRunCard.terminal = true
+      ∧ exampleRunningUngatedState.status = RunLifecycleStatus.running
+      ∧ exampleRunningUngatedState.shipGateOk = false := by
+  native_decide
+
+theorem projected_run_card_rejects_forged_success :
+    ¬ runCardProjectsState exampleRunningUngatedState independentReadyRunCard := by
+  simp [runCardProjectsState, exampleRunningUngatedState, independentReadyRunCard]
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
