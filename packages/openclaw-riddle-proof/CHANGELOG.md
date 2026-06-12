@@ -1,5 +1,16 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.156
+
+### Patch Changes
+
+- 5cc2620: Leave checkpoint summary `token_matches` unset until a checkpoint response exists, so pending tokenized packets are not reported as token mismatches.
+
+  Update the OpenClaw status presentation to continue exposing `token_status: awaiting_response` for pending tokenized checkpoints after the upstream summary fix.
+
+- Updated dependencies [5cc2620]
+  - @riddledc/riddle-proof@0.8.48
+
 ## 0.4.155
 
 ### Patch Changes
