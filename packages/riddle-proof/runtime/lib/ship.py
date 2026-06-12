@@ -15,6 +15,8 @@ VISUAL_FIRST_MODES = {
     'visual', 'render', 'ui', 'layout', 'screenshot',
     'canvas', 'animation',
 }
+INTERACTION_MODES = {'interaction', 'interactive', 'user_flow', 'user-flow', 'workflow'}
+REFERENCE_MODES = ('before', 'prod', 'both')
 
 
 def read_json_file(path):
@@ -682,6 +684,7 @@ def build_ship_report(state, marked_ready=None):
     prod_artifact_url = first_public_artifact_url(state, 'prod', 'image') or state.get('prod_cdn', '')
     after_artifact_url = first_public_artifact_url(state, 'after', 'image') or state.get('after_cdn', '')
     artifact_publication = state.get('proof_artifact_publication') or {}
+    ship_gate = ship_gate_report_facts(state)
     return {
         'pr_url': state.get('pr_url', ''),
         'pr_branch': branch,
@@ -699,6 +702,7 @@ def build_ship_report(state, marked_ready=None):
         'proof_artifacts_url': artifact_publication.get('html_url', '') if isinstance(artifact_publication, dict) else '',
         'proof_artifacts_manifest_url': artifact_publication.get('manifest_url', '') if isinstance(artifact_publication, dict) else '',
         'proof_artifact_publication': artifact_publication if isinstance(artifact_publication, dict) else {},
+        'ship_gate': ship_gate,
     }
 
 
@@ -709,13 +713,7 @@ def record_ship_report(state, marked_ready=None):
 
 
 def proof_assessment_is_ready(state):
-    assessment = state.get('proof_assessment') or {}
-    source = str(assessment.get('source') or state.get('proof_assessment_source') or '').strip().lower()
-    return (
-        source in ('supervising_agent', 'supervisor')
-        and assessment.get('decision') == 'ready_to_ship'
-        and not visual_delta_ship_blocker(state)
-    )
+    return ship_gate_report_facts(state).get('ok') is True
 
 
 def effective_merge_recommendation(state):
@@ -793,6 +791,175 @@ def state_has_after_evidence(state):
             or observation.get('telemetry_ready')
         )
     )
+
+
+def state_has_proof_evidence(state):
+    if state.get('proof_evidence_present') is True:
+        return True
+    proof_evidence = state.get('proof_evidence')
+    if proof_evidence is not None:
+        if not isinstance(proof_evidence, dict):
+            return True
+        if len(proof_evidence.keys()) > 0:
+            return True
+    bundle = state.get('evidence_bundle') or {}
+    if not isinstance(bundle, dict):
+        bundle = {}
+    after = bundle.get('after') or {}
+    if not isinstance(after, dict):
+        after = {}
+    supporting = after.get('supporting_artifacts') or {}
+    if not isinstance(supporting, dict):
+        supporting = {}
+    request = state.get('proof_assessment_request') or {}
+    if not isinstance(request, dict):
+        request = {}
+    structured_evidence = request.get('structured_evidence') or {}
+    if not isinstance(structured_evidence, dict):
+        structured_evidence = {}
+    bundle_proof_evidence = bundle.get('proof_evidence') or {}
+    after_proof_evidence = after.get('proof_evidence') or {}
+    return bool(
+        supporting.get('proof_evidence_present') is True
+        or structured_evidence.get('proof_evidence_present') is True
+        or (isinstance(bundle_proof_evidence, dict) and len(bundle_proof_evidence.keys()) > 0)
+        or (isinstance(after_proof_evidence, dict) and len(after_proof_evidence.keys()) > 0)
+    )
+
+
+def proof_assessment_hard_blockers_for_state(state):
+    request = state.get('proof_assessment_request') or {}
+    if not isinstance(request, dict):
+        request = {}
+    blockers = []
+
+    def add(value):
+        if not isinstance(value, str):
+            return
+        trimmed = value.strip()
+        if trimmed and trimmed not in blockers:
+            blockers.append(trimmed)
+
+    for blocker in request.get('hard_blockers') or []:
+        add(blocker)
+    add(state.get('structured_interaction_capture_failure_summary'))
+    add(state.get('structured_interaction_failure_summary'))
+    if normalized_verification_mode(state) in INTERACTION_MODES and not state_has_proof_evidence(state):
+        add('interaction proof evidence is required before ready_to_ship; proof_evidence_present=false')
+    if str(state.get('merge_recommendation') or '').strip() == 'do-not-merge' and blockers:
+        add('merge_recommendation=do-not-merge because the proof bundle contains hard blockers.')
+    return blockers
+
+
+def required_baseline_labels_for_state(state):
+    reference = str(state.get('requested_reference') or state.get('reference') or 'before').strip()
+    labels = []
+    if reference in ('before', 'both'):
+        labels.append('before')
+    if reference in ('prod', 'both'):
+        labels.append('prod')
+    return labels
+
+
+def ship_gate_report_facts(state):
+    reference = str(state.get('requested_reference') or state.get('reference') or 'before').strip() or 'before'
+    prod_url = str(state.get('prod_url') or '').strip()
+    before_cdn = str(state.get('before_cdn') or '').strip()
+    prod_cdn = str(state.get('prod_cdn') or '').strip()
+    after_cdn = str(state.get('after_cdn') or '').strip()
+    verify_status = str(state.get('verify_status') or '').strip()
+    assessment = state.get('proof_assessment') or {}
+    if not isinstance(assessment, dict):
+        assessment = {}
+    proof_source = str(assessment.get('source') or state.get('proof_assessment_source') or '').strip().lower()
+    proof_decision = str(assessment.get('decision') or '').strip()
+    visual_delta = visual_delta_for_state(state)
+    visual_delta_required = visual_delta_required_for_ship(state)
+    visual_delta_blocker = visual_delta_ship_blocker(state)
+    hard_blockers = proof_assessment_hard_blockers_for_state(state)
+    required_baselines = required_baseline_labels_for_state(state)
+    after_evidence_present = state_has_after_evidence(state)
+    reasons = []
+
+    if reference not in REFERENCE_MODES:
+        reasons.append('reference must be before, prod, or both; got ' + reference)
+    if 'before' in required_baselines and not before_cdn:
+        reasons.append('before_cdn is required before ship')
+    if 'prod' in required_baselines:
+        if not prod_url:
+            reasons.append('prod_url is required when reference=' + reference)
+        if not prod_cdn:
+            reasons.append('prod_cdn is required before ship')
+    if not after_evidence_present:
+        reasons.append('after evidence is required before ship')
+    if verify_status != 'evidence_captured':
+        reasons.append('verify_status must be evidence_captured before ship')
+    if proof_source not in ('supervising_agent', 'supervisor'):
+        reasons.append('proof_assessment.source must be supervising_agent before ship')
+    if proof_decision != 'ready_to_ship':
+        reasons.append('proof_assessment.decision must be ready_to_ship before ship')
+    if visual_delta_blocker:
+        reasons.append(visual_delta_blocker)
+    for blocker in hard_blockers:
+        reasons.append('proof hard blocker prevents ready_to_ship: ' + blocker)
+
+    return {
+        'ok': len(reasons) == 0,
+        'reasons': reasons,
+        'required_baselines': required_baselines,
+        'evidence': {
+            'reference': reference,
+            'verification_mode': normalized_verification_mode(state),
+            'prod_url_present': bool(prod_url),
+            'before_present': bool(before_cdn),
+            'prod_present': bool(prod_cdn),
+            'after_present': bool(after_cdn) or after_evidence_present,
+            'after_artifact_url_present': bool(after_cdn),
+            'verify_status': verify_status or None,
+            'proof_assessment_decision': proof_decision or None,
+            'proof_assessment_source': proof_source or None,
+            'visual_delta_required': visual_delta_required,
+            'visual_delta_status': visual_delta.get('status') if isinstance(visual_delta.get('status'), str) else None,
+            'visual_delta_passed': visual_delta.get('passed') if isinstance(visual_delta.get('passed'), bool) else None,
+            'hard_blockers': hard_blockers,
+        },
+    }
+
+
+def ship_gate_failure_message(ship_gate):
+    reasons = ship_gate.get('reasons') or []
+    if not reasons:
+        return 'Ship gate is blocked.'
+    first = reasons[0]
+    if first == 'after evidence is required before ship':
+        return 'No after evidence in state. Run verify first.'
+    if first.startswith('visual_delta.'):
+        return first + '. Rerun verify with measured before/after visual delta or return a non-shipping proof assessment.'
+    return first
+
+
+def ship_gate_text(state):
+    gate = ship_gate_report_facts(state)
+    evidence = gate.get('evidence') or {}
+    required = gate.get('required_baselines') or []
+    hard_blockers = evidence.get('hard_blockers') or []
+    visual_status = evidence.get('visual_delta_status') or ('required' if evidence.get('visual_delta_required') else 'not_required')
+    lines = [
+        'Status: ' + ('ok' if gate.get('ok') else 'blocked'),
+        'Reference: ' + str(evidence.get('reference') or 'unknown'),
+        'Required baselines: ' + (', '.join(required) if required else 'none'),
+        'Evidence present: before=' + ('yes' if evidence.get('before_present') else 'no')
+            + ', prod=' + ('yes' if evidence.get('prod_present') else 'no')
+            + ', after=' + ('yes' if evidence.get('after_present') else 'no'),
+        'Verify status: ' + str(evidence.get('verify_status') or 'unknown'),
+        'Proof assessment: source=' + str(evidence.get('proof_assessment_source') or 'unknown')
+            + ', decision=' + str(evidence.get('proof_assessment_decision') or 'unknown'),
+        'Visual delta: ' + str(visual_status),
+        'Hard blockers: ' + (', '.join(hard_blockers) if hard_blockers else 'none'),
+    ]
+    if gate.get('reasons'):
+        lines.append('Reasons: ' + '; '.join(str(reason) for reason in gate.get('reasons') or []))
+    return '\n'.join(lines)
 
 
 def evidence_bundle_text(state):
@@ -1033,29 +1200,10 @@ def post_assessment_comment_if_needed(state, repo_dir, pr_num):
 
 s = load_state()
 
-before_cdn = s.get('before_cdn', '')
-prod_cdn = s.get('prod_cdn', '')
-after_cdn = s.get('after_cdn', '')
-reference = s.get('requested_reference') or s.get('reference', 'before')
-prod_url = (s.get('prod_url') or '').strip()
 proof_assessment = s.get('proof_assessment') or {}
-proof_source = str(proof_assessment.get('source') or s.get('proof_assessment_source') or '').strip().lower()
-if not state_has_after_evidence(s):
-    raise SystemExit('No after evidence in state. Run verify first.')
-if s.get('verify_status') != 'evidence_captured':
-    raise SystemExit('verify_status must be evidence_captured before ship.')
-if reference in ('before', 'both') and not before_cdn:
-    raise SystemExit('before_cdn is required before ship. Run recon/verify again and preserve the approved baseline.')
-if reference in ('prod', 'both'):
-    if not prod_url:
-        raise SystemExit('prod_url is required when reference=' + reference + ' before ship.')
-    if not prod_cdn:
-        raise SystemExit('prod_cdn is required before ship. Run recon/verify again and preserve the approved prod baseline.')
-visual_delta_blocker = visual_delta_ship_blocker(s)
-if visual_delta_blocker:
-    raise SystemExit(visual_delta_blocker + '. Rerun verify with measured before/after visual delta or return a non-shipping proof assessment.')
-if proof_source not in ('supervising_agent', 'supervisor') or proof_assessment.get('decision') != 'ready_to_ship':
-    raise SystemExit('Supervising-agent proof_assessment.decision=ready_to_ship is required before ship.')
+ship_gate = ship_gate_report_facts(s)
+if not ship_gate.get('ok'):
+    raise SystemExit(ship_gate_failure_message(ship_gate))
 
 s['merge_recommendation'] = effective_merge_recommendation(s)
 s['proof_decision'] = proof_assessment.get('decision')
@@ -1193,6 +1341,7 @@ if s.get('success_criteria'):
     body += '**Success criteria:** ' + s['success_criteria'] + '\n\n'
 body += '**Verification mode:** ' + s.get('verification_mode', 'proof') + '\n\n'
 body += '**Merge recommendation:** ' + effective_merge_recommendation(s) + '\n\n'
+body += '**Ship gate:** ' + ('ok' if ship_gate_report_facts(s).get('ok') else 'blocked') + '\n\n'
 
 public_artifacts = public_proof_artifacts(s)
 if publication.get('ok') and not publication.get('skipped'):
@@ -1251,6 +1400,9 @@ if bundle_text:
 assessment_text = proof_assessment_text(s)
 if assessment_text:
     body += '### Supervising proof assessment\n```\n' + assessment_text + '\n```\n\n'
+gate_text = ship_gate_text(s)
+if gate_text:
+    body += '### Ship gate\n```\n' + gate_text + '\n```\n\n'
 body += '### Proof summary\n```\n' + (s.get('proof_summary') or 'No summary') + '\n```\n\n'
 body += '### Assertion status\n' + s.get('assertion_status', 'unknown') + '\n\n'
 notes = s.get('evidence_notes') or []
