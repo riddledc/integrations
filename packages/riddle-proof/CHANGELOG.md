@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.47
+
+### Patch Changes
+
+- 2bfd797: Refresh run-card projection in run status snapshots so stale embedded cards cannot report an older status, enforce advertised checkpoint decisions in the harness, and add formal/runtime conformance coverage for run lifecycle and checkpoint response semantics.
+
 ## 0.8.46
 
 ### Patch Changes
