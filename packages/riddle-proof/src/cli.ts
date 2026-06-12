@@ -29,6 +29,7 @@ import {
 } from "./riddle-client";
 import {
   assessRiddleProofProfileEvidence,
+  applyRiddleProofProfileArtifactCompleteness,
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
   createRiddleProofProfileEnvironmentBlockedResult,
@@ -4694,7 +4695,13 @@ async function profileResultFromRiddleArtifacts(
 ): Promise<RiddleProofProfileResult | undefined> {
   for (const input of fallbackInputs) {
     const result = extractRiddleProofProfileResult(input);
-    if (result) return withProfileMetadata(profile, result);
+    if (result) {
+      return applyRiddleProofProfileArtifactCompleteness(
+        profile,
+        withProfileMetadata(profile, result),
+        artifacts,
+      );
+    }
   }
   const proofArtifacts = artifacts
     .filter((artifact) => /(^|\/)proof\.json(?:\.json)?$/i.test(artifact.name || artifact.url || artifact.path || ""))
@@ -4706,7 +4713,13 @@ async function profileResultFromRiddleArtifacts(
   for (const artifact of proofArtifacts) {
     const parsed = await readArtifactJson(artifact);
     const result = extractRiddleProofProfileResult(parsed);
-    if (result) return withProfileMetadata(profile, result);
+    if (result) {
+      return applyRiddleProofProfileArtifactCompleteness(
+        profile,
+        withProfileMetadata(profile, result),
+        artifacts,
+      );
+    }
   }
   const evidenceArtifacts = artifacts.filter((artifact) => /profile-evidence|evidence\.json/i.test(artifact.name || artifact.url || artifact.path || ""));
   for (const artifact of evidenceArtifacts) {
@@ -5418,9 +5431,17 @@ async function runSingleRiddleProfileForCli(
         : "";
     if (!jobId) {
       const directResult = extractRiddleProofProfileResult(created);
+      const createdArtifacts = collectRiddleProfileArtifactRefs(created);
       return directResult
-        ? withRiddleMetadata(withProfileMetadata(profile, directResult), { artifacts: collectRiddleProfileArtifactRefs(created) })
-        : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: collectRiddleProfileArtifactRefs(created) });
+        ? withRiddleMetadata(
+            applyRiddleProofProfileArtifactCompleteness(
+              profile,
+              withProfileMetadata(profile, directResult),
+              createdArtifacts.length ? createdArtifacts : undefined,
+            ),
+            { artifacts: createdArtifacts },
+          )
+        : createRiddleProofProfileInsufficientResult({ profile, runner, error: "Riddle run response was missing job_id.", artifacts: createdArtifacts });
     }
     writeRiddleJobReceipt(input.outputDir, {
       profile,

@@ -4729,6 +4729,128 @@ function profileStatusFromEvidence(
   return "passed";
 }
 
+export interface RiddleProofProfileArtifactCompleteness {
+  ok: boolean;
+  required: string[];
+  observed: string[];
+  missing: string[];
+}
+
+export function assessRiddleProofProfileArtifactCompleteness(
+  profile: RiddleProofProfile,
+  result: RiddleProofProfileResult,
+  artifacts: RiddleProofProfileArtifactRef[],
+): RiddleProofProfileArtifactCompleteness {
+  const required = profileRequiredArtifactKeys(profile, result);
+  const missing = required.filter((key) => !profileArtifactKeyPresent(key, artifacts));
+  return {
+    ok: missing.length === 0,
+    required,
+    observed: artifacts.map((artifact) => profileArtifactObservedLabel(artifact)).filter(Boolean),
+    missing,
+  };
+}
+
+export function applyRiddleProofProfileArtifactCompleteness(
+  profile: RiddleProofProfile,
+  result: RiddleProofProfileResult,
+  artifacts: RiddleProofProfileArtifactRef[] | undefined,
+): RiddleProofProfileResult {
+  if (artifacts === undefined) return result;
+  const completeness = assessRiddleProofProfileArtifactCompleteness(profile, result, artifacts);
+  if (result.status !== "passed" || completeness.ok) {
+    return {
+      ...result,
+      artifacts: {
+        ...result.artifacts,
+        riddle_artifacts: artifacts,
+      },
+    };
+  }
+
+  const missing = completeness.missing.join(", ");
+  const message = `Missing required profile artifact(s): ${missing}`;
+  const warnings = [...(result.warnings || []), message];
+  return {
+    ...result,
+    status: "proof_insufficient",
+    artifacts: {
+      ...result.artifacts,
+      riddle_artifacts: artifacts,
+    },
+    summary: `${profile.name} did not produce required profile artifact(s): ${missing}.`,
+    warnings,
+    error: message,
+  };
+}
+
+function profileRequiredArtifactKeys(profile: RiddleProofProfile, result: RiddleProofProfileResult): string[] {
+  const keys: string[] = [];
+  for (const artifact of profile.artifacts || []) {
+    const role = normalizeProfileArtifactRole(artifact);
+    if (!role) continue;
+    if (role === "screenshot") {
+      const screenshots = result.artifacts.screenshots || [];
+      if (screenshots.length) {
+        keys.push(...screenshots.map((label) => `screenshot:${label}`));
+      } else {
+        keys.push("screenshot");
+      }
+      continue;
+    }
+    keys.push(role);
+  }
+  return uniqueNonEmptyStrings(keys);
+}
+
+function normalizeProfileArtifactRole(input: string) {
+  const normalized = input.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return "";
+  if (normalized === "screenshots") return "screenshot";
+  if (normalized === "console" || normalized === "console_json" || normalized === "console.json") return "console.json";
+  if (normalized === "dom_summary" || normalized === "dom_summary_json" || normalized === "dom-summary.json") return "dom-summary.json";
+  if (normalized === "proof" || normalized === "proof_json" || normalized === "proof.json") return "proof.json";
+  return normalizeRiddleProfileArtifactName(input.trim()).toLowerCase();
+}
+
+function profileArtifactKeyPresent(key: string, artifacts: RiddleProofProfileArtifactRef[]) {
+  if (key.startsWith("screenshot:")) {
+    const label = key.slice("screenshot:".length);
+    return artifacts.some((artifact) => profileArtifactRefIsScreenshot(artifact) && profileArtifactRefText(artifact).includes(label.toLowerCase()));
+  }
+  if (key === "screenshot") {
+    return artifacts.some((artifact) => profileArtifactRefIsScreenshot(artifact));
+  }
+  return artifacts.some((artifact) => {
+    const name = normalizeRiddleProfileArtifactName(artifact.name || artifactNameFromPath(artifact.url || artifact.path) || "").toLowerCase();
+    return name === key || profileArtifactRefText(artifact).includes(key);
+  });
+}
+
+function profileArtifactRefIsScreenshot(artifact: RiddleProofProfileArtifactRef) {
+  const kind = (artifact.kind || "").toLowerCase();
+  const contentType = (artifact.content_type || "").toLowerCase();
+  const text = profileArtifactRefText(artifact);
+  return kind === "screenshot"
+    || contentType.startsWith("image/")
+    || /\.(png|jpe?g|webp)(?:$|[?#])/i.test(text)
+    || /\.(png|jpe?g|webp)$/i.test(text);
+}
+
+function profileArtifactRefText(artifact: RiddleProofProfileArtifactRef) {
+  return [
+    artifact.name,
+    artifact.url,
+    artifact.path,
+    artifact.kind,
+    artifact.content_type,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function profileArtifactObservedLabel(artifact: RiddleProofProfileArtifactRef) {
+  return artifact.name || artifact.url || artifact.path || artifact.kind || "";
+}
+
 export function assessRiddleProofProfileEvidence(
   profile: RiddleProofProfile,
   evidence: RiddleProofProfileEvidence | undefined,
@@ -4746,7 +4868,7 @@ export function assessRiddleProofProfileEvidence(
   const status = profileStatusFromEvidence(profile, evidence, checks);
   const firstViewport = evidence?.viewports?.[0];
   const screenshots = profileScreenshotLabels(evidence?.viewports);
-  return {
+  const result: RiddleProofProfileResult = {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: profile.name,
     runner: options.runner || "riddle",
@@ -4768,6 +4890,7 @@ export function assessRiddleProofProfileEvidence(
     evidence,
     riddle: options.riddle,
   };
+  return applyRiddleProofProfileArtifactCompleteness(profile, result, options.artifacts);
 }
 
 export function summarizeRiddleProofProfileResult(input: {

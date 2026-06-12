@@ -14,6 +14,7 @@ import {
   applyPrLifecycleState,
   appendCaptureDiagnostic,
   assessBasicGameplayEvidence,
+  assessRiddleProofProfileArtifactCompleteness,
   attachBasicGameplayArtifactScreenshotHashes,
   BASIC_GAMEPLAY_ACTION_TYPES,
   BASIC_GAMEPLAY_PROGRESS_CHECK_TYPES,
@@ -93,6 +94,7 @@ assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjs.assessRiddleProofProfileArtifactCompleteness, "function");
 assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
 assert.equal(typeof cjs.preflightRiddleProofProfileHttpStatusChecks, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
@@ -949,6 +951,30 @@ let cliRunProfileUnsubmittedPollCount = 0;
 let cliRunProfileDoubleUnsubmittedRunCount = 0;
 let cliRunProfileDoubleUnsubmittedPollCount = 0;
 let cliRunProfilePort = 0;
+function cliProfileArtifacts(proofPath, screenshots = []) {
+  return [
+    {
+      name: "proof.json",
+      url: `http://127.0.0.1:${cliRunProfilePort}/${proofPath}`,
+      kind: "json",
+    },
+    {
+      name: "console.json",
+      url: `http://127.0.0.1:${cliRunProfilePort}/console.json`,
+      kind: "json",
+    },
+    {
+      name: "dom-summary.json",
+      url: `http://127.0.0.1:${cliRunProfilePort}/dom-summary.json`,
+      kind: "json",
+    },
+    ...screenshots.map((label) => ({
+      name: `${label}.png`,
+      url: `http://127.0.0.1:${cliRunProfilePort}/${label}.png`,
+      kind: "screenshot",
+    })),
+  ];
+}
 function cliRunProfileSplitResult(viewportName, width, height) {
   return {
     version: "riddle-proof.profile-result.v1",
@@ -4441,12 +4467,7 @@ const cliRunProfileServer = createServer((request, response) => {
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_timeout_artifacts/artifacts") {
     sendJson({
       status: "completed",
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/timeout-artifacts-proof.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts("timeout-artifacts-proof.json", ["timeout-artifacts-profile"]),
     });
     return;
   }
@@ -4466,12 +4487,7 @@ const cliRunProfileServer = createServer((request, response) => {
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_artifact_recovery/artifacts") {
     sendJson({
       status: "completed",
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-artifact-recovery-proof.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts("unsubmitted-artifact-recovery-proof.json", ["unsubmitted-artifact-recovery-profile"]),
     });
     return;
   }
@@ -4532,24 +4548,14 @@ const cliRunProfileServer = createServer((request, response) => {
 
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_retry/artifacts") {
     sendJson({
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-retry-proof.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts("unsubmitted-retry-proof.json", ["unsubmitted-retry-profile"]),
     });
     return;
   }
 
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_unsubmitted_double_retry/artifacts") {
     sendJson({
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/unsubmitted-double-retry-proof.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts("unsubmitted-double-retry-proof.json", ["unsubmitted-double-retry-profile"]),
     });
     return;
   }
@@ -4753,12 +4759,7 @@ const cliRunProfileServer = createServer((request, response) => {
   if (request.method === "GET" && splitArtifactMatch) {
     const viewportName = splitArtifactMatch[1];
     sendJson({
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/split-proof-${viewportName}.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts(`split-proof-${viewportName}.json`, [`cli-profile-split-${viewportName}`]),
     });
     return;
   }
@@ -4767,12 +4768,7 @@ const cliRunProfileServer = createServer((request, response) => {
   if (request.method === "GET" && splitChildFailArtifactMatch) {
     const viewportName = splitChildFailArtifactMatch[1];
     sendJson({
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/split-child-fail-proof-${viewportName}.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts(`split-child-fail-proof-${viewportName}.json`, [`cli-profile-split-${viewportName}`]),
     });
     return;
   }
@@ -4797,12 +4793,7 @@ const cliRunProfileServer = createServer((request, response) => {
 
   if (request.method === "GET" && request.url === "/v1/jobs/job_cli_profile_progress/artifacts") {
     sendJson({
-      artifacts: [
-        {
-          name: "proof.json",
-          url: `http://127.0.0.1:${cliRunProfilePort}/proof.json`,
-        },
-      ],
+      artifacts: cliProfileArtifacts("proof.json", ["cli-profile-progress-desktop-ready"]),
     });
     return;
   }
@@ -10085,6 +10076,36 @@ const profileAssessment = assessRiddleProofProfileEvidence(profile, profileEvide
 assert.equal(profileAssessment.status, "passed");
 assert.equal(profileAssessment.route.matched, true);
 assert.equal(profileAssessment.checks.length, 13);
+const completeProfileArtifacts = [
+  { name: "proof.json", url: "https://cdn.test/proof.json", kind: "json" },
+  { name: "console.json", url: "https://cdn.test/console.json", kind: "json" },
+  { name: "dom-summary.json", url: "https://cdn.test/dom-summary.json", kind: "json" },
+  { name: "pricing-page-basic-mobile.png", url: "https://cdn.test/pricing-page-basic-mobile.png", kind: "screenshot" },
+  { name: "pricing-page-basic-mobile-after-click.png", url: "https://cdn.test/pricing-page-basic-mobile-after-click.png", kind: "screenshot" },
+  { name: "pricing-page-basic-desktop.png", url: "https://cdn.test/pricing-page-basic-desktop.png", kind: "screenshot" },
+];
+const completeProfileArtifactAssessment = assessRiddleProofProfileArtifactCompleteness(
+  profile,
+  profileAssessment,
+  completeProfileArtifacts,
+);
+assert.equal(completeProfileArtifactAssessment.ok, true);
+assert.deepEqual(completeProfileArtifactAssessment.missing, []);
+const missingScreenshotProfileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence, {
+  artifacts: [
+    { name: "proof.json", url: "https://cdn.test/proof.json", kind: "json" },
+    { name: "console.json", url: "https://cdn.test/console.json", kind: "json" },
+    { name: "dom-summary.json", url: "https://cdn.test/dom-summary.json", kind: "json" },
+  ],
+});
+assert.equal(missingScreenshotProfileAssessment.status, "proof_insufficient");
+assert.match(missingScreenshotProfileAssessment.error, /Missing required profile artifact\(s\): screenshot:pricing-page-basic-mobile/);
+assert.ok(missingScreenshotProfileAssessment.warnings.some((warning) => /screenshot:pricing-page-basic-desktop/.test(warning)));
+const completeManifestProfileAssessment = assessRiddleProofProfileEvidence(profile, profileEvidence, {
+  artifacts: completeProfileArtifacts,
+});
+assert.equal(completeManifestProfileAssessment.status, "passed");
+assert.equal(completeManifestProfileAssessment.artifacts.riddle_artifacts.length, 6);
 const routeReadinessFailureProfile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "route-readiness-failure",
