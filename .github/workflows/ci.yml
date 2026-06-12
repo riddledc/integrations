@@ -35,3 +35,45 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  formal-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect formal contract changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > /tmp/changed-files
+          if grep -E '^(formal/riddle-proof-kernel/|packages/riddle-proof/src/(profile|proof-run-core|proof-run-engine|cli)\.ts|packages/riddle-proof/runtime/lib/(recon|verify|ship|author|implement|setup)\.py|packages/riddle-proof/(formal-conformance|test|proof-run|trust-boundary|regression-packs)\.test\.js)' /tmp/changed-files >/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Lean
+        if: steps.changes.outputs.run == 'true'
+        shell: bash
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Build formal kernel
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          cd formal/riddle-proof-kernel
+          lake build
+
+      - name: Skip formal kernel
+        if: steps.changes.outputs.run != 'true'
+        run: echo "No formal/Riddle Proof contract files changed; skipping Lean build."
