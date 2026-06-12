@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has seven named layers.
+The model in `RiddleProofKernel.lean` now has eight named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -170,6 +170,23 @@ published pass report projected from a flow cannot pass unless the same flow's
 ship gate is true. The counterexample `status_only_public_report_can_invent_pass`
 shows why the public report must not be reduced to a naked status string.
 
+## Layer 7: Ship-Gate Implementation Parity
+
+The Layer 7 model covers drift between implementation surfaces that claim the
+same ship-gate truth:
+
+- TypeScript `validateShipGate`
+- Python `ship_gate_report_facts`
+- Lean `wholeFlowShipGateOk` / public report projection
+
+The theorem `ship_gate_projection_parity_implies_ok_agreement` proves that if
+two implementation projections agree on the semantic gate fields, their pass
+verdict agrees. The counterexample
+`runtime_projection_without_reference_or_hard_blockers_can_disagree` shows why
+the runtime parity test must cover unsupported references and proof hard
+blockers: omitting either field can let a runtime surface pass while the true
+ship gate blocks.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -261,6 +278,14 @@ Layer 6 adds the public-report projection counterexample:
   hard blocker. The public report now carries a `ship_gate` projection, and
   Python `ship.py` rejects unsupported reference modes and proof hard blockers
   before publishing a pass report.
+
+Layer 7 adds the ship-gate parity counterexample:
+
+- `runtime_projection_without_reference_or_hard_blockers_can_disagree` shows
+  that an implementation projection can pass if it omits reference validity or
+  hard-blocker facts, even when the full ship gate blocks. Runtime conformance
+  now compares TypeScript and Python ship-gate projections across the shared
+  blocker matrix.
 
 ## Build
 

@@ -891,7 +891,7 @@ def ship_gate_report_facts(state):
         if not prod_cdn:
             reasons.append('prod_cdn is required before ship')
     if not after_evidence_present:
-        reasons.append('after evidence is required before ship')
+        reasons.append('after_cdn is required before ship')
     if verify_status != 'evidence_captured':
         reasons.append('verify_status must be evidence_captured before ship')
     if proof_source not in ('supervising_agent', 'supervisor'):
@@ -931,7 +931,7 @@ def ship_gate_failure_message(ship_gate):
     if not reasons:
         return 'Ship gate is blocked.'
     first = reasons[0]
-    if first == 'after evidence is required before ship':
+    if first == 'after_cdn is required before ship':
         return 'No after evidence in state. Run verify first.'
     if first.startswith('visual_delta.'):
         return first + '. Rerun verify with measured before/after visual delta or return a non-shipping proof assessment.'
