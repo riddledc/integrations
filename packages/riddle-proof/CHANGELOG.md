@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.58
+
+### Patch Changes
+
+- 0939cb6: Add a core public proof state summary helper for safe downstream projections.
+
 ## 0.8.57
 
 ### Patch Changes
