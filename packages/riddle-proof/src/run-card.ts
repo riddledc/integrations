@@ -4,7 +4,7 @@ import type {
   RiddleProofRunState,
   RiddleProofStatePaths,
 } from "./types";
-import { compactRecord, isTerminalStatus, nonEmptyString, recordValue } from "./result";
+import { compactRecord, isTerminalStatus, nonEmptyString, recordValue, shipControlStateFor } from "./result";
 import { statePathsForRunState } from "./checkpoint";
 
 export const RIDDLE_PROOF_RUN_CARD_VERSION = "riddle-proof.run-card.v1" as const;
@@ -223,6 +223,7 @@ export function createRiddleProofRunCard(
   const visualDelta = visualDeltaFrom({ fullRiddleState: fullState, runState: state });
   const artifacts = artifactsFrom({ fullRiddleState: fullState, runState: state });
   const viewportMatrix = viewportMatrixFrom({ fullRiddleState: fullState, runState: state });
+  const shipControl = shipControlStateFor({ state });
 
   return {
     version: RIDDLE_PROOF_RUN_CARD_VERSION,
@@ -277,6 +278,9 @@ export function createRiddleProofRunCard(
     stop_condition: compactRecord({
       status: state.status,
       terminal: isTerminalStatus(state.status),
+      ship_held: shipControl.ship_held,
+      shipping_disabled: shipControl.shipping_disabled,
+      ship_authorized: shipControl.ship_authorized,
       blocker_code: state.blocker?.code || null,
       blocker_message: state.blocker?.message || null,
       proof_decision: state.proof_decision,

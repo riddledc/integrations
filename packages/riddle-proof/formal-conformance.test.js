@@ -677,6 +677,33 @@ for (const status of lifecycleStatuses) {
   assert.equal(runResult.run_card.stop_condition.terminal, isTerminalStatus(status));
 }
 
+const heldReadyNoShipState = createRunState({
+  request: lifecycleRequest,
+  run_id: "run_formal_lifecycle_held_ready_no_ship",
+  created_at: "2026-06-12T01:05:00.000Z",
+});
+setRunStatus(heldReadyNoShipState, "ready_to_ship", "2026-06-12T01:05:10.000Z");
+heldReadyNoShipState.run_card = createRiddleProofRunCard(heldReadyNoShipState, { at: "2026-06-12T01:05:10.000Z" });
+const heldReadyNoShipResult = createRunResult({
+  state: heldReadyNoShipState,
+  status: "ready_to_ship",
+  last_summary: "Ready proof held by ship_mode=none.",
+});
+assert.equal(isTerminalStatus(heldReadyNoShipResult.status), true);
+assert.equal(isSuccessfulStatus(heldReadyNoShipResult.status), true);
+assert.equal(heldReadyNoShipResult.ship_held, true);
+assert.equal(heldReadyNoShipResult.shipping_disabled, true);
+assert.equal(heldReadyNoShipResult.ship_authorized, false);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.ship_held, true);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.shipping_disabled, true);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.ship_authorized, false);
+const heldReadyNoShipSnapshot = createRunStatusSnapshot(heldReadyNoShipState, "2026-06-12T01:05:20.000Z");
+assert.equal(heldReadyNoShipSnapshot.ship_held, true);
+assert.equal(heldReadyNoShipSnapshot.shipping_disabled, true);
+assert.equal(heldReadyNoShipSnapshot.ship_authorized, false);
+assert.equal(heldReadyNoShipSnapshot.run_card.stop_condition.ship_held, true);
+assert.equal(heldReadyNoShipSnapshot.run_card.stop_condition.ship_authorized, false);
+
 const staleCardState = createRunState({
   request: lifecycleRequest,
   run_id: "run_formal_lifecycle_stale_card",
@@ -735,6 +762,7 @@ console.log(JSON.stringify({
     checkpointIgnoredSummary: true,
     runCardProjection: true,
     runResultStatusProjection: true,
+    heldReadyNoShipSemantics: true,
     staleRunCardSnapshotRefresh: true,
     currentRunCardSnapshotPreservesRichProjection: true,
   },

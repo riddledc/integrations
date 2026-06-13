@@ -1612,6 +1612,14 @@ async function run() {
   });
   assert(noShipReview.status === 'ready_to_ship', 'ship_review continuation must be held when ship_mode=none');
   assert(noShipReview.raw.ship_held === true, 'held ship_review result should expose ship_held metadata');
+  assert(noShipReview.ship_held === true, 'held ship_review result should expose first-class ship_held');
+  assert(noShipReview.shipping_disabled === true, 'held ship_review result should expose shipping_disabled');
+  assert(noShipReview.ship_authorized === false, 'held ship_review result must not be ship_authorized');
+  const noShipReviewSnapshot = harnessMod.readRiddleProofRunStatus(noShipReview.state_path);
+  assert(noShipReviewSnapshot.ship_held === true, 'held status snapshot should persist ship_held');
+  assert(noShipReviewSnapshot.ship_authorized === false, 'held status snapshot must not be ship_authorized');
+  assert(noShipReviewSnapshot.run_card.stop_condition.ship_held === true, 'held run card should expose ship_held');
+  assert(noShipReviewSnapshot.run_card.stop_condition.ship_authorized === false, 'held run card must not be ship_authorized');
   assert(noShipReviewEngineCalls.length === 1, 'ship_mode=none should not follow ship_review into a ship continuation');
 
   const duplicateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({

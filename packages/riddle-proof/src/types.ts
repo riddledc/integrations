@@ -341,6 +341,9 @@ export interface RiddleProofRunCard {
   stop_condition: {
     status: RiddleProofStatus;
     terminal?: boolean;
+    ship_held?: boolean;
+    shipping_disabled?: boolean;
+    ship_authorized?: boolean;
     blocker_code?: string | null;
     blocker_message?: string | null;
     proof_decision?: RiddleProofDecision;
@@ -395,6 +398,9 @@ export interface RiddleProofRunState {
   pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
+  ship_held?: boolean;
+  shipping_disabled?: boolean;
+  ship_authorized?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
@@ -445,6 +451,9 @@ export interface RiddleProofRunResult {
   pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
+  ship_held?: boolean;
+  shipping_disabled?: boolean;
+  ship_authorized?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
@@ -484,6 +493,9 @@ export interface RiddleProofRunStatusSnapshot {
   pr_url?: string | null;
   pr_branch?: string | null;
   pr_state?: RiddleProofPrLifecycleState;
+  ship_held?: boolean;
+  shipping_disabled?: boolean;
+  ship_authorized?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
@@ -656,6 +668,9 @@ export interface RiddleProofTerminalMetadata {
   pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
+  ship_held?: boolean;
+  shipping_disabled?: boolean;
+  ship_authorized?: boolean;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;

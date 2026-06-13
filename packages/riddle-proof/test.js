@@ -13302,6 +13302,9 @@ assert.deepEqual(result, {
   pr_branch: "tictactoe-board-polish",
   marked_ready: true,
   left_draft: false,
+  ship_held: false,
+  shipping_disabled: false,
+  ship_authorized: true,
   ci_status: "no_checks",
   ship_commit: "96f5f86",
   ship_remote_head: "96f5f86",
@@ -13689,6 +13692,9 @@ const auditNoDiffResult = await runRiddleProof({
 assert.deepEqual(auditCalls, ["prove:true", "judge"]);
 assert.equal(auditNoDiffResult.status, "ready_to_ship");
 assert.equal(auditNoDiffResult.ok, true);
+assert.equal(auditNoDiffResult.ship_held, true);
+assert.equal(auditNoDiffResult.shipping_disabled, true);
+assert.equal(auditNoDiffResult.ship_authorized, false);
 
 const calls = [];
 const harnessResult = await runRiddleProof({
@@ -13795,6 +13801,9 @@ assert.equal(harnessResult.current_stage, "notify");
 assert.equal(harnessResult.iterations, 1);
 assert.equal(harnessResult.pr_url, "https://github.com/riddledc/example/pull/42");
 assert.equal(harnessResult.marked_ready, true);
+assert.equal(harnessResult.ship_held, false);
+assert.equal(harnessResult.shipping_disabled, false);
+assert.equal(harnessResult.ship_authorized, true);
 assert.equal(harnessResult.proof_decision, "ready_to_ship");
 assert.equal(harnessResult.finalized, true);
 assert.equal(harnessResult.notification.ok, true);
@@ -13957,12 +13966,18 @@ assert.equal(engineHarnessResult.status, "shipped");
 assert.equal(engineHarnessResult.ok, true);
 assert.equal(engineHarnessResult.pr_url, "https://github.com/riddledc/example/pull/101");
 assert.equal(engineHarnessResult.marked_ready, true);
+assert.equal(engineHarnessResult.ship_held, false);
+assert.equal(engineHarnessResult.shipping_disabled, false);
+assert.equal(engineHarnessResult.ship_authorized, true);
 assert.equal(engineHarnessResult.proof_decision, "ready_to_ship");
 assert.equal(engineHarnessResult.worktree_path, engineWorkdir);
 assert.equal(engineHarnessResult.branch, "agent/openclaw/riddle-proof-engine-harness");
 assert.equal(engineHarnessResult.current_stage, "ship");
 assert.equal(engineHarnessResult.state_path, path.join(engineFixture, "harness-state.json"));
-assert.equal(readRiddleProofRunStatus(engineHarnessResult.state_path).status, "shipped");
+const engineHarnessSnapshot = readRiddleProofRunStatus(engineHarnessResult.state_path);
+assert.equal(engineHarnessSnapshot.status, "shipped");
+assert.equal(engineHarnessSnapshot.ship_held, false);
+assert.equal(engineHarnessSnapshot.ship_authorized, true);
 const engineHarnessState = JSON.parse(readFileSync(engineHarnessResult.state_path, "utf-8"));
 const firstEngineCallEvent = engineHarnessState.events.find((event) => event.kind === "engine.call");
 const firstEngineResultEvent = engineHarnessState.events.find((event) => event.kind === "engine.result");
@@ -14119,7 +14134,15 @@ const metricProofResult = await runRiddleProofEngineHarness({
 });
 assert.equal(metricProofResult.status, "ready_to_ship");
 assert.equal(metricProofResult.raw.ship_held, true);
+assert.equal(metricProofResult.ship_held, true);
+assert.equal(metricProofResult.shipping_disabled, true);
+assert.equal(metricProofResult.ship_authorized, false);
 const metricProofHarnessState = JSON.parse(readFileSync(metricProofResult.state_path, "utf-8"));
+assert.equal(metricProofHarnessState.ship_held, true);
+assert.equal(metricProofHarnessState.shipping_disabled, true);
+assert.equal(metricProofHarnessState.ship_authorized, false);
+assert.equal(metricProofHarnessState.run_card.stop_condition.ship_held, true);
+assert.equal(metricProofHarnessState.run_card.stop_condition.ship_authorized, false);
 assert.equal(metricProofHarnessState.events.some((event) => event.kind === "agent.proof_assessment.evidence_recovery_required"), false);
 
 const auditVisualFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-audit-visual-"));
@@ -14176,6 +14199,9 @@ const auditVisualResult = await runRiddleProofEngineHarness({
 });
 assert.equal(auditVisualResult.status, "ready_to_ship");
 assert.equal(auditVisualResult.raw.ship_held, true);
+assert.equal(auditVisualResult.ship_held, true);
+assert.equal(auditVisualResult.shipping_disabled, true);
+assert.equal(auditVisualResult.ship_authorized, false);
 assert.equal(auditVisualEngineCalls.some((call) => call.proof_assessment_json), false);
 const auditVisualHarnessState = JSON.parse(readFileSync(auditVisualResult.state_path, "utf-8"));
 assert.equal(auditVisualHarnessState.events.some((event) => event.kind === "agent.proof_assessment.evidence_recovery_required"), false);

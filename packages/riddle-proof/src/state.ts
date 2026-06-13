@@ -14,7 +14,7 @@ import type {
   RiddleProofStatePaths,
   RiddleProofStatus,
 } from "./types";
-import { compactRecord, isTerminalStatus, nonEmptyString, recordValue } from "./result";
+import { compactRecord, isTerminalStatus, nonEmptyString, recordValue, shipControlStateFor } from "./result";
 import { createRiddleProofRunCard } from "./run-card";
 
 export const RIDDLE_PROOF_RUN_STATE_VERSION = "riddle-proof.run-state.v1" as const;
@@ -257,11 +257,15 @@ export function appendStageHeartbeat<T extends RiddleProofRunState>(state: T, in
 export function createRunStatusSnapshot(state: RiddleProofRunState, at = timestamp()): RiddleProofRunStatusSnapshot {
   const latestEvent = state.events[state.events.length - 1];
   const runId = state.run_id || "unknown";
+  const shipControl = shipControlStateFor({ state });
   const existingRunCardCurrent =
     state.run_card?.status === state.status &&
     state.run_card.stop_condition?.status === state.status &&
     state.run_card.stop_condition?.terminal === isTerminalStatus(state.status) &&
-    state.run_card.stop_condition?.monitor_should_continue === !isTerminalStatus(state.status);
+    state.run_card.stop_condition?.monitor_should_continue === !isTerminalStatus(state.status) &&
+    state.run_card.stop_condition?.ship_held === shipControl.ship_held &&
+    state.run_card.stop_condition?.shipping_disabled === shipControl.shipping_disabled &&
+    state.run_card.stop_condition?.ship_authorized === shipControl.ship_authorized;
   const runCard = existingRunCardCurrent
     ? state.run_card
     : createRiddleProofRunCard(state, { at });
@@ -277,6 +281,9 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
     pr_url: state.pr_url ?? null,
     pr_branch: state.pr_branch ?? null,
     pr_state: state.pr_state,
+    ship_held: shipControl.ship_held,
+    shipping_disabled: shipControl.shipping_disabled,
+    ship_authorized: shipControl.ship_authorized,
     ci_status: state.ci_status,
     ship_commit: state.ship_commit,
     ship_remote_head: state.ship_remote_head,

@@ -147,6 +147,9 @@ export function normalizeTerminalMetadata(input: TerminalMetadataInput): RiddleP
     pr_state: prState,
     marked_ready: markedReady,
     left_draft: leftDraft,
+    ship_held: firstBoolean(riddleState.ship_held, result.ship_held, result.shipHeld, details.ship_held, details.shipHeld, shipReport.ship_held, shipReport.shipHeld),
+    shipping_disabled: firstBoolean(riddleState.shipping_disabled, result.shipping_disabled, result.shippingDisabled, details.shipping_disabled, details.shippingDisabled, shipReport.shipping_disabled, shipReport.shippingDisabled),
+    ship_authorized: firstBoolean(riddleState.ship_authorized, result.ship_authorized, result.shipAuthorized, details.ship_authorized, details.shipAuthorized, shipReport.ship_authorized, shipReport.shipAuthorized),
     ci_status: firstNonEmptyString(riddleState.ci_status, result.ci_status, result.ciStatus, details.ci_status, details.ciStatus, shipReport.ci_status),
     ship_commit: firstNonEmptyString(riddleState.ship_commit, result.ship_commit, result.shipCommit, details.ship_commit, details.shipCommit, shipReport.shipped_commit, shipReport.ship_commit),
     ship_remote_head: firstNonEmptyString(riddleState.ship_remote_head, result.ship_remote_head, result.shipRemoteHead, details.ship_remote_head, details.shipRemoteHead, shipReport.ship_remote_head),
@@ -185,6 +188,9 @@ export function applyTerminalMetadata<T extends RiddleProofRunState>(state: T, m
   if (prBranch) state.pr_branch = prBranch;
   if (typeof metadata.marked_ready === "boolean") state.marked_ready = metadata.marked_ready;
   if (typeof metadata.left_draft === "boolean") state.left_draft = metadata.left_draft;
+  if (typeof metadata.ship_held === "boolean") state.ship_held = metadata.ship_held;
+  if (typeof metadata.shipping_disabled === "boolean") state.shipping_disabled = metadata.shipping_disabled;
+  if (typeof metadata.ship_authorized === "boolean") state.ship_authorized = metadata.ship_authorized;
   const ciStatus = nonEmptyString(metadata.ci_status);
   if (ciStatus) state.ci_status = ciStatus;
   const shipCommit = nonEmptyString(metadata.ship_commit);
@@ -217,6 +223,71 @@ export function applyTerminalMetadata<T extends RiddleProofRunState>(state: T, m
   return state;
 }
 
+export interface RiddleProofShipControlState {
+  ship_held: boolean;
+  shipping_disabled: boolean;
+  ship_authorized: boolean;
+}
+
+export function shipControlStateFor(input: {
+  state: RiddleProofRunState;
+  status?: RiddleProofStatus;
+  raw?: Record<string, unknown>;
+}): RiddleProofShipControlState {
+  const state = input.state;
+  const status = input.status || state.status;
+  const raw = recordValue(input.raw) || {};
+  const shipReport = recordValue(state.ship_report) || {};
+  const prState = recordValue(state.pr_state) || {};
+  const shippingDisabled = (
+    firstBoolean(
+      raw.shipping_disabled,
+      raw.shippingDisabled,
+      state.shipping_disabled,
+      shipReport.shipping_disabled,
+      shipReport.shippingDisabled,
+    ) ?? (state.request?.ship_mode === "none")
+  );
+  const explicitAuthorized = firstBoolean(
+    raw.ship_authorized,
+    raw.shipAuthorized,
+    state.ship_authorized,
+    shipReport.ship_authorized,
+    shipReport.shipAuthorized,
+  );
+  const authorizationEvidence = Boolean(
+    status === "shipped" ||
+      state.marked_ready === true ||
+      shipReport.marked_ready === true ||
+      prState.status === "merged" ||
+      state.merge_commit ||
+      state.merged_at,
+  );
+  const inferredAuthorized = explicitAuthorized ?? authorizationEvidence;
+  const rawHeld = firstBoolean(raw.ship_held, raw.shipHeld);
+  const inferredHeld = status === "ready_to_ship" && shippingDisabled && !inferredAuthorized;
+  const shipHeld = rawHeld ?? (state.ship_held === true || inferredHeld);
+  return {
+    ship_held: shipHeld,
+    shipping_disabled: shippingDisabled,
+    ship_authorized: shipHeld ? false : inferredAuthorized,
+  };
+}
+
+export function applyShipControlState<T extends RiddleProofRunState>(
+  state: T,
+  input: {
+    status?: RiddleProofStatus;
+    raw?: Record<string, unknown>;
+  } = {},
+): T {
+  const control = shipControlStateFor({ state, status: input.status, raw: input.raw });
+  state.ship_held = control.ship_held;
+  state.shipping_disabled = control.shipping_disabled;
+  state.ship_authorized = control.ship_authorized;
+  return state;
+}
+
 export function createRunResult(input: {
   state: RiddleProofRunState;
   status?: RiddleProofStatus;
@@ -231,6 +302,7 @@ export function createRunResult(input: {
   const state = input.metadata ? applyTerminalMetadata(input.state, input.metadata) : input.state;
   state.status = status;
   state.ok = ok;
+  applyShipControlState(state, { status, raw: input.raw });
   return compactRecord({
     ok,
     status,
@@ -248,6 +320,9 @@ export function createRunResult(input: {
     pr_state: state.pr_state as RiddleProofPrLifecycleState | undefined,
     marked_ready: state.marked_ready,
     left_draft: state.left_draft,
+    ship_held: state.ship_held,
+    shipping_disabled: state.shipping_disabled,
+    ship_authorized: state.ship_authorized,
     ci_status: state.ci_status,
     ship_commit: state.ship_commit,
     ship_remote_head: state.ship_remote_head,

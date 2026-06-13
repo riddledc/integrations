@@ -11,6 +11,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {
   applyTerminalMetadata,
+  applyShipControlState,
   compactRecord,
   createRunResult,
   nonEmptyString,
@@ -462,7 +463,7 @@ function shipHeldTerminal(
     "ready_to_ship",
     result,
     result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
-    { ship_held: true },
+    { ship_held: true, shipping_disabled: true, ship_authorized: false },
   );
 }
 
@@ -854,6 +855,7 @@ function terminalResult(
     engineResult: result,
   });
   applyTerminalMetadata(state, metadata);
+  applyShipControlState(state, { status, raw });
   persist(state);
   return createRunResult({
     state,
@@ -1214,6 +1216,8 @@ function checkpointResponseContinuation(
             response.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
             {
               ship_held: true,
+              shipping_disabled: true,
+              ship_authorized: false,
               proof_assessment: assessment,
             },
           ),
@@ -1872,6 +1876,8 @@ async function routeCheckpoint(
           assessment.summary || result.summary || "Riddle Proof evidence is approved, but ship_mode=none is holding before PR/ship.",
           {
             ship_held: true,
+            shipping_disabled: true,
+            ship_authorized: false,
             proof_assessment: payload,
           },
         ),
