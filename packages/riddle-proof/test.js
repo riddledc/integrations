@@ -330,6 +330,47 @@ assert.match(prCommentCli.stdout, /Riddle Proof Evidence/);
 assert.match(prCommentCli.stdout, /job_prcomment/);
 assert.match(prCommentCli.stdout, /The generated comment preserves success criteria/);
 
+const heldPrCommentResult = {
+  ok: true,
+  status: "ready_to_ship",
+  ship_held: true,
+  shipping_disabled: true,
+  ship_authorized: false,
+  proof_decision: "ready_to_ship",
+  merge_recommendation: "ready-to-ship",
+  checkpoint_summary: {
+    pending: false,
+    response_count: 1,
+    rejected_response_count: 2,
+    ignored_response_count: 1,
+    duplicate_response_count: 1,
+    latest_decision: "ready_to_ship",
+  },
+  pages: [
+    { route: "/checkout", checks: { preservedCart: true } },
+  ],
+};
+const heldPrCommentSummary = summarizeRiddleProofPrComment({
+  runResponse: prCommentRunResponse,
+  result: heldPrCommentResult,
+});
+assert.equal(heldPrCommentSummary.result_status, "ready_to_ship");
+assert.equal(heldPrCommentSummary.ship_held, true);
+assert.equal(heldPrCommentSummary.shipping_disabled, true);
+assert.equal(heldPrCommentSummary.ship_authorized, false);
+assert.equal(heldPrCommentSummary.checkpoint_summary?.rejected_response_count, 2);
+assert.equal(heldPrCommentSummary.checkpoint_summary?.ignored_response_count, 1);
+const heldPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
+  title: "Riddle Proof Held Evidence",
+  runResponse: prCommentRunResponse,
+  result: heldPrCommentResult,
+});
+assert.match(heldPrCommentMarkdown, /\*\*Result:\*\* proof passed; ship held/);
+assert.match(heldPrCommentMarkdown, /\*\*Evidence status:\*\* ready_to_ship/);
+assert.match(heldPrCommentMarkdown, /\*\*Ship control:\*\* held=true, shipping_disabled=true, authorized=false/);
+assert.match(heldPrCommentMarkdown, /\*\*Proof decision:\*\* `ready_to_ship`/);
+assert.match(heldPrCommentMarkdown, /\*\*Checkpoints:\*\* 1 accepted \/ 2 rejected \/ 1 ignored \/ 1 duplicate; complete; latest decision `ready_to_ship`/);
+
 const unknownOptionCli = await runCli([
   "profile-body-assertions",
   "--artifact",
