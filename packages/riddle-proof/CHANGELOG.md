@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.51
+
+### Patch Changes
+
+- 96cdd8d: Keep ignored late terminal checkpoint responses out of accepted response history and lock the lifecycle semantics with Lean and runtime conformance coverage.
+
 ## 0.8.50
 
 ### Patch Changes
