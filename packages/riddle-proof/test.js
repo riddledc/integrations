@@ -61,6 +61,7 @@ import {
   deployRiddleStaticPreview,
   parseRiddleViewport,
   RIDDLE_PROOF_PR_COMMENT_MARKER,
+  summarizeRiddleProofPublicState,
   summarizeRiddleProofPrComment,
   RIDDLE_PROOF_PROFILE_CHECK_TYPES,
   RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES,
@@ -78,6 +79,7 @@ const cjsPlayability = require("./dist/playability.cjs");
 const cjsBasicGameplay = require("./dist/basic-gameplay.cjs");
 const cjsProfile = require("./dist/profile.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
+const cjsPublicState = require("./dist/public-state.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
 assert.equal(typeof cjs.createCaptureDiagnostic, "function");
 assert.equal(typeof cjs.createCheckpointResponseTemplate, "function");
@@ -111,6 +113,8 @@ assert.equal(typeof cjs.createRiddleApiClient, "function");
 assert.equal(typeof cjs.collectRiddlePreviewDeployWarnings, "function");
 assert.equal(typeof cjs.deployRiddlePreview, "function");
 assert.equal(typeof cjs.deployRiddleStaticPreview, "function");
+assert.equal(typeof cjs.summarizeRiddleProofPublicState, "function");
+assert.equal(typeof cjsPublicState.summarizeRiddleProofPublicState, "function");
 assert.equal(typeof cjs.buildRiddleProofPrCommentMarkdown, "function");
 assert.equal(typeof cjs.summarizeRiddleProofPrComment, "function");
 
@@ -358,6 +362,7 @@ assert.equal(heldPrCommentSummary.result_status, "ready_to_ship");
 assert.equal(heldPrCommentSummary.ship_held, true);
 assert.equal(heldPrCommentSummary.shipping_disabled, true);
 assert.equal(heldPrCommentSummary.ship_authorized, false);
+assert.equal(heldPrCommentSummary.public_state?.policy_state, "proof_passed_ship_held");
 assert.equal(heldPrCommentSummary.checkpoint_summary?.rejected_response_count, 2);
 assert.equal(heldPrCommentSummary.checkpoint_summary?.ignored_response_count, 1);
 const heldPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
@@ -370,6 +375,118 @@ assert.match(heldPrCommentMarkdown, /\*\*Evidence status:\*\* ready_to_ship/);
 assert.match(heldPrCommentMarkdown, /\*\*Ship control:\*\* held=true, shipping_disabled=true, authorized=false/);
 assert.match(heldPrCommentMarkdown, /\*\*Proof decision:\*\* `ready_to_ship`/);
 assert.match(heldPrCommentMarkdown, /\*\*Checkpoints:\*\* 1 accepted \/ 2 rejected \/ 1 ignored \/ 1 duplicate; complete; latest decision `ready_to_ship`/);
+
+const heldPublicState = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  ship_held: true,
+  shipping_disabled: true,
+  ship_authorized: false,
+  checkpoint_summary: {
+    pending: false,
+    response_count: 1,
+    rejected_response_count: 2,
+    ignored_response_count: 1,
+    duplicate_response_count: 1,
+    latest_decision: "ready_to_ship",
+  },
+});
+assert.equal(heldPublicState.policy_state, "proof_passed_ship_held");
+assert.equal(heldPublicState.result_label, "proof passed; ship held");
+assert.equal(heldPublicState.proof_complete, true);
+assert.equal(heldPublicState.proof_passed, true);
+assert.equal(heldPublicState.merge_ready, false);
+assert.equal(heldPublicState.sync_allowed, false);
+assert.deepEqual([...heldPublicState.required_disclosures].sort(), [
+  "checkpoint_audit_counters",
+  "ship_held",
+  "shipping_disabled",
+].sort());
+assert.ok(heldPublicState.prohibited_claims.includes("merge_ready"));
+assert.ok(heldPublicState.prohibited_claims.includes("sync_allowed"));
+assert.ok(heldPublicState.prohibited_claims.includes("all_checkpoint_responses_accepted"));
+assert.equal(heldPublicState.checkpoint_summary?.accepted_response_count, 1);
+assert.equal(heldPublicState.checkpoint_summary?.rejected_response_count, 2);
+assert.equal(heldPublicState.checkpoint_summary?.audit_disclosure_required, true);
+
+const noShipPublicState = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete_ship_disabled",
+    proof_complete: true,
+    shipping_disabled: true,
+    ship_mode: "none",
+    merge_ready: false,
+    normal_pr_allowed: false,
+  },
+});
+assert.equal(noShipPublicState.policy_state, "proof_complete_ship_disabled");
+assert.equal(noShipPublicState.result_label, "proof complete; shipping disabled");
+assert.equal(noShipPublicState.proof_complete, true);
+assert.equal(noShipPublicState.merge_ready, false);
+assert.equal(noShipPublicState.sync_allowed, false);
+assert.ok(noShipPublicState.required_disclosures.includes("shipping_disabled"));
+assert.ok(noShipPublicState.prohibited_claims.includes("ship_authorized"));
+
+const handoffReadyPublicState = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete",
+    proof_complete: true,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+});
+assert.equal(handoffReadyPublicState.policy_state, "proof_passed");
+assert.equal(handoffReadyPublicState.result_label, "passed");
+assert.equal(handoffReadyPublicState.ship_authorized, false);
+assert.equal(handoffReadyPublicState.merge_ready, true);
+assert.equal(handoffReadyPublicState.sync_allowed, true);
+assert.ok(handoffReadyPublicState.prohibited_claims.includes("ship_authorized"));
+assert.equal(handoffReadyPublicState.prohibited_claims.includes("merge_ready"), false);
+assert.equal(handoffReadyPublicState.prohibited_claims.includes("sync_allowed"), false);
+
+const shippedPublicState = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "shipped",
+  ship_authorized: true,
+});
+assert.equal(shippedPublicState.policy_state, "ship_authorized");
+assert.equal(shippedPublicState.result_label, "shipped");
+assert.equal(shippedPublicState.proof_passed, true);
+assert.equal(shippedPublicState.merge_ready, true);
+assert.equal(shippedPublicState.sync_allowed, true);
+assert.deepEqual(shippedPublicState.prohibited_claims, []);
+
+const handoffBlockedPublicState = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "completed",
+  pr_handoff_policy: {
+    state: "proof_review_required",
+    proof_complete: false,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+});
+assert.equal(handoffBlockedPublicState.policy_state, "proof_blocked");
+assert.equal(handoffBlockedPublicState.proof_passed, false);
+assert.equal(handoffBlockedPublicState.merge_ready, false);
+assert.equal(handoffBlockedPublicState.sync_allowed, false);
+assert.ok(handoffBlockedPublicState.prohibited_claims.includes("proof_passed"));
+assert.ok(handoffBlockedPublicState.prohibited_claims.includes("ready_to_ship"));
+
+const checkpointPublicState = summarizeRiddleProofPublicState({
+  status: "awaiting_checkpoint",
+  checkpoint_summary: { pending: true, response_count: 0 },
+});
+assert.equal(checkpointPublicState.policy_state, "awaiting_checkpoint");
+assert.equal(checkpointPublicState.result_label, "checkpoint required");
+assert.equal(checkpointPublicState.proof_passed, false);
+assert.ok(checkpointPublicState.required_disclosures.includes("checkpoint_required"));
+assert.ok(checkpointPublicState.prohibited_claims.includes("ready_to_ship"));
+assert.ok(checkpointPublicState.prohibited_claims.includes("proof_passed"));
 
 const unknownOptionCli = await runCli([
   "profile-body-assertions",

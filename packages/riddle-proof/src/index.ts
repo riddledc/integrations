@@ -3,6 +3,7 @@ export * from "./result";
 export * from "./state";
 export * from "./checkpoint";
 export * from "./run-card";
+export * from "./public-state";
 export * from "./runner";
 export * from "./engine-harness";
 export * from "./codex-exec-agent";
