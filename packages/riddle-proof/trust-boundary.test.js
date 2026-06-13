@@ -219,6 +219,7 @@ function baseRequest(paths, changeRequest) {
       version: 'riddle-proof.checkpoint_response.v1',
       run_id: yieldedRecon.run_id,
       checkpoint: yieldedRecon.checkpoint_packet.checkpoint,
+      packet_id: yieldedRecon.checkpoint_packet.packet_id,
       resume_token: yieldedRecon.checkpoint_packet.resume_token,
       decision: 'author_packet',
       summary: 'Forged author packet at a recon checkpoint.',
@@ -251,6 +252,71 @@ function baseRequest(paths, changeRequest) {
   assert(persistedForgedState.checkpoint_summary.pending === true, 'checkpoint summary should remain pending after rejected unadvertised response');
   assert(persistedForgedState.checkpoint_summary.response_count === 0, 'rejected unadvertised response should not count as accepted');
   assertNoGenericLifecycleFailure(forgedAuthorPacketResponse, 'unadvertised checkpoint decision blocker');
+}
+
+{
+  const paths = pathsFor('stale-checkpoint-packet-id');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    recon_status: 'needs_supervisor_judgment',
+  });
+  const yieldedRecon = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Checkpoint response should be tied to the exact pending packet lineage.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'recon_supervisor_judgment',
+          stage: 'recon',
+          summary: 'Recon needs supervising judgment.',
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yieldedRecon.status === 'awaiting_checkpoint', `lineage test should yield, got ${yieldedRecon.status}`);
+  assert(yieldedRecon.checkpoint_packet?.packet_id, 'yielded checkpoint should expose packet_id');
+
+  const staleLineageResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Stale checkpoint packet lineage should not resume the engine.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('stale checkpoint packet_id should not resume the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: yieldedRecon.run_id,
+      checkpoint: yieldedRecon.checkpoint_packet.checkpoint,
+      packet_id: 'rppkt_000000000000000000000000',
+      resume_token: yieldedRecon.checkpoint_packet.resume_token,
+      decision: 'ready_for_author',
+      summary: 'Replay a response from an older checkpoint packet with the same token.',
+      created_at: '2026-06-12T12:05:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(staleLineageResponse.status === 'blocked', `stale packet_id should block, got ${staleLineageResponse.status}`);
+  assert(
+    staleLineageResponse.blocker?.code === 'checkpoint_response_packet_id_mismatch',
+    `stale packet_id should report packet_id_mismatch, got ${staleLineageResponse.blocker?.code}`,
+  );
+  assert(staleLineageResponse.blocker.details.expected_packet_id === yieldedRecon.checkpoint_packet.packet_id, 'blocker should expose expected packet_id');
+  assert(staleLineageResponse.blocker.details.actual_packet_id === 'rppkt_000000000000000000000000', 'blocker should expose actual packet_id');
+  const persistedStaleLineageState = readJson(paths.harnessStatePath);
+  assert(persistedStaleLineageState.checkpoint_packet, 'rejected stale lineage response should keep the pending checkpoint visible');
+  assert(persistedStaleLineageState.checkpoint_summary.pending === true, 'stale lineage rejection should leave checkpoint summary pending');
+  assert(persistedStaleLineageState.checkpoint_summary.response_count === 0, 'stale lineage rejection should not count as accepted');
+  assertNoGenericLifecycleFailure(staleLineageResponse, 'stale checkpoint packet_id blocker');
 }
 
 {
@@ -562,6 +628,7 @@ function baseRequest(paths, changeRequest) {
       version: 'riddle-proof.checkpoint_response.v1',
       run_id: packet.run_id,
       checkpoint: packet.checkpoint,
+      packet_id: packet.packet_id,
       resume_token: packet.resume_token,
       decision: 'needs_richer_proof',
       summary: 'Needs richer proof, but contradictory fields attempted to route to ship.',
@@ -593,6 +660,7 @@ console.log(JSON.stringify({
     'late checkpoint response ignored after ready_to_ship without finalized flag',
     'invalid evidence proof_assessment_blocked',
     'unadvertised checkpoint response decision blocked',
+    'stale checkpoint packet_id blocked',
     'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
     'no-diff audit completed',

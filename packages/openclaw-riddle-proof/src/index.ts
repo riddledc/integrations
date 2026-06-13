@@ -687,6 +687,8 @@ function syncWrapperStateFromBackgroundResult(
     state.current_stage = result.checkpoint_packet.stage || state.current_stage;
     const alreadyRecorded = Boolean((state.checkpoint_history || []).some((entry) => {
       const packet = recordValue(entry?.packet);
+      const incomingPacketId = stringValue(result.checkpoint_packet?.packet_id);
+      if (incomingPacketId) return stringValue(packet?.packet_id) === incomingPacketId;
       return packet?.resume_token === result.checkpoint_packet?.resume_token &&
         packet?.checkpoint === result.checkpoint_packet?.checkpoint;
     }));
@@ -2042,6 +2044,7 @@ function compactCheckpointPacket(packet: unknown, includeStateExcerpt = false) {
   return compactRecordValue({
     version: record.version,
     run_id: record.run_id,
+    packet_id: record.packet_id,
     stage: record.stage,
     checkpoint: record.checkpoint,
     kind: record.kind,
@@ -3595,6 +3598,7 @@ export function formatOpenClawRiddleProofWakeEvent(
       `checkpoint_packet: ${compactValue({
         version: packet.version,
         run_id: packet.run_id,
+        packet_id: packet.packet_id,
         checkpoint: packet.checkpoint,
         kind: packet.kind,
         summary: packet.summary,
@@ -3981,6 +3985,7 @@ function checkpointResponseFromReviewParams(
     version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
     run_id: packet.run_id,
     checkpoint: packet.checkpoint,
+    packet_id: packet.packet_id,
     resume_token: packet.resume_token,
     decision: params.decision,
     summary: params.summary,

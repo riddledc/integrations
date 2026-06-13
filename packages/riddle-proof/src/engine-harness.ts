@@ -1013,6 +1013,22 @@ function checkpointResponseContinuation(
       },
     };
   }
+  if (packet.packet_id && response.packet_id !== packet.packet_id) {
+    return {
+      blocker: {
+        code: "checkpoint_response_packet_id_mismatch",
+        checkpoint: packet.checkpoint,
+        message: "Checkpoint response packet_id does not match the pending checkpoint packet.",
+        details: {
+          stage: packet.stage,
+          expected_packet_id: packet.packet_id,
+          actual_packet_id: response.packet_id || null,
+          expected_resume_token: packet.resume_token || null,
+          actual_resume_token: response.resume_token || null,
+        },
+      },
+    };
+  }
   if (!packet.allowed_decisions.includes(response.decision)) {
     return {
       blocker: {

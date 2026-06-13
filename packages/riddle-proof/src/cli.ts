@@ -1232,6 +1232,7 @@ function formatCheckpointMarkdown(input: {
     `Status: ${input.status || "awaiting_checkpoint"}`,
     `Stage: ${packet.stage}`,
     `Checkpoint: ${packet.checkpoint}`,
+    `Packet ID: ${packet.packet_id || "legacy"}`,
     `Kind: ${packet.kind}`,
     "",
     "## Goal",

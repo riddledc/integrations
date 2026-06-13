@@ -788,13 +788,14 @@ Layer 4: checkpoint response semantics.
 The runtime checkpoint protocol has two visible JSON surfaces:
 
 - `riddle-proof.checkpoint.v1`, the active packet with run/checkpoint identity,
-  an optional resume token, and an advertised `allowed_decisions` list.
+  packet lineage, an optional resume token, and an advertised
+  `allowed_decisions` list.
 - `riddle-proof.checkpoint_response.v1`, the supervising response.
 
 The semantic contract is narrower than JSON shape validation: an accepted
-response must match the active packet and must use a decision advertised by
-that packet. Late responses after protected terminal states are ignored rather
-than reopening the run.
+response must match the active packet lineage and must use a decision
+advertised by that packet. Late responses after protected terminal states are
+ignored rather than reopening the run.
 -/
 
 inductive CheckpointDecision where
@@ -828,6 +829,7 @@ inductive CheckpointBlocker where
   | withoutPacket
   | mismatch
   | resumeTokenMismatch
+  | packetLineageMismatch
   | decisionNotAllowed
   deriving Repr, DecidableEq
 
@@ -840,6 +842,7 @@ inductive CheckpointResponseOutcome where
 structure CheckpointPacket where
   runId : Nat
   checkpointId : Nat
+  packetLineage : Nat
   resumeToken : Option Nat
   allowedDecisions : List CheckpointDecision
   deriving Repr
@@ -847,6 +850,7 @@ structure CheckpointPacket where
 structure CheckpointResponse where
   runId : Nat
   checkpointId : Nat
+  packetLineage : Option Nat
   resumeToken : Option Nat
   decision : CheckpointDecision
   deriving Repr
@@ -881,9 +885,13 @@ def resumeTokenMatches (packet : CheckpointPacket) (response : CheckpointRespons
   | none => true
   | some token => response.resumeToken = some token
 
+def packetLineageMatches (packet : CheckpointPacket) (response : CheckpointResponse) : Bool :=
+  response.packetLineage = some packet.packetLineage
+
 def activePacketAccepts (packet : CheckpointPacket) (response : CheckpointResponse) : Bool :=
   sameRunAndCheckpoint packet response
     && resumeTokenMatches packet response
+    && packetLineageMatches packet response
     && decisionAdvertised response.decision packet.allowedDecisions
 
 def checkpointResponseOutcome
@@ -902,16 +910,18 @@ def checkpointResponseOutcome
           CheckpointResponseOutcome.blocked CheckpointBlocker.mismatch
         else if resumeTokenMatches packet response = false then
           CheckpointResponseOutcome.blocked CheckpointBlocker.resumeTokenMismatch
+        else if packetLineageMatches packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.packetLineageMismatch
         else if decisionAdvertised response.decision packet.allowedDecisions = false then
           CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed
         else
           CheckpointResponseOutcome.accepted
 
 /-!
-An intentionally incomplete acceptance model. It matches the active packet and
-resume token but forgets to require the decision to be advertised by the packet.
-This mirrors the class of drift where response parsing/continuation accepts a
-decision that `allowed_decisions` did not expose.
+An intentionally incomplete acceptance model. It matches the active packet
+identity, resume token, and packet lineage, but forgets to require the decision
+to be advertised by the packet. This mirrors the class of drift where response
+parsing/continuation accepts a decision that `allowed_decisions` did not expose.
 -/
 def checkpointResponseOutcomeWithoutAllowedGuard
     (state : CheckpointRunState)
@@ -929,6 +939,29 @@ def checkpointResponseOutcomeWithoutAllowedGuard
           CheckpointResponseOutcome.blocked CheckpointBlocker.mismatch
         else if resumeTokenMatches packet response = false then
           CheckpointResponseOutcome.blocked CheckpointBlocker.resumeTokenMismatch
+        else if packetLineageMatches packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.packetLineageMismatch
+        else
+          CheckpointResponseOutcome.accepted
+
+def checkpointResponseOutcomeWithoutLineageGuard
+    (state : CheckpointRunState)
+    (response : CheckpointResponse) : CheckpointResponseOutcome :=
+  if state.responseAlreadyAccepted then
+    CheckpointResponseOutcome.blocked CheckpointBlocker.duplicate
+  else if protectedFinalStatus state.status && state.packet.isNone then
+    CheckpointResponseOutcome.ignoredFinal
+  else
+    match state.packet with
+    | none =>
+        CheckpointResponseOutcome.blocked CheckpointBlocker.withoutPacket
+    | some packet =>
+        if sameRunAndCheckpoint packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.mismatch
+        else if resumeTokenMatches packet response = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.resumeTokenMismatch
+        else if decisionAdvertised response.decision packet.allowedDecisions = false then
+          CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed
         else
           CheckpointResponseOutcome.accepted
 
@@ -967,9 +1000,10 @@ theorem active_packet_accepts_implies_identity_and_advertised
     (hAccepted : activePacketAccepts packet response = true) :
     sameRunAndCheckpoint packet response = true
       ∧ resumeTokenMatches packet response = true
+      ∧ packetLineageMatches packet response = true
       ∧ decisionAdvertised response.decision packet.allowedDecisions = true := by
   simp [activePacketAccepts] at hAccepted
-  exact ⟨hAccepted.1.1, hAccepted.1.2, hAccepted.2⟩
+  exact ⟨hAccepted.1.1.1, hAccepted.1.1.2, hAccepted.1.2, hAccepted.2⟩
 
 theorem accepted_response_has_matching_advertised_packet
     (packet : CheckpointPacket)
@@ -982,6 +1016,7 @@ theorem accepted_response_has_matching_advertised_packet
       } response = CheckpointResponseOutcome.accepted) :
     sameRunAndCheckpoint packet response = true
       ∧ resumeTokenMatches packet response = true
+      ∧ packetLineageMatches packet response = true
       ∧ decisionAdvertised response.decision packet.allowedDecisions = true := by
   by_cases hSame : sameRunAndCheckpoint packet response = false
   · simp [checkpointResponseOutcome, hSame] at hAccepted
@@ -995,17 +1030,24 @@ theorem accepted_response_has_matching_advertised_packet
         cases h : resumeTokenMatches packet response with
         | false => contradiction
         | true => rfl
-      by_cases hAllowed : decisionAdvertised response.decision packet.allowedDecisions = false
-      · simp [checkpointResponseOutcome, hSameTrue, hTokenTrue, hAllowed] at hAccepted
-      · have hAllowedTrue : decisionAdvertised response.decision packet.allowedDecisions = true := by
-          cases h : decisionAdvertised response.decision packet.allowedDecisions with
+      by_cases hLineage : packetLineageMatches packet response = false
+      · simp [checkpointResponseOutcome, hSameTrue, hTokenTrue, hLineage] at hAccepted
+      · have hLineageTrue : packetLineageMatches packet response = true := by
+          cases h : packetLineageMatches packet response with
           | false => contradiction
           | true => rfl
-        exact ⟨hSameTrue, hTokenTrue, hAllowedTrue⟩
+        by_cases hAllowed : decisionAdvertised response.decision packet.allowedDecisions = false
+        · simp [checkpointResponseOutcome, hSameTrue, hTokenTrue, hLineageTrue, hAllowed] at hAccepted
+        · have hAllowedTrue : decisionAdvertised response.decision packet.allowedDecisions = true := by
+            cases h : decisionAdvertised response.decision packet.allowedDecisions with
+            | false => contradiction
+            | true => rfl
+          exact ⟨hSameTrue, hTokenTrue, hLineageTrue, hAllowedTrue⟩
 
 def exampleReconPacketBeforeAllowedFix : CheckpointPacket where
   runId := 7
   checkpointId := 11
+  packetLineage := 101
   resumeToken := some 19
   allowedDecisions := [
     CheckpointDecision.readyForAuthor,
@@ -1018,6 +1060,7 @@ def exampleReconPacketBeforeAllowedFix : CheckpointPacket where
 def exampleReconPacketAfterAllowedFix : CheckpointPacket where
   runId := 7
   checkpointId := 11
+  packetLineage := 101
   resumeToken := some 19
   allowedDecisions := [
     CheckpointDecision.readyForAuthor,
@@ -1031,14 +1074,23 @@ def exampleReconPacketAfterAllowedFix : CheckpointPacket where
 def exampleReconNeedsReconResponse : CheckpointResponse where
   runId := 7
   checkpointId := 11
+  packetLineage := some 101
   resumeToken := some 19
   decision := CheckpointDecision.needsRecon
 
 def exampleReconForgedAuthorPacketResponse : CheckpointResponse where
   runId := 7
   checkpointId := 11
+  packetLineage := some 101
   resumeToken := some 19
   decision := CheckpointDecision.authorPacket
+
+def exampleReconStaleLineageResponse : CheckpointResponse where
+  runId := 7
+  checkpointId := 11
+  packetLineage := some 100
+  resumeToken := some 19
+  decision := CheckpointDecision.needsRecon
 
 def exampleReconBeforeAllowedState : CheckpointRunState where
   status := CheckpointRunStatus.awaitingCheckpoint
@@ -1053,6 +1105,7 @@ def exampleReconAfterAllowedState : CheckpointRunState where
 def exampleGenericPacketBeforeRetryAllowedFix : CheckpointPacket where
   runId := 8
   checkpointId := 13
+  packetLineage := 201
   resumeToken := some 21
   allowedDecisions := [
     CheckpointDecision.continueStage,
@@ -1065,6 +1118,7 @@ def exampleGenericPacketBeforeRetryAllowedFix : CheckpointPacket where
 def exampleGenericPacketAfterRetryAllowedFix : CheckpointPacket where
   runId := 8
   checkpointId := 13
+  packetLineage := 201
   resumeToken := some 21
   allowedDecisions := [
     CheckpointDecision.continueStage,
@@ -1078,6 +1132,7 @@ def exampleGenericPacketAfterRetryAllowedFix : CheckpointPacket where
 def exampleGenericRetryStageResponse : CheckpointResponse where
   runId := 8
   checkpointId := 13
+  packetLineage := some 201
   resumeToken := some 21
   decision := CheckpointDecision.retryStage
 
@@ -1096,6 +1151,8 @@ def exampleGenericAfterRetryAllowedState : CheckpointRunState where
 #eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconNeedsReconResponse
 #eval checkpointResponseOutcomeWithoutAllowedGuard exampleReconAfterAllowedState exampleReconForgedAuthorPacketResponse
 #eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconForgedAuthorPacketResponse
+#eval checkpointResponseOutcomeWithoutLineageGuard exampleReconAfterAllowedState exampleReconStaleLineageResponse
+#eval checkpointResponseOutcome exampleReconAfterAllowedState exampleReconStaleLineageResponse
 
 #eval checkpointResponseOutcomeWithoutAllowedGuard exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
 #eval checkpointResponseOutcome exampleGenericBeforeRetryAllowedState exampleGenericRetryStageResponse
@@ -1125,6 +1182,16 @@ theorem forged_author_packet_recon_response_requires_allowed_guard :
         exampleReconAfterAllowedState
         exampleReconForgedAuthorPacketResponse =
           CheckpointResponseOutcome.blocked CheckpointBlocker.decisionNotAllowed := by
+  native_decide
+
+theorem stale_checkpoint_lineage_requires_lineage_guard :
+    checkpointResponseOutcomeWithoutLineageGuard
+        exampleReconAfterAllowedState
+        exampleReconStaleLineageResponse = CheckpointResponseOutcome.accepted
+      ∧ checkpointResponseOutcome
+        exampleReconAfterAllowedState
+        exampleReconStaleLineageResponse =
+          CheckpointResponseOutcome.blocked CheckpointBlocker.packetLineageMismatch := by
   native_decide
 
 theorem unadvertised_retry_stage_was_accepted_without_allowed_guard :

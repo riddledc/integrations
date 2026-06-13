@@ -383,11 +383,15 @@ const reconPacket = buildStageCheckpointPacket({
   },
 });
 assertDecisionContract(reconPacket, "recon checkpoint");
+assert.match(reconPacket.packet_id, /^rppkt_[0-9a-f]{24}$/);
+assert.ok(reconPacket.response_schema.required.includes("packet_id"), "checkpoint response schema should require packet_id");
+assert.equal(reconPacket.response_schema.properties.packet_id.type, "string");
 const reconRetryResponse = createCheckpointResponseTemplate(reconPacket, {
   decision: "needs_recon",
   summary: "Retry recon from the supervising checkpoint.",
 });
 assert.equal(reconRetryResponse.decision, "needs_recon");
+assert.equal(reconRetryResponse.packet_id, reconPacket.packet_id, "response templates should echo packet_id");
 
 const defaultStagePacket = buildStageCheckpointPacket({
   request: checkpointRequest,
@@ -449,6 +453,7 @@ const proofAssessmentPacket = buildProofAssessmentCheckpointPacket({
   },
 });
 assertDecisionContract(proofAssessmentPacket, "proof assessment checkpoint");
+assert.match(proofAssessmentPacket.packet_id, /^rppkt_[0-9a-f]{24}$/);
 
 const pendingCheckpointSummary = checkpointSummaryFromState({
   ...checkpointRunState,
@@ -464,6 +469,9 @@ assert.equal(pendingCheckpointSummary.packet_count, 1);
 assert.equal(pendingCheckpointSummary.response_count, 0);
 assert.equal(pendingCheckpointSummary.duplicate_response_count, 0);
 assert.equal(pendingCheckpointSummary.latest_decision, undefined);
+assert.equal(pendingCheckpointSummary.latest_packet_id, reconPacket.packet_id);
+assert.equal(pendingCheckpointSummary.latest_response_packet_id, undefined);
+assert.equal(pendingCheckpointSummary.packet_id_matches, undefined);
 assert.equal(pendingCheckpointSummary.token_matches, undefined);
 
 const acceptedAdvancingSummary = checkpointSummaryFromState({
@@ -485,7 +493,31 @@ assert.equal(acceptedAdvancingSummary.pending, false);
 assert.equal(acceptedAdvancingSummary.response_count, 1);
 assert.equal(acceptedAdvancingSummary.duplicate_response_count, 0);
 assert.equal(acceptedAdvancingSummary.latest_decision, "needs_recon");
+assert.equal(acceptedAdvancingSummary.latest_packet_id, reconPacket.packet_id);
+assert.equal(acceptedAdvancingSummary.latest_response_packet_id, reconPacket.packet_id);
+assert.equal(acceptedAdvancingSummary.packet_id_matches, true);
 assert.equal(acceptedAdvancingSummary.token_matches, true);
+
+const stalePacketIdResponse = {
+  ...reconRetryResponse,
+  packet_id: "rppkt_000000000000000000000000",
+};
+const mismatchedLineageSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: reconPacket,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:05:00.000Z",
+    packet: reconPacket,
+  }, {
+    ts: "2026-06-12T00:06:00.000Z",
+    response: stalePacketIdResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:06:00.000Z",
+    kind: "checkpoint.response.accepted",
+  }],
+});
+assert.equal(mismatchedLineageSummary.packet_id_matches, false);
 
 const blockedCheckpointResponse = createCheckpointResponseTemplate(reconPacket, {
   decision: "blocked",
@@ -698,6 +730,7 @@ console.log(JSON.stringify({
     proofAssessmentStageConsistency: true,
     shipGateRuntimeParity: true,
     checkpointDecisionContracts: true,
+    checkpointPacketLineage: true,
     checkpointLifecycleSummary: true,
     checkpointIgnoredSummary: true,
     runCardProjection: true,

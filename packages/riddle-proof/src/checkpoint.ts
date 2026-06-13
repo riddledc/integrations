@@ -67,12 +67,13 @@ export function statePathsForRunState(
 function responseSchemaForAuthorPacket() {
   return {
     type: "object",
-    required: ["version", "run_id", "checkpoint", "decision", "summary", "payload", "created_at"],
+    required: ["version", "run_id", "checkpoint", "packet_id", "decision", "summary", "payload", "created_at"],
     additionalProperties: false,
     properties: {
       version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
       run_id: { type: "string" },
       checkpoint: { type: "string" },
+      packet_id: { type: "string" },
       resume_token: { type: "string" },
       decision: {
         type: "string",
@@ -102,12 +103,13 @@ function responseSchemaForAuthorPacket() {
 function responseSchemaForProofAssessmentPacket() {
   return {
     type: "object",
-    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    required: ["version", "run_id", "checkpoint", "packet_id", "decision", "summary", "created_at"],
     additionalProperties: false,
     properties: {
       version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
       run_id: { type: "string" },
       checkpoint: { type: "string" },
+      packet_id: { type: "string" },
       resume_token: { type: "string" },
       decision: {
         type: "string",
@@ -145,12 +147,13 @@ function responseSchemaForProofAssessmentPacket() {
 function responseSchemaForReconPacket() {
   return {
     type: "object",
-    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    required: ["version", "run_id", "checkpoint", "packet_id", "decision", "summary", "created_at"],
     additionalProperties: false,
     properties: {
       version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
       run_id: { type: "string" },
       checkpoint: { type: "string" },
+      packet_id: { type: "string" },
       resume_token: { type: "string" },
       decision: {
         type: "string",
@@ -180,12 +183,13 @@ function responseSchemaForReconPacket() {
 function responseSchemaForImplementationPacket() {
   return {
     type: "object",
-    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    required: ["version", "run_id", "checkpoint", "packet_id", "decision", "summary", "created_at"],
     additionalProperties: false,
     properties: {
       version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
       run_id: { type: "string" },
       checkpoint: { type: "string" },
+      packet_id: { type: "string" },
       resume_token: { type: "string" },
       decision: {
         type: "string",
@@ -215,12 +219,13 @@ function responseSchemaForImplementationPacket() {
 function responseSchemaForAdvancePacket(stage: RiddleProofStage) {
   return {
     type: "object",
-    required: ["version", "run_id", "checkpoint", "decision", "summary", "created_at"],
+    required: ["version", "run_id", "checkpoint", "packet_id", "decision", "summary", "created_at"],
     additionalProperties: false,
     properties: {
       version: { const: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION },
       run_id: { type: "string" },
       checkpoint: { type: "string" },
+      packet_id: { type: "string" },
       resume_token: { type: "string" },
       decision: {
         type: "string",
@@ -255,6 +260,27 @@ function resumeTokenFor(input: {
     .digest("hex")
     .slice(0, 24);
   return `rpchk_${hash}`;
+}
+
+function packetIdentityPayload(packet: RiddleProofCheckpointPacket): Record<string, unknown> {
+  const { packet_id: _packetId, ...identityPayload } = packet;
+  return identityPayload as Record<string, unknown>;
+}
+
+export function checkpointPacketIdentity(packet: RiddleProofCheckpointPacket) {
+  const hash = crypto
+    .createHash("sha256")
+    .update(stableJson(packetIdentityPayload(packet)))
+    .digest("hex")
+    .slice(0, 24);
+  return `rppkt_${hash}`;
+}
+
+function withPacketIdentity(packet: RiddleProofCheckpointPacket): RiddleProofCheckpointPacket {
+  return {
+    ...packet,
+    packet_id: checkpointPacketIdentity(packet),
+  };
 }
 
 function artifactsFromState(state: Record<string, unknown> | null): RiddleProofCheckpointArtifact[] {
@@ -353,7 +379,7 @@ export function buildStageCheckpointPacket(input: {
     `${stage} checkpoint needs a supervising decision.`;
   const kind = packetKindForStage(stage, checkpoint);
 
-  return {
+  return withPacketIdentity({
     version: RIDDLE_PROOF_CHECKPOINT_PACKET_VERSION,
     run_id: runId,
     state_path: input.runState.state_path,
@@ -405,7 +431,7 @@ export function buildStageCheckpointPacket(input: {
       stage,
     }),
     created_at: input.created_at || timestamp(),
-  };
+  });
 }
 
 export function buildAuthorCheckpointPacket(input: {
@@ -440,7 +466,7 @@ export function buildAuthorCheckpointPacket(input: {
     nonEmptyString(fullState.author_summary) ||
     "Author checkpoint needs a supervising proof packet.";
 
-  return {
+  return withPacketIdentity({
     version: RIDDLE_PROOF_CHECKPOINT_PACKET_VERSION,
     run_id: runId,
     state_path: input.runState.state_path,
@@ -490,7 +516,7 @@ export function buildAuthorCheckpointPacket(input: {
       stage,
     }),
     created_at: input.created_at || timestamp(),
-  };
+  });
 }
 
 function visualDeltaFromState(fullState: Record<string, unknown>) {
@@ -622,7 +648,7 @@ export function buildProofAssessmentCheckpointPacket(input: {
     ? "Required visual_delta evidence is incomplete. Keep this same run in verify/evidence recovery with decision=revise_capture and continue_with_stage=verify unless the evidence proves an implementation or recon problem."
     : "Assess whether the current artifacts prove the requested change, then choose the next stage.";
 
-  return {
+  return withPacketIdentity({
     version: RIDDLE_PROOF_CHECKPOINT_PACKET_VERSION,
     run_id: runId,
     state_path: input.runState.state_path,
@@ -683,7 +709,7 @@ export function buildProofAssessmentCheckpointPacket(input: {
       stage,
     }),
     created_at: input.created_at || timestamp(),
-  };
+  });
 }
 
 export function buildCheckpointPacketForEngineResult(input: {
@@ -735,6 +761,7 @@ export function normalizeCheckpointResponse(value: unknown): RiddleProofCheckpoi
     version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
     run_id: runId,
     checkpoint,
+    packet_id: nonEmptyString(record.packet_id),
     resume_token: nonEmptyString(record.resume_token),
     decision,
     summary,
@@ -841,6 +868,7 @@ export function createCheckpointResponseTemplate(
     version: RIDDLE_PROOF_CHECKPOINT_RESPONSE_VERSION,
     run_id: packet.run_id,
     checkpoint: packet.checkpoint,
+    packet_id: packet.packet_id,
     resume_token: packet.resume_token,
     decision,
     summary: input.summary || `TODO: explain checkpoint decision ${decision}.`,
@@ -882,6 +910,13 @@ export function checkpointSummaryFromState(
   const latestResponseEntry = [...responses].reverse().find((entry) => entry.response);
   const latestPacket = state.checkpoint_packet || latestPacketEntry?.packet;
   const latestResponse = latestResponseEntry?.response;
+  const latestPacketId = latestPacket?.packet_id || null;
+  const latestResponsePacketId = latestResponse?.packet_id || null;
+  const packetIdMatches =
+    !latestResponse ? null :
+      latestPacketId && latestResponsePacketId ? latestPacketId === latestResponsePacketId :
+        latestPacketId || latestResponsePacketId ? false :
+          null;
   const latestResumeToken = latestPacket?.resume_token || null;
   const latestResponseToken = latestResponse?.resume_token || null;
   const tokenMatches =
@@ -900,6 +935,9 @@ export function checkpointSummaryFromState(
     latest_decision: latestResponse?.decision || null,
     latest_packet_summary: latestPacket?.summary || null,
     latest_response_summary: latestResponse?.summary || null,
+    latest_packet_id: latestPacketId,
+    latest_response_packet_id: latestResponsePacketId,
+    packet_id_matches: packetIdMatches,
     latest_resume_token: latestResumeToken,
     latest_response_token: latestResponseToken,
     token_matches: tokenMatches,
@@ -923,6 +961,7 @@ export function checkpointResponseIdentity(response: RiddleProofCheckpointRespon
   const logicalResponse = compactRecord({
     run_id: response.run_id,
     checkpoint: response.checkpoint,
+    packet_id: response.packet_id,
     resume_token: response.resume_token,
     decision: response.decision,
     summary: response.summary,
