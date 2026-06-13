@@ -3079,6 +3079,25 @@ const reviewResumedStatus = readOpenClawRiddleProofStatus(reviewWrapperStatePath
 assert.equal(reviewResumedStatus?.pr_handoff_policy?.state, "proof_complete_ship_disabled");
 assert.equal(reviewResumedStatus?.pr_handoff_policy?.merge_ready, false);
 assert.equal(reviewResumedStatus?.pr_handoff_policy?.normal_pr_allowed, false);
+const noShipSyncCalls = [];
+const noShipSyncResult = await syncOpenClawRiddleProof(
+  { state_path: reviewWrapperStatePath },
+  {
+    executionMode: "engine",
+    defaultShipMode: "none",
+    engine: {
+      async execute(engineParams) {
+        noShipSyncCalls.push(engineParams);
+        throw new Error("no-ship sync should be blocked before engine execution");
+      },
+    },
+  },
+);
+assert.equal(noShipSyncResult.status, "blocked");
+assert.equal(noShipSyncResult.blocker?.code, "riddle_proof_sync_ship_disabled");
+assert.equal(noShipSyncResult.raw?.sync_blocked, true);
+assert.equal(noShipSyncCalls.length, 0);
+assert.equal(JSON.parse(readFileSync(reviewWrapperStatePath, "utf-8")).status, "ready_to_ship");
 
 const syncFixture = mkdtempSync(path.join(os.tmpdir(), "openclaw-riddle-proof-sync-"));
 const syncStatePath = path.join(syncFixture, "riddle-state.json");

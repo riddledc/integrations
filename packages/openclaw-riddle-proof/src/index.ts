@@ -4049,6 +4049,28 @@ function proofAssessmentAppliesToCheckpoint(
   );
 }
 
+function syncBlockedByShipPolicy(state: RiddleProofRunState) {
+  const shipMode = stringValue(state.request?.ship_mode);
+  const shipHeld = state.ship_held === true;
+  const shippingDisabled = state.shipping_disabled === true || shipMode === "none";
+  const shipAuthorized = state.ship_authorized === true;
+  if (!shippingDisabled && !shipHeld) return null;
+  if (shipAuthorized) return null;
+  return {
+    code: "riddle_proof_sync_ship_disabled",
+    message:
+      "Riddle Proof sync is disabled for this run because the proof is held by no-ship/ship policy. Report the terminal proof evidence instead of syncing PR/ship state.",
+    details: compactRecordValue({
+      state_path: state.state_path,
+      status: state.status,
+      ship_mode: shipMode || null,
+      ship_held: state.ship_held,
+      shipping_disabled: state.shipping_disabled,
+      ship_authorized: state.ship_authorized,
+    }),
+  };
+}
+
 export function inspectOpenClawRiddleProof(params: RiddleProofInspectParams) {
   const state = readRunState(params.state_path);
   if (!state) {
@@ -4321,6 +4343,18 @@ export async function syncOpenClawRiddleProof(
       details: { state_path: params.state_path },
     };
     return createRunResult({ state: request, status: "blocked", last_summary: request.blocker.message });
+  }
+
+  const shipPolicyBlocker = syncBlockedByShipPolicy(state);
+  if (shipPolicyBlocker) {
+    state.blocker = shipPolicyBlocker;
+    return createRunResult({
+      state,
+      status: "blocked",
+      state_path: params.state_path,
+      last_summary: shipPolicyBlocker.message,
+      raw: { sync_blocked: true, ship_policy_blocker: shipPolicyBlocker },
+    });
   }
 
   const engineStatePath = state.request.engine_state_path;
