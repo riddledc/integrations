@@ -2164,6 +2164,259 @@ def runtimeProjectionWithoutReferenceOrHardBlockers
     referenceValid := true
     hardBlockersClear := true }
 
+/-!
+Layer 8: public state summary projection.
+
+`summarizeRiddleProofPublicState` is the generic product-facing projection for
+agent wrappers, PR comments, hosted proof views, and status monitors. It is not
+OpenClaw-specific. The contract here is about safe public claims:
+
+* checkpoint, failed, and blocked handoff states dominate stale success-shaped
+  status fields
+* held and no-ship proof states cannot become merge/sync/ship authorization
+* `merge_ready` / `sync_allowed` are handoff permissions, not proof that a PR
+  has already shipped
+* checkpoint audit counters require disclosure instead of the claim that all
+  checkpoint responses were accepted
+-/
+
+inductive PublicRunStatus where
+  | running
+  | awaitingCheckpoint
+  | blocked
+  | failed
+  | readyToShip
+  | shipped
+  | completed
+  | passed
+  | unknown
+  deriving Repr, DecidableEq, BEq
+
+inductive PublicHandoffState where
+  | none
+  | proofCheckpointRequired
+  | proofReviewRequired
+  | proofBlocked
+  | proofFailed
+  | proofCompleteShipDisabled
+  | proofComplete
+  deriving Repr, DecidableEq, BEq
+
+inductive PublicPolicyState where
+  | awaitingCheckpoint
+  | proofBlocked
+  | proofFailed
+  | proofCompleteShipDisabled
+  | proofPassedShipHeld
+  | shipAuthorized
+  | proofPassed
+  | proofInProgress
+  | unknown
+  deriving Repr, DecidableEq, BEq
+
+structure PublicCheckpointProjection where
+  acceptedResponseCount : Nat
+  rejectedResponseCount : Nat
+  ignoredResponseCount : Nat
+  duplicateResponseCount : Nat
+  deriving Repr, DecidableEq
+
+structure PublicStateInput where
+  status : PublicRunStatus
+  ok : Option Bool
+  handoffState : PublicHandoffState
+  handoffProofComplete : Bool
+  shipModeNone : Bool
+  shippingDisabledExplicit : Option Bool
+  shipAuthorizedExplicit : Option Bool
+  authorizationEvidence : Bool
+  shipHeldExplicit : Option Bool
+  mergeReadyExplicit : Option Bool
+  normalPrAllowed : Option Bool
+  checkpoint : PublicCheckpointProjection
+  deriving Repr
+
+structure PublicStateSummary where
+  policyState : PublicPolicyState
+  proofComplete : Bool
+  proofPassed : Bool
+  shipHeld : Bool
+  shippingDisabled : Bool
+  shipAuthorized : Bool
+  mergeReady : Bool
+  syncAllowed : Bool
+  checkpointAuditDisclosureRequired : Bool
+  deriving Repr, DecidableEq
+
+def optionBoolTrue : Option Bool → Bool
+  | some true => true
+  | _ => false
+
+def optionBoolFalse : Option Bool → Bool
+  | some false => true
+  | _ => false
+
+def optionBoolGetD (value : Option Bool) (fallback : Bool) : Bool :=
+  match value with
+  | some bool => bool
+  | none => fallback
+
+def publicStatusProofComplete : PublicRunStatus → Bool
+  | PublicRunStatus.readyToShip => true
+  | PublicRunStatus.shipped => true
+  | PublicRunStatus.completed => true
+  | PublicRunStatus.passed => true
+  | _ => false
+
+def publicShippingDisabled (input : PublicStateInput) : Bool :=
+  optionBoolTrue input.shippingDisabledExplicit
+    || input.shipModeNone
+    || input.handoffState == PublicHandoffState.proofCompleteShipDisabled
+
+def publicShipAuthorizedBeforeHold (input : PublicStateInput) : Bool :=
+  optionBoolGetD input.shipAuthorizedExplicit input.authorizationEvidence
+
+def publicShipHeld (input : PublicStateInput) : Bool :=
+  optionBoolTrue input.shipHeldExplicit
+    || (input.status == PublicRunStatus.readyToShip
+      && publicShippingDisabled input
+      && !publicShipAuthorizedBeforeHold input)
+
+def publicShipAuthorized (input : PublicStateInput) : Bool :=
+  if publicShipHeld input then
+    false
+  else
+    publicShipAuthorizedBeforeHold input
+
+def publicProofComplete (input : PublicStateInput) : Bool :=
+  publicStatusProofComplete input.status
+    || optionBoolTrue input.ok
+    || input.handoffProofComplete
+
+def publicBlockedOrWaiting (input : PublicStateInput) : Bool :=
+  input.status == PublicRunStatus.blocked
+    || input.status == PublicRunStatus.failed
+    || input.status == PublicRunStatus.awaitingCheckpoint
+    || input.handoffState == PublicHandoffState.proofBlocked
+    || input.handoffState == PublicHandoffState.proofReviewRequired
+    || input.handoffState == PublicHandoffState.proofFailed
+    || input.handoffState == PublicHandoffState.proofCheckpointRequired
+
+def publicProofPassed (input : PublicStateInput) : Bool :=
+  publicProofComplete input && !publicBlockedOrWaiting input
+
+def publicBaseHandoffAllowed (input : PublicStateInput) : Bool :=
+  !publicBlockedOrWaiting input
+    && !publicShipHeld input
+    && !publicShippingDisabled input
+
+def publicMergeReady (input : PublicStateInput) : Bool :=
+  publicBaseHandoffAllowed input
+    && !optionBoolFalse input.normalPrAllowed
+    && optionBoolGetD input.mergeReadyExplicit (publicShipAuthorized input)
+
+def publicSyncAllowed (input : PublicStateInput) : Bool :=
+  publicMergeReady input
+
+def publicCheckpointAuditDisclosureRequired (input : PublicStateInput) : Bool :=
+  decide
+    (input.checkpoint.rejectedResponseCount > 0
+      ∨ input.checkpoint.ignoredResponseCount > 0
+      ∨ input.checkpoint.duplicateResponseCount > 0)
+
+def publicPolicyState (input : PublicStateInput) : PublicPolicyState :=
+  if input.status == PublicRunStatus.awaitingCheckpoint
+      || input.handoffState == PublicHandoffState.proofCheckpointRequired then
+    PublicPolicyState.awaitingCheckpoint
+  else if input.status == PublicRunStatus.failed
+      || input.handoffState == PublicHandoffState.proofFailed then
+    PublicPolicyState.proofFailed
+  else if input.status == PublicRunStatus.blocked
+      || input.handoffState == PublicHandoffState.proofBlocked
+      || input.handoffState == PublicHandoffState.proofReviewRequired then
+    PublicPolicyState.proofBlocked
+  else if input.handoffState == PublicHandoffState.proofCompleteShipDisabled then
+    PublicPolicyState.proofCompleteShipDisabled
+  else if publicProofComplete input
+      && publicShipHeld input
+      && !publicShipAuthorized input then
+    PublicPolicyState.proofPassedShipHeld
+  else if publicProofComplete input
+      && publicShippingDisabled input
+      && !publicShipAuthorized input then
+    PublicPolicyState.proofCompleteShipDisabled
+  else if publicShipAuthorized input then
+    PublicPolicyState.shipAuthorized
+  else if publicProofPassed input then
+    PublicPolicyState.proofPassed
+  else if input.status == PublicRunStatus.running then
+    PublicPolicyState.proofInProgress
+  else
+    PublicPolicyState.unknown
+
+def publicStateSummary (input : PublicStateInput) : PublicStateSummary where
+  policyState := publicPolicyState input
+  proofComplete := publicProofComplete input
+  proofPassed := publicProofPassed input
+  shipHeld := publicShipHeld input
+  shippingDisabled := publicShippingDisabled input
+  shipAuthorized := publicShipAuthorized input
+  mergeReady := publicMergeReady input
+  syncAllowed := publicSyncAllowed input
+  checkpointAuditDisclosureRequired :=
+    publicCheckpointAuditDisclosureRequired input
+
+def publicProhibitsShipAuthorizationClaim (input : PublicStateInput) : Bool :=
+  !publicShipAuthorized input || publicShipHeld input || publicShippingDisabled input
+
+def publicProhibitsMergeReadyClaim (input : PublicStateInput) : Bool :=
+  !publicMergeReady input
+
+def publicProhibitsSyncAllowedClaim (input : PublicStateInput) : Bool :=
+  !publicSyncAllowed input
+
+def publicProhibitsAllCheckpointResponsesAcceptedClaim
+    (input : PublicStateInput) : Bool :=
+  publicCheckpointAuditDisclosureRequired input
+
+theorem public_sync_allowed_matches_merge_ready
+    (input : PublicStateInput) :
+    publicSyncAllowed input = publicMergeReady input := by
+  rfl
+
+theorem public_summary_sync_allowed_matches_merge_ready
+    (input : PublicStateInput) :
+    (publicStateSummary input).syncAllowed =
+      (publicStateSummary input).mergeReady := by
+  rfl
+
+theorem public_held_state_is_not_ship_authorized
+    (input : PublicStateInput)
+    (hHeld : publicShipHeld input = true) :
+    publicShipAuthorized input = false := by
+  simp [publicShipAuthorized, hHeld]
+
+theorem public_blocked_or_waiting_blocks_merge_ready
+    (input : PublicStateInput)
+    (hBlocked : publicBlockedOrWaiting input = true) :
+    publicMergeReady input = false := by
+  simp [publicMergeReady, publicBaseHandoffAllowed, hBlocked]
+
+theorem public_blocked_or_waiting_blocks_sync
+    (input : PublicStateInput)
+    (hBlocked : publicBlockedOrWaiting input = true) :
+    publicSyncAllowed input = false := by
+  simp [
+    publicSyncAllowed,
+    public_blocked_or_waiting_blocks_merge_ready input hBlocked
+  ]
+
+theorem public_blocked_or_waiting_blocks_proof_passed
+    (input : PublicStateInput)
+    (hBlocked : publicBlockedOrWaiting input = true) :
+    publicProofPassed input = false := by
+  simp [publicProofPassed, hBlocked]
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
@@ -2384,6 +2637,161 @@ theorem missing_authoring_guard_passes_after_erasing_required_artifact :
 theorem missing_recon_guard_passes_with_unwitnessed_required_recon_artifact :
     processVerdictWithoutReconArtifacts exampleMissingReconArtifactProcess = Verdict.passed
       ∧ processVerdict exampleMissingReconArtifactProcess = Verdict.proofInsufficient := by
+  native_decide
+
+def publicNoCheckpointCounters : PublicCheckpointProjection where
+  acceptedResponseCount := 0
+  rejectedResponseCount := 0
+  ignoredResponseCount := 0
+  duplicateResponseCount := 0
+
+def publicExampleHeldReadyNoShip : PublicStateInput where
+  status := PublicRunStatus.readyToShip
+  ok := some true
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := true
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := some false
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := none
+  normalPrAllowed := none
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleNoShipHandoff : PublicStateInput where
+  status := PublicRunStatus.readyToShip
+  ok := some true
+  handoffState := PublicHandoffState.proofCompleteShipDisabled
+  handoffProofComplete := true
+  shipModeNone := true
+  shippingDisabledExplicit := some true
+  shipAuthorizedExplicit := some false
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some false
+  normalPrAllowed := some false
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleHandoffReadyNotAuthorized : PublicStateInput where
+  status := PublicRunStatus.readyToShip
+  ok := some true
+  handoffState := PublicHandoffState.proofComplete
+  handoffProofComplete := true
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleBlockedStaleCompleted : PublicStateInput where
+  status := PublicRunStatus.completed
+  ok := some true
+  handoffState := PublicHandoffState.proofReviewRequired
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleShippedAuthorized : PublicStateInput where
+  status := PublicRunStatus.shipped
+  ok := some true
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := some true
+  authorizationEvidence := true
+  shipHeldExplicit := none
+  mergeReadyExplicit := none
+  normalPrAllowed := none
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleCheckpointAudit : PublicStateInput where
+  status := PublicRunStatus.readyToShip
+  ok := some true
+  handoffState := PublicHandoffState.proofComplete
+  handoffProofComplete := true
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := {
+    acceptedResponseCount := 1
+    rejectedResponseCount := 2
+    ignoredResponseCount := 1
+    duplicateResponseCount := 1
+  }
+
+#eval publicStateSummary publicExampleHeldReadyNoShip
+#eval publicStateSummary publicExampleNoShipHandoff
+#eval publicStateSummary publicExampleHandoffReadyNotAuthorized
+#eval publicStateSummary publicExampleBlockedStaleCompleted
+#eval publicStateSummary publicExampleShippedAuthorized
+#eval publicStateSummary publicExampleCheckpointAudit
+
+theorem public_held_ready_no_ship_blocks_public_handoff :
+    publicPolicyState publicExampleHeldReadyNoShip =
+        PublicPolicyState.proofPassedShipHeld
+      ∧ publicShipHeld publicExampleHeldReadyNoShip = true
+      ∧ publicShippingDisabled publicExampleHeldReadyNoShip = true
+      ∧ publicShipAuthorized publicExampleHeldReadyNoShip = false
+      ∧ publicMergeReady publicExampleHeldReadyNoShip = false
+      ∧ publicSyncAllowed publicExampleHeldReadyNoShip = false := by
+  native_decide
+
+theorem public_no_ship_handoff_blocks_public_handoff :
+    publicPolicyState publicExampleNoShipHandoff =
+        PublicPolicyState.proofCompleteShipDisabled
+      ∧ publicShippingDisabled publicExampleNoShipHandoff = true
+      ∧ publicShipAuthorized publicExampleNoShipHandoff = false
+      ∧ publicMergeReady publicExampleNoShipHandoff = false
+      ∧ publicSyncAllowed publicExampleNoShipHandoff = false := by
+  native_decide
+
+theorem public_handoff_ready_can_merge_without_ship_authorization :
+    publicPolicyState publicExampleHandoffReadyNotAuthorized =
+        PublicPolicyState.proofPassed
+      ∧ publicShipAuthorized publicExampleHandoffReadyNotAuthorized = false
+      ∧ publicMergeReady publicExampleHandoffReadyNotAuthorized = true
+      ∧ publicSyncAllowed publicExampleHandoffReadyNotAuthorized = true
+      ∧ publicProhibitsShipAuthorizationClaim
+        publicExampleHandoffReadyNotAuthorized = true
+      ∧ publicProhibitsMergeReadyClaim
+        publicExampleHandoffReadyNotAuthorized = false := by
+  native_decide
+
+theorem public_blocked_handoff_dominates_stale_completed_status :
+    publicPolicyState publicExampleBlockedStaleCompleted =
+        PublicPolicyState.proofBlocked
+      ∧ publicProofPassed publicExampleBlockedStaleCompleted = false
+      ∧ publicMergeReady publicExampleBlockedStaleCompleted = false
+      ∧ publicSyncAllowed publicExampleBlockedStaleCompleted = false := by
+  native_decide
+
+theorem public_shipped_status_authorizes_ship_and_sync :
+    publicPolicyState publicExampleShippedAuthorized =
+        PublicPolicyState.shipAuthorized
+      ∧ publicShipAuthorized publicExampleShippedAuthorized = true
+      ∧ publicMergeReady publicExampleShippedAuthorized = true
+      ∧ publicSyncAllowed publicExampleShippedAuthorized = true := by
+  native_decide
+
+theorem public_checkpoint_audit_counters_require_disclosure :
+    publicCheckpointAuditDisclosureRequired publicExampleCheckpointAudit = true
+      ∧ publicProhibitsAllCheckpointResponsesAcceptedClaim
+        publicExampleCheckpointAudit = true := by
   native_decide
 
 end RiddleProofKernel
