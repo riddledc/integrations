@@ -854,16 +854,32 @@ export function createCheckpointResponseTemplate(
   }) as RiddleProofCheckpointResponse;
 }
 
+function acceptedCheckpointResponseEntries(state: RiddleProofRunState) {
+  const history = state.checkpoint_history || [];
+  const events = state.events || [];
+  const acceptedResponseEvents = events.filter((event) => event.kind === "checkpoint.response.accepted");
+  const hasCheckpointResponseEvents = events.some((event) => nonEmptyString(event.kind)?.startsWith("checkpoint.response."));
+  return history.filter((entry) => {
+    if (!entry.response) return false;
+    if (!hasCheckpointResponseEvents) return true;
+    return acceptedResponseEvents.some((event) => (
+      event.ts === entry.ts &&
+      (!event.checkpoint || event.checkpoint === entry.response?.checkpoint)
+    ));
+  });
+}
+
 export function checkpointSummaryFromState(
   state: RiddleProofRunState,
   engineStatePath?: string | null,
 ): RiddleProofCheckpointSummary {
   const history = state.checkpoint_history || [];
+  const events = state.events || [];
   const packets = history.filter((entry) => entry.packet);
-  const responses = history.filter((entry) => entry.response);
-  const duplicateResponses = (state.events || []).filter((event) => event.kind === "checkpoint.response.duplicate");
+  const responses = acceptedCheckpointResponseEntries(state);
+  const duplicateResponses = events.filter((event) => event.kind === "checkpoint.response.duplicate");
   const latestPacketEntry = [...history].reverse().find((entry) => entry.packet);
-  const latestResponseEntry = [...history].reverse().find((entry) => entry.response);
+  const latestResponseEntry = [...responses].reverse().find((entry) => entry.response);
   const latestPacket = state.checkpoint_packet || latestPacketEntry?.packet;
   const latestResponse = latestResponseEntry?.response;
   const latestResumeToken = latestPacket?.resume_token || null;
@@ -898,7 +914,7 @@ export function isDuplicateCheckpointResponse(
   response: RiddleProofCheckpointResponse,
 ) {
   const identity = checkpointResponseIdentity(response);
-  return (state.checkpoint_history || []).some((entry) => (
+  return acceptedCheckpointResponseEntries(state).some((entry) => (
     entry.response ? checkpointResponseIdentity(entry.response) === identity : false
   ));
 }

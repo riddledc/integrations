@@ -29,6 +29,7 @@ import {
   buildStageCheckpointPacket,
   checkpointSummaryFromState,
   createCheckpointResponseTemplate,
+  isDuplicateCheckpointResponse,
 } from "./dist/checkpoint.js";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -531,6 +532,45 @@ assert.equal(duplicateCheckpointSummary.response_count, 1);
 assert.equal(duplicateCheckpointSummary.duplicate_response_count, 1);
 assert.equal(duplicateCheckpointSummary.latest_decision, "blocked");
 
+const ignoredCheckpointSummary = checkpointSummaryFromState({
+  ...checkpointRunState,
+  checkpoint_packet: undefined,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:09:00.000Z",
+    response: blockedCheckpointResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:09:00.000Z",
+    kind: "checkpoint.response.ignored",
+  }],
+});
+assert.equal(ignoredCheckpointSummary.pending, false);
+assert.equal(ignoredCheckpointSummary.response_count, 0);
+assert.equal(ignoredCheckpointSummary.duplicate_response_count, 0);
+assert.equal(ignoredCheckpointSummary.latest_decision, undefined);
+assert.equal(isDuplicateCheckpointResponse({
+  ...checkpointRunState,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:09:00.000Z",
+    response: blockedCheckpointResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:09:00.000Z",
+    kind: "checkpoint.response.ignored",
+  }],
+}, blockedCheckpointResponse), false);
+assert.equal(isDuplicateCheckpointResponse({
+  ...checkpointRunState,
+  checkpoint_history: [{
+    ts: "2026-06-12T00:07:00.000Z",
+    response: blockedCheckpointResponse,
+  }],
+  events: [{
+    ts: "2026-06-12T00:07:00.000Z",
+    kind: "checkpoint.response.accepted",
+  }],
+}, blockedCheckpointResponse), true);
+
 const lifecycleRequest = {
   repo: "riddledc/example",
   branch: "formal-lifecycle",
@@ -636,6 +676,7 @@ console.log(JSON.stringify({
     shipGateRuntimeParity: true,
     checkpointDecisionContracts: true,
     checkpointLifecycleSummary: true,
+    checkpointIgnoredSummary: true,
     runCardProjection: true,
     runResultStatusProjection: true,
     staleRunCardSnapshotRefresh: true,

@@ -116,6 +116,8 @@ It models these obligations:
   packet
 - rejected responses keep the packet pending and do not count as accepted
 - duplicate responses increment duplicate count, not accepted response count
+- ignored late terminal responses do not count as accepted responses and do not
+  poison future duplicate detection
 - pending packets without a response do not report a token mismatch verdict
 
 The theorem `accepted_response_has_matching_advertised_packet` proves that an
@@ -257,6 +259,8 @@ Layer 4 adds checkpoint contract counterexamples:
   checkpoint responses must retain the pending packet.
 - `counting_rejected_response_inflates_accepted_count` shows why rejected
   checkpoint responses must not be folded into accepted response count.
+- `counting_ignored_response_inflates_accepted_count` shows why ignored late
+  terminal checkpoint responses must not be folded into accepted response count.
 - `pending_packet_without_response_has_no_token_match_verdict` caught a runtime
   summary bug: a pending tokenized packet with no response was reported as
   `token_matches: false` instead of leaving the comparison unset.

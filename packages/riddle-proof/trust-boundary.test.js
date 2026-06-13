@@ -86,6 +86,18 @@ function baseRequest(paths, changeRequest) {
   const terminalStateWithoutFinalizedFlag = readJson(paths.harnessStatePath);
   terminalStateWithoutFinalizedFlag.finalized = false;
   writeJson(paths.harnessStatePath, terminalStateWithoutFinalizedFlag);
+  const staleReadyResponse = {
+    version: 'riddle-proof.checkpoint_response.v1',
+    run_id: result.run_id,
+    checkpoint: 'author_supervisor_judgment',
+    decision: 'author_packet',
+    summary: 'Late manual author packet after terminal ready_to_ship.',
+    payload: {
+      proof_plan: 'stale proof plan',
+      capture_script: "return { passed: true, staleManualCheckpointProbe: true };",
+    },
+    created_at: '2026-06-01T14:27:30.000Z',
+  };
   const lateReadyCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: baseRequest(paths, 'Ready-to-ship run should ignore stale manual checkpoint responses even without finalized=true.'),
     state_path: paths.harnessStatePath,
@@ -94,28 +106,35 @@ function baseRequest(paths, changeRequest) {
         throw new Error('late checkpoint response after ready_to_ship should not call the engine');
       },
     },
-    checkpoint_response: {
-      version: 'riddle-proof.checkpoint_response.v1',
-      run_id: result.run_id,
-      checkpoint: 'author_supervisor_judgment',
-      decision: 'author_packet',
-      summary: 'Late manual author packet after terminal ready_to_ship.',
-      payload: {
-        proof_plan: 'stale proof plan',
-        capture_script: "return { passed: true, staleManualCheckpointProbe: true };",
-      },
-      created_at: '2026-06-01T14:27:30.000Z',
-    },
+    checkpoint_response: staleReadyResponse,
     max_iterations: 3,
     config: { defaultShipMode: 'none' },
   });
   assert(lateReadyCheckpointResponse.status === 'ready_to_ship', `late checkpoint response should preserve ready_to_ship, got ${lateReadyCheckpointResponse.status}`);
   assert(lateReadyCheckpointResponse.raw?.ignored_checkpoint_response === true, 'late ready checkpoint response should be explicitly ignored');
   assert(!lateReadyCheckpointResponse.blocker, 'late ready checkpoint response should not create a blocker');
+  assertNoGenericLifecycleFailure(lateReadyCheckpointResponse, 'late checkpoint response after ready_to_ship');
   const persistedReadyState = readJson(paths.harnessStatePath);
   assert(persistedReadyState.status === 'ready_to_ship', 'persisted ready_to_ship status should remain after late checkpoint response');
   assert(persistedReadyState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late ready checkpoint response should be recorded');
-  assertNoGenericLifecycleFailure(lateReadyCheckpointResponse, 'late checkpoint response after ready_to_ship');
+  assert(persistedReadyState.checkpoint_summary.response_count === 0, 'ignored late ready response must not count as an accepted checkpoint response');
+  assert(persistedReadyState.checkpoint_summary.latest_decision === undefined, 'ignored late ready response must not become the latest accepted decision');
+  const repeatedLateReadyCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Repeated stale checkpoint responses after ready_to_ship should still be ignored.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('repeated late checkpoint response after ready_to_ship should not call the engine');
+      },
+    },
+    checkpoint_response: staleReadyResponse,
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(repeatedLateReadyCheckpointResponse.status === 'ready_to_ship', `repeated late checkpoint response should preserve ready_to_ship, got ${repeatedLateReadyCheckpointResponse.status}`);
+  assert(repeatedLateReadyCheckpointResponse.raw?.ignored_checkpoint_response === true, 'repeated late ready checkpoint response should be explicitly ignored');
+  assert(!repeatedLateReadyCheckpointResponse.blocker, 'repeated late ready checkpoint response should not become a duplicate blocker');
+  assertNoGenericLifecycleFailure(repeatedLateReadyCheckpointResponse, 'repeated late checkpoint response after ready_to_ship');
 }
 
 {
@@ -410,6 +429,18 @@ function baseRequest(paths, changeRequest) {
   assert(calls.length === 1, 'audit completion should not loop');
   assertNoGenericLifecycleFailure(result, 'audit completion');
 
+  const staleCompletedResponse = {
+    version: 'riddle-proof.checkpoint_response.v1',
+    run_id: result.run_id,
+    checkpoint: 'verify_capture_retry',
+    decision: 'author_packet',
+    summary: 'Late manual response from a stale checkpoint surface.',
+    payload: {
+      proof_plan: 'stale proof plan',
+      capture_script: "await saveScreenshot('stale');",
+    },
+    created_at: '2026-06-01T04:00:00.000Z',
+  };
   const lateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: {
       ...baseRequest(paths, 'No-diff prod audit should ignore late manual checkpoint responses after terminal completion.'),
@@ -423,18 +454,7 @@ function baseRequest(paths, changeRequest) {
         throw new Error('late checkpoint response after terminal completion should not call the engine');
       },
     },
-    checkpoint_response: {
-      version: 'riddle-proof.checkpoint_response.v1',
-      run_id: result.run_id,
-      checkpoint: 'verify_capture_retry',
-      decision: 'author_packet',
-      summary: 'Late manual response from a stale checkpoint surface.',
-      payload: {
-        proof_plan: 'stale proof plan',
-        capture_script: "await saveScreenshot('stale');",
-      },
-      created_at: '2026-06-01T04:00:00.000Z',
-    },
+    checkpoint_response: staleCompletedResponse,
     max_iterations: 3,
     config: { defaultShipMode: 'none' },
   });
@@ -444,7 +464,30 @@ function baseRequest(paths, changeRequest) {
   const persistedAuditState = readJson(paths.harnessStatePath);
   assert(persistedAuditState.status === 'completed', 'persisted terminal status should remain completed after late checkpoint response');
   assert(persistedAuditState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late checkpoint response should be recorded as an event');
+  assert(persistedAuditState.checkpoint_summary.response_count === 0, 'ignored late completed response must not count as an accepted checkpoint response');
+  assert(persistedAuditState.checkpoint_summary.latest_decision === undefined, 'ignored late completed response must not become the latest accepted decision');
+  const repeatedLateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      ...baseRequest(paths, 'Repeated stale checkpoint responses after terminal completion should still be ignored.'),
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+    },
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('repeated late checkpoint response after terminal completion should not call the engine');
+      },
+    },
+    checkpoint_response: staleCompletedResponse,
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(repeatedLateCheckpointResponse.status === 'completed', `repeated late checkpoint response should preserve completed status, got ${repeatedLateCheckpointResponse.status}`);
+  assert(repeatedLateCheckpointResponse.raw?.ignored_checkpoint_response === true, 'repeated late completed checkpoint response should be explicitly ignored');
+  assert(!repeatedLateCheckpointResponse.blocker, 'repeated late completed checkpoint response should not become a duplicate blocker');
   assertNoGenericLifecycleFailure(lateCheckpointResponse, 'late checkpoint response after terminal completion');
+  assertNoGenericLifecycleFailure(repeatedLateCheckpointResponse, 'repeated late checkpoint response after terminal completion');
 }
 
 console.log(JSON.stringify({
