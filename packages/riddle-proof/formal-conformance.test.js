@@ -26,6 +26,9 @@ import {
   setRunStatus,
 } from "./dist/state.js";
 import {
+  summarizeRiddleProofAgentSummarySurface,
+  summarizeRiddleProofHostedProofViewSurface,
+  summarizeRiddleProofPublicConsumerSurface,
   summarizeRiddleProofPublicState,
 } from "./dist/public-state.js";
 import {
@@ -970,6 +973,39 @@ assert.equal(publicConsumerHeldSummary.merge_recommendation, undefined);
 assert.equal(publicConsumerHeldSummary.public_state?.result_label, "proof passed; ship held");
 assert.ok(publicConsumerHeldSummary.public_state?.prohibited_claims.includes("merge_ready"));
 assert.equal(publicConsumerHeldSummary.checkpoint_summary?.rejected_response_count, 1);
+const publicConsumerHeldHostedView = summarizeRiddleProofHostedProofViewSurface({
+  ok: true,
+  status: "ready_to_ship",
+  ship_mode: "none",
+  ship_authorized: false,
+  merge_recommendation: "ready-to-ship",
+  checkpoint_summary: {
+    pending: false,
+    response_count: 1,
+    rejected_response_count: 1,
+  },
+});
+assert.equal(publicConsumerHeldHostedView.kind, "hosted_proof_view");
+assert.equal(publicConsumerHeldHostedView.result_label, "proof passed; ship held");
+assert.equal(publicConsumerHeldHostedView.claims.proof_passed, true);
+assert.equal(publicConsumerHeldHostedView.claims.ship_authorized, false);
+assert.equal(publicConsumerHeldHostedView.claims.merge_ready, false);
+assert.equal(publicConsumerHeldHostedView.claims.sync_allowed, false);
+assert.equal(publicConsumerHeldHostedView.claims.all_checkpoint_responses_accepted, false);
+assert.equal(publicConsumerHeldHostedView.handoff.merge_recommendation, undefined);
+assert.equal(publicConsumerHeldHostedView.disclosures.ship_control, true);
+assert.equal(publicConsumerHeldHostedView.disclosures.checkpoint_audit, true);
+assert.equal(publicConsumerHeldHostedView.checkpoint_audit?.rejected_response_count, 1);
+const publicConsumerHeldAgentSummary = summarizeRiddleProofAgentSummarySurface({
+  ok: true,
+  status: "ready_to_ship",
+  ship_mode: "none",
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerHeldAgentSummary.kind, "agent_summary");
+assert.equal(publicConsumerHeldAgentSummary.handoff.merge_recommendation, undefined);
+assert.equal(publicConsumerHeldAgentSummary.claims.merge_ready, false);
+assert.equal(publicConsumerHeldAgentSummary.claims.sync_allowed, false);
 
 const publicConsumerReadyMarkdown = buildRiddleProofPrCommentMarkdown({
   runResponse: publicConsumerRunResponse,
@@ -1006,6 +1042,21 @@ const publicConsumerReadySummary = summarizeRiddleProofPrComment({
 assert.equal(publicConsumerReadySummary.merge_ready, true);
 assert.equal(publicConsumerReadySummary.sync_allowed, true);
 assert.equal(publicConsumerReadySummary.merge_recommendation, "ready-to-ship");
+const publicConsumerReadyHostedView = summarizeRiddleProofHostedProofViewSurface({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete",
+    proof_complete: true,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerReadyHostedView.claims.ship_authorized, false);
+assert.equal(publicConsumerReadyHostedView.claims.merge_ready, true);
+assert.equal(publicConsumerReadyHostedView.claims.sync_allowed, true);
+assert.equal(publicConsumerReadyHostedView.handoff.merge_recommendation, "ready-to-ship");
 
 const publicConsumerBlockedMarkdown = buildRiddleProofPrCommentMarkdown({
   runResponse: publicConsumerRunResponse,
@@ -1041,6 +1092,31 @@ const publicConsumerBlockedSummary = summarizeRiddleProofPrComment({
 assert.equal(publicConsumerBlockedSummary.merge_ready, false);
 assert.equal(publicConsumerBlockedSummary.sync_allowed, false);
 assert.equal(publicConsumerBlockedSummary.merge_recommendation, undefined);
+const publicConsumerBlockedAgentSummary = summarizeRiddleProofAgentSummarySurface({
+  ok: true,
+  status: "completed",
+  pr_handoff_policy: {
+    state: "proof_review_required",
+    proof_complete: false,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerBlockedAgentSummary.result_label, "blocked");
+assert.equal(publicConsumerBlockedAgentSummary.claims.proof_passed, false);
+assert.equal(publicConsumerBlockedAgentSummary.claims.merge_ready, false);
+assert.equal(publicConsumerBlockedAgentSummary.claims.sync_allowed, false);
+assert.equal(publicConsumerBlockedAgentSummary.handoff.merge_recommendation, undefined);
+assert.ok(publicConsumerBlockedAgentSummary.disclosures.prohibited_claims.includes("ready_to_ship"));
+const publicConsumerDefaultSurface = summarizeRiddleProofPublicConsumerSurface({
+  ok: true,
+  status: "ready_to_ship",
+  ship_mode: "none",
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerDefaultSurface.kind, "run_result");
+assert.equal(publicConsumerDefaultSurface.handoff.merge_recommendation, undefined);
 
 console.log(JSON.stringify({
   ok: true,

@@ -1328,6 +1328,34 @@ theorem human_checkpoint_response_source_can_hold_ready_to_ship :
       CheckpointResponseSourceKind.human = true := by
   native_decide
 
+def checkpointResponseReadyHoldWithProofGate
+    (state : CheckpointRunState)
+    (response : CheckpointResponse)
+    (source : CheckpointResponseSourceKind)
+    (hardBlockersPresent : Bool) : Bool :=
+  checkpointResponseReadyHoldWithSourceGuard state response source
+    && !hardBlockersPresent
+
+theorem human_checkpoint_response_with_hard_blocker_cannot_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithSourceGuard
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse
+        CheckpointResponseSourceKind.human = true
+      ∧ checkpointResponseReadyHoldWithProofGate
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse
+        CheckpointResponseSourceKind.human
+        true = false := by
+  native_decide
+
+theorem human_checkpoint_response_without_hard_blocker_can_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithProofGate
+      exampleVerifyProofState
+      exampleVerifyReadyToShipResponse
+      CheckpointResponseSourceKind.human
+      false = true := by
+  native_decide
+
 /-!
 Layer 4.5: checkpoint lifecycle summary semantics.
 
