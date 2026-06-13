@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.54
+
+### Patch Changes
+
+- af2bf1d: Preserve checkpoint response source authority when converting proof checkpoint responses into proof assessments, blocking explicit untrusted sources from approving `ready_to_ship`.
+
 ## 0.8.53
 
 ### Patch Changes
