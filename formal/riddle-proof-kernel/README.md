@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has ten named layers.
+The model in `RiddleProofKernel.lean` now has eleven named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -230,6 +230,25 @@ being `ship_authorized`. The theorem
 `public_blocked_handoff_dominates_stale_completed_status` proves that a blocked
 or review-required handoff suppresses stale success-shaped status fields.
 
+## Layer 9: Public-State Consumer Conformance
+
+The Layer 9 model covers downstream surfaces that consume public state: PR
+comments, hosted summaries, status monitors, and agent summaries.
+
+It models these obligations:
+
+- consumer surfaces must not reintroduce claims that public state prohibits
+- held or shipping-disabled states must disclose ship control
+- checkpoint audit counters must remain disclosed by public consumers
+- generated consumers derived from public state conform by construction
+
+The theorem `public_consumer_surface_from_state_conforms` proves the positive
+contract for generated surfaces. The counterexample
+`stale_merge_recommendation_consumer_violates_held_public_state` shows that a
+stale merge-ready recommendation violates held/no-ship public state, and
+`missing_checkpoint_audit_consumer_violates_public_state` shows that checkpoint
+audit counters cannot be hidden by a downstream surface.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -348,6 +367,17 @@ Layer 8 adds public-state projection checks:
 - `public_checkpoint_audit_counters_require_disclosure` shows that rejected,
   ignored, or duplicate checkpoint response counters must remain visible in
   public summaries.
+
+Layer 9 adds public-state consumer checks:
+
+- `stale_merge_recommendation_consumer_violates_held_public_state` caught a
+  real PR-comment drift: the comment could repeat a raw `ready-to-ship` merge
+  recommendation even when `public_state` prohibited merge/sync claims. The
+  comment now emits explicit handoff booleans and suppresses stale merge
+  recommendations under those prohibited claims.
+- `missing_checkpoint_audit_consumer_violates_public_state` shows that a
+  public consumer cannot hide rejected, ignored, or duplicate checkpoint
+  counters once public state requires that disclosure.
 
 ## Build
 

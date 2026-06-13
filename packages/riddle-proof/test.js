@@ -362,6 +362,8 @@ assert.equal(heldPrCommentSummary.result_status, "ready_to_ship");
 assert.equal(heldPrCommentSummary.ship_held, true);
 assert.equal(heldPrCommentSummary.shipping_disabled, true);
 assert.equal(heldPrCommentSummary.ship_authorized, false);
+assert.equal(heldPrCommentSummary.merge_ready, false);
+assert.equal(heldPrCommentSummary.sync_allowed, false);
 assert.equal(heldPrCommentSummary.public_state?.policy_state, "proof_passed_ship_held");
 assert.equal(heldPrCommentSummary.checkpoint_summary?.rejected_response_count, 2);
 assert.equal(heldPrCommentSummary.checkpoint_summary?.ignored_response_count, 1);
@@ -373,8 +375,62 @@ const heldPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
 assert.match(heldPrCommentMarkdown, /\*\*Result:\*\* proof passed; ship held/);
 assert.match(heldPrCommentMarkdown, /\*\*Evidence status:\*\* ready_to_ship/);
 assert.match(heldPrCommentMarkdown, /\*\*Ship control:\*\* held=true, shipping_disabled=true, authorized=false/);
+assert.match(heldPrCommentMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
 assert.match(heldPrCommentMarkdown, /\*\*Proof decision:\*\* `ready_to_ship`/);
 assert.match(heldPrCommentMarkdown, /\*\*Checkpoints:\*\* 1 accepted \/ 2 rejected \/ 1 ignored \/ 1 duplicate; complete; latest decision `ready_to_ship`/);
+assert.doesNotMatch(heldPrCommentMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+
+const handoffReadyPrCommentResult = {
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete",
+    proof_complete: true,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+  merge_recommendation: "ready-to-ship",
+  pages: [
+    { route: "/checkout", checks: { preservedCart: true } },
+  ],
+};
+const handoffReadyPrCommentSummary = summarizeRiddleProofPrComment({
+  runResponse: prCommentRunResponse,
+  result: handoffReadyPrCommentResult,
+});
+assert.equal(handoffReadyPrCommentSummary.ship_authorized, false);
+assert.equal(handoffReadyPrCommentSummary.merge_ready, true);
+assert.equal(handoffReadyPrCommentSummary.sync_allowed, true);
+const handoffReadyPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
+  title: "Riddle Proof Handoff Evidence",
+  runResponse: prCommentRunResponse,
+  result: handoffReadyPrCommentResult,
+});
+assert.match(handoffReadyPrCommentMarkdown, /\*\*Result:\*\* passed/);
+assert.match(handoffReadyPrCommentMarkdown, /\*\*Handoff:\*\* merge_ready=true, sync_allowed=true/);
+assert.match(handoffReadyPrCommentMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+assert.doesNotMatch(handoffReadyPrCommentMarkdown, /authorized=true/);
+
+const blockedConsumerPrCommentResult = {
+  ok: true,
+  status: "completed",
+  pr_handoff_policy: {
+    state: "proof_review_required",
+    proof_complete: false,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+  merge_recommendation: "ready-to-ship",
+};
+const blockedConsumerPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
+  title: "Riddle Proof Blocked Evidence",
+  runResponse: prCommentRunResponse,
+  result: blockedConsumerPrCommentResult,
+});
+assert.match(blockedConsumerPrCommentMarkdown, /\*\*Result:\*\* blocked/);
+assert.match(blockedConsumerPrCommentMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
+assert.doesNotMatch(blockedConsumerPrCommentMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+assert.doesNotMatch(blockedConsumerPrCommentMarkdown, /\*\*Result:\*\* passed/);
 
 const heldPublicState = summarizeRiddleProofPublicState({
   ok: true,
