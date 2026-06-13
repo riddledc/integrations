@@ -1,3 +1,5 @@
+import type { RiddleProofPublicStateSummary } from "./public-state";
+
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 export type JsonObject = { [key: string]: JsonValue };
@@ -343,14 +345,18 @@ export interface RiddleProofRunCard {
   stop_condition: {
     status: RiddleProofStatus;
     terminal?: boolean;
+    result_label?: string;
     ship_held?: boolean;
     shipping_disabled?: boolean;
     ship_authorized?: boolean;
+    merge_ready?: boolean;
+    sync_allowed?: boolean;
     blocker_code?: string | null;
     blocker_message?: string | null;
     proof_decision?: RiddleProofDecision;
     merge_recommendation?: string;
     monitor_should_continue?: boolean;
+    public_state?: RiddleProofPublicStateSummary;
   };
   updated_at: string;
 }
@@ -453,9 +459,13 @@ export interface RiddleProofRunResult {
   pr_state?: RiddleProofPrLifecycleState;
   marked_ready?: boolean;
   left_draft?: boolean;
+  result_label?: string;
   ship_held?: boolean;
   shipping_disabled?: boolean;
   ship_authorized?: boolean;
+  merge_ready?: boolean;
+  sync_allowed?: boolean;
+  public_state?: RiddleProofPublicStateSummary;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;
@@ -495,9 +505,13 @@ export interface RiddleProofRunStatusSnapshot {
   pr_url?: string | null;
   pr_branch?: string | null;
   pr_state?: RiddleProofPrLifecycleState;
+  result_label?: string;
   ship_held?: boolean;
   shipping_disabled?: boolean;
   ship_authorized?: boolean;
+  merge_ready?: boolean;
+  sync_allowed?: boolean;
+  public_state?: RiddleProofPublicStateSummary;
   ci_status?: string;
   ship_commit?: string;
   ship_remote_head?: string;

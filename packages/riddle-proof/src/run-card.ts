@@ -4,7 +4,14 @@ import type {
   RiddleProofRunState,
   RiddleProofStatePaths,
 } from "./types";
-import { compactRecord, isTerminalStatus, nonEmptyString, recordValue, shipControlStateFor } from "./result";
+import {
+  compactRecord,
+  isTerminalStatus,
+  nonEmptyString,
+  publicMergeRecommendationForRunState,
+  publicStateForRunState,
+  recordValue,
+} from "./result";
 import { statePathsForRunState } from "./checkpoint";
 
 export const RIDDLE_PROOF_RUN_CARD_VERSION = "riddle-proof.run-card.v1" as const;
@@ -223,7 +230,8 @@ export function createRiddleProofRunCard(
   const visualDelta = visualDeltaFrom({ fullRiddleState: fullState, runState: state });
   const artifacts = artifactsFrom({ fullRiddleState: fullState, runState: state });
   const viewportMatrix = viewportMatrixFrom({ fullRiddleState: fullState, runState: state });
-  const shipControl = shipControlStateFor({ state });
+  const publicState = publicStateForRunState({ state, status: state.status });
+  const publicMergeRecommendation = publicMergeRecommendationForRunState({ state, status: state.status });
 
   return {
     version: RIDDLE_PROOF_RUN_CARD_VERSION,
@@ -278,14 +286,18 @@ export function createRiddleProofRunCard(
     stop_condition: compactRecord({
       status: state.status,
       terminal: isTerminalStatus(state.status),
-      ship_held: shipControl.ship_held,
-      shipping_disabled: shipControl.shipping_disabled,
-      ship_authorized: shipControl.ship_authorized,
+      result_label: publicState.result_label,
+      ship_held: publicState.ship_held,
+      shipping_disabled: publicState.shipping_disabled,
+      ship_authorized: publicState.ship_authorized,
+      merge_ready: publicState.merge_ready,
+      sync_allowed: publicState.sync_allowed,
       blocker_code: state.blocker?.code || null,
       blocker_message: state.blocker?.message || null,
       proof_decision: state.proof_decision,
-      merge_recommendation: state.merge_recommendation,
+      merge_recommendation: publicMergeRecommendation,
       monitor_should_continue: !isTerminalStatus(state.status),
+      public_state: publicState,
     }) as RiddleProofRunCard["stop_condition"],
     updated_at: state.updated_at,
   };

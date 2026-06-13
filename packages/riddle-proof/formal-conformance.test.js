@@ -704,6 +704,7 @@ const heldReadyNoShipState = createRunState({
   created_at: "2026-06-12T01:05:00.000Z",
 });
 setRunStatus(heldReadyNoShipState, "ready_to_ship", "2026-06-12T01:05:10.000Z");
+heldReadyNoShipState.merge_recommendation = "ready-to-ship";
 heldReadyNoShipState.run_card = createRiddleProofRunCard(heldReadyNoShipState, { at: "2026-06-12T01:05:10.000Z" });
 const heldReadyNoShipResult = createRunResult({
   state: heldReadyNoShipState,
@@ -715,15 +716,66 @@ assert.equal(isSuccessfulStatus(heldReadyNoShipResult.status), true);
 assert.equal(heldReadyNoShipResult.ship_held, true);
 assert.equal(heldReadyNoShipResult.shipping_disabled, true);
 assert.equal(heldReadyNoShipResult.ship_authorized, false);
+assert.equal(heldReadyNoShipResult.merge_ready, false);
+assert.equal(heldReadyNoShipResult.sync_allowed, false);
+assert.equal(heldReadyNoShipResult.result_label, "proof passed; ship held");
+assert.equal(heldReadyNoShipResult.merge_recommendation, undefined);
+assert.ok(heldReadyNoShipResult.public_state?.prohibited_claims.includes("merge_ready"));
+assert.ok(heldReadyNoShipResult.public_state?.prohibited_claims.includes("sync_allowed"));
 assert.equal(heldReadyNoShipResult.run_card.stop_condition.ship_held, true);
 assert.equal(heldReadyNoShipResult.run_card.stop_condition.shipping_disabled, true);
 assert.equal(heldReadyNoShipResult.run_card.stop_condition.ship_authorized, false);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.merge_ready, false);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.sync_allowed, false);
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.result_label, "proof passed; ship held");
+assert.equal(heldReadyNoShipResult.run_card.stop_condition.merge_recommendation, undefined);
+assert.ok(heldReadyNoShipResult.run_card.stop_condition.public_state?.prohibited_claims.includes("merge_ready"));
 const heldReadyNoShipSnapshot = createRunStatusSnapshot(heldReadyNoShipState, "2026-06-12T01:05:20.000Z");
 assert.equal(heldReadyNoShipSnapshot.ship_held, true);
 assert.equal(heldReadyNoShipSnapshot.shipping_disabled, true);
 assert.equal(heldReadyNoShipSnapshot.ship_authorized, false);
+assert.equal(heldReadyNoShipSnapshot.merge_ready, false);
+assert.equal(heldReadyNoShipSnapshot.sync_allowed, false);
+assert.equal(heldReadyNoShipSnapshot.result_label, "proof passed; ship held");
+assert.ok(heldReadyNoShipSnapshot.public_state?.prohibited_claims.includes("sync_allowed"));
 assert.equal(heldReadyNoShipSnapshot.run_card.stop_condition.ship_held, true);
 assert.equal(heldReadyNoShipSnapshot.run_card.stop_condition.ship_authorized, false);
+assert.equal(heldReadyNoShipSnapshot.run_card.stop_condition.merge_recommendation, undefined);
+
+const handoffReadyRunState = createRunState({
+  request: {
+    repo: "riddledc/example",
+    branch: "proof/public-handoff",
+    change_request: "Verify public handoff surface semantics.",
+  },
+  run_id: "run_formal_lifecycle_handoff_ready_not_authorized",
+  created_at: "2026-06-12T01:06:00.000Z",
+});
+handoffReadyRunState.pr_handoff_policy = {
+  state: "proof_complete",
+  proof_complete: true,
+  merge_ready: true,
+  normal_pr_allowed: true,
+};
+handoffReadyRunState.merge_recommendation = "ready-to-ship";
+setRunStatus(handoffReadyRunState, "ready_to_ship", "2026-06-12T01:06:10.000Z");
+handoffReadyRunState.run_card = createRiddleProofRunCard(handoffReadyRunState, { at: "2026-06-12T01:06:10.000Z" });
+const handoffReadyRunResult = createRunResult({
+  state: handoffReadyRunState,
+  status: "ready_to_ship",
+  last_summary: "Ready for normal handoff.",
+});
+assert.equal(handoffReadyRunResult.ship_authorized, false);
+assert.equal(handoffReadyRunResult.merge_ready, true);
+assert.equal(handoffReadyRunResult.sync_allowed, true);
+assert.equal(handoffReadyRunResult.result_label, "passed");
+assert.equal(handoffReadyRunResult.merge_recommendation, "ready-to-ship");
+assert.ok(handoffReadyRunResult.public_state?.prohibited_claims.includes("ship_authorized"));
+assert.equal(handoffReadyRunResult.public_state?.prohibited_claims.includes("merge_ready"), false);
+assert.equal(handoffReadyRunResult.run_card.stop_condition.ship_authorized, false);
+assert.equal(handoffReadyRunResult.run_card.stop_condition.merge_ready, true);
+assert.equal(handoffReadyRunResult.run_card.stop_condition.sync_allowed, true);
+assert.equal(handoffReadyRunResult.run_card.stop_condition.merge_recommendation, "ready-to-ship");
 
 const staleCardState = createRunState({
   request: lifecycleRequest,
@@ -951,5 +1003,6 @@ console.log(JSON.stringify({
     publicStateHandoffReadiness: true,
     publicStateAuditDisclosure: true,
     publicStateConsumerConformance: true,
+    publicStateRunSurfaceConformance: true,
   },
 }));

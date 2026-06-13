@@ -2938,4 +2938,15 @@ theorem generated_public_consumer_surface_handles_handoff_ready :
           publicExampleHandoffReadyNotAuthorized).claimsSyncAllowed = true := by
   native_decide
 
+theorem generated_run_status_surface_from_public_state_conforms
+    (input : PublicStateInput) :
+    publicConsumerSurfaceConforms input
+      (publicConsumerSurfaceFromState input) = true := by
+  exact public_consumer_surface_from_state_conforms input
+
+theorem stale_run_status_surface_violates_held_public_state :
+    publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
+      publicConsumerStaleMergeRecommendation = false := by
+  native_decide
+
 end RiddleProofKernel
