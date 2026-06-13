@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.55
+
+### Patch Changes
+
+- 15e6f7f: Expose held-ready ship semantics in run results, status snapshots, and run cards so `ship_mode=none` proof readiness is not confused with ship authorization.
+
 ## 0.8.54
 
 ### Patch Changes
