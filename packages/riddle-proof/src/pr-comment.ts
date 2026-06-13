@@ -15,9 +15,21 @@ export interface RiddleProofPrCommentPageSummary {
   failed: number;
 }
 
+export interface RiddleProofPrCommentCheckpointSummary {
+  pending?: boolean;
+  response_count?: number;
+  rejected_response_count?: number;
+  ignored_response_count?: number;
+  duplicate_response_count?: number;
+  latest_decision?: string;
+  latest_packet_id?: string;
+  latest_resume_token?: string;
+}
+
 export interface RiddleProofPrCommentSummary {
   ok: boolean | null;
   status?: string;
+  result_status?: string;
   job_id?: string;
   duration_ms?: number;
   proof_url?: string;
@@ -25,6 +37,12 @@ export interface RiddleProofPrCommentSummary {
   preview_url?: string;
   preview_publish_recovered?: boolean;
   preview_publish_error?: string;
+  ship_held?: boolean;
+  shipping_disabled?: boolean;
+  ship_authorized?: boolean;
+  proof_decision?: string;
+  merge_recommendation?: string;
+  checkpoint_summary?: RiddleProofPrCommentCheckpointSummary;
   passed_checks: number;
   failed_checks: number;
   pages: RiddleProofPrCommentPageSummary[];
@@ -61,6 +79,22 @@ function numberValue(value: unknown): number | undefined {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function firstStringValue(...values: unknown[]) {
+  for (const value of values) {
+    const text = stringValue(value);
+    if (text) return text;
+  }
+  return undefined;
+}
+
+function firstBooleanValue(...values: unknown[]) {
+  for (const value of values) {
+    const bool = booleanValue(value);
+    if (typeof bool === "boolean") return bool;
+  }
+  return undefined;
 }
 
 function artifactKind(name: string, url: string): RiddleProofPrCommentArtifactKind {
@@ -148,20 +182,57 @@ function selectPrimaryImage(artifacts: RiddleProofPrCommentArtifact[]) {
   );
 }
 
+function firstRecordValue(...values: unknown[]) {
+  for (const value of values) {
+    const record = asRecord(value);
+    if (Object.keys(record).length) return record;
+  }
+  return undefined;
+}
+
+function checkpointSummaryFrom(...values: unknown[]): RiddleProofPrCommentCheckpointSummary | undefined {
+  const record = firstRecordValue(...values);
+  if (!record) return undefined;
+  const summary: RiddleProofPrCommentCheckpointSummary = {
+    pending: booleanValue(record.pending),
+    response_count: numberValue(record.response_count),
+    rejected_response_count: numberValue(record.rejected_response_count),
+    ignored_response_count: numberValue(record.ignored_response_count),
+    duplicate_response_count: numberValue(record.duplicate_response_count),
+    latest_decision: stringValue(record.latest_decision),
+    latest_packet_id: stringValue(record.latest_packet_id),
+    latest_resume_token: stringValue(record.latest_resume_token),
+  };
+  return Object.values(summary).some((value) => typeof value !== "undefined") ? summary : undefined;
+}
+
 export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput): RiddleProofPrCommentSummary {
   const runResponse = asRecord(input.runResponse);
   const result = asRecord(input.result);
   const proofResult = asRecord(runResponse.proofResult);
   const preview = asRecord(runResponse.preview);
+  const resultRunCard = asRecord(result.run_card);
+  const stopCondition = asRecord(resultRunCard.stop_condition);
+  const resultDetails = asRecord(result.details);
+  const resultRaw = asRecord(result.raw);
+  const rawDetails = asRecord(resultRaw.details);
   const artifacts = collectArtifacts(runResponse);
   const pages = pageSummaries(result);
   const checkSource = { ...result };
   delete checkSource.ok;
   const nestedChecks = summarizeExplicitChecks(checkSource);
   const ok = booleanValue(result.ok) ?? booleanValue(runResponse.ok) ?? null;
+  const checkpointSummary = checkpointSummaryFrom(
+    result.checkpoint_summary,
+    stopCondition.checkpoint_summary,
+    resultDetails.checkpoint_summary,
+    rawDetails.checkpoint_summary,
+    proofResult.checkpoint_summary,
+  );
   return {
     ok,
     status: stringValue(proofResult.status),
+    result_status: firstStringValue(result.status, stopCondition.status),
     job_id: stringValue(proofResult.job_id),
     duration_ms: numberValue(proofResult.duration_ms),
     proof_url: stringValue(runResponse.proofUrl),
@@ -169,6 +240,12 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     preview_url: stringValue(preview.preview_url) || stringValue(preview.url),
     preview_publish_recovered: booleanValue(preview.publish_recovered),
     preview_publish_error: stringValue(preview.publish_error),
+    ship_held: firstBooleanValue(result.ship_held, stopCondition.ship_held, resultRaw.ship_held),
+    shipping_disabled: firstBooleanValue(result.shipping_disabled, stopCondition.shipping_disabled, resultRaw.shipping_disabled),
+    ship_authorized: firstBooleanValue(result.ship_authorized, stopCondition.ship_authorized, resultRaw.ship_authorized),
+    proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
+    merge_recommendation: firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
+    checkpoint_summary: checkpointSummary,
     passed_checks: nestedChecks.passed,
     failed_checks: nestedChecks.failed,
     pages,
@@ -190,9 +267,15 @@ function markdownLink(label: string, url: string) {
 }
 
 function resultLabel(summary: RiddleProofPrCommentSummary) {
-  if (summary.ok === true) return "passed";
+  if (summary.ok === true) {
+    if (summary.result_status === "shipped") return "shipped";
+    if (summary.result_status === "completed") return "completed";
+    if (summary.ship_held === true) return "proof passed; ship held";
+    if (summary.ship_authorized === true) return "passed; ship authorized";
+    return "passed";
+  }
   if (summary.ok === false) return "failed";
-  return summary.status || "recorded";
+  return summary.result_status || summary.status || "recorded";
 }
 
 function artifactRank(artifact: RiddleProofPrCommentArtifact) {
@@ -204,6 +287,30 @@ function artifactRank(artifact: RiddleProofPrCommentArtifact) {
   if (artifact.kind === "data") return 10;
   if (artifact.kind === "image") return 20;
   return 30;
+}
+
+function formatBool(value: boolean | undefined) {
+  return typeof value === "boolean" ? String(value) : "unknown";
+}
+
+function hasShipControl(summary: RiddleProofPrCommentSummary) {
+  return typeof summary.ship_held === "boolean" ||
+    typeof summary.shipping_disabled === "boolean" ||
+    typeof summary.ship_authorized === "boolean";
+}
+
+function checkpointSummaryLine(summary: RiddleProofPrCommentCheckpointSummary) {
+  const accepted = summary.response_count ?? 0;
+  const rejected = summary.rejected_response_count ?? 0;
+  const ignored = summary.ignored_response_count ?? 0;
+  const parts = [`${accepted} accepted`, `${rejected} rejected`, `${ignored} ignored`];
+  if ((summary.duplicate_response_count ?? 0) > 0) parts.push(`${summary.duplicate_response_count} duplicate`);
+  const state = summary.pending === true ? "pending" : summary.pending === false ? "complete" : "";
+  return [
+    parts.join(" / "),
+    state,
+    summary.latest_decision ? `latest decision \`${summary.latest_decision}\`` : "",
+  ].filter(Boolean).join("; ");
 }
 
 export function buildRiddleProofPrCommentMarkdown(input: RiddleProofPrCommentInput) {
@@ -218,9 +325,16 @@ export function buildRiddleProofPrCommentMarkdown(input: RiddleProofPrCommentInp
 
   if (input.goal?.trim()) lines.push(`**Goal:** ${input.goal.trim()}`);
   if (input.successCriteria?.trim()) lines.push(`**Success criteria:** ${input.successCriteria.trim()}`);
+  if (summary.result_status) lines.push(`**Evidence status:** ${summary.result_status}`);
   if (summary.status) lines.push(`**Riddle job status:** ${summary.status}`);
   if (summary.job_id) lines.push(`**Riddle job:** \`${summary.job_id}\``);
   if (summary.duration_ms) lines.push(`**Duration:** ${formatDuration(summary.duration_ms)}`);
+  if (hasShipControl(summary)) {
+    lines.push(`**Ship control:** held=${formatBool(summary.ship_held)}, shipping_disabled=${formatBool(summary.shipping_disabled)}, authorized=${formatBool(summary.ship_authorized)}`);
+  }
+  if (summary.proof_decision) lines.push(`**Proof decision:** \`${summary.proof_decision}\``);
+  if (summary.merge_recommendation) lines.push(`**Merge recommendation:** ${summary.merge_recommendation}`);
+  if (summary.checkpoint_summary) lines.push(`**Checkpoints:** ${checkpointSummaryLine(summary.checkpoint_summary)}`);
   if (summary.proof_url) lines.push(`**Proof URL:** ${markdownLink(summary.proof_url, summary.proof_url)}`);
   if (summary.preview_id || summary.preview_url) {
     const previewLabel = summary.preview_id ? `\`${summary.preview_id}\`` : "preview";
