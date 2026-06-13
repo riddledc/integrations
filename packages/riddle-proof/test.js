@@ -364,6 +364,7 @@ assert.equal(heldPrCommentSummary.shipping_disabled, true);
 assert.equal(heldPrCommentSummary.ship_authorized, false);
 assert.equal(heldPrCommentSummary.merge_ready, false);
 assert.equal(heldPrCommentSummary.sync_allowed, false);
+assert.equal(heldPrCommentSummary.merge_recommendation, undefined);
 assert.equal(heldPrCommentSummary.public_state?.policy_state, "proof_passed_ship_held");
 assert.equal(heldPrCommentSummary.checkpoint_summary?.rejected_response_count, 2);
 assert.equal(heldPrCommentSummary.checkpoint_summary?.ignored_response_count, 1);
@@ -401,6 +402,7 @@ const handoffReadyPrCommentSummary = summarizeRiddleProofPrComment({
 assert.equal(handoffReadyPrCommentSummary.ship_authorized, false);
 assert.equal(handoffReadyPrCommentSummary.merge_ready, true);
 assert.equal(handoffReadyPrCommentSummary.sync_allowed, true);
+assert.equal(handoffReadyPrCommentSummary.merge_recommendation, "ready-to-ship");
 const handoffReadyPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
   title: "Riddle Proof Handoff Evidence",
   runResponse: prCommentRunResponse,
@@ -422,6 +424,13 @@ const blockedConsumerPrCommentResult = {
   },
   merge_recommendation: "ready-to-ship",
 };
+const blockedConsumerPrCommentSummary = summarizeRiddleProofPrComment({
+  runResponse: prCommentRunResponse,
+  result: blockedConsumerPrCommentResult,
+});
+assert.equal(blockedConsumerPrCommentSummary.merge_ready, false);
+assert.equal(blockedConsumerPrCommentSummary.sync_allowed, false);
+assert.equal(blockedConsumerPrCommentSummary.merge_recommendation, undefined);
 const blockedConsumerPrCommentMarkdown = buildRiddleProofPrCommentMarkdown({
   title: "Riddle Proof Blocked Evidence",
   runResponse: prCommentRunResponse,

@@ -30,6 +30,7 @@ import {
 } from "./dist/public-state.js";
 import {
   buildRiddleProofPrCommentMarkdown,
+  summarizeRiddleProofPrComment,
 } from "./dist/pr-comment.js";
 import {
   buildAuthorCheckpointPacket,
@@ -939,6 +940,36 @@ assert.match(publicConsumerHeldMarkdown, /\*\*Result:\*\* proof passed; ship hel
 assert.match(publicConsumerHeldMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
 assert.match(publicConsumerHeldMarkdown, /\*\*Checkpoints:\*\* 1 accepted \/ 1 rejected \/ 0 ignored/);
 assert.doesNotMatch(publicConsumerHeldMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+const publicConsumerHeldSummary = summarizeRiddleProofPrComment({
+  runResponse: {
+    ...publicConsumerRunResponse,
+    preview: {
+      id: "ps_public_held",
+      preview_url: "https://preview.riddledc.com/s/ps_public_held/",
+    },
+    proofUrl: "https://preview.riddledc.com/s/ps_public_held/docs/riddle-proof/index.html",
+  },
+  result: {
+    ok: true,
+    status: "ready_to_ship",
+    ship_mode: "none",
+    ship_authorized: false,
+    merge_recommendation: "ready-to-ship",
+    checkpoint_summary: {
+      pending: false,
+      response_count: 1,
+      rejected_response_count: 1,
+    },
+  },
+});
+assert.equal(publicConsumerHeldSummary.proof_url, "https://preview.riddledc.com/s/ps_public_held/docs/riddle-proof/index.html");
+assert.equal(publicConsumerHeldSummary.preview_url, "https://preview.riddledc.com/s/ps_public_held/");
+assert.equal(publicConsumerHeldSummary.merge_ready, false);
+assert.equal(publicConsumerHeldSummary.sync_allowed, false);
+assert.equal(publicConsumerHeldSummary.merge_recommendation, undefined);
+assert.equal(publicConsumerHeldSummary.public_state?.result_label, "proof passed; ship held");
+assert.ok(publicConsumerHeldSummary.public_state?.prohibited_claims.includes("merge_ready"));
+assert.equal(publicConsumerHeldSummary.checkpoint_summary?.rejected_response_count, 1);
 
 const publicConsumerReadyMarkdown = buildRiddleProofPrCommentMarkdown({
   runResponse: publicConsumerRunResponse,
@@ -958,6 +989,23 @@ assert.match(publicConsumerReadyMarkdown, /\*\*Result:\*\* passed/);
 assert.match(publicConsumerReadyMarkdown, /\*\*Handoff:\*\* merge_ready=true, sync_allowed=true/);
 assert.match(publicConsumerReadyMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
 assert.doesNotMatch(publicConsumerReadyMarkdown, /authorized=true/);
+const publicConsumerReadySummary = summarizeRiddleProofPrComment({
+  runResponse: publicConsumerRunResponse,
+  result: {
+    ok: true,
+    status: "ready_to_ship",
+    pr_handoff_policy: {
+      state: "proof_complete",
+      proof_complete: true,
+      merge_ready: true,
+      normal_pr_allowed: true,
+    },
+    merge_recommendation: "ready-to-ship",
+  },
+});
+assert.equal(publicConsumerReadySummary.merge_ready, true);
+assert.equal(publicConsumerReadySummary.sync_allowed, true);
+assert.equal(publicConsumerReadySummary.merge_recommendation, "ready-to-ship");
 
 const publicConsumerBlockedMarkdown = buildRiddleProofPrCommentMarkdown({
   runResponse: publicConsumerRunResponse,
@@ -976,6 +1024,23 @@ const publicConsumerBlockedMarkdown = buildRiddleProofPrCommentMarkdown({
 assert.match(publicConsumerBlockedMarkdown, /\*\*Result:\*\* blocked/);
 assert.match(publicConsumerBlockedMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
 assert.doesNotMatch(publicConsumerBlockedMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+const publicConsumerBlockedSummary = summarizeRiddleProofPrComment({
+  runResponse: publicConsumerRunResponse,
+  result: {
+    ok: true,
+    status: "completed",
+    pr_handoff_policy: {
+      state: "proof_review_required",
+      proof_complete: false,
+      merge_ready: true,
+      normal_pr_allowed: true,
+    },
+    merge_recommendation: "ready-to-ship",
+  },
+});
+assert.equal(publicConsumerBlockedSummary.merge_ready, false);
+assert.equal(publicConsumerBlockedSummary.sync_allowed, false);
+assert.equal(publicConsumerBlockedSummary.merge_recommendation, undefined);
 
 console.log(JSON.stringify({
   ok: true,
@@ -1004,5 +1069,6 @@ console.log(JSON.stringify({
     publicStateAuditDisclosure: true,
     publicStateConsumerConformance: true,
     publicStateRunSurfaceConformance: true,
+    publicStateHostedAgentSummaryConformance: true,
   },
 }));

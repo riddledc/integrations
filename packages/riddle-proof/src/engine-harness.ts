@@ -575,6 +575,14 @@ function proofAssessmentHardBlockers(state: Record<string, unknown> | null, payl
   return blockers;
 }
 
+function proofGateStateForCheckpointResponse(state: RiddleProofRunState) {
+  const fullState = readJson(state.request.engine_state_path) || {};
+  return compactRecord({
+    ...fullState,
+    verification_mode: nonEmptyString(fullState.verification_mode) || state.request.verification_mode,
+  }) as Record<string, unknown>;
+}
+
 function proofAssessmentContinuation(
   result: RiddleProofEngineResult,
   payload: Record<string, unknown>,
@@ -1241,6 +1249,45 @@ function checkpointResponseContinuation(
           response,
           blocker: sourceBlocker,
         });
+      }
+      const proofGateState = proofGateStateForCheckpointResponse(state);
+      const hardBlockers = proofAssessmentHardBlockers(proofGateState, assessment);
+      if (proofAssessmentRequestsShip(assessment) && hardBlockers.length) {
+        return checkpointResponseRejectedBlocker(state, {
+          packet,
+          response,
+          blocker: {
+            code: "checkpoint_response_proof_hard_blocker",
+            checkpoint: packet.checkpoint,
+            message: "Riddle Proof cannot mark ready_to_ship while the proof bundle contains a hard blocker: " + hardBlockers[0],
+            details: compactRecord({
+              stage: packet.stage,
+              hard_blockers: hardBlockers,
+              proofAssessment: assessment,
+              response,
+            }) as Record<string, unknown>,
+          },
+        });
+      }
+      const visualBlocker = proofAssessmentVisualBlocker(proofGateState, assessment);
+      if (visualBlocker) {
+        const recoveryAssessment = visualDeltaEvidenceRecoveryAssessment(proofGateState, assessment, visualBlocker);
+        appendCheckpointResponse(state, response, { summary: visualBlocker });
+        recordEvent(state, {
+          kind: "checkpoint.response.evidence_recovery_required",
+          checkpoint: packet.checkpoint,
+          stage: "verify",
+          summary: visualBlocker,
+          details: compactRecord({
+            evidence_collection_incomplete: true,
+            recovery_stage: "verify",
+            evidence_issue_code: recoveryAssessment.evidence_issue_code || null,
+            visual_delta: recoveryAssessment.visual_delta || null,
+            proof_assessment: recoveryAssessment,
+            checkpoint_response_source: response.source || null,
+          }) as Record<string, unknown>,
+        });
+        return { next: { ...base, proof_assessment_json: jsonParam(recoveryAssessment) } };
       }
       appendCheckpointResponse(state, response);
       if (state.request.ship_mode !== "ship" && proofAssessmentRequestsShip(assessment)) {

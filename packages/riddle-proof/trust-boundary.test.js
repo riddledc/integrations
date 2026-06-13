@@ -547,6 +547,122 @@ function baseRequest(paths, changeRequest) {
 }
 
 {
+  const paths = pathsFor('checkpoint-ready-routed-to-recovery');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    verification_mode: 'visual',
+    verify_status: 'evidence_captured',
+    before_cdn: 'https://cdn.example.com/before-visual.png',
+    after_cdn: 'https://cdn.example.com/after-visual.png',
+    evidence_bundle: {
+      verification_mode: 'visual',
+      artifact_contract: { required: { visual_delta: true } },
+      after: {
+        visual_delta: {
+          status: 'unmeasured',
+          reason: 'comparator fetch failed before measuring the visual delta',
+        },
+      },
+    },
+    proof_assessment_request: {
+      status: 'needs_supervising_agent_assessment',
+      artifact_contract: { required: { visual_delta: true } },
+      visual_delta: {
+        status: 'unmeasured',
+        reason: 'comparator fetch failed before measuring the visual delta',
+      },
+    },
+  });
+  const request = {
+    ...baseRequest(paths, 'Ready checkpoint responses must not pass while visual recovery evidence is incomplete.'),
+    verification_mode: 'visual',
+  };
+  const yielded = await harnessMod.runRiddleProofEngineHarness({
+    request,
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_supervisor_judgment',
+          summary: 'Verify needs supervising proof assessment, but visual_delta is incomplete.',
+          checkpointContract: {
+            checkpoint: 'verify_supervisor_judgment',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yielded.status === 'awaiting_checkpoint', `visual recovery checkpoint should yield, got ${yielded.status}`);
+  assert(yielded.checkpoint_packet?.kind === 'recover_evidence', `expected recover_evidence packet, got ${yielded.checkpoint_packet?.kind}`);
+
+  const recoveryCalls = [];
+  const readyResponse = {
+    version: 'riddle-proof.checkpoint_response.v1',
+    run_id: yielded.checkpoint_packet.run_id,
+    checkpoint: yielded.checkpoint_packet.checkpoint,
+    packet_id: yielded.checkpoint_packet.packet_id,
+    resume_token: yielded.checkpoint_packet.resume_token,
+    decision: 'ready_to_ship',
+    summary: 'Ready to ship from the checkpoint response.',
+    reasons: ['The screenshot looks acceptable.'],
+    payload: {
+      recommended_stage: 'ship',
+      continue_with_stage: 'ship',
+    },
+    source: { kind: 'codex' },
+    created_at: '2026-06-01T05:00:00.000Z',
+  };
+  const recovered = await harnessMod.runRiddleProofEngineHarness({
+    request,
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute(params) {
+        recoveryCalls.push(params);
+        const assessment = JSON.parse(params.proof_assessment_json);
+        assert(assessment.blocked_decision === 'ready_to_ship', 'ready response should be recorded as the blocked decision');
+        assert(assessment.decision === 'revise_capture', `ready response should be routed to revise_capture, got ${assessment.decision}`);
+        assert(assessment.evidence_collection_incomplete === true, 'recovery assessment should mark incomplete evidence');
+        assert(assessment.recovery_stage === 'verify', 'recovery assessment should stay in verify');
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_capture_retry',
+          summary: 'Visual delta is still incomplete; retry capture/comparison.',
+          checkpointContract: {
+            checkpoint: 'verify_capture_retry',
+            stage: 'verify',
+            blocking: false,
+            resume: { continue_with_stage: 'verify' },
+          },
+        };
+      },
+    },
+    checkpoint_response: readyResponse,
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(recovered.status === 'awaiting_checkpoint', `incomplete recovery must remain awaiting_checkpoint, got ${recovered.status}`);
+  assert(recovered.status !== 'ready_to_ship', 'incomplete recovery must not terminalize as ready_to_ship');
+  assert(recovered.checkpoint_packet?.checkpoint === 'verify_capture_retry', `expected verify_capture_retry checkpoint, got ${recovered.checkpoint_packet?.checkpoint}`);
+  assert(recoveryCalls.length === 1, 'ready response should run one recovery continuation');
+  const persistedRecoveryState = readJson(paths.harnessStatePath);
+  assert(persistedRecoveryState.events.some((event) => event.kind === 'checkpoint.response.evidence_recovery_required'), 'ready response routed to recovery should emit evidence recovery event');
+  assert(persistedRecoveryState.checkpoint_summary.response_count === 1, 'routed ready response should count as one accepted checkpoint response');
+  assert(persistedRecoveryState.checkpoint_summary.pending === true, 'new recovery checkpoint should remain pending');
+  assertNoGenericLifecycleFailure(recovered, 'checkpoint ready response evidence recovery');
+}
+
+{
   const paths = pathsFor('audit-complete');
   writeJson(paths.engineStatePath, {
     repo: 'riddledc/example',
@@ -757,6 +873,7 @@ console.log(JSON.stringify({
     'untrusted proof assessment source blocked',
     'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
+    'ready checkpoint response routed to evidence recovery',
     'no-diff audit completed',
     'late checkpoint response ignored after terminal completion',
     'contradictory proof assessment stage hints canonicalized',

@@ -1,5 +1,6 @@
 import {
   riddleProofPublicStateAllowsMergeRecommendation,
+  riddleProofPublicStateMergeRecommendation,
   summarizeRiddleProofPublicState,
   type RiddleProofPublicStateSummary,
 } from "./public-state";
@@ -235,6 +236,10 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     status: firstStringValue(result.status, stopCondition.status),
     checkpoint_summary: checkpointSummary || result.checkpoint_summary,
   });
+  const mergeRecommendation = riddleProofPublicStateMergeRecommendation(
+    publicState,
+    firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
+  );
   return {
     ok,
     status: stringValue(proofResult.status),
@@ -252,7 +257,7 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     merge_ready: publicState.merge_ready,
     sync_allowed: publicState.sync_allowed,
     proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
-    merge_recommendation: firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
+    merge_recommendation: mergeRecommendation,
     checkpoint_summary: checkpointSummary,
     public_state: publicState,
     passed_checks: nestedChecks.passed,
