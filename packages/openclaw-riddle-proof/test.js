@@ -1429,6 +1429,14 @@ assert.equal(noShipCompleteStatus?.pr_handoff_policy?.merge_ready, false);
 assert.equal(noShipCompleteStatus?.pr_handoff_policy?.normal_pr_allowed, false);
 assert.equal(noShipCompleteStatus?.pr_handoff_policy?.fallback_pr?.allowed, false);
 assert.match(noShipCompleteStatus?.pr_handoff_policy?.user_facing_summary, /no-ship/);
+const noShipCompleteWake = classifyOpenClawRiddleProofWake(noShipCompleteStatus);
+assert.equal(noShipCompleteWake.should_dispatch, true);
+assert.equal(noShipCompleteWake.kind, "ready_to_ship");
+assert.deepEqual(noShipCompleteWake.next_tools, [RIDDLE_PROOF_STATUS_TOOL_NAME]);
+const noShipCompleteWakeText = formatOpenClawRiddleProofWakeEvent(noShipCompleteWake, noShipCompleteWrapperStatePath);
+assert.match(noShipCompleteWakeText, /shipping disabled/);
+assert.match(noShipCompleteWakeText, /Do not call sync or present this as merge-ready/);
+assert.doesNotMatch(noShipCompleteWakeText, new RegExp(RIDDLE_PROOF_SYNC_TOOL_NAME));
 
 const blockedSalvageStatePath = path.join(reviewFixture, "riddle-state-blocked-salvage.json");
 const blockedSalvageWrapperStatePath = path.join(reviewFixture, "wrapper-state-blocked-salvage.json");
