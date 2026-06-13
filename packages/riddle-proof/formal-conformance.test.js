@@ -26,6 +26,9 @@ import {
   setRunStatus,
 } from "./dist/state.js";
 import {
+  summarizeRiddleProofPublicState,
+} from "./dist/public-state.js";
+import {
   buildAuthorCheckpointPacket,
   buildProofAssessmentCheckpointPacket,
   buildStageCheckpointPacket,
@@ -759,6 +762,103 @@ assert.equal(
   "https://cdn.example.com/formal-before.png",
 );
 
+const publicHeldReadyNoShip = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  ship_mode: "none",
+  ship_authorized: false,
+});
+assert.equal(publicHeldReadyNoShip.policy_state, "proof_passed_ship_held");
+assert.equal(publicHeldReadyNoShip.ship_held, true);
+assert.equal(publicHeldReadyNoShip.shipping_disabled, true);
+assert.equal(publicHeldReadyNoShip.ship_authorized, false);
+assert.equal(publicHeldReadyNoShip.merge_ready, false);
+assert.equal(publicHeldReadyNoShip.sync_allowed, false);
+
+const publicNoShipHandoff = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete_ship_disabled",
+    proof_complete: true,
+    shipping_disabled: true,
+    ship_mode: "none",
+    merge_ready: false,
+    normal_pr_allowed: false,
+  },
+});
+assert.equal(publicNoShipHandoff.policy_state, "proof_complete_ship_disabled");
+assert.equal(publicNoShipHandoff.shipping_disabled, true);
+assert.equal(publicNoShipHandoff.ship_authorized, false);
+assert.equal(publicNoShipHandoff.merge_ready, false);
+assert.equal(publicNoShipHandoff.sync_allowed, false);
+
+const publicHandoffReady = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete",
+    proof_complete: true,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+});
+assert.equal(publicHandoffReady.policy_state, "proof_passed");
+assert.equal(publicHandoffReady.ship_authorized, false);
+assert.equal(publicHandoffReady.merge_ready, true);
+assert.equal(publicHandoffReady.sync_allowed, true);
+assert.ok(publicHandoffReady.prohibited_claims.includes("ship_authorized"));
+assert.equal(publicHandoffReady.prohibited_claims.includes("merge_ready"), false);
+assert.equal(publicHandoffReady.prohibited_claims.includes("sync_allowed"), false);
+
+const publicBlockedStaleCompleted = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "completed",
+  pr_handoff_policy: {
+    state: "proof_review_required",
+    proof_complete: false,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+});
+assert.equal(publicBlockedStaleCompleted.policy_state, "proof_blocked");
+assert.equal(publicBlockedStaleCompleted.proof_passed, false);
+assert.equal(publicBlockedStaleCompleted.merge_ready, false);
+assert.equal(publicBlockedStaleCompleted.sync_allowed, false);
+assert.ok(publicBlockedStaleCompleted.prohibited_claims.includes("proof_passed"));
+assert.ok(publicBlockedStaleCompleted.prohibited_claims.includes("ready_to_ship"));
+
+const publicShipped = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "shipped",
+  ship_authorized: true,
+});
+assert.equal(publicShipped.policy_state, "ship_authorized");
+assert.equal(publicShipped.ship_authorized, true);
+assert.equal(publicShipped.merge_ready, true);
+assert.equal(publicShipped.sync_allowed, true);
+
+const publicCheckpointAudit = summarizeRiddleProofPublicState({
+  ok: true,
+  status: "ready_to_ship",
+  pr_handoff_policy: {
+    state: "proof_complete",
+    proof_complete: true,
+    merge_ready: true,
+    normal_pr_allowed: true,
+  },
+  checkpoint_summary: {
+    pending: false,
+    response_count: 1,
+    rejected_response_count: 2,
+    ignored_response_count: 1,
+    duplicate_response_count: 1,
+  },
+});
+assert.equal(publicCheckpointAudit.checkpoint_summary?.audit_disclosure_required, true);
+assert.ok(publicCheckpointAudit.required_disclosures.includes("checkpoint_audit_counters"));
+assert.ok(publicCheckpointAudit.prohibited_claims.includes("all_checkpoint_responses_accepted"));
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.formal-conformance",
@@ -781,5 +881,8 @@ console.log(JSON.stringify({
     heldReadyNoShipSemantics: true,
     staleRunCardSnapshotRefresh: true,
     currentRunCardSnapshotPreservesRichProjection: true,
+    publicStateProjection: true,
+    publicStateHandoffReadiness: true,
+    publicStateAuditDisclosure: true,
   },
 }));

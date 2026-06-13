@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has nine named layers.
+The model in `RiddleProofKernel.lean` now has ten named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -208,6 +208,28 @@ the runtime parity test must cover unsupported references and proof hard
 blockers: omitting either field can let a runtime surface pass while the true
 ship gate blocks.
 
+## Layer 8: Public State Summary Projection
+
+The Layer 8 model covers the generic public-state helper exported as
+`summarizeRiddleProofPublicState`.
+
+It models these obligations:
+
+- checkpoint, failed, and blocked handoff states dominate stale success-shaped
+  status fields
+- held and no-ship proof states do not become merge-ready, sync-ready, or
+  ship-authorized
+- `merge_ready` / `sync_allowed` are handoff permissions, not proof that a PR
+  has already shipped
+- checkpoint audit counters require disclosure and prohibit claiming that all
+  checkpoint responses were accepted
+
+The theorem `public_handoff_ready_can_merge_without_ship_authorization` proves
+the key product distinction: a proof can be ready for normal handoff without
+being `ship_authorized`. The theorem
+`public_blocked_handoff_dominates_stale_completed_status` proves that a blocked
+or review-required handoff suppresses stale success-shaped status fields.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -315,6 +337,17 @@ Layer 7 adds the ship-gate parity counterexample:
   hard-blocker facts, even when the full ship gate blocks. Runtime conformance
   now compares TypeScript and Python ship-gate projections across the shared
   blocker matrix.
+
+Layer 8 adds public-state projection checks:
+
+- `public_handoff_ready_can_merge_without_ship_authorization` shows why public
+  projections must keep handoff readiness separate from shipped/authorized
+  claims.
+- `public_blocked_handoff_dominates_stale_completed_status` shows that a
+  review-required handoff blocks stale success-shaped status fields.
+- `public_checkpoint_audit_counters_require_disclosure` shows that rejected,
+  ignored, or duplicate checkpoint response counters must remain visible in
+  public summaries.
 
 ## Build
 
