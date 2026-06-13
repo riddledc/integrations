@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.57
+
+### Patch Changes
+
+- 2a51524: Surface ship-control and checkpoint audit facts in generated PR proof comments.
+
 ## 0.8.56
 
 ### Patch Changes
