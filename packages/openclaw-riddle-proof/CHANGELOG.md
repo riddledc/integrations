@@ -1,5 +1,13 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.157
+
+### Patch Changes
+
+- 33a4caf: Add checkpoint packet lineage IDs to packet/response contracts so stale responses from an older active packet cannot resume a run with the same checkpoint token.
+- Updated dependencies [33a4caf]
+  - @riddledc/riddle-proof@0.8.53
+
 ## 0.4.156
 
 ### Patch Changes
