@@ -320,6 +320,85 @@ function baseRequest(paths, changeRequest) {
 }
 
 {
+  const paths = pathsFor('untrusted-proof-assessment-source');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    reference: 'before',
+    before_cdn: 'https://cdn.example.com/before.png',
+    after_cdn: 'https://cdn.example.com/after.png',
+    verify_status: 'evidence_captured',
+    proof_assessment_request: {
+      status: 'needs_supervising_agent_assessment',
+    },
+  });
+  const yieldedProof = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'CI metadata must not become supervising proof approval.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_supervisor_judgment',
+          stage: 'verify',
+          summary: 'Verify needs supervising proof judgment.',
+          checkpointContract: {
+            checkpoint: 'verify_supervisor_judgment',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yieldedProof.status === 'awaiting_checkpoint', `proof checkpoint should yield, got ${yieldedProof.status}`);
+  assert(yieldedProof.checkpoint_packet?.allowed_decisions.includes('ready_to_ship'), 'proof checkpoint should advertise ready_to_ship');
+
+  const untrustedReadyResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: baseRequest(paths, 'Explicit CI checkpoint source should not approve shipping.'),
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('untrusted ready_to_ship checkpoint response should not resume the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: yieldedProof.run_id,
+      checkpoint: yieldedProof.checkpoint_packet.checkpoint,
+      packet_id: yieldedProof.checkpoint_packet.packet_id,
+      resume_token: yieldedProof.checkpoint_packet.resume_token,
+      decision: 'ready_to_ship',
+      summary: 'CI saw green checks and attempted to approve shipping.',
+      source: { kind: 'ci' },
+      created_at: '2026-06-12T12:10:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(untrustedReadyResponse.status === 'blocked', `untrusted ready response should block, got ${untrustedReadyResponse.status}`);
+  assert(
+    untrustedReadyResponse.blocker?.code === 'checkpoint_response_source_not_trusted',
+    `untrusted ready response should report source_not_trusted, got ${untrustedReadyResponse.blocker?.code}`,
+  );
+  assert(
+    untrustedReadyResponse.blocker.details.proofAssessment.source === 'checkpoint_response:ci',
+    'blocker should preserve the untrusted checkpoint response source in proof assessment metadata',
+  );
+  const persistedUntrustedSourceState = readJson(paths.harnessStatePath);
+  assert(persistedUntrustedSourceState.checkpoint_packet, 'rejected source response should keep the pending checkpoint packet visible');
+  assert(persistedUntrustedSourceState.checkpoint_summary.pending === true, 'source rejection should leave checkpoint summary pending');
+  assert(persistedUntrustedSourceState.checkpoint_summary.response_count === 0, 'source rejection should not count as accepted');
+  assertNoGenericLifecycleFailure(untrustedReadyResponse, 'untrusted proof assessment source blocker');
+}
+
+{
   const paths = pathsFor('interaction-missing-proof-evidence');
   writeJson(paths.engineStatePath, {
     repo: 'riddledc/example',
@@ -661,6 +740,7 @@ console.log(JSON.stringify({
     'invalid evidence proof_assessment_blocked',
     'unadvertised checkpoint response decision blocked',
     'stale checkpoint packet_id blocked',
+    'untrusted proof assessment source blocked',
     'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
     'no-diff audit completed',

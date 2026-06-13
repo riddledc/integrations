@@ -1211,6 +1211,124 @@ theorem advertised_retry_stage_response_is_accepted :
   native_decide
 
 /-!
+Layer 4.1: checkpoint proof-assessment source authority.
+
+Packet identity and allowed-decision checks say a response belongs to the active
+checkpoint. They do not by themselves say the response is allowed to approve
+shipping. A proof checkpoint response can hold `ready_to_ship` only when its
+response source maps to a trusted proof-assessment source.
+-/
+
+inductive CheckpointResponseSourceKind where
+  | missing
+  | openclawMain
+  | openclawSubagent
+  | codex
+  | claudeCode
+  | human
+  | ci
+  | unknown
+  deriving Repr, DecidableEq
+
+def proofAssessmentSourceFromCheckpointResponseKind :
+    CheckpointResponseSourceKind → ProofAssessmentSource
+  | CheckpointResponseSourceKind.missing => ProofAssessmentSource.supervisingAgent
+  | CheckpointResponseSourceKind.openclawMain => ProofAssessmentSource.supervisingAgent
+  | CheckpointResponseSourceKind.codex => ProofAssessmentSource.supervisingAgent
+  | CheckpointResponseSourceKind.claudeCode => ProofAssessmentSource.supervisingAgent
+  | CheckpointResponseSourceKind.human => ProofAssessmentSource.supervisor
+  | CheckpointResponseSourceKind.openclawSubagent => ProofAssessmentSource.runner
+  | CheckpointResponseSourceKind.ci => ProofAssessmentSource.runner
+  | CheckpointResponseSourceKind.unknown => ProofAssessmentSource.unknown
+
+def checkpointResponseReadyHoldWithoutSourceGuard
+    (state : CheckpointRunState)
+    (response : CheckpointResponse) : Bool :=
+  decide (checkpointResponseOutcome state response = CheckpointResponseOutcome.accepted)
+    && decide (response.decision = CheckpointDecision.readyToShip)
+
+def checkpointResponseReadyHoldWithSourceGuard
+    (state : CheckpointRunState)
+    (response : CheckpointResponse)
+    (source : CheckpointResponseSourceKind) : Bool :=
+  checkpointResponseReadyHoldWithoutSourceGuard state response
+    && supervisorSourceAccepted
+      (proofAssessmentSourceFromCheckpointResponseKind source)
+
+def exampleVerifyProofPacket : CheckpointPacket where
+  runId := 9
+  checkpointId := 17
+  packetLineage := 301
+  resumeToken := some 23
+  allowedDecisions := [
+    CheckpointDecision.readyToShip,
+    CheckpointDecision.needsRicherProof,
+    CheckpointDecision.reviseCapture,
+    CheckpointDecision.needsRecon,
+    CheckpointDecision.needsImplementation,
+    CheckpointDecision.blocked,
+    CheckpointDecision.humanReview
+  ]
+
+def exampleVerifyProofState : CheckpointRunState where
+  status := CheckpointRunStatus.awaitingCheckpoint
+  packet := some exampleVerifyProofPacket
+  responseAlreadyAccepted := false
+
+def exampleVerifyReadyToShipResponse : CheckpointResponse where
+  runId := 9
+  checkpointId := 17
+  packetLineage := some 301
+  resumeToken := some 23
+  decision := CheckpointDecision.readyToShip
+
+#eval checkpointResponseReadyHoldWithoutSourceGuard
+  exampleVerifyProofState
+  exampleVerifyReadyToShipResponse
+#eval checkpointResponseReadyHoldWithSourceGuard
+  exampleVerifyProofState
+  exampleVerifyReadyToShipResponse
+  CheckpointResponseSourceKind.ci
+#eval checkpointResponseReadyHoldWithSourceGuard
+  exampleVerifyProofState
+  exampleVerifyReadyToShipResponse
+  CheckpointResponseSourceKind.codex
+
+theorem ci_checkpoint_response_source_cannot_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithoutSourceGuard
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse = true
+      ∧ checkpointResponseReadyHoldWithSourceGuard
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse
+        CheckpointResponseSourceKind.ci = false := by
+  native_decide
+
+theorem subagent_checkpoint_response_source_cannot_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithoutSourceGuard
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse = true
+      ∧ checkpointResponseReadyHoldWithSourceGuard
+        exampleVerifyProofState
+        exampleVerifyReadyToShipResponse
+        CheckpointResponseSourceKind.openclawSubagent = false := by
+  native_decide
+
+theorem codex_checkpoint_response_source_can_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithSourceGuard
+      exampleVerifyProofState
+      exampleVerifyReadyToShipResponse
+      CheckpointResponseSourceKind.codex = true := by
+  native_decide
+
+theorem human_checkpoint_response_source_can_hold_ready_to_ship :
+    checkpointResponseReadyHoldWithSourceGuard
+      exampleVerifyProofState
+      exampleVerifyReadyToShipResponse
+      CheckpointResponseSourceKind.human = true := by
+  native_decide
+
+/-!
 Layer 4.5: checkpoint lifecycle summary semantics.
 
 Once a checkpoint response passes the active-packet guard above, the runtime also
