@@ -1490,7 +1490,9 @@ async function run() {
   const storedCheckpointState = readJson(checkpointHarnessStatePath);
   assert(storedCheckpointState.status === 'awaiting_checkpoint', 'wrapper state should persist awaiting_checkpoint');
   assert(storedCheckpointState.checkpoint_packet.resume_token === yieldedCheckpoint.checkpoint_packet.resume_token, 'wrapper state should persist the same resume token');
+  assert(storedCheckpointState.checkpoint_packet.packet_id === yieldedCheckpoint.checkpoint_packet.packet_id, 'wrapper state should persist the same packet id');
   assert(storedCheckpointState.checkpoint_summary.pending === true, 'wrapper state should persist compact checkpoint summary');
+  assert(storedCheckpointState.checkpoint_summary.latest_packet_id === yieldedCheckpoint.checkpoint_packet.packet_id, 'checkpoint summary should expose latest packet id');
   assert(storedCheckpointState.checkpoint_summary.latest_resume_token === yieldedCheckpoint.checkpoint_packet.resume_token, 'checkpoint summary should expose latest resume token');
   assert(storedCheckpointState.state_paths.wrapper_state_path === checkpointHarnessStatePath, 'wrapper state path should be labeled explicitly');
   assert(storedCheckpointState.state_paths.engine_state_path === checkpointEngineStatePath, 'engine state path should be labeled explicitly');
@@ -1500,6 +1502,7 @@ async function run() {
     version: 'riddle-proof.checkpoint_response.v1',
     run_id: yieldedCheckpoint.run_id,
     checkpoint: yieldedCheckpoint.checkpoint_packet.checkpoint,
+    packet_id: yieldedCheckpoint.checkpoint_packet.packet_id,
     resume_token: yieldedCheckpoint.checkpoint_packet.resume_token,
     decision: 'author_packet',
     summary: 'Authored a deterministic checkpoint packet.',
@@ -1805,6 +1808,7 @@ async function run() {
     version: 'riddle-proof.checkpoint_response.v1',
     run_id: blockedDuplicateYield.run_id,
     checkpoint: blockedDuplicateYield.checkpoint_packet.checkpoint,
+    packet_id: blockedDuplicateYield.checkpoint_packet.packet_id,
     resume_token: blockedDuplicateYield.checkpoint_packet.resume_token,
     decision: 'blocked',
     summary: 'Stop at the author checkpoint for duplicate testing.',

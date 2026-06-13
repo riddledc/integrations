@@ -172,6 +172,7 @@ export interface RiddleProofCheckpointPacket {
   version: "riddle-proof.checkpoint.v1";
   run_id: string;
   state_path?: string;
+  packet_id?: string;
   stage: RiddleProofStage;
   checkpoint: string;
   kind:
@@ -202,6 +203,7 @@ export interface RiddleProofCheckpointResponse {
   version: "riddle-proof.checkpoint_response.v1";
   run_id: string;
   checkpoint: string;
+  packet_id?: string;
   resume_token?: string;
   decision: string;
   summary: string;
@@ -240,6 +242,9 @@ export interface RiddleProofCheckpointSummary {
   latest_decision?: string | null;
   latest_packet_summary?: string | null;
   latest_response_summary?: string | null;
+  latest_packet_id?: string | null;
+  latest_response_packet_id?: string | null;
+  packet_id_matches?: boolean | null;
   latest_resume_token?: string | null;
   latest_response_token?: string | null;
   token_matches?: boolean | null;

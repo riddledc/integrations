@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has eight named layers.
+The model in `RiddleProofKernel.lean` now has nine named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -128,6 +128,7 @@ It models these obligations:
 - duplicate checkpoint responses are blocked before they can replay work
 - accepted responses must match the active packet's run/checkpoint identity
 - accepted responses must match the active packet's resume token
+- accepted responses must match the active packet's packet lineage
 - accepted responses must use a decision advertised by `allowed_decisions`
 - accepted advancing responses clear the pending packet and count once
 - accepted blocking/manual-stop responses count once and retain the pending
@@ -140,7 +141,7 @@ It models these obligations:
 
 The theorem `accepted_response_has_matching_advertised_packet` proves that an
 accepted checkpoint response implies the packet identity, resume token, and
-advertised decision checks all held. The theorem
+advertised decision checks all held, including packet lineage. The theorem
 `checkpoint_lifecycle_summary_projects_state` proves that the compact checkpoint
 summary projects pending, accepted-response, and duplicate-response state without
 inventing acceptance. The theorem
@@ -273,6 +274,9 @@ Layer 4 adds checkpoint contract counterexamples:
 - `forged_author_packet_recon_response_requires_allowed_guard` shows that a
   matching run/checkpoint/resume-token response can still be invalid when it
   uses a decision the active packet did not advertise.
+- `stale_checkpoint_lineage_requires_lineage_guard` shows that a response with
+  the right run/checkpoint/resume-token and advertised decision can still be
+  stale if it was authored against a different active packet instance.
 - `advertised_recon_response_is_accepted` and
   `advertised_retry_stage_response_is_accepted` are the positive post-fix
   checks: the same responses are accepted once the packet advertises them.
