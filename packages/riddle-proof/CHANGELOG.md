@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.52
+
+### Patch Changes
+
+- 2993d5b: Canonicalize proof-assessment continuation stages from the assessment decision so contradictory stage hints cannot mark insufficient proof as ready to ship.
+
 ## 0.8.51
 
 ### Patch Changes
