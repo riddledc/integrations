@@ -1649,6 +1649,9 @@ structure RunLifecycleState where
   proofDecisionReady : Bool
   mergeRecommendationReady : Bool
   shipGateOk : Bool
+  shipHeld : Bool
+  shippingDisabled : Bool
+  shipAuthorized : Bool
   deriving Repr
 
 def applyTerminalRunStatus
@@ -1713,6 +1716,9 @@ structure RunCardSummary where
   monitorShouldContinue : Bool
   blockerVisible : Bool
   proofDecisionReady : Bool
+  shipHeld : Bool
+  shippingDisabled : Bool
+  shipAuthorized : Bool
   deriving Repr
 
 def runCardSummaryFromState (state : RunLifecycleState) : RunCardSummary where
@@ -1721,6 +1727,9 @@ def runCardSummaryFromState (state : RunLifecycleState) : RunCardSummary where
   monitorShouldContinue := !isRunLifecycleTerminal state.status
   blockerVisible := state.blockerVisible
   proofDecisionReady := state.proofDecisionReady
+  shipHeld := state.shipHeld
+  shippingDisabled := state.shippingDisabled
+  shipAuthorized := state.shipAuthorized
 
 def runCardProjectsState
     (state : RunLifecycleState)
@@ -1728,6 +1737,9 @@ def runCardProjectsState
   card.status = state.status
     ∧ card.terminal = isRunLifecycleTerminal state.status
     ∧ card.monitorShouldContinue = !isRunLifecycleTerminal state.status
+    ∧ card.shipHeld = state.shipHeld
+    ∧ card.shippingDisabled = state.shippingDisabled
+    ∧ card.shipAuthorized = state.shipAuthorized
 
 def runCardPassClaim
     (state : RunLifecycleState)
@@ -1738,10 +1750,20 @@ def runCardPassClaim
     ∧ state.shipGateOk = true
     ∧ state.proofDecisionReady = true
 
+def runCardShipClaim
+    (state : RunLifecycleState)
+    (card : RunCardSummary) : Prop :=
+  runCardPassClaim state card
+    ∧ card.shipHeld = false
+    ∧ card.shipAuthorized = true
+
 structure RunResultSummary where
   status : RunLifecycleStatus
   ok : Bool
   finalized : Bool
+  shipHeld : Bool
+  shippingDisabled : Bool
+  shipAuthorized : Bool
   runCard : RunCardSummary
   deriving Repr
 
@@ -1749,6 +1771,9 @@ def runResultSummaryFromState (state : RunLifecycleState) : RunResultSummary whe
   status := state.status
   ok := isRunLifecycleSuccessful state.status
   finalized := state.finalized
+  shipHeld := state.shipHeld
+  shippingDisabled := state.shippingDisabled
+  shipAuthorized := state.shipAuthorized
   runCard := runCardSummaryFromState state
 
 theorem run_card_status_projects_state_status
@@ -1765,7 +1790,7 @@ theorem run_card_terminal_projects_state_status
 theorem run_card_projects_state
     (state : RunLifecycleState) :
     runCardProjectsState state (runCardSummaryFromState state) := by
-  exact ⟨rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem run_card_pass_claim_requires_ship_gate
     (state : RunLifecycleState)
@@ -1778,6 +1803,18 @@ theorem run_card_pass_claim_requires_trusted_decision
     (hPass : runCardPassClaim state (runCardSummaryFromState state)) :
     state.proofDecisionReady = true :=
   hPass.2.2.2.2
+
+theorem run_card_ship_claim_requires_not_held
+    (state : RunLifecycleState)
+    (hShip : runCardShipClaim state (runCardSummaryFromState state)) :
+    state.shipHeld = false := by
+  exact hShip.2.1
+
+theorem run_card_ship_claim_requires_ship_authorized
+    (state : RunLifecycleState)
+    (hShip : runCardShipClaim state (runCardSummaryFromState state)) :
+    state.shipAuthorized = true := by
+  exact hShip.2.2
 
 theorem run_result_status_projects_state_status
     (state : RunLifecycleState) :
@@ -1802,6 +1839,9 @@ def exampleRunningUngatedState : RunLifecycleState where
   proofDecisionReady := false
   mergeRecommendationReady := false
   shipGateOk := false
+  shipHeld := false
+  shippingDisabled := false
+  shipAuthorized := false
 
 def independentReadyRunCard : RunCardSummary where
   status := RunLifecycleStatus.readyToShip
@@ -1809,6 +1849,9 @@ def independentReadyRunCard : RunCardSummary where
   monitorShouldContinue := false
   blockerVisible := false
   proofDecisionReady := true
+  shipHeld := false
+  shippingDisabled := false
+  shipAuthorized := true
 
 def exampleCompletedFinalState : RunLifecycleState where
   status := RunLifecycleStatus.completed
@@ -1817,6 +1860,9 @@ def exampleCompletedFinalState : RunLifecycleState where
   proofDecisionReady := true
   mergeRecommendationReady := true
   shipGateOk := true
+  shipHeld := false
+  shippingDisabled := false
+  shipAuthorized := true
 
 def exampleReadyIncomingFinalState : RunLifecycleState where
   status := RunLifecycleStatus.readyToShip
@@ -1825,6 +1871,20 @@ def exampleReadyIncomingFinalState : RunLifecycleState where
   proofDecisionReady := true
   mergeRecommendationReady := true
   shipGateOk := true
+  shipHeld := false
+  shippingDisabled := false
+  shipAuthorized := true
+
+def exampleHeldReadyNoShipState : RunLifecycleState where
+  status := RunLifecycleStatus.readyToShip
+  finalized := true
+  blockerVisible := false
+  proofDecisionReady := true
+  mergeRecommendationReady := true
+  shipGateOk := true
+  shipHeld := true
+  shippingDisabled := true
+  shipAuthorized := false
 
 #eval shouldPreserveFinalizedRunState exampleCompletedFinalState exampleReadyIncomingFinalState
 #eval runCardSummaryFromState exampleRunningUngatedState
@@ -1846,6 +1906,26 @@ theorem independent_run_card_can_invent_success :
 theorem projected_run_card_rejects_forged_success :
     ¬ runCardProjectsState exampleRunningUngatedState independentReadyRunCard := by
   simp [runCardProjectsState, exampleRunningUngatedState, independentReadyRunCard]
+
+theorem held_ready_is_successful_terminal_but_not_ship_authorized :
+    isRunLifecycleTerminal exampleHeldReadyNoShipState.status = true
+      ∧ isRunLifecycleSuccessful exampleHeldReadyNoShipState.status = true
+      ∧ (runResultSummaryFromState exampleHeldReadyNoShipState).shipHeld = true
+      ∧ (runResultSummaryFromState exampleHeldReadyNoShipState).shippingDisabled = true
+      ∧ (runResultSummaryFromState exampleHeldReadyNoShipState).shipAuthorized = false := by
+  native_decide
+
+theorem held_ready_run_card_is_not_ship_claim :
+    ¬ runCardShipClaim
+      exampleHeldReadyNoShipState
+      (runCardSummaryFromState exampleHeldReadyNoShipState) := by
+  simp [
+    runCardShipClaim,
+    runCardPassClaim,
+    runCardProjectsState,
+    runCardSummaryFromState,
+    exampleHeldReadyNoShipState
+  ]
 
 /-!
 Layer 6: published report projection.

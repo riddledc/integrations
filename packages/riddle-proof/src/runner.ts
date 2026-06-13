@@ -521,7 +521,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
       status: "ready_to_ship",
       last_summary: assessment.summary,
       evidence_bundle: evidenceBundle,
-      raw: { implementation, assessment },
+      raw: { implementation, assessment, ship_held: true, shipping_disabled: true, ship_authorized: false },
     });
     return notifyIfConfigured({ state, result, notification: adapters.notification });
   }
