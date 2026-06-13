@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.159
+
+### Patch Changes
+
+- c2bd8eb: Block direct sync calls for no-ship proof completions.
+
 ## 0.4.158
 
 ### Patch Changes
