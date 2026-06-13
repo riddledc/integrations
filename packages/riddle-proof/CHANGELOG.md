@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.59
+
+### Patch Changes
+
+- 3a123d7: Make PR comment handoff rendering obey the public proof state contract.
+
 ## 0.8.58
 
 ### Patch Changes
