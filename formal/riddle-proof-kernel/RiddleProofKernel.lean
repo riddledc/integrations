@@ -1652,6 +1652,54 @@ theorem counting_ignored_response_inflates_accepted_count :
   native_decide
 
 /-!
+Layer 4.6: checkpoint recovery readiness.
+
+A supervising checkpoint response may say `ready_to_ship`, but a recovery
+checkpoint still has to respect the framework-owned evidence gate. If visual or
+other required recovery evidence is incomplete, the response is routed back into
+recovery instead of terminalizing the run as ready.
+-/
+
+inductive RecoveryEvidence where
+  | incomplete
+  | complete
+  deriving Repr, DecidableEq
+
+inductive ReadyCheckpointDisposition where
+  | terminalReady
+  | continueRecovery
+  deriving Repr, DecidableEq
+
+def readyCheckpointDispositionWithRecoveryGate
+    (evidence : RecoveryEvidence) : ReadyCheckpointDisposition :=
+  match evidence with
+  | RecoveryEvidence.complete =>
+      ReadyCheckpointDisposition.terminalReady
+  | RecoveryEvidence.incomplete =>
+      ReadyCheckpointDisposition.continueRecovery
+
+def readyCheckpointDispositionWithoutRecoveryGate
+    (_evidence : RecoveryEvidence) : ReadyCheckpointDisposition :=
+  ReadyCheckpointDisposition.terminalReady
+
+theorem incomplete_recovery_ready_response_continues_recovery :
+    readyCheckpointDispositionWithRecoveryGate RecoveryEvidence.incomplete =
+      ReadyCheckpointDisposition.continueRecovery := by
+  native_decide
+
+theorem complete_recovery_ready_response_can_terminalize :
+    readyCheckpointDispositionWithRecoveryGate RecoveryEvidence.complete =
+      ReadyCheckpointDisposition.terminalReady := by
+  native_decide
+
+theorem recovery_gate_prevents_passed_after_incomplete_recovery :
+    readyCheckpointDispositionWithoutRecoveryGate RecoveryEvidence.incomplete =
+        ReadyCheckpointDisposition.terminalReady
+      ∧ readyCheckpointDispositionWithRecoveryGate RecoveryEvidence.incomplete =
+        ReadyCheckpointDisposition.continueRecovery := by
+  native_decide
+
+/-!
 Layer 5: run lifecycle and run-card projection.
 
 The runtime has a durable run state plus derived public surfaces: status
@@ -2489,6 +2537,14 @@ def publicConsumerSurfaceFromState
   disclosesCheckpointAudit :=
     publicCheckpointAuditDisclosureRequired input
 
+def publicHostedProofViewSurfaceFromState
+    (input : PublicStateInput) : PublicConsumerSurface :=
+  publicConsumerSurfaceFromState input
+
+def publicAgentSummarySurfaceFromState
+    (input : PublicStateInput) : PublicConsumerSurface :=
+  publicConsumerSurfaceFromState input
+
 theorem public_consumer_surface_from_state_conforms
     (input : PublicStateInput) :
     publicConsumerSurfaceConforms input
@@ -2944,7 +3000,29 @@ theorem generated_run_status_surface_from_public_state_conforms
       (publicConsumerSurfaceFromState input) = true := by
   exact public_consumer_surface_from_state_conforms input
 
+theorem generated_hosted_proof_view_surface_from_public_state_conforms
+    (input : PublicStateInput) :
+    publicConsumerSurfaceConforms input
+      (publicHostedProofViewSurfaceFromState input) = true := by
+  exact public_consumer_surface_from_state_conforms input
+
+theorem generated_agent_summary_surface_from_public_state_conforms
+    (input : PublicStateInput) :
+    publicConsumerSurfaceConforms input
+      (publicAgentSummarySurfaceFromState input) = true := by
+  exact public_consumer_surface_from_state_conforms input
+
 theorem stale_run_status_surface_violates_held_public_state :
+    publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
+      publicConsumerStaleMergeRecommendation = false := by
+  native_decide
+
+theorem stale_hosted_proof_view_surface_violates_held_public_state :
+    publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
+      publicConsumerStaleMergeRecommendation = false := by
+  native_decide
+
+theorem stale_agent_summary_surface_violates_held_public_state :
     publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
       publicConsumerStaleMergeRecommendation = false := by
   native_decide

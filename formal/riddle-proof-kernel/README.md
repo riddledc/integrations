@@ -138,6 +138,8 @@ It models these obligations:
 - ignored late terminal responses do not count as accepted responses and do not
   poison future duplicate detection
 - pending packets without a response do not report a token mismatch verdict
+- `ready_to_ship` checkpoint responses after partial recovery do not terminalize
+  until the recovery evidence gate is complete
 
 The theorem `accepted_response_has_matching_advertised_packet` proves that an
 accepted checkpoint response implies the packet identity, resume token, and
@@ -147,7 +149,10 @@ summary projects pending, accepted-response, and duplicate-response state withou
 inventing acceptance. The theorem
 `pending_packet_without_response_has_no_token_match_verdict` proves that a
 pending packet token is not treated as a response-token mismatch before any
-response has been seen.
+response has been seen. The theorem
+`recovery_gate_prevents_passed_after_incomplete_recovery` shows the old
+short-circuit shape that would have turned incomplete recovery into a terminal
+ready state.
 
 ## Layer 5: Run Lifecycle and Run-Card Projection
 
@@ -244,11 +249,14 @@ It models these obligations:
 - generated consumers derived from public state conform by construction
 
 The theorem `public_consumer_surface_from_state_conforms` proves the positive
-contract for generated surfaces. The counterexample
-`stale_merge_recommendation_consumer_violates_held_public_state` shows that a
-stale merge-ready recommendation violates held/no-ship public state, and
-`missing_checkpoint_audit_consumer_violates_public_state` shows that checkpoint
-audit counters cannot be hidden by a downstream surface.
+contract for generated surfaces. The named
+`generated_hosted_proof_view_surface_from_public_state_conforms` and
+`generated_agent_summary_surface_from_public_state_conforms` theorems pin that
+generic rule to hosted proof views and agent-facing summaries. The
+counterexample `stale_merge_recommendation_consumer_violates_held_public_state`
+shows that a stale merge-ready recommendation violates held/no-ship public
+state, and `missing_checkpoint_audit_consumer_violates_public_state` shows that
+checkpoint audit counters cannot be hidden by a downstream surface.
 
 ## What Lean Caught So Far
 
@@ -331,6 +339,9 @@ Layer 4 adds checkpoint contract counterexamples:
 - `pending_packet_without_response_has_no_token_match_verdict` caught a runtime
   summary bug: a pending tokenized packet with no response was reported as
   `token_matches: false` instead of leaving the comparison unset.
+- `recovery_gate_prevents_passed_after_incomplete_recovery` shows that a
+  `ready_to_ship` checkpoint response after incomplete evidence recovery must
+  route back into verify/evidence recovery instead of terminalizing the run.
 
 Layer 5 adds run lifecycle projection checks:
 
@@ -377,6 +388,10 @@ Layer 9 adds public-state consumer checks:
   comment, run card, status snapshot, and run result surfaces now emit explicit
   handoff booleans and suppress stale merge recommendations under those
   prohibited claims.
+- `stale_agent_summary_surface_violates_held_public_state` applies the same bug
+  class to exported summary JSON that hosted proof views and agent tools can
+  consume. The summary projection now suppresses prohibited merge
+  recommendations before the data leaves the package.
 - `missing_checkpoint_audit_consumer_violates_public_state` shows that a
   public consumer cannot hide rejected, ignored, or duplicate checkpoint
   counters once public state requires that disclosure.
