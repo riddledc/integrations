@@ -14,6 +14,7 @@ import {
   applyShipControlState,
   compactRecord,
   createRunResult,
+  isProtectedFinalStatus,
   nonEmptyString,
   normalizeTerminalMetadata,
   recordValue,
@@ -39,6 +40,7 @@ import {
 } from "./checkpoint";
 import type {
   RiddleProofBlocker,
+  RiddleProofCheckpointPacket,
   RiddleProofCheckpointResponse,
   RiddleProofCheckpointVisibility,
   RiddleProofRunParams,
@@ -221,10 +223,6 @@ function loadRunState(input: RunRiddleProofEngineHarnessInput): RiddleProofRunSt
     request: input.request,
     state_path: statePath,
   });
-}
-
-function isProtectedFinalStatus(status: unknown) {
-  return status === "ready_to_ship" || status === "shipped" || status === "completed";
 }
 
 function shouldPreserveFinalizedRunState(filePath: string, incoming: RiddleProofRunState) {
@@ -977,6 +975,32 @@ function appendCheckpointResponse(
   persist(state);
 }
 
+function checkpointResponseRejectedBlocker(
+  state: RiddleProofRunState,
+  input: {
+    packet?: RiddleProofCheckpointPacket | null;
+    response?: RiddleProofCheckpointResponse | null;
+    blocker: RiddleProofBlocker;
+  },
+): { blocker: RiddleProofBlocker } {
+  const packet = input.packet || null;
+  const response = input.response || null;
+  appendRunEvent(state, {
+    kind: "checkpoint.response.rejected",
+    checkpoint: response?.checkpoint || packet?.checkpoint || input.blocker.checkpoint || null,
+    stage: packet?.stage || state.current_stage || "author",
+    summary: input.blocker.message,
+    details: compactRecord({
+      code: input.blocker.code,
+      decision: response?.decision,
+      resume_token: response?.resume_token,
+      packet_id: response?.packet_id,
+      source: response?.source,
+    }) as Record<string, unknown>,
+  });
+  return { blocker: input.blocker };
+}
+
 function checkpointResponseContinuation(
   state: RiddleProofRunState,
   value?: RiddleProofCheckpointResponse | Record<string, unknown>,
@@ -985,14 +1009,15 @@ function checkpointResponseContinuation(
   const packet = state.checkpoint_packet;
   const response = normalizeCheckpointResponse(value);
   if (!response) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      packet,
       blocker: {
         code: "checkpoint_response_invalid",
         checkpoint: packet?.checkpoint || state.last_checkpoint || null,
         message: "Checkpoint response was not a valid riddle-proof.checkpoint_response.v1 object.",
         details: { checkpoint_packet: packet || null, checkpoint_summary: checkpointSummaryFromState(state) },
       },
-    };
+    });
   }
   if (isDuplicateCheckpointResponse(state, response)) {
     const stage = packet?.stage || state.current_stage || "author";
@@ -1023,17 +1048,20 @@ function checkpointResponseContinuation(
     };
   }
   if (!packet) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      response,
       blocker: {
         code: "checkpoint_response_without_packet",
         checkpoint: response.checkpoint,
         message: "A checkpoint response was supplied, but the run state has no pending checkpoint packet.",
         details: { response, checkpoint_summary: checkpointSummaryFromState(state) },
       },
-    };
+    });
   }
   if (response.run_id !== packet.run_id || response.checkpoint !== packet.checkpoint) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      packet,
+      response,
       blocker: {
         code: "checkpoint_response_mismatch",
         checkpoint: packet.checkpoint,
@@ -1044,10 +1072,12 @@ function checkpointResponseContinuation(
           actual: { run_id: response.run_id, checkpoint: response.checkpoint },
         },
       },
-    };
+    });
   }
   if (packet.resume_token && response.resume_token !== packet.resume_token) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      packet,
+      response,
       blocker: {
         code: "checkpoint_response_resume_token_mismatch",
         checkpoint: packet.checkpoint,
@@ -1058,10 +1088,12 @@ function checkpointResponseContinuation(
           actual_resume_token: response.resume_token || null,
         },
       },
-    };
+    });
   }
   if (packet.packet_id && response.packet_id !== packet.packet_id) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      packet,
+      response,
       blocker: {
         code: "checkpoint_response_packet_id_mismatch",
         checkpoint: packet.checkpoint,
@@ -1074,10 +1106,12 @@ function checkpointResponseContinuation(
           actual_resume_token: response.resume_token || null,
         },
       },
-    };
+    });
   }
   if (!packet.allowed_decisions.includes(response.decision)) {
-    return {
+    return checkpointResponseRejectedBlocker(state, {
+      packet,
+      response,
       blocker: {
         code: "checkpoint_response_decision_not_allowed",
         checkpoint: packet.checkpoint,
@@ -1089,7 +1123,7 @@ function checkpointResponseContinuation(
           response,
         },
       },
-    };
+    });
   }
 
   const base = {
@@ -1100,14 +1134,16 @@ function checkpointResponseContinuation(
   if (response.decision === "author_packet") {
     const payload = authorPacketPayloadFromCheckpointResponse(response);
     if (!payload) {
-      return {
+      return checkpointResponseRejectedBlocker(state, {
+        packet,
+        response,
         blocker: {
           code: "checkpoint_author_packet_missing",
           checkpoint: packet.checkpoint,
           message: "Checkpoint response decision=author_packet did not include a proof_plan and capture_script payload.",
           details: { stage: packet.stage, response },
         },
-      };
+      });
     }
     state.proof_contract = proofContractFromAuthorCheckpointResponse(response, packet, payload);
     appendCheckpointResponse(state, response);
@@ -1138,7 +1174,9 @@ function checkpointResponseContinuation(
       const workdir = nonEmptyString(packet.state_excerpt?.after_worktree) || state.worktree_path;
       if (workdir) state.worktree_path = workdir;
       if (!hasGitDiff(workdir)) {
-        return {
+        return checkpointResponseRejectedBlocker(state, {
+          packet,
+          response,
           blocker: {
             code: "implementation_diff_missing",
             checkpoint: packet.checkpoint,
@@ -1146,7 +1184,7 @@ function checkpointResponseContinuation(
               "Checkpoint response claimed implementation_complete, but the after worktree has no detectable git diff.",
             details: { stage: packet.stage, worktree_path: workdir || null, response },
           },
-        };
+        });
       }
       appendCheckpointResponse(state, response);
       return {
@@ -1197,7 +1235,13 @@ function checkpointResponseContinuation(
         response,
         code: "checkpoint_response_source_not_trusted",
       });
-      if (sourceBlocker) return { blocker: sourceBlocker };
+      if (sourceBlocker) {
+        return checkpointResponseRejectedBlocker(state, {
+          packet,
+          response,
+          blocker: sourceBlocker,
+        });
+      }
       appendCheckpointResponse(state, response);
       if (state.request.ship_mode !== "ship" && proofAssessmentRequestsShip(assessment)) {
         const result = {

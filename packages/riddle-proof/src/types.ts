@@ -236,6 +236,8 @@ export interface RiddleProofCheckpointSummary {
   packet_count: number;
   response_count: number;
   duplicate_response_count?: number;
+  rejected_response_count?: number;
+  ignored_response_count?: number;
   latest_checkpoint?: string | null;
   latest_stage?: RiddleProofStage | null;
   latest_kind?: string | null;

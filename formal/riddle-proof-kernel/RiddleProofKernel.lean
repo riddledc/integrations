@@ -1353,18 +1353,24 @@ structure CheckpointLifecycleState where
   pendingPacket : Bool
   acceptedResponseCount : Nat
   duplicateResponseCount : Nat
+  rejectedResponseCount : Nat
+  ignoredResponseCount : Nat
   deriving Repr, DecidableEq
 
 structure CheckpointLifecycleSummary where
   pending : Bool
   responseCount : Nat
   duplicateResponseCount : Nat
+  rejectedResponseCount : Nat
+  ignoredResponseCount : Nat
   deriving Repr, DecidableEq
 
 def checkpointLifecycleSummary (state : CheckpointLifecycleState) : CheckpointLifecycleSummary where
   pending := state.pendingPacket
   responseCount := state.acceptedResponseCount
   duplicateResponseCount := state.duplicateResponseCount
+  rejectedResponseCount := state.rejectedResponseCount
+  ignoredResponseCount := state.ignoredResponseCount
 
 def applyCheckpointLifecycleResponse
     (state : CheckpointLifecycleState)
@@ -1378,12 +1384,14 @@ def applyCheckpointLifecycleResponse
       { state with
         acceptedResponseCount := state.acceptedResponseCount + 1 }
   | CheckpointLifecycleResponse.rejected =>
-      state
+      { state with
+        rejectedResponseCount := state.rejectedResponseCount + 1 }
   | CheckpointLifecycleResponse.duplicate =>
       { state with
         duplicateResponseCount := state.duplicateResponseCount + 1 }
   | CheckpointLifecycleResponse.ignored =>
-      state
+      { state with
+        ignoredResponseCount := state.ignoredResponseCount + 1 }
 
 /-!
 Two intentionally broken lifecycle projections. The first clears the pending
@@ -1403,19 +1411,21 @@ def checkpointLifecycleClearsBlocking
         pendingPacket := false
         acceptedResponseCount := state.acceptedResponseCount + 1 }
   | CheckpointLifecycleResponse.rejected =>
-      state
+      { state with
+        rejectedResponseCount := state.rejectedResponseCount + 1 }
   | CheckpointLifecycleResponse.duplicate =>
       { state with
         duplicateResponseCount := state.duplicateResponseCount + 1 }
   | CheckpointLifecycleResponse.ignored =>
-      state
+      { state with
+        ignoredResponseCount := state.ignoredResponseCount + 1 }
 
 def checkpointLifecycleCountsRejected
     (state : CheckpointLifecycleState)
     (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
   match response with
   | CheckpointLifecycleResponse.rejected =>
-      { state with
+      { (applyCheckpointLifecycleResponse state response) with
         acceptedResponseCount := state.acceptedResponseCount + 1 }
   | _ =>
       applyCheckpointLifecycleResponse state response
@@ -1425,7 +1435,7 @@ def checkpointLifecycleCountsIgnored
     (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
   match response with
   | CheckpointLifecycleResponse.ignored =>
-      { state with
+      { (applyCheckpointLifecycleResponse state response) with
         acceptedResponseCount := state.acceptedResponseCount + 1 }
   | _ =>
       applyCheckpointLifecycleResponse state response
@@ -1461,11 +1471,28 @@ theorem accepted_blocking_response_increments_response_count
         state.acceptedResponseCount + 1 := by
   rfl
 
-theorem rejected_response_preserves_lifecycle_state
+theorem rejected_response_does_not_increment_response_count
     (state : CheckpointLifecycleState) :
-    applyCheckpointLifecycleResponse
+    (applyCheckpointLifecycleResponse
       state
-      CheckpointLifecycleResponse.rejected = state := by
+      CheckpointLifecycleResponse.rejected).acceptedResponseCount =
+        state.acceptedResponseCount := by
+  rfl
+
+theorem rejected_response_increments_rejected_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.rejected).rejectedResponseCount =
+        state.rejectedResponseCount + 1 := by
+  rfl
+
+theorem rejected_response_retains_pending_packet
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.rejected).pendingPacket =
+        state.pendingPacket := by
   rfl
 
 theorem duplicate_response_does_not_increment_response_count
@@ -1484,13 +1511,6 @@ theorem duplicate_response_increments_duplicate_count
         state.duplicateResponseCount + 1 := by
   rfl
 
-theorem ignored_response_preserves_lifecycle_state
-    (state : CheckpointLifecycleState) :
-    applyCheckpointLifecycleResponse
-      state
-      CheckpointLifecycleResponse.ignored = state := by
-  rfl
-
 theorem ignored_response_does_not_increment_response_count
     (state : CheckpointLifecycleState) :
     (applyCheckpointLifecycleResponse
@@ -1499,12 +1519,32 @@ theorem ignored_response_does_not_increment_response_count
         state.acceptedResponseCount := by
   rfl
 
+theorem ignored_response_increments_ignored_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.ignored).ignoredResponseCount =
+        state.ignoredResponseCount + 1 := by
+  rfl
+
+theorem ignored_response_retains_pending_packet
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.ignored).pendingPacket =
+        state.pendingPacket := by
+  rfl
+
 theorem checkpoint_lifecycle_summary_projects_state
     (state : CheckpointLifecycleState) :
     (checkpointLifecycleSummary state).pending = state.pendingPacket
       ∧ (checkpointLifecycleSummary state).responseCount = state.acceptedResponseCount
       ∧ (checkpointLifecycleSummary state).duplicateResponseCount =
-        state.duplicateResponseCount := by
+        state.duplicateResponseCount
+      ∧ (checkpointLifecycleSummary state).rejectedResponseCount =
+        state.rejectedResponseCount
+      ∧ (checkpointLifecycleSummary state).ignoredResponseCount =
+        state.ignoredResponseCount := by
   simp [checkpointLifecycleSummary]
 
 structure CheckpointTokenMatchInput where
@@ -1575,6 +1615,8 @@ def examplePendingCheckpointLifecycle : CheckpointLifecycleState where
   pendingPacket := true
   acceptedResponseCount := 0
   duplicateResponseCount := 0
+  rejectedResponseCount := 0
+  ignoredResponseCount := 0
 
 theorem clearing_blocking_response_loses_pending_packet :
     (applyCheckpointLifecycleResponse
@@ -1589,6 +1631,9 @@ theorem counting_rejected_response_inflates_accepted_count :
     (applyCheckpointLifecycleResponse
       examplePendingCheckpointLifecycle
       CheckpointLifecycleResponse.rejected).acceptedResponseCount = 0
+      ∧ (applyCheckpointLifecycleResponse
+        examplePendingCheckpointLifecycle
+        CheckpointLifecycleResponse.rejected).rejectedResponseCount = 1
       ∧ (checkpointLifecycleCountsRejected
         examplePendingCheckpointLifecycle
         CheckpointLifecycleResponse.rejected).acceptedResponseCount = 1 := by
@@ -1598,6 +1643,9 @@ theorem counting_ignored_response_inflates_accepted_count :
     (applyCheckpointLifecycleResponse
       examplePendingCheckpointLifecycle
       CheckpointLifecycleResponse.ignored).acceptedResponseCount = 0
+      ∧ (applyCheckpointLifecycleResponse
+        examplePendingCheckpointLifecycle
+        CheckpointLifecycleResponse.ignored).ignoredResponseCount = 1
       ∧ (checkpointLifecycleCountsIgnored
         examplePendingCheckpointLifecycle
         CheckpointLifecycleResponse.ignored).acceptedResponseCount = 1 := by
@@ -1674,6 +1722,15 @@ def shouldPreserveFinalizedRunState
   else
     false
 
+def applyCheckpointResponseWithoutPendingPacket
+    (state : RunLifecycleState) : RunLifecycleState :=
+  if isProtectedLifecycleFinalStatus state.status then
+    state
+  else
+    { state with
+      status := RunLifecycleStatus.blocked
+      blockerVisible := true }
+
 theorem protected_terminal_run_status_finalizes
     (state : RunLifecycleState)
     (status : RunLifecycleStatus)
@@ -1709,6 +1766,19 @@ theorem finalized_ready_to_ship_allows_shipped_transition
     hIncomingFinal,
     isProtectedLifecycleFinalStatus
   ]
+
+theorem checkpoint_response_without_packet_preserves_protected_status
+    (state : RunLifecycleState)
+    (hProtected : isProtectedLifecycleFinalStatus state.status = true) :
+    (applyCheckpointResponseWithoutPendingPacket state).status = state.status := by
+  simp [applyCheckpointResponseWithoutPendingPacket, hProtected]
+
+theorem checkpoint_response_without_packet_blocks_unprotected_status
+    (state : RunLifecycleState)
+    (hProtected : isProtectedLifecycleFinalStatus state.status = false) :
+    (applyCheckpointResponseWithoutPendingPacket state).status =
+      RunLifecycleStatus.blocked := by
+  simp [applyCheckpointResponseWithoutPendingPacket, hProtected]
 
 structure RunCardSummary where
   status : RunLifecycleStatus
