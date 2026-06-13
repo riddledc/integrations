@@ -11,6 +11,10 @@ export function isTerminalStatus(status: RiddleProofStatus): boolean {
   return status === "blocked" || status === "failed" || status === "ready_to_ship" || status === "shipped" || status === "completed";
 }
 
+export function isProtectedFinalStatus(status: unknown): boolean {
+  return status === "ready_to_ship" || status === "shipped" || status === "completed";
+}
+
 export function isSuccessfulStatus(status: RiddleProofStatus): boolean {
   return status !== "blocked" && status !== "failed";
 }
@@ -302,6 +306,7 @@ export function createRunResult(input: {
   const state = input.metadata ? applyTerminalMetadata(input.state, input.metadata) : input.state;
   state.status = status;
   state.ok = ok;
+  if (isProtectedFinalStatus(status)) state.finalized = true;
   applyShipControlState(state, { status, raw: input.raw });
   return compactRecord({
     ok,

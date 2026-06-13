@@ -906,6 +906,8 @@ export function checkpointSummaryFromState(
   const packets = history.filter((entry) => entry.packet);
   const responses = acceptedCheckpointResponseEntries(state);
   const duplicateResponses = events.filter((event) => event.kind === "checkpoint.response.duplicate");
+  const rejectedResponses = events.filter((event) => event.kind === "checkpoint.response.rejected");
+  const ignoredResponses = events.filter((event) => event.kind === "checkpoint.response.ignored");
   const latestPacketEntry = [...history].reverse().find((entry) => entry.packet);
   const latestResponseEntry = [...responses].reverse().find((entry) => entry.response);
   const latestPacket = state.checkpoint_packet || latestPacketEntry?.packet;
@@ -929,6 +931,8 @@ export function checkpointSummaryFromState(
     packet_count: packets.length,
     response_count: responses.length,
     duplicate_response_count: duplicateResponses.length,
+    rejected_response_count: rejectedResponses.length,
+    ignored_response_count: ignoredResponses.length,
     latest_checkpoint: state.checkpoint_packet?.checkpoint || latestResponse?.checkpoint || state.last_checkpoint || null,
     latest_stage: state.checkpoint_packet?.stage || latestResponse?.continue_with_stage || state.current_stage || null,
     latest_kind: state.checkpoint_packet?.kind || latestPacket?.kind || null,

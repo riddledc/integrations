@@ -468,6 +468,8 @@ assert.equal(pendingCheckpointSummary.pending, true);
 assert.equal(pendingCheckpointSummary.packet_count, 1);
 assert.equal(pendingCheckpointSummary.response_count, 0);
 assert.equal(pendingCheckpointSummary.duplicate_response_count, 0);
+assert.equal(pendingCheckpointSummary.rejected_response_count, 0);
+assert.equal(pendingCheckpointSummary.ignored_response_count, 0);
 assert.equal(pendingCheckpointSummary.latest_decision, undefined);
 assert.equal(pendingCheckpointSummary.latest_packet_id, reconPacket.packet_id);
 assert.equal(pendingCheckpointSummary.latest_response_packet_id, undefined);
@@ -492,6 +494,8 @@ const acceptedAdvancingSummary = checkpointSummaryFromState({
 assert.equal(acceptedAdvancingSummary.pending, false);
 assert.equal(acceptedAdvancingSummary.response_count, 1);
 assert.equal(acceptedAdvancingSummary.duplicate_response_count, 0);
+assert.equal(acceptedAdvancingSummary.rejected_response_count, 0);
+assert.equal(acceptedAdvancingSummary.ignored_response_count, 0);
 assert.equal(acceptedAdvancingSummary.latest_decision, "needs_recon");
 assert.equal(acceptedAdvancingSummary.latest_packet_id, reconPacket.packet_id);
 assert.equal(acceptedAdvancingSummary.latest_response_packet_id, reconPacket.packet_id);
@@ -543,6 +547,8 @@ const acceptedBlockingSummary = checkpointSummaryFromState({
 assert.equal(acceptedBlockingSummary.pending, true);
 assert.equal(acceptedBlockingSummary.response_count, 1);
 assert.equal(acceptedBlockingSummary.duplicate_response_count, 0);
+assert.equal(acceptedBlockingSummary.rejected_response_count, 0);
+assert.equal(acceptedBlockingSummary.ignored_response_count, 0);
 assert.equal(acceptedBlockingSummary.latest_decision, "blocked");
 assert.equal(acceptedBlockingSummary.token_matches, true);
 
@@ -561,6 +567,8 @@ const rejectedCheckpointSummary = checkpointSummaryFromState({
 assert.equal(rejectedCheckpointSummary.pending, true);
 assert.equal(rejectedCheckpointSummary.response_count, 0);
 assert.equal(rejectedCheckpointSummary.duplicate_response_count, 0);
+assert.equal(rejectedCheckpointSummary.rejected_response_count, 1);
+assert.equal(rejectedCheckpointSummary.ignored_response_count, 0);
 assert.equal(rejectedCheckpointSummary.latest_decision, undefined);
 
 const duplicateCheckpointSummary = checkpointSummaryFromState({
@@ -584,6 +592,8 @@ const duplicateCheckpointSummary = checkpointSummaryFromState({
 assert.equal(duplicateCheckpointSummary.pending, true);
 assert.equal(duplicateCheckpointSummary.response_count, 1);
 assert.equal(duplicateCheckpointSummary.duplicate_response_count, 1);
+assert.equal(duplicateCheckpointSummary.rejected_response_count, 0);
+assert.equal(duplicateCheckpointSummary.ignored_response_count, 0);
 assert.equal(duplicateCheckpointSummary.latest_decision, "blocked");
 
 const ignoredCheckpointSummary = checkpointSummaryFromState({
@@ -601,6 +611,8 @@ const ignoredCheckpointSummary = checkpointSummaryFromState({
 assert.equal(ignoredCheckpointSummary.pending, false);
 assert.equal(ignoredCheckpointSummary.response_count, 0);
 assert.equal(ignoredCheckpointSummary.duplicate_response_count, 0);
+assert.equal(ignoredCheckpointSummary.rejected_response_count, 0);
+assert.equal(ignoredCheckpointSummary.ignored_response_count, 1);
 assert.equal(ignoredCheckpointSummary.latest_decision, undefined);
 assert.equal(isDuplicateCheckpointResponse({
   ...checkpointRunState,
@@ -643,6 +655,7 @@ const lifecycleStatuses = [
   "shipped",
   "completed",
 ];
+const protectedFinalStatuses = new Set(["ready_to_ship", "shipped", "completed"]);
 
 for (const status of lifecycleStatuses) {
   const runState = createRunState({
@@ -658,6 +671,7 @@ for (const status of lifecycleStatuses) {
     };
   }
   setRunStatus(runState, status, "2026-06-12T01:00:10.000Z");
+  assert.equal(Boolean(runState.finalized), protectedFinalStatuses.has(status));
   runState.run_card = createRiddleProofRunCard(runState, { at: "2026-06-12T01:00:10.000Z" });
 
   assert.equal(runState.run_card.status, status);
@@ -672,6 +686,7 @@ for (const status of lifecycleStatuses) {
   });
   assert.equal(runResult.status, status);
   assert.equal(runResult.ok, isSuccessfulStatus(status));
+  assert.equal(Boolean(runResult.finalized), protectedFinalStatuses.has(status));
   assert.equal(runResult.run_card.status, status);
   assert.equal(runResult.run_card.stop_condition.status, status);
   assert.equal(runResult.run_card.stop_condition.terminal, isTerminalStatus(status));
@@ -759,6 +774,7 @@ console.log(JSON.stringify({
     checkpointDecisionContracts: true,
     checkpointPacketLineage: true,
     checkpointLifecycleSummary: true,
+    checkpointRejectedIgnoredAuditCounters: true,
     checkpointIgnoredSummary: true,
     runCardProjection: true,
     runResultStatusProjection: true,

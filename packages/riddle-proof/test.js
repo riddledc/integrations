@@ -13692,6 +13692,7 @@ const auditNoDiffResult = await runRiddleProof({
 assert.deepEqual(auditCalls, ["prove:true", "judge"]);
 assert.equal(auditNoDiffResult.status, "ready_to_ship");
 assert.equal(auditNoDiffResult.ok, true);
+assert.equal(auditNoDiffResult.finalized, true);
 assert.equal(auditNoDiffResult.ship_held, true);
 assert.equal(auditNoDiffResult.shipping_disabled, true);
 assert.equal(auditNoDiffResult.ship_authorized, false);

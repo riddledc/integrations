@@ -118,6 +118,7 @@ function baseRequest(paths, changeRequest) {
   assert(persistedReadyState.status === 'ready_to_ship', 'persisted ready_to_ship status should remain after late checkpoint response');
   assert(persistedReadyState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late ready checkpoint response should be recorded');
   assert(persistedReadyState.checkpoint_summary.response_count === 0, 'ignored late ready response must not count as an accepted checkpoint response');
+  assert(persistedReadyState.checkpoint_summary.ignored_response_count === 1, 'ignored late ready response should increment ignored_response_count');
   assert(persistedReadyState.checkpoint_summary.latest_decision === undefined, 'ignored late ready response must not become the latest accepted decision');
   const repeatedLateReadyCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: baseRequest(paths, 'Repeated stale checkpoint responses after ready_to_ship should still be ignored.'),
@@ -134,6 +135,9 @@ function baseRequest(paths, changeRequest) {
   assert(repeatedLateReadyCheckpointResponse.status === 'ready_to_ship', `repeated late checkpoint response should preserve ready_to_ship, got ${repeatedLateReadyCheckpointResponse.status}`);
   assert(repeatedLateReadyCheckpointResponse.raw?.ignored_checkpoint_response === true, 'repeated late ready checkpoint response should be explicitly ignored');
   assert(!repeatedLateReadyCheckpointResponse.blocker, 'repeated late ready checkpoint response should not become a duplicate blocker');
+  const persistedRepeatedReadyState = readJson(paths.harnessStatePath);
+  assert(persistedRepeatedReadyState.checkpoint_summary.response_count === 0, 'repeated ignored ready response must still not count as accepted');
+  assert(persistedRepeatedReadyState.checkpoint_summary.ignored_response_count === 2, 'repeated ignored ready response should increment ignored_response_count again');
   assertNoGenericLifecycleFailure(repeatedLateReadyCheckpointResponse, 'repeated late checkpoint response after ready_to_ship');
 }
 
@@ -251,6 +255,8 @@ function baseRequest(paths, changeRequest) {
   assert(persistedForgedState.checkpoint_packet, 'rejected unadvertised response should keep the pending checkpoint packet visible');
   assert(persistedForgedState.checkpoint_summary.pending === true, 'checkpoint summary should remain pending after rejected unadvertised response');
   assert(persistedForgedState.checkpoint_summary.response_count === 0, 'rejected unadvertised response should not count as accepted');
+  assert(persistedForgedState.checkpoint_summary.rejected_response_count === 1, 'rejected unadvertised response should increment rejected_response_count');
+  assert(persistedForgedState.events.some((event) => event.kind === 'checkpoint.response.rejected'), 'rejected unadvertised response should emit checkpoint.response.rejected');
   assertNoGenericLifecycleFailure(forgedAuthorPacketResponse, 'unadvertised checkpoint decision blocker');
 }
 
@@ -316,6 +322,8 @@ function baseRequest(paths, changeRequest) {
   assert(persistedStaleLineageState.checkpoint_packet, 'rejected stale lineage response should keep the pending checkpoint visible');
   assert(persistedStaleLineageState.checkpoint_summary.pending === true, 'stale lineage rejection should leave checkpoint summary pending');
   assert(persistedStaleLineageState.checkpoint_summary.response_count === 0, 'stale lineage rejection should not count as accepted');
+  assert(persistedStaleLineageState.checkpoint_summary.rejected_response_count === 1, 'stale lineage rejection should increment rejected_response_count');
+  assert(persistedStaleLineageState.events.some((event) => event.kind === 'checkpoint.response.rejected'), 'stale lineage rejection should emit checkpoint.response.rejected');
   assertNoGenericLifecycleFailure(staleLineageResponse, 'stale checkpoint packet_id blocker');
 }
 
@@ -395,6 +403,8 @@ function baseRequest(paths, changeRequest) {
   assert(persistedUntrustedSourceState.checkpoint_packet, 'rejected source response should keep the pending checkpoint packet visible');
   assert(persistedUntrustedSourceState.checkpoint_summary.pending === true, 'source rejection should leave checkpoint summary pending');
   assert(persistedUntrustedSourceState.checkpoint_summary.response_count === 0, 'source rejection should not count as accepted');
+  assert(persistedUntrustedSourceState.checkpoint_summary.rejected_response_count === 1, 'source rejection should increment rejected_response_count');
+  assert(persistedUntrustedSourceState.events.some((event) => event.kind === 'checkpoint.response.rejected'), 'source rejection should emit checkpoint.response.rejected');
   assertNoGenericLifecycleFailure(untrustedReadyResponse, 'untrusted proof assessment source blocker');
 }
 
@@ -610,6 +620,7 @@ function baseRequest(paths, changeRequest) {
   assert(persistedAuditState.status === 'completed', 'persisted terminal status should remain completed after late checkpoint response');
   assert(persistedAuditState.events.some((event) => event.kind === 'checkpoint.response.ignored'), 'ignored late checkpoint response should be recorded as an event');
   assert(persistedAuditState.checkpoint_summary.response_count === 0, 'ignored late completed response must not count as an accepted checkpoint response');
+  assert(persistedAuditState.checkpoint_summary.ignored_response_count === 1, 'ignored late completed response should increment ignored_response_count');
   assert(persistedAuditState.checkpoint_summary.latest_decision === undefined, 'ignored late completed response must not become the latest accepted decision');
   const repeatedLateCheckpointResponse = await harnessMod.runRiddleProofEngineHarness({
     request: {
@@ -631,6 +642,9 @@ function baseRequest(paths, changeRequest) {
   assert(repeatedLateCheckpointResponse.status === 'completed', `repeated late checkpoint response should preserve completed status, got ${repeatedLateCheckpointResponse.status}`);
   assert(repeatedLateCheckpointResponse.raw?.ignored_checkpoint_response === true, 'repeated late completed checkpoint response should be explicitly ignored');
   assert(!repeatedLateCheckpointResponse.blocker, 'repeated late completed checkpoint response should not become a duplicate blocker');
+  const persistedRepeatedAuditState = readJson(paths.harnessStatePath);
+  assert(persistedRepeatedAuditState.checkpoint_summary.response_count === 0, 'repeated ignored completed response must still not count as accepted');
+  assert(persistedRepeatedAuditState.checkpoint_summary.ignored_response_count === 2, 'repeated ignored completed response should increment ignored_response_count again');
   assertNoGenericLifecycleFailure(lateCheckpointResponse, 'late checkpoint response after terminal completion');
   assertNoGenericLifecycleFailure(repeatedLateCheckpointResponse, 'repeated late checkpoint response after terminal completion');
 }

@@ -14,7 +14,7 @@ import type {
   RiddleProofStatePaths,
   RiddleProofStatus,
 } from "./types";
-import { compactRecord, isTerminalStatus, nonEmptyString, recordValue, shipControlStateFor } from "./result";
+import { compactRecord, isProtectedFinalStatus, isTerminalStatus, nonEmptyString, recordValue, shipControlStateFor } from "./result";
 import { createRiddleProofRunCard } from "./run-card";
 
 export const RIDDLE_PROOF_RUN_STATE_VERSION = "riddle-proof.run-state.v1" as const;
@@ -310,6 +310,7 @@ export function createRunStatusSnapshot(state: RiddleProofRunState, at = timesta
 export function setRunStatus<T extends RiddleProofRunState>(state: T, status: RiddleProofStatus, at = timestamp()): T {
   state.status = status;
   state.ok = status !== "blocked" && status !== "failed";
+  if (isProtectedFinalStatus(status)) state.finalized = true;
   state.updated_at = at;
   return state;
 }
