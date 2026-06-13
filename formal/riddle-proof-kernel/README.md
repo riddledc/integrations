@@ -99,6 +99,24 @@ It models these obligations:
 The theorem `reported_whole_flow_passed_implies_ship_gate_ok` proves that the
 reported verdict cannot be `passed` unless the whole ship gate is true.
 
+## Layer 3.5: Proof-Assessment Routing
+
+The proof-assessment response carries a decision plus advisory stage fields.
+The decision is the semantic authority:
+
+- `ready_to_ship` routes to ship
+- `needs_richer_proof` routes to author
+- `revise_capture` routes to verify
+- `needs_recon` routes to recon
+- `needs_implementation` routes to implement
+
+The theorem `proof_assessment_requests_ship_implies_ready_decision` proves that
+a proof assessment can request ship only when the decision is `ready_to_ship`.
+The counterexample `contradictory_stage_hint_does_not_request_ship` shows why a
+stage hint alone is unsafe: `needs_richer_proof` may carry a contradictory
+`ship` hint, but normalization must route it to author and must not mark the run
+ready to ship.
+
 ## Layer 4: Checkpoint Semantics
 
 The Layer 4 model covers the active checkpoint packet and response handoff.
@@ -241,6 +259,9 @@ Layer 3 adds whole-flow final-report counterexamples:
 - `unknown_artifact_manifest_blocks_even_without_ship_gate` is a positive check:
   the contract-level artifact verdict blocks unknown manifests even before the
   whole-flow ship gate.
+- `contradictory_stage_hint_does_not_request_ship` shows why
+  proof-assessment routing must derive ship readiness from the decision, not
+  from advisory stage fields.
 
 Layer 4 adds checkpoint contract counterexamples:
 
