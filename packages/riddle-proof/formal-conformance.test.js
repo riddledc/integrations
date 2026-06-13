@@ -8,6 +8,8 @@ import {
   normalizeRiddleProofProfile,
 } from "./dist/profile.js";
 import {
+  canonicalProofAssessmentStageForDecision,
+  normalizeProofAssessmentStageFields,
   validateShipGate,
 } from "./dist/proof-run-core.js";
 import {
@@ -216,6 +218,26 @@ const hardBlockerGate = validateShipGate({
 });
 assert.equal(hardBlockerGate.ok, false);
 assert.ok(hardBlockerGate.reasons.includes("proof hard blocker prevents ready_to_ship: structured proof assertion failed"));
+
+assert.equal(canonicalProofAssessmentStageForDecision("ready_to_ship"), "ship");
+assert.equal(canonicalProofAssessmentStageForDecision("needs_richer_proof"), "author");
+assert.equal(canonicalProofAssessmentStageForDecision("revise_capture"), "verify");
+assert.equal(canonicalProofAssessmentStageForDecision("needs_recon"), "recon");
+assert.equal(canonicalProofAssessmentStageForDecision("needs_implementation"), "implement");
+const contradictoryProofAssessment = normalizeProofAssessmentStageFields({
+  decision: "needs_richer_proof",
+  recommended_stage: "ship",
+  continue_with_stage: "ship",
+});
+assert.equal(contradictoryProofAssessment.recommended_stage, "author");
+assert.equal(contradictoryProofAssessment.continue_with_stage, "author");
+const readyProofAssessment = normalizeProofAssessmentStageFields({
+  decision: "ready_to_ship",
+  recommended_stage: "recon",
+  continue_with_stage: "recon",
+});
+assert.equal(readyProofAssessment.recommended_stage, "ship");
+assert.equal(readyProofAssessment.continue_with_stage, "ship");
 
 const shipGateParityCases = [
   ["clean before", baseShipState],
@@ -673,6 +695,7 @@ console.log(JSON.stringify({
     shipGateSupervisor: true,
     shipGateDecision: true,
     shipGateHardBlockers: true,
+    proofAssessmentStageConsistency: true,
     shipGateRuntimeParity: true,
     checkpointDecisionContracts: true,
     checkpointLifecycleSummary: true,

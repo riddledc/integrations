@@ -48,7 +48,9 @@ import type {
   RiddleProofStatus,
 } from "./types";
 import {
+  canonicalProofAssessmentStageForDecision,
   noImplementationModeFor,
+  normalizeProofAssessmentStageFields,
   proofAssessmentHardBlockersForState,
   visualDeltaForState,
   visualDeltaRequiredForState,
@@ -524,10 +526,7 @@ function isReadyShipGate(result: RiddleProofEngineResult) {
 }
 
 function proofAssessmentRequestsShip(payload: Record<string, unknown>) {
-  const decision = String(payload.decision || "");
-  const recommendedStage = String(payload.recommended_stage || "");
-  const continueStage = String(payload.continue_with_stage || "");
-  return decision === "ready_to_ship" || recommendedStage === "ship" || continueStage === "ship";
+  return String(payload.decision || "").trim() === "ready_to_ship";
 }
 
 function proofAssessmentHardBlockers(state: Record<string, unknown> | null, payload: Record<string, unknown>) {
@@ -551,12 +550,7 @@ function proofAssessmentContinuation(
 }
 
 function defaultStageForProofCheckpointDecision(decision: string): RiddleProofStage | null {
-  if (decision === "ready_to_ship") return "ship";
-  if (decision === "needs_implementation") return "implement";
-  if (decision === "needs_recon") return "recon";
-  if (decision === "revise_capture") return "verify";
-  if (decision === "needs_richer_proof") return "author";
-  return null;
+  return canonicalProofAssessmentStageForDecision(decision) as RiddleProofStage | null;
 }
 
 function checkpointContractFromPacket(packet: NonNullable<RiddleProofRunState["checkpoint_packet"]>) {
@@ -605,7 +599,7 @@ function proofAssessmentPayloadFromCheckpointResponse(
     response.continue_with_stage ||
     nonEmptyString(payload.recommended_stage) ||
     defaultStageForProofCheckpointDecision(response.decision);
-  return compactRecord({
+  return normalizeProofAssessmentStageFields(compactRecord({
     ...payload,
     decision: response.decision,
     summary: response.summary,
@@ -620,7 +614,7 @@ function proofAssessmentPayloadFromCheckpointResponse(
     source: "supervising_agent",
     checkpoint_response_source: response.source || null,
     checkpoint_response_created_at: response.created_at,
-  }) as Record<string, unknown>;
+  }) as Record<string, unknown>);
 }
 
 function reconAssessmentPayloadFromCheckpointResponse(
@@ -1712,7 +1706,7 @@ async function routeCheckpoint(
       }
       return { blocker };
     }
-    const payload = assessment.payload as Record<string, unknown>;
+    const payload = normalizeProofAssessmentStageFields(assessment.payload as Record<string, unknown>);
     recordEvent(state, {
       kind: "agent.proof_assessment.completed",
       checkpoint,

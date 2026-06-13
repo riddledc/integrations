@@ -69,6 +69,26 @@ export interface WorkflowParams {
   advance_stage?: WorkflowStage;
 }
 
+export function canonicalProofAssessmentStageForDecision(decision: unknown): WorkflowStage | null {
+  const normalized = typeof decision === "string" ? decision.trim() : "";
+  if (normalized === "ready_to_ship") return "ship";
+  if (normalized === "needs_richer_proof") return "author";
+  if (normalized === "revise_capture") return "verify";
+  if (normalized === "needs_recon") return "recon";
+  if (normalized === "needs_implementation") return "implement";
+  return null;
+}
+
+export function normalizeProofAssessmentStageFields<T extends Record<string, unknown>>(assessment: T): T {
+  const canonicalStage = canonicalProofAssessmentStageForDecision(assessment.decision);
+  if (!canonicalStage) return assessment;
+  return {
+    ...assessment,
+    recommended_stage: canonicalStage,
+    continue_with_stage: canonicalStage,
+  };
+}
+
 type NoImplementationModeInput = {
   mode?: unknown;
   workflow_mode?: unknown;
@@ -1348,10 +1368,10 @@ export function mergeStateFromParams(statePath: string, params: WorkflowParams) 
       state.proof_assessment_source = null;
     } else {
       const parsed = JSON.parse(raw);
-      const assessment = {
+      const assessment = normalizeProofAssessmentStageFields({
         ...parsed,
         source: (parsed?.source || "supervising_agent").toString(),
-      };
+      });
       const readyBlocker = assessment?.decision === "ready_to_ship"
         ? visualDeltaShipGateReason({ ...state, proof_assessment: assessment, proof_assessment_source: assessment.source })
         : null;

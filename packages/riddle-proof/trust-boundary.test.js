@@ -490,6 +490,101 @@ function baseRequest(paths, changeRequest) {
   assertNoGenericLifecycleFailure(repeatedLateCheckpointResponse, 'repeated late checkpoint response after terminal completion');
 }
 
+{
+  const paths = pathsFor('contradictory-proof-assessment-route');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    verification_mode: 'proof',
+    verify_status: 'evidence_captured',
+    before_cdn: 'https://cdn.example.com/before-proof.png',
+    after_cdn: 'https://cdn.example.com/after-proof.png',
+    proof_assessment_request: {
+      status: 'needs_supervising_agent_assessment',
+    },
+  });
+  const request = {
+    ...baseRequest(paths, 'Contradictory proof assessment stage hints must not override the decision.'),
+    implementation_mode: 'none',
+    require_diff: false,
+    allow_code_changes: false,
+  };
+  const yielded = await harnessMod.runRiddleProofEngineHarness({
+    request,
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_supervisor_judgment',
+          summary: 'Verify needs supervising proof assessment.',
+          checkpointContract: {
+            checkpoint: 'verify_supervisor_judgment',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 1,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yielded.status === 'awaiting_checkpoint', `verify assessment should yield, got ${yielded.status}`);
+  const packet = yielded.checkpoint_packet;
+  assert(packet?.checkpoint === 'verify_supervisor_judgment', 'proof assessment packet should be pending');
+  const resumeCalls = [];
+  const resumed = await harnessMod.runRiddleProofEngineHarness({
+    request,
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute(params) {
+        resumeCalls.push(params);
+        const assessment = JSON.parse(params.proof_assessment_json || '{}');
+        assert(assessment.decision === 'needs_richer_proof', 'proof assessment decision should be preserved');
+        assert(assessment.recommended_stage === 'author', `needs_richer_proof should canonicalize recommended_stage to author, got ${assessment.recommended_stage}`);
+        assert(assessment.continue_with_stage === 'author', `needs_richer_proof should canonicalize continue_with_stage to author, got ${assessment.continue_with_stage}`);
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_agent_retry',
+          summary: 'Richer proof is required before shipping.',
+          checkpointContract: {
+            checkpoint: 'verify_agent_retry',
+            stage: 'verify',
+            resume: { continue_with_stage: 'author' },
+          },
+        };
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: packet.run_id,
+      checkpoint: packet.checkpoint,
+      resume_token: packet.resume_token,
+      decision: 'needs_richer_proof',
+      summary: 'Needs richer proof, but contradictory fields attempted to route to ship.',
+      payload: {
+        recommended_stage: 'ship',
+        continue_with_stage: 'ship',
+      },
+      continue_with_stage: 'ship',
+      created_at: '2026-06-13T00:30:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 2,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(resumeCalls.length === 1, 'contradictory proof assessment should resume engine exactly once');
+  assert(resumed.status === 'awaiting_checkpoint', `contradictory proof assessment should yield author retry, got ${resumed.status}`);
+  assert(resumed.checkpoint_packet?.stage === 'author', 'needs_richer_proof should route to author, not ship');
+  assert(resumed.checkpoint_packet?.checkpoint === 'verify_agent_retry', 'retry checkpoint should remain tied to verify_agent_retry');
+  assert(!resumed.raw?.ship_held, 'needs_richer_proof with contradictory ship hints must not become ship-held ready_to_ship');
+  assertNoGenericLifecycleFailure(resumed, 'contradictory proof assessment stage routing');
+}
+
 console.log(JSON.stringify({
   ok: true,
   suite: 'riddle-proof.direct-trust-boundary',
@@ -502,5 +597,6 @@ console.log(JSON.stringify({
     'timeout capture retry checkpoint',
     'no-diff audit completed',
     'late checkpoint response ignored after terminal completion',
+    'contradictory proof assessment stage hints canonicalized',
   ],
 }, null, 2));

@@ -612,6 +612,59 @@ inductive ProofAssessmentDecision where
   | unknown
   deriving DecidableEq, Repr, BEq
 
+inductive ProofAssessmentStage where
+  | ship
+  | author
+  | verify
+  | recon
+  | implement
+  | unknown
+  deriving DecidableEq, Repr, BEq
+
+def canonicalProofAssessmentStage : ProofAssessmentDecision → ProofAssessmentStage
+  | ProofAssessmentDecision.readyToShip => ProofAssessmentStage.ship
+  | ProofAssessmentDecision.needsRicherProof => ProofAssessmentStage.author
+  | ProofAssessmentDecision.reviseCapture => ProofAssessmentStage.verify
+  | ProofAssessmentDecision.needsRecon => ProofAssessmentStage.recon
+  | ProofAssessmentDecision.needsImplementation => ProofAssessmentStage.implement
+  | ProofAssessmentDecision.unknown => ProofAssessmentStage.unknown
+
+structure ProofAssessmentRouting where
+  decision : ProofAssessmentDecision
+  stageHint : ProofAssessmentStage
+  deriving Repr
+
+def normalizedProofAssessmentStage (routing : ProofAssessmentRouting) : ProofAssessmentStage :=
+  canonicalProofAssessmentStage routing.decision
+
+def proofAssessmentRequestsShip (routing : ProofAssessmentRouting) : Bool :=
+  match routing.decision with
+  | ProofAssessmentDecision.readyToShip => true
+  | _ => false
+
+def proofAssessmentStageHintRequestsShip (routing : ProofAssessmentRouting) : Bool :=
+  routing.stageHint == ProofAssessmentStage.ship
+
+theorem proof_assessment_requests_ship_implies_ready_decision
+    (routing : ProofAssessmentRouting)
+    (hShip : proofAssessmentRequestsShip routing = true) :
+    routing.decision = ProofAssessmentDecision.readyToShip := by
+  cases routing with
+  | mk decision stageHint =>
+      cases decision <;> simp [proofAssessmentRequestsShip] at hShip ⊢
+
+def exampleContradictoryNeedsRicherProofRoute : ProofAssessmentRouting where
+  decision := ProofAssessmentDecision.needsRicherProof
+  stageHint := ProofAssessmentStage.ship
+
+theorem contradictory_stage_hint_does_not_request_ship :
+    proofAssessmentRequestsShip exampleContradictoryNeedsRicherProofRoute = false
+      ∧ normalizedProofAssessmentStage exampleContradictoryNeedsRicherProofRoute =
+          ProofAssessmentStage.author
+      ∧ proofAssessmentStageHintRequestsShip
+          exampleContradictoryNeedsRicherProofRoute = true := by
+  native_decide
+
 structure WholeFlowState where
   authoredRequirementsPreserved : Bool
   reconRequiredBaselinesPresent : Bool
