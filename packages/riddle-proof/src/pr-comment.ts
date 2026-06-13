@@ -42,6 +42,8 @@ export interface RiddleProofPrCommentSummary {
   ship_held?: boolean;
   shipping_disabled?: boolean;
   ship_authorized?: boolean;
+  merge_ready?: boolean;
+  sync_allowed?: boolean;
   proof_decision?: string;
   merge_recommendation?: string;
   checkpoint_summary?: RiddleProofPrCommentCheckpointSummary;
@@ -243,6 +245,8 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     ship_held: publicState.ship_held,
     shipping_disabled: publicState.shipping_disabled,
     ship_authorized: publicState.ship_authorized,
+    merge_ready: publicState.merge_ready,
+    sync_allowed: publicState.sync_allowed,
     proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
     merge_recommendation: firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
     checkpoint_summary: checkpointSummary,
@@ -301,6 +305,17 @@ function hasShipControl(summary: RiddleProofPrCommentSummary) {
     typeof summary.ship_authorized === "boolean";
 }
 
+function hasHandoffControl(summary: RiddleProofPrCommentSummary) {
+  return typeof summary.merge_ready === "boolean" ||
+    typeof summary.sync_allowed === "boolean";
+}
+
+function shouldRenderMergeRecommendation(summary: RiddleProofPrCommentSummary) {
+  if (!summary.merge_recommendation) return false;
+  const prohibited = summary.public_state?.prohibited_claims || [];
+  return !prohibited.includes("merge_ready") && !prohibited.includes("sync_allowed");
+}
+
 function checkpointSummaryLine(summary: RiddleProofPrCommentCheckpointSummary) {
   const accepted = summary.response_count ?? 0;
   const rejected = summary.rejected_response_count ?? 0;
@@ -334,8 +349,11 @@ export function buildRiddleProofPrCommentMarkdown(input: RiddleProofPrCommentInp
   if (hasShipControl(summary)) {
     lines.push(`**Ship control:** held=${formatBool(summary.ship_held)}, shipping_disabled=${formatBool(summary.shipping_disabled)}, authorized=${formatBool(summary.ship_authorized)}`);
   }
+  if (hasHandoffControl(summary)) {
+    lines.push(`**Handoff:** merge_ready=${formatBool(summary.merge_ready)}, sync_allowed=${formatBool(summary.sync_allowed)}`);
+  }
   if (summary.proof_decision) lines.push(`**Proof decision:** \`${summary.proof_decision}\``);
-  if (summary.merge_recommendation) lines.push(`**Merge recommendation:** ${summary.merge_recommendation}`);
+  if (shouldRenderMergeRecommendation(summary)) lines.push(`**Merge recommendation:** ${summary.merge_recommendation}`);
   if (summary.checkpoint_summary) lines.push(`**Checkpoints:** ${checkpointSummaryLine(summary.checkpoint_summary)}`);
   if (summary.proof_url) lines.push(`**Proof URL:** ${markdownLink(summary.proof_url, summary.proof_url)}`);
   if (summary.preview_id || summary.preview_url) {

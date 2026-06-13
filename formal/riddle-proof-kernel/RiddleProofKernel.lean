@@ -2417,6 +2417,99 @@ theorem public_blocked_or_waiting_blocks_proof_passed
     publicProofPassed input = false := by
   simp [publicProofPassed, hBlocked]
 
+/-!
+Layer 9: public-state consumer conformance.
+
+Consumer surfaces are comments, hosted summaries, agent summaries, or any other
+text/artifact derived from public state. They must not reintroduce claims that
+the public state explicitly prohibits.
+-/
+
+structure PublicConsumerSurface where
+  claimsShipAuthorized : Bool
+  claimsMergeReady : Bool
+  claimsSyncAllowed : Bool
+  claimsProofPassed : Bool
+  disclosesShipControl : Bool
+  disclosesCheckpointAudit : Bool
+  deriving Repr, DecidableEq
+
+def publicConsumerSurfaceConforms
+    (input : PublicStateInput)
+    (surface : PublicConsumerSurface) : Bool :=
+  (if publicProhibitsShipAuthorizationClaim input then
+      !surface.claimsShipAuthorized
+    else
+      true)
+    && (if publicProhibitsMergeReadyClaim input then
+      !surface.claimsMergeReady
+    else
+      true)
+    && (if publicProhibitsSyncAllowedClaim input then
+      !surface.claimsSyncAllowed
+    else
+      true)
+    && (if publicBlockedOrWaiting input then
+      !surface.claimsProofPassed
+    else
+      true)
+    && (if publicShipHeld input || publicShippingDisabled input then
+      surface.disclosesShipControl
+    else
+      true)
+    && (if publicCheckpointAuditDisclosureRequired input then
+      surface.disclosesCheckpointAudit
+    else
+      true)
+
+def publicConsumerSurfaceFromState
+    (input : PublicStateInput) : PublicConsumerSurface where
+  claimsShipAuthorized :=
+    if publicProhibitsShipAuthorizationClaim input then
+      false
+    else
+      publicShipAuthorized input
+  claimsMergeReady :=
+    if publicProhibitsMergeReadyClaim input then
+      false
+    else
+      publicMergeReady input
+  claimsSyncAllowed :=
+    if publicProhibitsSyncAllowedClaim input then
+      false
+    else
+      publicSyncAllowed input
+  claimsProofPassed :=
+    if publicBlockedOrWaiting input then
+      false
+    else
+      publicProofPassed input
+  disclosesShipControl :=
+    publicShipHeld input || publicShippingDisabled input
+  disclosesCheckpointAudit :=
+    publicCheckpointAuditDisclosureRequired input
+
+theorem public_consumer_surface_from_state_conforms
+    (input : PublicStateInput) :
+    publicConsumerSurfaceConforms input
+      (publicConsumerSurfaceFromState input) = true := by
+  by_cases hShip : publicProhibitsShipAuthorizationClaim input <;>
+  by_cases hMerge : publicProhibitsMergeReadyClaim input <;>
+  by_cases hSync : publicProhibitsSyncAllowedClaim input <;>
+  by_cases hBlocked : publicBlockedOrWaiting input <;>
+  by_cases hShipControl : publicShipHeld input || publicShippingDisabled input <;>
+  by_cases hAudit : publicCheckpointAuditDisclosureRequired input <;>
+  simp [
+    publicConsumerSurfaceConforms,
+    publicConsumerSurfaceFromState,
+    hShip,
+    hMerge,
+    hSync,
+    hBlocked,
+    hShipControl,
+    hAudit
+  ]
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
@@ -2792,6 +2885,57 @@ theorem public_checkpoint_audit_counters_require_disclosure :
     publicCheckpointAuditDisclosureRequired publicExampleCheckpointAudit = true
       ∧ publicProhibitsAllCheckpointResponsesAcceptedClaim
         publicExampleCheckpointAudit = true := by
+  native_decide
+
+def publicConsumerStaleMergeRecommendation : PublicConsumerSurface where
+  claimsShipAuthorized := false
+  claimsMergeReady := true
+  claimsSyncAllowed := true
+  claimsProofPassed := true
+  disclosesShipControl := true
+  disclosesCheckpointAudit := false
+
+def publicConsumerMissingCheckpointAuditDisclosure : PublicConsumerSurface where
+  claimsShipAuthorized := false
+  claimsMergeReady := true
+  claimsSyncAllowed := true
+  claimsProofPassed := true
+  disclosesShipControl := false
+  disclosesCheckpointAudit := false
+
+theorem stale_merge_recommendation_consumer_violates_held_public_state :
+    publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
+      publicConsumerStaleMergeRecommendation = false := by
+  native_decide
+
+theorem missing_checkpoint_audit_consumer_violates_public_state :
+    publicConsumerSurfaceConforms publicExampleCheckpointAudit
+      publicConsumerMissingCheckpointAuditDisclosure = false := by
+  native_decide
+
+theorem generated_public_consumer_surface_handles_held_no_ship :
+    publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
+        (publicConsumerSurfaceFromState publicExampleHeldReadyNoShip) = true
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHeldReadyNoShip).claimsShipAuthorized = false
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHeldReadyNoShip).claimsMergeReady = false
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHeldReadyNoShip).claimsSyncAllowed = false
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHeldReadyNoShip).disclosesShipControl = true := by
+  native_decide
+
+theorem generated_public_consumer_surface_handles_handoff_ready :
+    publicConsumerSurfaceConforms publicExampleHandoffReadyNotAuthorized
+        (publicConsumerSurfaceFromState
+          publicExampleHandoffReadyNotAuthorized) = true
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHandoffReadyNotAuthorized).claimsShipAuthorized = false
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHandoffReadyNotAuthorized).claimsMergeReady = true
+      ∧ (publicConsumerSurfaceFromState
+          publicExampleHandoffReadyNotAuthorized).claimsSyncAllowed = true := by
   native_decide
 
 end RiddleProofKernel

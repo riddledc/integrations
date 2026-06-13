@@ -29,6 +29,9 @@ import {
   summarizeRiddleProofPublicState,
 } from "./dist/public-state.js";
 import {
+  buildRiddleProofPrCommentMarkdown,
+} from "./dist/pr-comment.js";
+import {
   buildAuthorCheckpointPacket,
   buildProofAssessmentCheckpointPacket,
   buildStageCheckpointPacket,
@@ -859,6 +862,69 @@ assert.equal(publicCheckpointAudit.checkpoint_summary?.audit_disclosure_required
 assert.ok(publicCheckpointAudit.required_disclosures.includes("checkpoint_audit_counters"));
 assert.ok(publicCheckpointAudit.prohibited_claims.includes("all_checkpoint_responses_accepted"));
 
+const publicConsumerRunResponse = {
+  proofResult: {
+    status: "completed",
+    outputs: [],
+  },
+};
+const publicConsumerHeldMarkdown = buildRiddleProofPrCommentMarkdown({
+  runResponse: publicConsumerRunResponse,
+  result: {
+    ok: true,
+    status: "ready_to_ship",
+    ship_mode: "none",
+    ship_authorized: false,
+    merge_recommendation: "ready-to-ship",
+    checkpoint_summary: {
+      pending: false,
+      response_count: 1,
+      rejected_response_count: 1,
+    },
+  },
+});
+assert.match(publicConsumerHeldMarkdown, /\*\*Result:\*\* proof passed; ship held/);
+assert.match(publicConsumerHeldMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
+assert.match(publicConsumerHeldMarkdown, /\*\*Checkpoints:\*\* 1 accepted \/ 1 rejected \/ 0 ignored/);
+assert.doesNotMatch(publicConsumerHeldMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+
+const publicConsumerReadyMarkdown = buildRiddleProofPrCommentMarkdown({
+  runResponse: publicConsumerRunResponse,
+  result: {
+    ok: true,
+    status: "ready_to_ship",
+    pr_handoff_policy: {
+      state: "proof_complete",
+      proof_complete: true,
+      merge_ready: true,
+      normal_pr_allowed: true,
+    },
+    merge_recommendation: "ready-to-ship",
+  },
+});
+assert.match(publicConsumerReadyMarkdown, /\*\*Result:\*\* passed/);
+assert.match(publicConsumerReadyMarkdown, /\*\*Handoff:\*\* merge_ready=true, sync_allowed=true/);
+assert.match(publicConsumerReadyMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+assert.doesNotMatch(publicConsumerReadyMarkdown, /authorized=true/);
+
+const publicConsumerBlockedMarkdown = buildRiddleProofPrCommentMarkdown({
+  runResponse: publicConsumerRunResponse,
+  result: {
+    ok: true,
+    status: "completed",
+    pr_handoff_policy: {
+      state: "proof_review_required",
+      proof_complete: false,
+      merge_ready: true,
+      normal_pr_allowed: true,
+    },
+    merge_recommendation: "ready-to-ship",
+  },
+});
+assert.match(publicConsumerBlockedMarkdown, /\*\*Result:\*\* blocked/);
+assert.match(publicConsumerBlockedMarkdown, /\*\*Handoff:\*\* merge_ready=false, sync_allowed=false/);
+assert.doesNotMatch(publicConsumerBlockedMarkdown, /\*\*Merge recommendation:\*\* ready-to-ship/);
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.formal-conformance",
@@ -884,5 +950,6 @@ console.log(JSON.stringify({
     publicStateProjection: true,
     publicStateHandoffReadiness: true,
     publicStateAuditDisclosure: true,
+    publicStateConsumerConformance: true,
   },
 }));
