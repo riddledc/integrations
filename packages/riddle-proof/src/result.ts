@@ -6,6 +6,10 @@ import type {
   RiddleProofStatus,
   RiddleProofTerminalMetadata,
 } from "./types";
+import {
+  riddleProofPublicStateMergeRecommendation,
+  summarizeRiddleProofPublicState,
+} from "./public-state";
 
 export function isTerminalStatus(status: RiddleProofStatus): boolean {
   return status === "blocked" || status === "failed" || status === "ready_to_ship" || status === "shipped" || status === "completed";
@@ -233,6 +237,47 @@ export interface RiddleProofShipControlState {
   ship_authorized: boolean;
 }
 
+export function publicStateForRunState(input: {
+  state: RiddleProofRunState;
+  status?: RiddleProofStatus;
+  raw?: Record<string, unknown>;
+}) {
+  const state = input.state;
+  const status = input.status || state.status;
+  const raw = recordValue(input.raw) || {};
+  const extendedState = state as unknown as Record<string, unknown>;
+  const terminalOk = isTerminalStatus(status) ? state.ok : undefined;
+  return summarizeRiddleProofPublicState(compactRecord({
+    status,
+    ok: terminalOk,
+    request: state.request,
+    pr_state: state.pr_state,
+    marked_ready: state.marked_ready,
+    ship_held: state.ship_held,
+    shipping_disabled: state.shipping_disabled,
+    ship_authorized: state.ship_authorized,
+    ship_mode: state.request?.ship_mode,
+    merge_commit: state.merge_commit,
+    merged_at: state.merged_at,
+    checkpoint_summary: state.checkpoint_summary,
+    pr_handoff_policy: recordValue(extendedState.pr_handoff_policy),
+    merge_ready: extendedState.merge_ready,
+    normal_pr_allowed: extendedState.normal_pr_allowed,
+    raw: Object.keys(raw).length ? raw : undefined,
+  }));
+}
+
+export function publicMergeRecommendationForRunState(input: {
+  state: RiddleProofRunState;
+  status?: RiddleProofStatus;
+  raw?: Record<string, unknown>;
+}) {
+  return riddleProofPublicStateMergeRecommendation(
+    publicStateForRunState(input),
+    input.state.merge_recommendation,
+  );
+}
+
 export function shipControlStateFor(input: {
   state: RiddleProofRunState;
   status?: RiddleProofStatus;
@@ -308,6 +353,11 @@ export function createRunResult(input: {
   state.ok = ok;
   if (isProtectedFinalStatus(status)) state.finalized = true;
   applyShipControlState(state, { status, raw: input.raw });
+  const publicState = publicStateForRunState({ state, status, raw: input.raw });
+  const publicMergeRecommendation = riddleProofPublicStateMergeRecommendation(
+    publicState,
+    state.merge_recommendation,
+  );
   return compactRecord({
     ok,
     status,
@@ -325,9 +375,12 @@ export function createRunResult(input: {
     pr_state: state.pr_state as RiddleProofPrLifecycleState | undefined,
     marked_ready: state.marked_ready,
     left_draft: state.left_draft,
-    ship_held: state.ship_held,
-    shipping_disabled: state.shipping_disabled,
-    ship_authorized: state.ship_authorized,
+    result_label: publicState.result_label,
+    ship_held: publicState.ship_held,
+    shipping_disabled: publicState.shipping_disabled,
+    ship_authorized: publicState.ship_authorized,
+    merge_ready: publicState.merge_ready,
+    sync_allowed: publicState.sync_allowed,
     ci_status: state.ci_status,
     ship_commit: state.ship_commit,
     ship_remote_head: state.ship_remote_head,
@@ -341,7 +394,8 @@ export function createRunResult(input: {
     cleanup_report: state.cleanup_report,
     notification: state.notification,
     proof_decision: state.proof_decision,
-    merge_recommendation: state.merge_recommendation,
+    merge_recommendation: publicMergeRecommendation,
+    public_state: publicState,
     finalized: state.finalized,
     blocker: state.blocker,
     checkpoint_packet: state.checkpoint_packet,

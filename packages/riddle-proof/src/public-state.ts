@@ -36,6 +36,29 @@ export interface RiddleProofPublicStateSummary {
   prohibited_claims: string[];
 }
 
+export function riddleProofPublicStateAllowsClaim(
+  summary: RiddleProofPublicStateSummary | undefined,
+  claim: string,
+) {
+  return !summary?.prohibited_claims.includes(claim);
+}
+
+export function riddleProofPublicStateAllowsMergeRecommendation(
+  summary: RiddleProofPublicStateSummary | undefined,
+) {
+  return riddleProofPublicStateAllowsClaim(summary, "merge_ready") &&
+    riddleProofPublicStateAllowsClaim(summary, "sync_allowed");
+}
+
+export function riddleProofPublicStateMergeRecommendation(
+  summary: RiddleProofPublicStateSummary | undefined,
+  recommendation: string | undefined,
+) {
+  return recommendation && riddleProofPublicStateAllowsMergeRecommendation(summary)
+    ? recommendation
+    : undefined;
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

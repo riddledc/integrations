@@ -233,7 +233,8 @@ or review-required handoff suppresses stale success-shaped status fields.
 ## Layer 9: Public-State Consumer Conformance
 
 The Layer 9 model covers downstream surfaces that consume public state: PR
-comments, hosted summaries, status monitors, and agent summaries.
+comments, run cards, run results, hosted summaries, status monitors, and agent
+summaries.
 
 It models these obligations:
 
@@ -373,8 +374,9 @@ Layer 9 adds public-state consumer checks:
 - `stale_merge_recommendation_consumer_violates_held_public_state` caught a
   real PR-comment drift: the comment could repeat a raw `ready-to-ship` merge
   recommendation even when `public_state` prohibited merge/sync claims. The
-  comment now emits explicit handoff booleans and suppresses stale merge
-  recommendations under those prohibited claims.
+  comment, run card, status snapshot, and run result surfaces now emit explicit
+  handoff booleans and suppress stale merge recommendations under those
+  prohibited claims.
 - `missing_checkpoint_audit_consumer_violates_public_state` shows that a
   public consumer cannot hide rejected, ignored, or duplicate checkpoint
   counters once public state requires that disclosure.

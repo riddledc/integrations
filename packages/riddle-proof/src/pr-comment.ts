@@ -1,4 +1,8 @@
-import { summarizeRiddleProofPublicState, type RiddleProofPublicStateSummary } from "./public-state";
+import {
+  riddleProofPublicStateAllowsMergeRecommendation,
+  summarizeRiddleProofPublicState,
+  type RiddleProofPublicStateSummary,
+} from "./public-state";
 
 export const RIDDLE_PROOF_PR_COMMENT_MARKER = "<!-- riddle-proof:pr-comment:v1 -->";
 
@@ -312,8 +316,7 @@ function hasHandoffControl(summary: RiddleProofPrCommentSummary) {
 
 function shouldRenderMergeRecommendation(summary: RiddleProofPrCommentSummary) {
   if (!summary.merge_recommendation) return false;
-  const prohibited = summary.public_state?.prohibited_claims || [];
-  return !prohibited.includes("merge_ready") && !prohibited.includes("sync_allowed");
+  return riddleProofPublicStateAllowsMergeRecommendation(summary.public_state);
 }
 
 function checkpointSummaryLine(summary: RiddleProofPrCommentCheckpointSummary) {
