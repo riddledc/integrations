@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.60
+
+### Patch Changes
+
+- 90e75d9: Project run cards, status snapshots, and run results through public proof state before exposing handoff claims.
+
 ## 0.8.59
 
 ### Patch Changes
