@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.53
+
+### Patch Changes
+
+- 33a4caf: Add checkpoint packet lineage IDs to packet/response contracts so stale responses from an older active packet cannot resume a run with the same checkpoint token.
+
 ## 0.8.52
 
 ### Patch Changes
