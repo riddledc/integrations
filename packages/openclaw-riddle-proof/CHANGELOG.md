@@ -1,5 +1,11 @@
 # @riddledc/openclaw-riddle-proof
 
+## 0.4.158
+
+### Patch Changes
+
+- 5929420: Preserve no-ship handoff policy in ready proof wake instructions.
+
 ## 0.4.157
 
 ### Patch Changes
