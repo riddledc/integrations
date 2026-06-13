@@ -3462,7 +3462,13 @@ function wakeKindForStatus(status: Record<string, unknown>): OpenClawRiddleProof
   return "reportable_status";
 }
 
-function nextToolsForWakeKind(kind: OpenClawRiddleProofWakeKind) {
+function handoffDisablesShipSync(handoff: Record<string, unknown> | null | undefined) {
+  if (!handoff) return false;
+  return stringValue(handoff.state) === "proof_complete_ship_disabled" ||
+    (handoff.proof_complete === true && handoff.normal_pr_allowed === false);
+}
+
+function nextToolsForWakeKind(kind: OpenClawRiddleProofWakeKind, handoff?: Record<string, unknown> | null) {
   if (kind === "proof_review_required") {
     return [RIDDLE_PROOF_INSPECT_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME, RIDDLE_PROOF_STATUS_TOOL_NAME];
   }
@@ -3470,12 +3476,17 @@ function nextToolsForWakeKind(kind: OpenClawRiddleProofWakeKind) {
     return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_REVIEW_TOOL_NAME];
   }
   if (kind === "ready_to_ship" || kind === "shipped" || kind === "completed") {
+    if (handoffDisablesShipSync(handoff)) return [RIDDLE_PROOF_STATUS_TOOL_NAME];
     return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_SYNC_TOOL_NAME];
   }
   return [RIDDLE_PROOF_STATUS_TOOL_NAME, RIDDLE_PROOF_INSPECT_TOOL_NAME];
 }
 
-function wakeInstructionForKind(kind: OpenClawRiddleProofWakeKind, statePath: string) {
+function wakeInstructionForKind(
+  kind: OpenClawRiddleProofWakeKind,
+  statePath: string,
+  handoff?: Record<string, unknown> | null,
+) {
   if (kind === "proof_review_required") {
     return (
       `Call ${RIDDLE_PROOF_INSPECT_TOOL_NAME} with state_path=${statePath}, judge the proof evidence directly, ` +
@@ -3489,6 +3500,12 @@ function wakeInstructionForKind(kind: OpenClawRiddleProofWakeKind, statePath: st
     );
   }
   if (kind === "ready_to_ship" || kind === "shipped" || kind === "completed") {
+    if (handoffDisablesShipSync(handoff)) {
+      return (
+        `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath}, then report the terminal proof result, ` +
+        "artifact URLs, and no-ship policy. Do not call sync or present this as merge-ready unless a separate shipping run or PR handoff is requested."
+      );
+    }
     return (
       `Call ${RIDDLE_PROOF_STATUS_TOOL_NAME} with state_path=${statePath}, then report the terminal proof result, ` +
       `PR state, and artifact URLs. Use ${RIDDLE_PROOF_SYNC_TOOL_NAME} after human PR review or merge.`
@@ -3519,7 +3536,8 @@ export function classifyOpenClawRiddleProofWake(
   const blocker = recordValue(status.blocker);
   const blockerCode = stringValue(blocker?.code);
   const kind = wakeKindForStatus(status);
-  const nextTools = nextToolsForWakeKind(kind);
+  const handoff = recordValue(status.pr_handoff_policy);
+  const nextTools = nextToolsForWakeKind(kind, handoff);
   const summary = stringValue(blocker?.message) || stringValue(status.last_summary) ||
     `Riddle Proof reached ${statusValue || "a reportable state"}.`;
   return {
@@ -3533,6 +3551,7 @@ export function classifyOpenClawRiddleProofWake(
       checkpoint,
       blockerCode,
       suggestedNextAction,
+      stringValue(handoff?.state),
     ].join("|"),
     status: statusValue,
     checkpoint,
@@ -3541,7 +3560,7 @@ export function classifyOpenClawRiddleProofWake(
     next_tools: nextTools,
     failure_summary: recordValue(status.failure_summary),
     proof_artifact_summary: recordValue(status.proof_artifact_summary),
-    pr_handoff_policy: recordValue(status.pr_handoff_policy),
+    pr_handoff_policy: handoff,
     checkpoint_packet: recordValue(status.checkpoint_packet),
   };
 }
@@ -3550,6 +3569,7 @@ export function formatOpenClawRiddleProofWakeEvent(
   classification: Extract<OpenClawRiddleProofWakeClassification, { should_dispatch: true }>,
   statePath: string,
 ) {
+  const handoff = recordValue(classification.pr_handoff_policy);
   const lines = [
     "Riddle Proof background run needs action.",
     `state_path: ${statePath}`,
@@ -3558,15 +3578,16 @@ export function formatOpenClawRiddleProofWakeEvent(
     `action: ${classification.suggested_next_action || classification.kind}`,
     `next_tools: ${classification.next_tools.join(", ")}`,
     `summary: ${classification.summary}`,
-    `instruction: ${wakeInstructionForKind(classification.kind, statePath)}`,
+    `instruction: ${wakeInstructionForKind(classification.kind, statePath, handoff)}`,
   ];
-  const handoff = recordValue(classification.pr_handoff_policy);
   const fallbackPr = recordValue(handoff?.fallback_pr);
   if (handoff && handoff.state === "proof_blocked") {
     lines.push(
       "pr_policy: proof blocked; if preserving useful edits, create/update only a draft PR marked proof-blocked.",
       `pr_required_state: ${stringValue(fallbackPr?.required_state) || "draft"}`,
     );
+  } else if (handoffDisablesShipSync(handoff)) {
+    lines.push("pr_policy: proof complete but shipping disabled; do not sync, merge, or present as merge-ready from this run.");
   }
   const failure = recordValue(classification.failure_summary);
   const primaryFailure = recordValue(failure?.primary_failure);
