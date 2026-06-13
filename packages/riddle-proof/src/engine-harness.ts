@@ -529,6 +529,41 @@ function proofAssessmentRequestsShip(payload: Record<string, unknown>) {
   return String(payload.decision || "").trim() === "ready_to_ship";
 }
 
+const TRUSTED_PROOF_ASSESSMENT_READY_SOURCES = new Set([
+  "supervising_agent",
+  "supervisor",
+  "openclaw_auto_ship_mode_none",
+]);
+
+function proofAssessmentSourceTrustedForShip(payload: Record<string, unknown>) {
+  const source = nonEmptyString(payload.source)?.toLowerCase();
+  if (!source) return true;
+  return TRUSTED_PROOF_ASSESSMENT_READY_SOURCES.has(source);
+}
+
+function proofAssessmentSourceBlocker(input: {
+  checkpoint?: string | null;
+  stage?: RiddleProofStage | string | null;
+  payload: Record<string, unknown>;
+  response?: RiddleProofCheckpointResponse | null;
+  code?: string;
+}): RiddleProofBlocker | null {
+  if (!proofAssessmentRequestsShip(input.payload)) return null;
+  if (proofAssessmentSourceTrustedForShip(input.payload)) return null;
+  const source = nonEmptyString(input.payload.source) || "unknown";
+  return {
+    code: input.code || "proof_assessment_source_not_trusted",
+    checkpoint: input.checkpoint || null,
+    message: `Riddle Proof cannot mark ready_to_ship from untrusted proof assessment source: ${source}.`,
+    details: compactRecord({
+      stage: input.stage || null,
+      proofAssessment: input.payload,
+      checkpoint_response_source: input.response?.source || null,
+      response: input.response || null,
+    }) as Record<string, unknown>,
+  };
+}
+
 function proofAssessmentHardBlockers(state: Record<string, unknown> | null, payload: Record<string, unknown>) {
   const blockers = proofAssessmentHardBlockersForState(state || {});
   if (Array.isArray(payload.hard_blockers)) {
@@ -579,6 +614,16 @@ function stageFromCheckpointResponse(
   return stage ? (stage as RiddleProofStage) : null;
 }
 
+function proofAssessmentSourceFromCheckpointResponse(response: RiddleProofCheckpointResponse) {
+  const kind = nonEmptyString(response.source?.kind)?.toLowerCase();
+  if (!kind) return "supervising_agent";
+  if (kind === "human") return "supervisor";
+  if (kind === "codex" || kind === "openclaw-main" || kind === "claude-code") {
+    return "supervising_agent";
+  }
+  return `checkpoint_response:${kind}`;
+}
+
 function proofAssessmentPayloadFromCheckpointResponse(
   response: RiddleProofCheckpointResponse,
 ): Record<string, unknown> | null {
@@ -611,7 +656,7 @@ function proofAssessmentPayloadFromCheckpointResponse(
       : Array.isArray(payload.reasons)
         ? payload.reasons
         : [],
-    source: "supervising_agent",
+    source: proofAssessmentSourceFromCheckpointResponse(response),
     checkpoint_response_source: response.source || null,
     checkpoint_response_created_at: response.created_at,
   }) as Record<string, unknown>);
@@ -1143,6 +1188,14 @@ function checkpointResponseContinuation(
   if (packet.kind === "assess_proof" || packet.kind === "recover_evidence" || packet.stage === "verify") {
     const assessment = proofAssessmentPayloadFromCheckpointResponse(response);
     if (assessment) {
+      const sourceBlocker = proofAssessmentSourceBlocker({
+        checkpoint: packet.checkpoint,
+        stage: packet.stage,
+        payload: assessment,
+        response,
+        code: "checkpoint_response_source_not_trusted",
+      });
+      if (sourceBlocker) return { blocker: sourceBlocker };
       appendCheckpointResponse(state, response);
       if (state.request.ship_mode !== "ship" && proofAssessmentRequestsShip(assessment)) {
         const result = {
@@ -1765,6 +1818,25 @@ async function routeCheckpoint(
           }) as Record<string, unknown>,
         },
       };
+    }
+    const sourceBlocker = proofAssessmentSourceBlocker({
+      checkpoint,
+      stage: "verify",
+      payload,
+      code: "proof_assessment_source_not_trusted",
+    });
+    if (sourceBlocker) {
+      recordEvent(state, {
+        kind: "agent.proof_assessment.source_blocked",
+        checkpoint,
+        stage: "verify",
+        summary: sourceBlocker.message,
+        details: compactRecord({
+          proof_assessment: payload,
+          agent_duration_ms: durationMs,
+        }),
+      });
+      return { blocker: sourceBlocker };
     }
     const visualBlocker = proofAssessmentVisualBlocker({
       ...(context.fullRiddleState || {}),
