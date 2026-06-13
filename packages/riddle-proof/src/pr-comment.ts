@@ -1,3 +1,5 @@
+import { summarizeRiddleProofPublicState, type RiddleProofPublicStateSummary } from "./public-state";
+
 export const RIDDLE_PROOF_PR_COMMENT_MARKER = "<!-- riddle-proof:pr-comment:v1 -->";
 
 export type RiddleProofPrCommentArtifactKind = "image" | "data" | "artifact";
@@ -43,6 +45,7 @@ export interface RiddleProofPrCommentSummary {
   proof_decision?: string;
   merge_recommendation?: string;
   checkpoint_summary?: RiddleProofPrCommentCheckpointSummary;
+  public_state?: RiddleProofPublicStateSummary;
   passed_checks: number;
   failed_checks: number;
   pages: RiddleProofPrCommentPageSummary[];
@@ -85,14 +88,6 @@ function firstStringValue(...values: unknown[]) {
   for (const value of values) {
     const text = stringValue(value);
     if (text) return text;
-  }
-  return undefined;
-}
-
-function firstBooleanValue(...values: unknown[]) {
-  for (const value of values) {
-    const bool = booleanValue(value);
-    if (typeof bool === "boolean") return bool;
   }
   return undefined;
 }
@@ -229,10 +224,15 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     rawDetails.checkpoint_summary,
     proofResult.checkpoint_summary,
   );
+  const publicState = summarizeRiddleProofPublicState({
+    ...result,
+    status: firstStringValue(result.status, stopCondition.status),
+    checkpoint_summary: checkpointSummary || result.checkpoint_summary,
+  });
   return {
     ok,
     status: stringValue(proofResult.status),
-    result_status: firstStringValue(result.status, stopCondition.status),
+    result_status: publicState.status,
     job_id: stringValue(proofResult.job_id),
     duration_ms: numberValue(proofResult.duration_ms),
     proof_url: stringValue(runResponse.proofUrl),
@@ -240,12 +240,13 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     preview_url: stringValue(preview.preview_url) || stringValue(preview.url),
     preview_publish_recovered: booleanValue(preview.publish_recovered),
     preview_publish_error: stringValue(preview.publish_error),
-    ship_held: firstBooleanValue(result.ship_held, stopCondition.ship_held, resultRaw.ship_held),
-    shipping_disabled: firstBooleanValue(result.shipping_disabled, stopCondition.shipping_disabled, resultRaw.shipping_disabled),
-    ship_authorized: firstBooleanValue(result.ship_authorized, stopCondition.ship_authorized, resultRaw.ship_authorized),
+    ship_held: publicState.ship_held,
+    shipping_disabled: publicState.shipping_disabled,
+    ship_authorized: publicState.ship_authorized,
     proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
     merge_recommendation: firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
     checkpoint_summary: checkpointSummary,
+    public_state: publicState,
     passed_checks: nestedChecks.passed,
     failed_checks: nestedChecks.failed,
     pages,
@@ -267,6 +268,7 @@ function markdownLink(label: string, url: string) {
 }
 
 function resultLabel(summary: RiddleProofPrCommentSummary) {
+  if (summary.public_state?.result_label) return summary.public_state.result_label;
   if (summary.ok === true) {
     if (summary.result_status === "shipped") return "shipped";
     if (summary.result_status === "completed") return "completed";
