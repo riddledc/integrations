@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.61
+
+### Patch Changes
+
+- 76edadb: Sanitize agent/hosted proof summaries through public state and route incomplete recovery checkpoint approvals back to evidence recovery.
+
 ## 0.8.60
 
 ### Patch Changes
