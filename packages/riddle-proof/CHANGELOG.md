@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.56
+
+### Patch Changes
+
+- bd2e0ff: Finalize protected terminal statuses consistently and expose rejected/ignored checkpoint response audit counts without counting them as accepted responses.
+
 ## 0.8.55
 
 ### Patch Changes
