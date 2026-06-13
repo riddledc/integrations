@@ -1205,10 +1205,6 @@ function finalizedCheckpointResponseWithoutPacketResult(
   if (isDuplicateCheckpointResponse(state, response)) return null;
 
   const at = timestamp();
-  state.checkpoint_history = [
-    ...(state.checkpoint_history || []),
-    { ts: at, response },
-  ].slice(-25);
   appendRunEvent(state, {
     ts: at,
     kind: "checkpoint.response.ignored",

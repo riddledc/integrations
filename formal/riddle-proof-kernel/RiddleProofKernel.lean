@@ -1108,6 +1108,7 @@ inductive CheckpointLifecycleResponse where
   | acceptedBlocking
   | rejected
   | duplicate
+  | ignored
   deriving Repr, DecidableEq
 
 structure CheckpointLifecycleState where
@@ -1143,6 +1144,8 @@ def applyCheckpointLifecycleResponse
   | CheckpointLifecycleResponse.duplicate =>
       { state with
         duplicateResponseCount := state.duplicateResponseCount + 1 }
+  | CheckpointLifecycleResponse.ignored =>
+      state
 
 /-!
 Two intentionally broken lifecycle projections. The first clears the pending
@@ -1166,12 +1169,24 @@ def checkpointLifecycleClearsBlocking
   | CheckpointLifecycleResponse.duplicate =>
       { state with
         duplicateResponseCount := state.duplicateResponseCount + 1 }
+  | CheckpointLifecycleResponse.ignored =>
+      state
 
 def checkpointLifecycleCountsRejected
     (state : CheckpointLifecycleState)
     (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
   match response with
   | CheckpointLifecycleResponse.rejected =>
+      { state with
+        acceptedResponseCount := state.acceptedResponseCount + 1 }
+  | _ =>
+      applyCheckpointLifecycleResponse state response
+
+def checkpointLifecycleCountsIgnored
+    (state : CheckpointLifecycleState)
+    (response : CheckpointLifecycleResponse) : CheckpointLifecycleState :=
+  match response with
+  | CheckpointLifecycleResponse.ignored =>
       { state with
         acceptedResponseCount := state.acceptedResponseCount + 1 }
   | _ =>
@@ -1229,6 +1244,21 @@ theorem duplicate_response_increments_duplicate_count
       state
       CheckpointLifecycleResponse.duplicate).duplicateResponseCount =
         state.duplicateResponseCount + 1 := by
+  rfl
+
+theorem ignored_response_preserves_lifecycle_state
+    (state : CheckpointLifecycleState) :
+    applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.ignored = state := by
+  rfl
+
+theorem ignored_response_does_not_increment_response_count
+    (state : CheckpointLifecycleState) :
+    (applyCheckpointLifecycleResponse
+      state
+      CheckpointLifecycleResponse.ignored).acceptedResponseCount =
+        state.acceptedResponseCount := by
   rfl
 
 theorem checkpoint_lifecycle_summary_projects_state
@@ -1324,6 +1354,15 @@ theorem counting_rejected_response_inflates_accepted_count :
       ∧ (checkpointLifecycleCountsRejected
         examplePendingCheckpointLifecycle
         CheckpointLifecycleResponse.rejected).acceptedResponseCount = 1 := by
+  native_decide
+
+theorem counting_ignored_response_inflates_accepted_count :
+    (applyCheckpointLifecycleResponse
+      examplePendingCheckpointLifecycle
+      CheckpointLifecycleResponse.ignored).acceptedResponseCount = 0
+      ∧ (checkpointLifecycleCountsIgnored
+        examplePendingCheckpointLifecycle
+        CheckpointLifecycleResponse.ignored).acceptedResponseCount = 1 := by
   native_decide
 
 /-!
