@@ -339,6 +339,9 @@ Layer 4 adds checkpoint contract counterexamples:
 - `pending_packet_without_response_has_no_token_match_verdict` caught a runtime
   summary bug: a pending tokenized packet with no response was reported as
   `token_matches: false` instead of leaving the comparison unset.
+- `human_checkpoint_response_with_hard_blocker_cannot_hold_ready_to_ship`
+  shows that even a trusted checkpoint response cannot turn upstream hard
+  blockers into `ready_to_ship`.
 - `recovery_gate_prevents_passed_after_incomplete_recovery` shows that a
   `ready_to_ship` checkpoint response after incomplete evidence recovery must
   route back into verify/evidence recovery instead of terminalizing the run.

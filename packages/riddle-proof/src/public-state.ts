@@ -36,6 +36,53 @@ export interface RiddleProofPublicStateSummary {
   prohibited_claims: string[];
 }
 
+export type RiddleProofPublicConsumerSurfaceKind =
+  | "run_status"
+  | "run_result"
+  | "run_card"
+  | "pr_comment"
+  | "hosted_proof_view"
+  | "agent_summary"
+  | (string & {});
+
+export interface RiddleProofPublicConsumerSurface {
+  kind: RiddleProofPublicConsumerSurfaceKind;
+  status?: string;
+  result_label: string;
+  policy_state: RiddleProofPublicPolicyState;
+  proof_complete: boolean;
+  claims: {
+    proof_passed: boolean;
+    ship_authorized: boolean;
+    merge_ready: boolean;
+    sync_allowed: boolean;
+    all_checkpoint_responses_accepted: boolean;
+  };
+  ship_control: {
+    ship_held: boolean;
+    shipping_disabled: boolean;
+    ship_authorized: boolean;
+  };
+  handoff: {
+    merge_ready: boolean;
+    sync_allowed: boolean;
+    merge_recommendation?: string;
+  };
+  checkpoint_audit?: RiddleProofPublicCheckpointSummary;
+  disclosures: {
+    ship_control: boolean;
+    checkpoint_audit: boolean;
+    required: string[];
+    prohibited_claims: string[];
+  };
+  public_state: RiddleProofPublicStateSummary;
+}
+
+export interface RiddleProofPublicConsumerSurfaceOptions {
+  kind?: RiddleProofPublicConsumerSurfaceKind;
+  merge_recommendation?: string;
+}
+
 export function riddleProofPublicStateAllowsClaim(
   summary: RiddleProofPublicStateSummary | undefined,
   claim: string,
@@ -251,4 +298,79 @@ export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPubl
     required_disclosures: uniqueStrings(requiredDisclosures),
     prohibited_claims: uniqueStrings(prohibitedClaims),
   };
+}
+
+export function summarizeRiddleProofPublicConsumerSurface(
+  input: unknown,
+  options: RiddleProofPublicConsumerSurfaceOptions = {},
+): RiddleProofPublicConsumerSurface {
+  const record = asRecord(input);
+  const runCard = asRecord(record.run_card);
+  const stopCondition = asRecord(runCard.stop_condition);
+  const raw = asRecord(record.raw);
+  const publicState = summarizeRiddleProofPublicState(input);
+  const checkpointAudit = publicState.checkpoint_summary;
+  const mergeRecommendation = riddleProofPublicStateMergeRecommendation(
+    publicState,
+    firstStringValue(
+      options.merge_recommendation,
+      record.merge_recommendation,
+      stopCondition.merge_recommendation,
+      raw.merge_recommendation,
+    ),
+  );
+  const checkpointAuditRequired = publicState.required_disclosures.includes("checkpoint_audit_counters");
+
+  return {
+    kind: options.kind || "run_result",
+    status: publicState.status,
+    result_label: publicState.result_label,
+    policy_state: publicState.policy_state,
+    proof_complete: publicState.proof_complete,
+    claims: {
+      proof_passed: publicState.proof_passed,
+      ship_authorized: publicState.ship_authorized,
+      merge_ready: publicState.merge_ready,
+      sync_allowed: publicState.sync_allowed,
+      all_checkpoint_responses_accepted: checkpointAudit ? !checkpointAudit.audit_disclosure_required : false,
+    },
+    ship_control: {
+      ship_held: publicState.ship_held,
+      shipping_disabled: publicState.shipping_disabled,
+      ship_authorized: publicState.ship_authorized,
+    },
+    handoff: {
+      merge_ready: publicState.merge_ready,
+      sync_allowed: publicState.sync_allowed,
+      merge_recommendation: mergeRecommendation,
+    },
+    checkpoint_audit: checkpointAudit,
+    disclosures: {
+      ship_control: true,
+      checkpoint_audit: !checkpointAuditRequired || Boolean(checkpointAudit),
+      required: [...publicState.required_disclosures],
+      prohibited_claims: [...publicState.prohibited_claims],
+    },
+    public_state: publicState,
+  };
+}
+
+export function summarizeRiddleProofHostedProofViewSurface(
+  input: unknown,
+  options: Omit<RiddleProofPublicConsumerSurfaceOptions, "kind"> = {},
+) {
+  return summarizeRiddleProofPublicConsumerSurface(input, {
+    ...options,
+    kind: "hosted_proof_view",
+  });
+}
+
+export function summarizeRiddleProofAgentSummarySurface(
+  input: unknown,
+  options: Omit<RiddleProofPublicConsumerSurfaceOptions, "kind"> = {},
+) {
+  return summarizeRiddleProofPublicConsumerSurface(input, {
+    ...options,
+    kind: "agent_summary",
+  });
 }

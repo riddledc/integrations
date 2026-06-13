@@ -409,6 +409,96 @@ function baseRequest(paths, changeRequest) {
 }
 
 {
+  const paths = pathsFor('checkpoint-response-hard-blocker');
+  writeJson(paths.engineStatePath, {
+    repo: 'riddledc/example',
+    verification_mode: 'interaction',
+    reference: 'before',
+    before_cdn: 'https://cdn.example.com/before.png',
+    after_cdn: 'https://cdn.example.com/after.png',
+    verify_status: 'evidence_captured',
+    merge_recommendation: 'do-not-merge',
+    proof_assessment_request: {
+      status: 'needs_supervising_agent_assessment',
+      hard_blockers: ['structured proof assertion failed: expected CTA copy did not appear'],
+    },
+  });
+  const yieldedProof = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      ...baseRequest(paths, 'Checkpoint approval must not override hard-blocked evidence.'),
+      verification_mode: 'interaction',
+    },
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        return {
+          ok: true,
+          state_path: paths.engineStatePath,
+          checkpoint: 'verify_supervisor_judgment',
+          stage: 'verify',
+          summary: 'Verify needs supervising proof judgment.',
+          checkpointContract: {
+            checkpoint: 'verify_supervisor_judgment',
+            stage: 'verify',
+            blocking: false,
+          },
+        };
+      },
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(yieldedProof.status === 'awaiting_checkpoint', `hard-blocked proof checkpoint should yield, got ${yieldedProof.status}`);
+  assert(yieldedProof.checkpoint_packet?.allowed_decisions.includes('ready_to_ship'), 'hard-blocked proof checkpoint should advertise ready_to_ship for trusted reviewers');
+
+  const hardBlockedReadyResponse = await harnessMod.runRiddleProofEngineHarness({
+    request: {
+      ...baseRequest(paths, 'Optimistic checkpoint response must not approve hard-blocked evidence.'),
+      verification_mode: 'interaction',
+    },
+    state_path: paths.harnessStatePath,
+    engine: {
+      async execute() {
+        throw new Error('hard-blocked ready_to_ship checkpoint response should not resume the engine');
+      },
+    },
+    checkpoint_response: {
+      version: 'riddle-proof.checkpoint_response.v1',
+      run_id: yieldedProof.run_id,
+      checkpoint: yieldedProof.checkpoint_packet.checkpoint,
+      packet_id: yieldedProof.checkpoint_packet.packet_id,
+      resume_token: yieldedProof.checkpoint_packet.resume_token,
+      decision: 'ready_to_ship',
+      summary: 'Reviewer incorrectly approved evidence with a hard blocker.',
+      source: { kind: 'human' },
+      created_at: '2026-06-12T12:12:00.000Z',
+    },
+    checkpoint_mode: 'yield',
+    checkpoint_visibility: 'manual',
+    max_iterations: 3,
+    config: { defaultShipMode: 'none' },
+  });
+  assert(hardBlockedReadyResponse.status === 'blocked', `hard-blocked ready response should block, got ${hardBlockedReadyResponse.status}`);
+  assert(
+    hardBlockedReadyResponse.blocker?.code === 'checkpoint_response_proof_hard_blocker',
+    `hard-blocked ready response should report proof_hard_blocker, got ${hardBlockedReadyResponse.blocker?.code}`,
+  );
+  assert(
+    hardBlockedReadyResponse.blocker.message.includes('structured proof assertion failed'),
+    'hard-blocker response should explain the upstream proof blocker',
+  );
+  const persistedHardBlockedState = readJson(paths.harnessStatePath);
+  assert(persistedHardBlockedState.checkpoint_packet, 'rejected hard-blocked response should keep the pending checkpoint packet visible');
+  assert(persistedHardBlockedState.checkpoint_summary.pending === true, 'hard-blocker rejection should leave checkpoint summary pending');
+  assert(persistedHardBlockedState.checkpoint_summary.response_count === 0, 'hard-blocker rejection should not count as accepted');
+  assert(persistedHardBlockedState.checkpoint_summary.rejected_response_count === 1, 'hard-blocker rejection should increment rejected_response_count');
+  assert(persistedHardBlockedState.events.some((event) => event.kind === 'checkpoint.response.rejected'), 'hard-blocker rejection should emit checkpoint.response.rejected');
+  assertNoGenericLifecycleFailure(hardBlockedReadyResponse, 'checkpoint response hard blocker');
+}
+
+{
   const paths = pathsFor('interaction-missing-proof-evidence');
   writeJson(paths.engineStatePath, {
     repo: 'riddledc/example',
@@ -871,6 +961,7 @@ console.log(JSON.stringify({
     'unadvertised checkpoint response decision blocked',
     'stale checkpoint packet_id blocked',
     'untrusted proof assessment source blocked',
+    'hard-blocked proof assessment checkpoint response rejected',
     'interaction missing proof evidence hard blocker',
     'timeout capture retry checkpoint',
     'ready checkpoint response routed to evidence recovery',
