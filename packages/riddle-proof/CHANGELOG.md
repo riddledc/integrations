@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.64
+
+### Patch Changes
+
+- 369780f: Expose proof provenance in ship reports so published proof artifacts can tie run, checkpoint, evidence bundle, artifact manifest, and proof assessment lineage together.
+
 ## 0.8.63
 
 ### Patch Changes
