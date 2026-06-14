@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has eleven named layers.
+The model in `RiddleProofKernel.lean` now has twelve named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -98,6 +98,29 @@ It models these obligations:
 
 The theorem `reported_whole_flow_passed_implies_ship_gate_ok` proves that the
 reported verdict cannot be `passed` unless the whole ship gate is true.
+
+## Layer 3.1: Interaction Proof Evidence
+
+The Layer 3.1 model covers the author-to-verify contract for route-changing
+interaction proofs.
+
+It models these obligations:
+
+- the proof is explicitly in interaction mode
+- the author packet declares terminal-route intent
+- the author packet asks for an active browser interaction, not only waiting
+- verify emits structured proof evidence
+- the structured evidence matches the authored terminal route
+- failed structured assertions and capture failures block final pass/ship
+
+The theorem `interaction_flow_passed_implies_interaction_contract_complete`
+proves that an interaction flow cannot pass unless its interaction proof
+contract is complete. The counterexamples
+`missing_interaction_proof_evidence_blocks_flow_pass`,
+`route_mismatched_interaction_proof_blocks_flow_pass`, and
+`passive_interaction_author_packet_blocks_flow_pass` pin the failure modes that
+runtime conformance now checks against TypeScript and Python ship-gate
+implementations.
 
 ## Layer 3.5: Proof-Assessment Routing
 
@@ -313,6 +336,16 @@ Layer 3 adds whole-flow final-report counterexamples:
 - `contradictory_stage_hint_does_not_request_ship` shows why
   proof-assessment routing must derive ship readiness from the decision, not
   from advisory stage fields.
+
+Layer 3.1 adds interaction proof counterexamples:
+
+- `missing_interaction_proof_evidence_blocks_flow_pass` shows that an
+  interaction proof cannot ship from a screenshot or generic after-evidence
+  signal alone.
+- `route_mismatched_interaction_proof_blocks_flow_pass` shows that structured
+  proof evidence for the wrong terminal route remains a hard blocker.
+- `passive_interaction_author_packet_blocks_flow_pass` shows that a passive
+  wait-only author packet does not satisfy the active interaction contract.
 
 Layer 4 adds checkpoint contract counterexamples:
 
