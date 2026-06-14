@@ -96,6 +96,10 @@ function shouldIterate(assessment: RiddleProofAssessment): boolean {
   return nextStage === "implement" || nextStage === "author";
 }
 
+function hasTrustedReadySource(assessment: RiddleProofAssessment): boolean {
+  return assessment.source === "supervising_agent" || assessment.source === "supervisor";
+}
+
 async function notifyIfConfigured(input: {
   state: RiddleProofRunState;
   result: RiddleProofRunResult;
@@ -458,6 +462,7 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
           decision: assessment.decision,
           recommended_stage: assessment.recommended_stage,
           continue_with_stage: assessment.continue_with_stage,
+          source: assessment.source,
           reasons: assessment.reasons,
         },
       });
@@ -470,7 +475,27 @@ export async function runRiddleProof(input: RunRiddleProofInput): Promise<Riddle
       });
     }
 
-    if (assessment.decision === "ready_to_ship") break;
+    if (assessment.decision === "ready_to_ship") {
+      if (!hasTrustedReadySource(assessment)) {
+        return blockRun({
+          state,
+          stage: "verify",
+          blocker: adapterBlocker(
+            "proof_assessment_untrusted_source",
+            "A ready_to_ship proof assessment must come from a supervising source.",
+            "judge_completed",
+            {
+              decision: assessment.decision,
+              source: assessment.source || null,
+              trusted_sources: ["supervising_agent", "supervisor"],
+            },
+          ),
+          evidence_bundle: evidenceBundle,
+          raw: { assessment },
+        });
+      }
+      break;
+    }
 
     if (attempt + 1 < maxIterations && shouldIterate(assessment)) {
       evidenceContext = evidenceBundle;

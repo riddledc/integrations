@@ -488,6 +488,7 @@ async function run() {
   const engineMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-run-engine.js')).href);
   const proofSessionMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'proof-session.js')).href);
   const harnessMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'engine-harness.js')).href);
+  const runnerMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'runner.js')).href);
   const codexExecMod = await import(pathToFileURL(path.join(__dirname, 'dist', 'codex-exec-agent.js')).href);
   const cjsCore = require(path.join(__dirname, 'dist', 'proof-run-core.cjs'));
   const cjsEngineMod = require(path.join(__dirname, 'dist', 'proof-run-engine.cjs'));
@@ -496,6 +497,7 @@ async function run() {
   assert(typeof engineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.js should expose createRiddleProofEngine');
   assert(typeof cjsEngineMod.createRiddleProofEngine === 'function', 'dist/proof-run-engine.cjs should expose createRiddleProofEngine');
   assert(typeof harnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.js should expose runRiddleProofEngineHarness');
+  assert(typeof runnerMod.runRiddleProof === 'function', 'dist/runner.js should expose runRiddleProof');
   assert(typeof codexExecMod.createCodexExecAgentAdapter === 'function', 'dist/codex-exec-agent.js should expose createCodexExecAgentAdapter');
   assert(typeof cjsHarnessMod.runRiddleProofEngineHarness === 'function', 'dist/engine-harness.cjs should expose runRiddleProofEngineHarness');
   assert(typeof core.noImplementationModeFor === 'function', 'dist/proof-run-core.js should expose noImplementationModeFor');
@@ -505,6 +507,57 @@ async function run() {
     core.RIDDLE_PROOF_DIR_CANDIDATES[0].endsWith('/runtime'),
     'default riddle-proof lookup should prefer the bundled package runtime',
   );
+
+  const runnerEvidenceBundle = {
+    verification_mode: 'proof',
+    artifacts: [{ name: 'proof.json', kind: 'json', role: 'after_proof' }],
+    summary: 'Runner captured proof evidence.',
+  };
+  const runnerBaseInput = {
+    request: {
+      change_request: 'Harden raw runner assessment source semantics.',
+      implementation_mode: 'none',
+      require_diff: false,
+      allow_code_changes: false,
+      ship_mode: 'none',
+    },
+    adapters: {
+      proof: {
+        prove: async () => ({ ok: true, evidence_bundle: runnerEvidenceBundle }),
+      },
+    },
+  };
+  const untrustedRunnerApproval = await runnerMod.runRiddleProof({
+    ...runnerBaseInput,
+    adapters: {
+      ...runnerBaseInput.adapters,
+      judge: {
+        assessProof: async () => ({
+          decision: 'ready_to_ship',
+          summary: 'The low-level runner tried to approve itself.',
+          source: 'runner',
+        }),
+      },
+    },
+  });
+  assert(untrustedRunnerApproval.status === 'blocked', `untrusted ready_to_ship source should block, got ${untrustedRunnerApproval.status}`);
+  assert(untrustedRunnerApproval.blocker?.code === 'proof_assessment_untrusted_source', `untrusted source blocker should be specific, got ${untrustedRunnerApproval.blocker?.code}`);
+  assert(untrustedRunnerApproval.raw?.assessment?.source === 'runner', 'blocked raw runner result should preserve the untrusted source');
+
+  const trustedSupervisorApproval = await runnerMod.runRiddleProof({
+    ...runnerBaseInput,
+    adapters: {
+      ...runnerBaseInput.adapters,
+      judge: {
+        assessProof: async () => ({
+          decision: 'ready_to_ship',
+          summary: 'Supervising assessment approved the proof.',
+          source: 'supervising_agent',
+        }),
+      },
+    },
+  });
+  assert(trustedSupervisorApproval.status === 'ready_to_ship', `supervising source should still hold as ready_to_ship, got ${trustedSupervisorApproval.status}`);
 
   let capturedAuthorRequest = null;
   const interactionAuthorAdapter = codexExecMod.createCodexExecAgentAdapter({}, async (request) => {
