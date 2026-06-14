@@ -676,6 +676,64 @@ def first_url_from_command_output(*parts):
     return ''
 
 
+def dict_value(value):
+    return value if isinstance(value, dict) else {}
+
+
+def proof_provenance_facts(state):
+    assessment = dict_value(state.get('proof_assessment'))
+    bundle = dict_value(state.get('evidence_bundle'))
+    bundle_session = dict_value(bundle.get('proof_session'))
+    proof_session = dict_value(state.get('proof_session')) or bundle_session
+    publication = dict_value(state.get('proof_artifact_publication'))
+    checkpoint_packet = dict_value(state.get('checkpoint_packet'))
+    checkpoint_summary = dict_value(state.get('checkpoint_summary'))
+    return {
+        'version': 'riddle-proof.provenance.v1',
+        'run_id': str(state.get('run_id') or ''),
+        'checkpoint_packet_id': str(
+            checkpoint_packet.get('packet_id')
+            or checkpoint_summary.get('latest_packet_id')
+            or ''
+        ),
+        'checkpoint_response_packet_id': str(
+            checkpoint_summary.get('latest_response_packet_id')
+            or ''
+        ),
+        'evidence_bundle_id': str(
+            bundle.get('evidence_bundle_id')
+            or bundle.get('bundle_id')
+            or bundle.get('id')
+            or ''
+        ),
+        'proof_session_id': str(
+            proof_session.get('session_id')
+            or bundle_session.get('session_id')
+            or ''
+        ),
+        'proof_session_fingerprint': str(
+            state.get('proof_session_fingerprint')
+            or proof_session.get('fingerprint')
+            or bundle_session.get('fingerprint')
+            or ''
+        ),
+        'proof_assessment_id': str(
+            assessment.get('assessment_id')
+            or assessment.get('id')
+            or ''
+        ),
+        'proof_assessment_source': str(
+            assessment.get('source')
+            or state.get('proof_assessment_source')
+            or ''
+        ),
+        'proof_assessment_decision': str(assessment.get('decision') or ''),
+        'artifact_publication_commit': str(publication.get('commit') or ''),
+        'artifact_manifest_url': str(publication.get('manifest_url') or ''),
+        'artifact_source_fingerprint': str(publication.get('source_fingerprint') or ''),
+    }
+
+
 def build_ship_report(state, marked_ready=None):
     branch = state.get('target_branch') or state.get('branch') or ''
     if marked_ready is None:
@@ -685,6 +743,7 @@ def build_ship_report(state, marked_ready=None):
     after_artifact_url = first_public_artifact_url(state, 'after', 'image') or state.get('after_cdn', '')
     artifact_publication = state.get('proof_artifact_publication') or {}
     ship_gate = ship_gate_report_facts(state)
+    proof_provenance = proof_provenance_facts(state)
     return {
         'pr_url': state.get('pr_url', ''),
         'pr_branch': branch,
@@ -703,6 +762,7 @@ def build_ship_report(state, marked_ready=None):
         'proof_artifacts_manifest_url': artifact_publication.get('manifest_url', '') if isinstance(artifact_publication, dict) else '',
         'proof_artifact_publication': artifact_publication if isinstance(artifact_publication, dict) else {},
         'ship_gate': ship_gate,
+        'proof_provenance': proof_provenance,
     }
 
 
