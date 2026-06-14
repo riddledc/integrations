@@ -72,6 +72,31 @@ print(json.dumps(namespace['ship_gate_report_facts'](state), sort_keys=True))
   return JSON.parse(result.stdout);
 }
 
+function pythonBuildShipReport(state) {
+  const script = `
+import json
+import sys
+from pathlib import Path
+
+ship_path = Path(${JSON.stringify(shipPyPath)})
+source = ship_path.read_text(encoding='utf-8')
+helpers_source = source.split('\\ns = load_state()', 1)[0]
+namespace = {'__file__': str(ship_path)}
+exec(compile(helpers_source, str(ship_path), 'exec'), namespace)
+state = json.loads(sys.stdin.read())
+print(json.dumps(namespace['build_ship_report'](state), sort_keys=True))
+`;
+  const result = spawnSync("python3", ["-c", script], {
+    cwd: packageRoot,
+    input: JSON.stringify(state),
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`python ship report failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
+}
+
 function sortedStrings(value) {
   return Array.isArray(value) ? value.map(String).sort() : [];
 }
@@ -228,6 +253,57 @@ const hardBlockerGate = validateShipGate({
 });
 assert.equal(hardBlockerGate.ok, false);
 assert.ok(hardBlockerGate.reasons.includes("proof hard blocker prevents ready_to_ship: structured proof assertion failed"));
+
+const provenancedShipReport = pythonBuildShipReport({
+  ...baseShipState,
+  run_id: "run_formal_provenance",
+  branch: "agent/provenance",
+  target_branch: "agent/provenance",
+  ship_commit: "abc123",
+  ship_remote_head: "abc123",
+  checkpoint_summary: {
+    latest_packet_id: "rppkt_formal",
+    latest_response_packet_id: "rppkt_formal",
+  },
+  proof_assessment: {
+    source: "supervising_agent",
+    decision: "ready_to_ship",
+    assessment_id: "assessment_formal",
+  },
+  evidence_bundle: {
+    id: "bundle_formal",
+    verification_mode: "proof",
+    proof_session: {
+      session_id: "session_formal",
+      fingerprint: "fingerprint_formal",
+    },
+  },
+  proof_session: {
+    session_id: "session_formal",
+    fingerprint: "fingerprint_formal",
+  },
+  proof_artifact_publication: {
+    commit: "artifact_commit",
+    manifest_url: "https://github.com/example/repo/blob/artifact_commit/riddle-proof/run_formal_provenance/proof-artifacts.json",
+    source_fingerprint: "artifact_source_fingerprint",
+  },
+});
+assert.equal(provenancedShipReport.ship_gate.ok, true);
+assert.deepEqual(provenancedShipReport.proof_provenance, {
+  version: "riddle-proof.provenance.v1",
+  run_id: "run_formal_provenance",
+  checkpoint_packet_id: "rppkt_formal",
+  checkpoint_response_packet_id: "rppkt_formal",
+  evidence_bundle_id: "bundle_formal",
+  proof_session_id: "session_formal",
+  proof_session_fingerprint: "fingerprint_formal",
+  proof_assessment_id: "assessment_formal",
+  proof_assessment_source: "supervising_agent",
+  proof_assessment_decision: "ready_to_ship",
+  artifact_publication_commit: "artifact_commit",
+  artifact_manifest_url: "https://github.com/example/repo/blob/artifact_commit/riddle-proof/run_formal_provenance/proof-artifacts.json",
+  artifact_source_fingerprint: "artifact_source_fingerprint",
+});
 
 const structuredInteractionState = {
   ...baseShipState,

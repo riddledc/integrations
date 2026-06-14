@@ -2504,6 +2504,133 @@ theorem public_report_from_flow_pass_implies_ship_gate_ok
   ] using hProjected
 
 /-!
+Layer 6.1: proof-report provenance projection.
+
+A public report that carries the right ship-gate facts can still be unsafe if
+it mixes facts from different runs or proof attempts. This layer models the
+Riddle-owned identity chain that a public report must expose: run, checkpoint
+packet, evidence bundle, artifact manifest, and proof assessment.
+-/
+
+structure ProofProvenance where
+  runId : Nat
+  checkpointPacketId : Nat
+  evidenceBundleId : Nat
+  artifactManifestId : Nat
+  proofAssessmentId : Nat
+  deriving Repr, DecidableEq
+
+structure ProvenancedPublicShipReport where
+  report : PublicShipReport
+  provenance : ProofProvenance
+  deriving Repr
+
+def publicShipReportWithProvenanceVerdict
+    (expected : ProofProvenance)
+    (report : ProvenancedPublicShipReport) : Verdict :=
+  if report.provenance = expected then
+    publicShipReportVerdict report.report
+  else
+    Verdict.proofInsufficient
+
+def publicShipReportWithoutProvenanceVerdict
+    (_expected : ProofProvenance)
+    (report : ProvenancedPublicShipReport) : Verdict :=
+  publicShipReportVerdict report.report
+
+theorem public_report_with_provenance_pass_implies_provenance_matches
+    (expected : ProofProvenance)
+    (report : ProvenancedPublicShipReport)
+    (hPassed :
+      publicShipReportWithProvenanceVerdict expected report =
+        Verdict.passed) :
+    report.provenance = expected := by
+  by_cases hProvenance : report.provenance = expected
+  · exact hProvenance
+  · simp [publicShipReportWithProvenanceVerdict, hProvenance] at hPassed
+
+theorem public_report_with_provenance_pass_implies_ship_gate_ok
+    (expected : ProofProvenance)
+    (report : ProvenancedPublicShipReport)
+    (hPassed :
+      publicShipReportWithProvenanceVerdict expected report =
+        Verdict.passed) :
+    publicShipGateProjectionOk report.report.shipGate = true := by
+  by_cases hProvenance : report.provenance = expected
+  · have hReportPassed :
+        publicShipReportVerdict report.report = Verdict.passed := by
+      simpa [publicShipReportWithProvenanceVerdict, hProvenance] using hPassed
+    exact public_report_pass_implies_projected_ship_gate_ok
+      report.report
+      hReportPassed
+  · simp [publicShipReportWithProvenanceVerdict, hProvenance] at hPassed
+
+def examplePassingPublicShipGateProjection : PublicShipGateProjection where
+  authoredRequirementsPreserved := true
+  referenceValid := true
+  requiredBaselinesPresent := true
+  reconRequiredBaselinesPresent := true
+  reconBaselineUnderstandingPresent := true
+  authorProofPlanPresent := true
+  authorCaptureScriptPresent := true
+  implementationOk := true
+  afterEvidencePresent := true
+  verifyCaptured := true
+  trustedAssessmentSourceAccepted := true
+  proofAssessmentReady := true
+  visualDeltaOk := true
+  hardBlockersClear := true
+  artifactManifestKnown := true
+  requiredArtifactsComplete := true
+
+def examplePublishedPassingReport : PublicShipReport where
+  status := PublicReportStatus.publishedPass
+  shipGate := examplePassingPublicShipGateProjection
+
+def exampleExpectedProofProvenance : ProofProvenance where
+  runId := 1
+  checkpointPacketId := 2
+  evidenceBundleId := 3
+  artifactManifestId := 4
+  proofAssessmentId := 5
+
+def exampleMixedEvidenceProvenance : ProofProvenance :=
+  { exampleExpectedProofProvenance with evidenceBundleId := 99 }
+
+def exampleCorrectProvenanceReport : ProvenancedPublicShipReport where
+  report := examplePublishedPassingReport
+  provenance := exampleExpectedProofProvenance
+
+def exampleMixedProvenanceReport : ProvenancedPublicShipReport where
+  report := examplePublishedPassingReport
+  provenance := exampleMixedEvidenceProvenance
+
+#eval publicShipReportWithProvenanceVerdict
+  exampleExpectedProofProvenance
+  exampleCorrectProvenanceReport
+#eval publicShipReportWithoutProvenanceVerdict
+  exampleExpectedProofProvenance
+  exampleMixedProvenanceReport
+#eval publicShipReportWithProvenanceVerdict
+  exampleExpectedProofProvenance
+  exampleMixedProvenanceReport
+
+theorem matching_provenance_public_report_can_pass :
+    publicShipReportWithProvenanceVerdict
+      exampleExpectedProofProvenance
+      exampleCorrectProvenanceReport = Verdict.passed := by
+  native_decide
+
+theorem gate_only_public_report_can_invent_mixed_provenance_pass :
+    publicShipReportWithoutProvenanceVerdict
+        exampleExpectedProofProvenance
+        exampleMixedProvenanceReport = Verdict.passed
+      ∧ publicShipReportWithProvenanceVerdict
+        exampleExpectedProofProvenance
+        exampleMixedProvenanceReport = Verdict.proofInsufficient := by
+  native_decide
+
+/-!
 Layer 7: ship-gate implementation parity.
 
 Riddle Proof currently has more than one implementation surface for the same

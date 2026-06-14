@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has twelve named layers.
+The model in `RiddleProofKernel.lean` now has thirteen named layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -219,6 +219,24 @@ published pass report projected from a flow cannot pass unless the same flow's
 ship gate is true. The counterexample `status_only_public_report_can_invent_pass`
 shows why the public report must not be reduced to a naked status string.
 
+## Layer 6.1: Proof Report Provenance
+
+The Layer 6.1 model covers the lineage fields that tie a public proof report
+back to the proof attempt it claims:
+
+- run identity
+- checkpoint packet identity
+- evidence bundle identity
+- artifact manifest identity
+- proof assessment identity
+
+The theorem `public_report_with_provenance_pass_implies_provenance_matches`
+proves that a published pass report carrying provenance can pass only when its
+lineage matches the expected proof attempt. The counterexample
+`gate_only_public_report_can_invent_mixed_provenance_pass` shows why ship-gate
+facts alone are not enough: a report can carry passing gate facts while silently
+mixing stale or unrelated evidence lineage unless provenance is checked too.
+
 ## Layer 7: Ship-Gate Implementation Parity
 
 The Layer 7 model covers drift between implementation surfaces that claim the
@@ -396,6 +414,14 @@ Layer 6 adds the public-report projection counterexample:
   hard blocker. The public report now carries a `ship_gate` projection, and
   Python `ship.py` rejects unsupported reference modes and proof hard blockers
   before publishing a pass report.
+
+Layer 6.1 adds the public-report provenance counterexample:
+
+- `gate_only_public_report_can_invent_mixed_provenance_pass` shows that a
+  public report with passing gate facts can still mix stale or unrelated
+  proof-attempt lineage. The final `ship_report` now carries
+  `proof_provenance`, including run, checkpoint, evidence bundle, artifact
+  publication, and proof-assessment identifiers.
 
 Layer 7 adds the ship-gate parity counterexample:
 

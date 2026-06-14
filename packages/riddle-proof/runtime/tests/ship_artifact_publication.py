@@ -138,12 +138,27 @@ def main():
             "proof_summary": "All assertions passed.",
             "proof_assessment_source": "supervising_agent",
             "proof_assessment": {
+                "assessment_id": "assessment_ship_artifact_test",
                 "source": "supervising_agent",
                 "decision": "ready_to_ship",
                 "summary": "Evidence is strong enough to ship.",
             },
+            "checkpoint_summary": {
+                "latest_packet_id": "rppkt_ship_artifact_test",
+                "latest_response_packet_id": "rppkt_ship_artifact_test",
+            },
+            "proof_session": {
+                "session_id": "session_ship_artifact_test",
+                "fingerprint": "fingerprint_ship_artifact_test",
+            },
+            "proof_session_fingerprint": "fingerprint_ship_artifact_test",
             "evidence_bundle": {
+                "id": "bundle_ship_artifact_test",
                 "verification_mode": "proof",
+                "proof_session": {
+                    "session_id": "session_ship_artifact_test",
+                    "fingerprint": "fingerprint_ship_artifact_test",
+                },
                 "after": {
                     "observation": {"valid": True, "reason": "ok", "telemetry_ready": True},
                     "supporting_artifacts": {
@@ -204,6 +219,46 @@ def main():
             "ship gate should expose proof decision"
         )
         assert gate_evidence.get("hard_blockers") == [], "ship gate should expose hard blockers"
+        provenance = ship_report.get("proof_provenance") or {}
+        assert provenance.get("version") == "riddle-proof.provenance.v1", (
+            "ship report should expose proof provenance version"
+        )
+        assert provenance.get("run_id") == "rp_ship_artifact_test", (
+            "ship report provenance should expose the run id"
+        )
+        assert provenance.get("checkpoint_packet_id") == "rppkt_ship_artifact_test", (
+            "ship report provenance should expose the checkpoint packet id"
+        )
+        assert provenance.get("checkpoint_response_packet_id") == "rppkt_ship_artifact_test", (
+            "ship report provenance should expose the checkpoint response packet id"
+        )
+        assert provenance.get("evidence_bundle_id") == "bundle_ship_artifact_test", (
+            "ship report provenance should expose the evidence bundle id"
+        )
+        assert provenance.get("proof_session_id") == "session_ship_artifact_test", (
+            "ship report provenance should expose the proof session id"
+        )
+        assert provenance.get("proof_session_fingerprint") == "fingerprint_ship_artifact_test", (
+            "ship report provenance should expose the proof session fingerprint"
+        )
+        assert provenance.get("proof_assessment_id") == "assessment_ship_artifact_test", (
+            "ship report provenance should expose the proof assessment id"
+        )
+        assert provenance.get("proof_assessment_source") == "supervising_agent", (
+            "ship report provenance should expose the proof assessment source"
+        )
+        assert provenance.get("proof_assessment_decision") == "ready_to_ship", (
+            "ship report provenance should expose the proof assessment decision"
+        )
+        assert provenance.get("artifact_publication_commit") == publication.get("commit"), (
+            "ship report provenance should expose the artifact publication commit"
+        )
+        assert provenance.get("artifact_manifest_url") == ship_report.get("proof_artifacts_manifest_url"), (
+            "ship report provenance should expose the artifact manifest URL"
+        )
+        assert provenance.get("artifact_source_fingerprint") == publication.get("source_fingerprint"), (
+            "ship report provenance should expose the artifact source fingerprint"
+        )
 
         comment = comment_body_path.read_text(encoding="utf-8")
         assert "file://" not in comment, "PR proof comment must not expose local file URLs"
