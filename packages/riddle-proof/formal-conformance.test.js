@@ -229,6 +229,68 @@ const hardBlockerGate = validateShipGate({
 assert.equal(hardBlockerGate.ok, false);
 assert.ok(hardBlockerGate.reasons.includes("proof hard blocker prevents ready_to_ship: structured proof assertion failed"));
 
+const structuredInteractionState = {
+  ...baseShipState,
+  verification_mode: "interaction",
+  after_cdn: "",
+  evidence_bundle: {
+    verification_mode: "interaction",
+    expected_path: "/proof",
+    artifact_contract: {
+      verification_mode: "interaction",
+      required: {
+        baseline_context: true,
+        route_semantics: true,
+        screenshot: false,
+        proof_evidence: true,
+        visual_delta: false,
+      },
+    },
+    after: {
+      observation: { valid: true, telemetry_ready: true, reason: "ok" },
+      supporting_artifacts: {
+        has_structured_payload: true,
+        proof_evidence_present: true,
+      },
+      proof_evidence: {
+        version: "riddle-proof.interaction.v1",
+        terminal: { href: "https://riddledc.com/proof/", pathname: "/proof" },
+        assertions: [{ name: "terminal route matched expected proof route", pass: true }],
+      },
+      visual_delta: { status: "not_applicable", passed: null },
+    },
+    proof_evidence: {
+      version: "riddle-proof.interaction.v1",
+      terminal: { href: "https://riddledc.com/proof/", pathname: "/proof" },
+    },
+  },
+};
+
+const structuredInteractionGate = validateShipGate(structuredInteractionState);
+assert.equal(structuredInteractionGate.ok, true);
+assert.deepEqual(structuredInteractionGate.reasons, []);
+assert.equal(structuredInteractionGate.evidence.after_cdn, null);
+
+const missingInteractionProofEvidenceState = {
+  ...baseShipState,
+  verification_mode: "interaction",
+};
+const missingInteractionProofEvidenceGate = validateShipGate(missingInteractionProofEvidenceState);
+assert.equal(missingInteractionProofEvidenceGate.ok, false);
+assert.ok(
+  missingInteractionProofEvidenceGate.reasons.some((reason) => reason.includes("proof_evidence_present=false")),
+);
+
+const routeMismatchedInteractionState = {
+  ...structuredInteractionState,
+  structured_interaction_failure_summary: "Structured interaction proof evidence captured failed assertion(s): routeMatched.",
+};
+const routeMismatchedInteractionGate = validateShipGate(routeMismatchedInteractionState);
+assert.equal(routeMismatchedInteractionGate.ok, false);
+assert.ok(
+  routeMismatchedInteractionGate.reasons.some((reason) => reason.includes("routeMatched")),
+);
+
 assert.equal(canonicalProofAssessmentStageForDecision("ready_to_ship"), "ship");
 assert.equal(canonicalProofAssessmentStageForDecision("needs_richer_proof"), "author");
 assert.equal(canonicalProofAssessmentStageForDecision("revise_capture"), "verify");
@@ -337,10 +399,9 @@ const shipGateParityCases = [
       },
     },
   }],
-  ["interaction missing proof evidence", {
-    ...baseShipState,
-    verification_mode: "interaction",
-  }],
+  ["interaction structured proof evidence without screenshot", structuredInteractionState],
+  ["interaction missing proof evidence", missingInteractionProofEvidenceState],
+  ["interaction route mismatch hard blocker", routeMismatchedInteractionState],
 ];
 
 for (const [name, state] of shipGateParityCases) {

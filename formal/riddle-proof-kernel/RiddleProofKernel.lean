@@ -783,6 +783,291 @@ theorem reported_whole_flow_passed_implies_ship_gate_ok
     simpa [reportedWholeFlowVerdict] using hPassed)
 
 /-!
+Layer 3.1: interaction proof evidence obligations.
+
+Interaction proofs have a stronger author-to-verify contract than ordinary
+visual or proof captures. The author packet must describe a terminal route and
+an active browser action, and the verify evidence must include structured proof
+evidence for that terminal interaction. A screenshot or generic telemetry alone
+is not enough to satisfy an interaction proof.
+-/
+
+inductive VerificationMode where
+  | proof
+  | visual
+  | interaction
+  | audio
+  | gameplay
+  | unknown
+  deriving Repr, DecidableEq, BEq
+
+def interactionVerificationMode : VerificationMode → Bool
+  | VerificationMode.interaction => true
+  | _ => false
+
+structure InteractionProofContract where
+  verificationMode : VerificationMode
+  terminalRouteAuthored : Bool
+  activeInteractionAuthored : Bool
+  structuredProofEvidencePresent : Bool
+  terminalRouteMatched : Bool
+  failedAssertionPresent : Bool
+  captureFailedBeforeEvidence : Bool
+  deriving Repr, DecidableEq
+
+def interactionProofEvidenceComplete
+    (contract : InteractionProofContract) : Bool :=
+  if interactionVerificationMode contract.verificationMode then
+    contract.terminalRouteAuthored
+      && contract.activeInteractionAuthored
+      && contract.structuredProofEvidencePresent
+      && contract.terminalRouteMatched
+      && !contract.failedAssertionPresent
+      && !contract.captureFailedBeforeEvidence
+  else
+    true
+
+def interactionProofHardBlockerPresent
+    (contract : InteractionProofContract) : Bool :=
+  interactionVerificationMode contract.verificationMode
+    && !interactionProofEvidenceComplete contract
+
+structure InteractionWholeFlowState where
+  flow : WholeFlowState
+  interaction : InteractionProofContract
+  deriving Repr
+
+def wholeFlowInteractionShipGateOk
+    (state : InteractionWholeFlowState) : Bool :=
+  wholeFlowShipGateOk state.flow
+    && interactionProofEvidenceComplete state.interaction
+
+def wholeFlowInteractionVerdict
+    (state : InteractionWholeFlowState) : Verdict :=
+  if wholeFlowInteractionShipGateOk state then
+    verdict (wholeFlowVerdictInput state.flow)
+  else
+    Verdict.proofInsufficient
+
+theorem interaction_flow_passed_implies_ship_gate_ok
+    (state : InteractionWholeFlowState)
+    (hPassed : wholeFlowInteractionVerdict state = Verdict.passed) :
+    wholeFlowShipGateOk state.flow = true := by
+  cases hGate : wholeFlowInteractionShipGateOk state with
+  | false =>
+      simp [wholeFlowInteractionVerdict, hGate] at hPassed
+  | true =>
+      have hBoth :
+          wholeFlowShipGateOk state.flow = true
+            ∧ interactionProofEvidenceComplete state.interaction = true := by
+        simpa [wholeFlowInteractionShipGateOk] using hGate
+      exact hBoth.1
+
+theorem interaction_flow_passed_implies_interaction_contract_complete
+    (state : InteractionWholeFlowState)
+    (hPassed : wholeFlowInteractionVerdict state = Verdict.passed) :
+    interactionProofEvidenceComplete state.interaction = true := by
+  cases hGate : wholeFlowInteractionShipGateOk state with
+  | false =>
+      simp [wholeFlowInteractionVerdict, hGate] at hPassed
+  | true =>
+      have hBoth :
+          wholeFlowShipGateOk state.flow = true
+            ∧ interactionProofEvidenceComplete state.interaction = true := by
+        simpa [wholeFlowInteractionShipGateOk] using hGate
+      exact hBoth.2
+
+theorem missing_interaction_proof_evidence_is_hard_blocker
+    (contract : InteractionProofContract)
+    (hMode : contract.verificationMode = VerificationMode.interaction)
+    (hEvidence : contract.structuredProofEvidencePresent = false) :
+    interactionProofHardBlockerPresent contract = true := by
+  simp [
+    interactionProofHardBlockerPresent,
+    interactionProofEvidenceComplete,
+    interactionVerificationMode,
+    hMode,
+    hEvidence
+  ]
+
+theorem interaction_route_mismatch_is_hard_blocker
+    (contract : InteractionProofContract)
+    (hMode : contract.verificationMode = VerificationMode.interaction)
+    (hMatched : contract.terminalRouteMatched = false) :
+    interactionProofHardBlockerPresent contract = true := by
+  by_cases hTerminal : contract.terminalRouteAuthored = false
+  · simp [
+      interactionProofHardBlockerPresent,
+      interactionProofEvidenceComplete,
+      interactionVerificationMode,
+      hMode,
+      hTerminal
+    ]
+  · by_cases hAction : contract.activeInteractionAuthored = false
+    · simp [
+        interactionProofHardBlockerPresent,
+        interactionProofEvidenceComplete,
+        interactionVerificationMode,
+        hMode,
+        hTerminal,
+        hAction
+      ]
+    · by_cases hEvidence : contract.structuredProofEvidencePresent = false
+      · simp [
+          interactionProofHardBlockerPresent,
+          interactionProofEvidenceComplete,
+          interactionVerificationMode,
+          hMode,
+          hTerminal,
+          hAction,
+          hEvidence
+        ]
+      · simp [
+          interactionProofHardBlockerPresent,
+          interactionProofEvidenceComplete,
+          interactionVerificationMode,
+          hMode,
+          hTerminal,
+          hAction,
+          hEvidence,
+          hMatched
+        ]
+
+theorem passive_interaction_authoring_is_hard_blocker
+    (contract : InteractionProofContract)
+    (hMode : contract.verificationMode = VerificationMode.interaction)
+    (hAction : contract.activeInteractionAuthored = false) :
+    interactionProofHardBlockerPresent contract = true := by
+  by_cases hTerminal : contract.terminalRouteAuthored = false
+  · simp [
+      interactionProofHardBlockerPresent,
+      interactionProofEvidenceComplete,
+      interactionVerificationMode,
+      hMode,
+      hTerminal
+    ]
+  · simp [
+      interactionProofHardBlockerPresent,
+      interactionProofEvidenceComplete,
+      interactionVerificationMode,
+      hMode,
+      hTerminal,
+      hAction
+    ]
+
+def exampleCompleteInteractionProofContract : InteractionProofContract where
+  verificationMode := VerificationMode.interaction
+  terminalRouteAuthored := true
+  activeInteractionAuthored := true
+  structuredProofEvidencePresent := true
+  terminalRouteMatched := true
+  failedAssertionPresent := false
+  captureFailedBeforeEvidence := false
+
+def exampleMissingInteractionProofEvidence : InteractionProofContract :=
+  { exampleCompleteInteractionProofContract with
+    structuredProofEvidencePresent := false }
+
+def exampleInteractionRouteMismatch : InteractionProofContract :=
+  { exampleCompleteInteractionProofContract with
+    terminalRouteMatched := false }
+
+def examplePassiveInteractionProofContract : InteractionProofContract :=
+  { exampleCompleteInteractionProofContract with
+    activeInteractionAuthored := false }
+
+def exampleNonInteractionProofContract : InteractionProofContract where
+  verificationMode := VerificationMode.proof
+  terminalRouteAuthored := false
+  activeInteractionAuthored := false
+  structuredProofEvidencePresent := false
+  terminalRouteMatched := false
+  failedAssertionPresent := true
+  captureFailedBeforeEvidence := true
+
+def exampleInteractionFlowCleanBase : WholeFlowState where
+  authoredRequirementsPreserved := true
+  reconRequiredBaselinesPresent := true
+  reconBaselineUnderstandingPresent := true
+  authorProofPlanPresent := true
+  authorCaptureScriptPresent := true
+  implementationOk := true
+  reference := FlowReference.before
+  beforeBaselinePresent := true
+  prodUrlPresent := false
+  prodBaselinePresent := false
+  afterEvidencePresent := true
+  verifyStatus := VerifyStatus.evidenceCaptured
+  proofAssessmentSource := ProofAssessmentSource.supervisingAgent
+  proofAssessmentDecision := ProofAssessmentDecision.readyToShip
+  visualDeltaOk := true
+  hardBlockersPresent := false
+  evidencePresent := true
+  observedViewportCount := 1
+  expectedViewportCount := 1
+  checkStatuses := [CheckStatus.passed]
+  hasNavigationError := false
+  requiredArtifacts := [Artifact.proofJson, Artifact.screenshot]
+  artifactManifest :=
+    ArtifactManifest.known [
+      Artifact.proofJson,
+      Artifact.screenshot,
+      Artifact.consoleJson
+    ]
+
+def exampleWholeFlowInteractionClean : InteractionWholeFlowState where
+  flow := exampleInteractionFlowCleanBase
+  interaction := exampleCompleteInteractionProofContract
+
+def exampleWholeFlowInteractionMissingEvidence : InteractionWholeFlowState where
+  flow := exampleInteractionFlowCleanBase
+  interaction := exampleMissingInteractionProofEvidence
+
+def exampleWholeFlowInteractionRouteMismatch : InteractionWholeFlowState where
+  flow := exampleInteractionFlowCleanBase
+  interaction := exampleInteractionRouteMismatch
+
+#eval interactionProofEvidenceComplete exampleCompleteInteractionProofContract
+#eval interactionProofEvidenceComplete exampleMissingInteractionProofEvidence
+#eval interactionProofEvidenceComplete exampleInteractionRouteMismatch
+#eval interactionProofEvidenceComplete exampleNonInteractionProofContract
+#eval wholeFlowInteractionVerdict exampleWholeFlowInteractionClean
+#eval wholeFlowInteractionVerdict exampleWholeFlowInteractionMissingEvidence
+
+theorem complete_interaction_proof_contract_satisfies_gate :
+    interactionProofEvidenceComplete exampleCompleteInteractionProofContract = true
+      ∧ interactionProofHardBlockerPresent
+        exampleCompleteInteractionProofContract = false := by
+  native_decide
+
+theorem missing_interaction_proof_evidence_blocks_flow_pass :
+    interactionProofHardBlockerPresent
+        exampleMissingInteractionProofEvidence = true
+      ∧ wholeFlowInteractionVerdict
+        exampleWholeFlowInteractionMissingEvidence =
+          Verdict.proofInsufficient := by
+  native_decide
+
+theorem route_mismatched_interaction_proof_blocks_flow_pass :
+    interactionProofHardBlockerPresent
+        exampleInteractionRouteMismatch = true
+      ∧ wholeFlowInteractionVerdict
+        exampleWholeFlowInteractionRouteMismatch =
+          Verdict.proofInsufficient := by
+  native_decide
+
+theorem passive_interaction_author_packet_blocks_flow_pass :
+    interactionProofHardBlockerPresent
+        examplePassiveInteractionProofContract = true := by
+  native_decide
+
+theorem non_interaction_mode_does_not_require_interaction_packet :
+    interactionProofEvidenceComplete exampleNonInteractionProofContract = true
+      ∧ interactionProofHardBlockerPresent
+        exampleNonInteractionProofContract = false := by
+  native_decide
+
+/-!
 Layer 4: checkpoint response semantics.
 
 The runtime checkpoint protocol has two visible JSON surfaces:
