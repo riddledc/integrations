@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.63
+
+### Patch Changes
+
+- 7ef4146: Block low-level runner `ready_to_ship` assessments unless they come from a supervising source.
+
 ## 0.8.62
 
 ### Patch Changes
