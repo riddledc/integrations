@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.65
+
+### Patch Changes
+
+- 3060a42: Add profile suggestion helpers and clearer hosted-worker cold-start polling messages.
+
 ## 0.8.64
 
 ### Patch Changes
