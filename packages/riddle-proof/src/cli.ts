@@ -19,6 +19,7 @@ import {
   createRiddleApiClient,
   isTerminalRiddleJobStatus,
   parseRiddleViewport,
+  RIDDLE_UNSUBMITTED_WAKE_HINT,
   type RiddlePollJobResult,
   type RiddlePollJobOptions,
   type RiddlePollProgressSnapshot,
@@ -56,6 +57,7 @@ import {
   RIDDLE_PROOF_PR_COMMENT_MARKER,
   summarizeRiddleProofPrComment,
 } from "./pr-comment";
+import { suggestRiddleProofProfileChecks } from "./profile-suggestions";
 
 type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
@@ -74,6 +76,8 @@ const KNOWN_CLI_OPTIONS = new Set([
   "candidatesJson",
   "checkpointMode",
   "checkpointVisibility",
+  "changedFiles",
+  "changedTextJson",
   "codexCommand",
   "codexFullAuto",
   "codexHome",
@@ -95,6 +99,8 @@ const KNOWN_CLI_OPTIONS = new Set([
   "help",
   "hostedRiddle",
   "image",
+  "includeMobile",
+  "includeScreenshot",
   "input",
   "inputDir",
   "inputFile",
@@ -105,6 +111,7 @@ const KNOWN_CLI_OPTIONS = new Set([
   "jobId",
   "localCore",
   "maxIterations",
+  "name",
   "navigationTimeout",
   "output",
   "outputDir",
@@ -137,6 +144,7 @@ const KNOWN_CLI_OPTIONS = new Set([
   "runResponse",
   "runner",
   "scriptFile",
+  "selectors",
   "sourceKind",
   "splitViewports",
   "stateDir",
@@ -173,6 +181,7 @@ function usage() {
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop profile-suggest --route /path|--url <url> [--changed-files a,b] [--selectors .a,.b] [--changed-text-json <file|json|->] [--format json|profile]",
     "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop pr-comment --proof-dir <dir>|--run-response <file> [--result-json <file>] --pr <number|url> [--repo owner/name] [--dry-run] [--body-file <file>] [--comment-mode update|append]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
@@ -230,6 +239,13 @@ function validateCliOptions(options: CliOptions) {
 function optionString(options: CliOptions, key: string) {
   const value = options[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionStringList(options: CliOptions, key: string) {
+  const value = optionString(options, key);
+  return value
+    ? value.split(",").map((item) => item.trim()).filter(Boolean)
+    : undefined;
 }
 
 function optionBoolean(options: CliOptions, key: string) {
@@ -1053,7 +1069,7 @@ function formatByteCount(bytes: number | null | undefined) {
 function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
   const submittedAt = snapshot.submitted_at || "not-submitted";
   const queuePart = snapshot.running_without_submission
-    ? ` waiting_for_submit=${formatPollDuration(snapshot.pre_submission_elapsed_ms)}${snapshot.queue_elapsed_ms !== null ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""}`
+    ? ` waiting_for_worker_submit=${formatPollDuration(snapshot.pre_submission_elapsed_ms)} worker_wake=possible${snapshot.queue_elapsed_ms !== null ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""}`
     : snapshot.queue_elapsed_ms !== null
       ? ` queue=${formatPollDuration(snapshot.queue_elapsed_ms)}`
       : "";
@@ -1174,6 +1190,16 @@ function readJsonValue(value: string | undefined, label: string): Record<string,
     throw new Error(`${label} must be a JSON object.`);
   }
   return parsed as Record<string, unknown>;
+}
+
+function readJsonAnyValue(value: string | undefined, label: string): unknown {
+  if (!value) throw new Error(`${label} is required.`);
+  const raw = value === "-"
+    ? readStdin()
+    : existsSync(value)
+      ? readFileSync(value, "utf-8")
+      : value;
+  return JSON.parse(raw);
 }
 
 function readOptionalJsonRecord(value: string | undefined, label: string): Record<string, unknown> | undefined {
@@ -1518,7 +1544,7 @@ function profileRiddleJobMarkdown(result: RiddleProofProfileResult): string[] {
     lines.push("- artifact recovery: used artifacts endpoint after non-terminal poll");
   }
   if (retryCount !== undefined && retryCount > 0) {
-    lines.push(`- retry recovery: replaced ${retryCount} unsubmitted job${retryCount === 1 ? "" : "s"}${staleJobIds.length ? ` (${staleJobIds.map((value) => markdownInlineCode(value)).join(", ")})` : ""}`);
+    lines.push(`- retry recovery: replaced ${retryCount} unsubmitted hosted job${retryCount === 1 ? "" : "s"}${staleJobIds.length ? ` (${staleJobIds.map((value) => markdownInlineCode(value)).join(", ")})` : ""}; ${RIDDLE_UNSUBMITTED_WAKE_HINT}`);
   }
   for (const job of splitJobs.slice(0, 12)) {
     const viewport = cliString(job.viewport) || "viewport";
@@ -5467,7 +5493,7 @@ async function runSingleRiddleProfileForCli(
       }
       staleJobIds.push(jobId);
       if (options.quiet !== true) {
-        process.stderr.write(`[riddle-poll] ${jobId} stayed unsubmitted for ${formatPollDuration(poll.poll?.pre_submission_elapsed_ms)}; retrying hosted run ${attempt + 1}/${retryLimit}\n`);
+        process.stderr.write(`[riddle-poll] ${jobId} stayed unsubmitted for ${formatPollDuration(poll.poll?.pre_submission_elapsed_ms)}; ${RIDDLE_UNSUBMITTED_WAKE_HINT}; retrying hosted run ${attempt + 1}/${retryLimit}\n`);
       }
       continue;
     }
@@ -5794,6 +5820,35 @@ async function main() {
       throw new Error("--format must be json or summary.");
     }
     process.exitCode = result.ok ? 0 : 1;
+    return;
+  }
+
+  if (command === "profile-suggest") {
+    const changedTextJson = optionString(options, "changedTextJson");
+    const changedText = changedTextJson
+      ? readJsonAnyValue(changedTextJson, "--changed-text-json")
+      : undefined;
+    if (changedText !== undefined && !Array.isArray(changedText)) {
+      throw new Error("--changed-text-json must be a JSON array.");
+    }
+    const result = suggestRiddleProofProfileChecks({
+      name: optionString(options, "name"),
+      route: optionString(options, "route"),
+      url: optionString(options, "url"),
+      changed_files: optionStringList(options, "changedFiles"),
+      selectors: optionStringList(options, "selectors"),
+      changed_text: changedText as Array<string | { text?: string; expected_text?: string; selector?: string; label?: string }> | undefined,
+      include_mobile: optionBoolean(options, "includeMobile"),
+      include_screenshot: optionBoolean(options, "includeScreenshot"),
+    });
+    const format = optionString(options, "format") || "json";
+    if (format === "profile") {
+      process.stdout.write(`${JSON.stringify(result.profile, null, 2)}\n`);
+    } else if (format === "json") {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    } else {
+      throw new Error("--format must be json or profile.");
+    }
     return;
   }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -102,6 +103,48 @@ try {
   assert.equal(timeoutResult.signal, null, timeoutResult.stderr || timeoutResult.stdout);
   assert.equal(timeoutResult.status, 0, timeoutResult.stderr || timeoutResult.stdout);
   assert.equal(existsSync(path.join(timeoutOutputDir, "profile-result.json")), true);
+
+  const missingBrowserProfilePath = path.join(workspace, "profile-missing-browser.json");
+  const missingBrowserOutputDir = path.join(workspace, "missing-browser-artifacts");
+  const missingBrowserPath = path.join(workspace, "empty-playwright-browsers");
+  mkdirSync(missingBrowserPath, { recursive: true });
+  writeFileSync(
+    missingBrowserProfilePath,
+    JSON.stringify({
+      ...profile,
+      name: "local-runner-missing-browser-blocked",
+    }),
+    "utf8",
+  );
+  const missingBrowserResult = spawnSync(process.execPath, [
+    "./bin/riddle-proof-playwright",
+    "run-profile",
+    "--profile",
+    missingBrowserProfilePath,
+    "--url",
+    `file://${targetPath}`,
+    "--output",
+    missingBrowserOutputDir,
+  ], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: missingBrowserPath,
+    },
+    timeout: 10_000,
+  });
+  assert.equal(missingBrowserResult.signal, null, missingBrowserResult.stderr || missingBrowserResult.stdout);
+  assert.equal(missingBrowserResult.status, 0, missingBrowserResult.stderr || missingBrowserResult.stdout);
+  assert.equal(missingBrowserResult.stderr, "");
+  const parsedMissingBrowserResult = JSON.parse(missingBrowserResult.stdout);
+  assert.equal(parsedMissingBrowserResult.result.status, "environment_blocked");
+  assert.equal(parsedMissingBrowserResult.result.runner, "local-playwright");
+  assert.match(parsedMissingBrowserResult.result.route.error, /Executable doesn't exist|browserType\.launch/);
+  assert.equal(existsSync(path.join(missingBrowserOutputDir, "profile-result.json")), true);
+  assert.equal(
+    JSON.parse(readFileSync(path.join(missingBrowserOutputDir, "profile-result.json"), "utf8")).status,
+    "environment_blocked",
+  );
 } finally {
   rmSync(workspace, { recursive: true, force: true });
 }

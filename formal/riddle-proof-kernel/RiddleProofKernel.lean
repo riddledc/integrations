@@ -3006,6 +3006,133 @@ theorem public_consumer_surface_from_state_conforms
     hAudit
   ]
 
+/-!
+Layer 10: runner and text-evidence conformance.
+
+Local Playwright and hosted Riddle workers are different execution substrates,
+but once either runner has produced a profile evidence packet the same verdict
+contract must apply. This layer also models the hosted cold-start case observed
+in live testing: a job that remains unsubmitted is blocked, not passed; retry
+or artifact recovery can pass only through the recovered/final evidence packet.
+
+The text-evidence model captures a practical authoring lesson from real copy
+proofs: broad page-level absence of old text is not the right proof shape for
+punctuation-only or substring-preserving changes. Exact slot assertions can
+prove the changed field while page-level absence may correctly fail.
+-/
+
+inductive ProfileRunnerKind where
+  | localPlaywright
+  | hostedRiddle
+  deriving DecidableEq, Repr, BEq
+
+def runnerContractVerdict
+    (_runner : ProfileRunnerKind)
+    (input : VerdictInput) : Verdict :=
+  verdict input
+
+theorem local_and_hosted_same_verdict_contract
+    (input : VerdictInput) :
+    runnerContractVerdict ProfileRunnerKind.localPlaywright input =
+      runnerContractVerdict ProfileRunnerKind.hostedRiddle input := by
+  rfl
+
+inductive HostedProfileOutcome where
+  | terminal (input : VerdictInput)
+  | blockedUnsubmitted
+  | recoveredFromArtifacts (input : VerdictInput)
+  | retryRecovered (staleJobCount : Nat) (finalInput : VerdictInput)
+  deriving Repr
+
+def hostedProfileVerdict : HostedProfileOutcome → Verdict
+  | HostedProfileOutcome.terminal input => verdict input
+  | HostedProfileOutcome.blockedUnsubmitted => Verdict.environmentBlocked
+  | HostedProfileOutcome.recoveredFromArtifacts input => verdict input
+  | HostedProfileOutcome.retryRecovered _ finalInput => verdict finalInput
+
+theorem blocked_unsubmitted_hosted_profile_never_passes :
+    hostedProfileVerdict HostedProfileOutcome.blockedUnsubmitted ≠
+      Verdict.passed := by
+  simp [hostedProfileVerdict]
+
+theorem verdict_passed_implies_evidence_present
+    (input : VerdictInput)
+    (hPassed : verdict input = Verdict.passed) :
+    input.evidencePresent ≠ false := by
+  intro hMissing
+  simp [verdict, hMissing] at hPassed
+
+theorem recovered_artifact_profile_passed_excludes_missing_required_artifact
+    (input : VerdictInput)
+    (hPassed :
+      hostedProfileVerdict
+        (HostedProfileOutcome.recoveredFromArtifacts input) = Verdict.passed) :
+    missingRequiredArtifact input ≠ true :=
+  verdict_satisfies_artifact_completeness_spec
+    input
+    (by simpa [hostedProfileVerdict] using hPassed)
+
+theorem retry_recovery_passed_implies_final_verdict_passed
+    (staleJobCount : Nat)
+    (finalInput : VerdictInput)
+    (hPassed :
+      hostedProfileVerdict
+        (HostedProfileOutcome.retryRecovered staleJobCount finalInput) =
+          Verdict.passed) :
+    verdict finalInput = Verdict.passed := by
+  simpa [hostedProfileVerdict] using hPassed
+
+theorem retry_recovery_passed_implies_recovered_evidence_present
+    (staleJobCount : Nat)
+    (finalInput : VerdictInput)
+    (hPassed :
+      hostedProfileVerdict
+        (HostedProfileOutcome.retryRecovered staleJobCount finalInput) =
+          Verdict.passed) :
+    finalInput.evidencePresent ≠ false :=
+  verdict_passed_implies_evidence_present
+    finalInput
+    (retry_recovery_passed_implies_final_verdict_passed
+      staleJobCount
+      finalInput
+      hPassed)
+
+theorem retry_recovery_passed_excludes_missing_required_artifact
+    (staleJobCount : Nat)
+    (finalInput : VerdictInput)
+    (hPassed :
+      hostedProfileVerdict
+        (HostedProfileOutcome.retryRecovered staleJobCount finalInput) =
+          Verdict.passed) :
+    missingRequiredArtifact finalInput ≠ true :=
+  verdict_satisfies_artifact_completeness_spec
+    finalInput
+    (retry_recovery_passed_implies_final_verdict_passed
+      staleJobCount
+      finalInput
+      hPassed)
+
+structure TextObservation where
+  pageContainsOldText : Bool
+  slotEqualsOldText : Bool
+  slotEqualsNewText : Bool
+  oldTextIsSubstringOfNewText : Bool
+  deriving Repr
+
+def broadOldTextAbsent (observation : TextObservation) : Bool :=
+  !observation.pageContainsOldText
+
+def exactSlotUpdated (observation : TextObservation) : Bool :=
+  observation.slotEqualsNewText && !observation.slotEqualsOldText
+
+theorem exact_slot_update_excludes_old_slot
+    (observation : TextObservation)
+    (hExact : exactSlotUpdated observation = true) :
+    observation.slotEqualsOldText ≠ true := by
+  cases hOld : observation.slotEqualsOldText
+  · simp
+  · simp [exactSlotUpdated, hOld] at hExact
+
 def exampleClean : VerdictInput where
   evidencePresent := true
   observedViewportCount := 2
@@ -3028,6 +3155,39 @@ def exampleMissingScreenshot : VerdictInput where
 #eval verdict exampleMissingScreenshot
 
 #eval currentProfileStatusFromEvidence exampleMissingScreenshot
+
+#eval runnerContractVerdict ProfileRunnerKind.localPlaywright exampleClean
+#eval runnerContractVerdict ProfileRunnerKind.hostedRiddle exampleClean
+
+#eval hostedProfileVerdict HostedProfileOutcome.blockedUnsubmitted
+#eval hostedProfileVerdict (HostedProfileOutcome.retryRecovered 2 exampleClean)
+#eval hostedProfileVerdict (HostedProfileOutcome.retryRecovered 2 exampleMissingScreenshot)
+
+theorem retry_recovery_can_pass_with_complete_final_evidence :
+    hostedProfileVerdict
+      (HostedProfileOutcome.retryRecovered 2 exampleClean) = Verdict.passed := by
+  native_decide
+
+theorem retry_recovery_missing_final_artifact_does_not_pass :
+    hostedProfileVerdict
+      (HostedProfileOutcome.retryRecovered 2 exampleMissingScreenshot) =
+        Verdict.proofInsufficient := by
+  native_decide
+
+def examplePunctuationOnlyCopyObservation : TextObservation where
+  pageContainsOldText := true
+  slotEqualsOldText := false
+  slotEqualsNewText := true
+  oldTextIsSubstringOfNewText := true
+
+#eval broadOldTextAbsent examplePunctuationOnlyCopyObservation
+#eval exactSlotUpdated examplePunctuationOnlyCopyObservation
+
+theorem exact_slot_update_can_pass_while_broad_page_absence_fails :
+    exactSlotUpdated examplePunctuationOnlyCopyObservation = true
+      ∧ broadOldTextAbsent examplePunctuationOnlyCopyObservation = false
+      ∧ examplePunctuationOnlyCopyObservation.oldTextIsSubstringOfNewText = true := by
+  native_decide
 
 def exampleDirectNoArtifactRefs : VerdictInput where
   evidencePresent := true

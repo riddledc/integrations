@@ -43,6 +43,7 @@ import {
   normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
   preflightRiddleProofProfileHttpStatusChecks,
+  suggestRiddleProofProfileChecks,
   resolveRiddleProofProfileTimeoutSec,
   resolveRiddleProofProfileRouteUrl,
   redactForProofDiagnostics,
@@ -78,6 +79,7 @@ const cjsDiagnostics = require("./dist/diagnostics.cjs");
 const cjsPlayability = require("./dist/playability.cjs");
 const cjsBasicGameplay = require("./dist/basic-gameplay.cjs");
 const cjsProfile = require("./dist/profile.cjs");
+const cjsProfileSuggestions = require("./dist/profile-suggestions.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 const cjsPublicState = require("./dist/public-state.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
@@ -99,6 +101,7 @@ assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileArtifactCompleteness, "function");
 assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
 assert.equal(typeof cjs.preflightRiddleProofProfileHttpStatusChecks, "function");
+assert.equal(typeof cjs.suggestRiddleProofProfileChecks, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
@@ -107,6 +110,7 @@ assert.equal(typeof cjsProfile.preflightRiddleProofProfileHttpStatusChecks, "fun
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
+assert.equal(typeof cjsProfileSuggestions.suggestRiddleProofProfileChecks, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
@@ -152,6 +156,46 @@ function runCli(args, options = {}) {
     });
   });
 }
+
+const suggestedProfile = suggestRiddleProofProfileChecks({
+  route: "/games/signal-sprint",
+  changed_files: ["src/Games/SignalSprint.jsx", "src/Games/SignalSprint.css"],
+  selectors: [".signal-sprint-start"],
+  changed_text: [{ selector: ".signal-sprint-start", text: "Proof Run" }],
+});
+assert.equal(suggestedProfile.profile.target.route, "/games/signal-sprint");
+assert.equal(suggestedProfile.profile.target.viewports.length, 2);
+assert.deepEqual(
+  suggestedProfile.profile.checks.map((check) => check.type),
+  [
+    "route_loaded",
+    "no_fatal_console_errors",
+    "no_mobile_horizontal_overflow",
+    "selector_visible",
+    "selector_text_visible",
+  ],
+);
+assert.deepEqual(suggestedProfile.profile.target.setup_actions, [
+  { type: "screenshot", label: "suggested-proof-screenshot", full_page: true },
+]);
+
+const suggestedProfileCli = await runCli([
+  "profile-suggest",
+  "--route",
+  "/games/signal-sprint",
+  "--changed-files",
+  "src/Games/SignalSprint.jsx,src/Games/SignalSprint.css",
+  "--selectors",
+  ".signal-sprint-start",
+  "--changed-text-json",
+  JSON.stringify([{ selector: ".signal-sprint-start", text: "Proof Run" }]),
+  "--format",
+  "profile",
+]);
+const parsedSuggestedProfileCli = JSON.parse(suggestedProfileCli.stdout);
+assert.equal(parsedSuggestedProfileCli.version, "riddle-proof.profile.v1");
+assert.equal(parsedSuggestedProfileCli.target.route, "/games/signal-sprint");
+assert.ok(parsedSuggestedProfileCli.checks.some((check) => check.type === "selector_text_visible"));
 
 const eventOnlyCodexFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-event-only-codex-"));
 const eventOnlyCodexCommand = path.join(eventOnlyCodexFixture, "fake-codex.mjs");
@@ -1046,6 +1090,7 @@ try {
   assert.equal(unsubmittedTimeoutResult.poll.unsubmitted_timeout, true);
   assert.equal(unsubmittedTimeoutResult.poll.unsubmitted_timeout_ms, 1000);
   assert.equal(unsubmittedTimeoutResult.poll.attempt, 1);
+  assert.match(unsubmittedTimeoutResult.poll.message, /hosted worker may still be waking/);
   assert.equal(unsubmittedTimeoutPollCount, 1);
 } finally {
   Date.now = originalDateNowForUnsubmittedTimeout;
@@ -6124,8 +6169,9 @@ try {
   assert.equal(cliRunProfileUnsubmittedRunCount, 2);
   assert.equal(cliRunProfileUnsubmittedPollCount, 1);
   assert.match(unsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale stayed unsubmitted/);
+  assert.match(unsubmittedRetryResult.stderr, /hosted worker may still be waking/);
   const unsubmittedRetrySummary = readFileSync(path.join(unsubmittedRetryOutputDir, "summary.md"), "utf8");
-  assert.match(unsubmittedRetrySummary, /retry recovery: replaced 1 unsubmitted job \(`job_cli_profile_unsubmitted_stale`\)/);
+  assert.match(unsubmittedRetrySummary, /retry recovery: replaced 1 unsubmitted hosted job \(`job_cli_profile_unsubmitted_stale`\); hosted worker may still be waking/);
 
   const doubleUnsubmittedRetryProfileFile = path.join(riddlePreviewDir, "cli-profile-unsubmitted-double-retry.json");
   const doubleUnsubmittedRetryOutputDir = path.join(riddlePreviewDir, "cli-profile-unsubmitted-double-retry-output");
@@ -6171,8 +6217,9 @@ try {
   assert.equal(cliRunProfileDoubleUnsubmittedPollCount, 2);
   assert.match(doubleUnsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale_a stayed unsubmitted/);
   assert.match(doubleUnsubmittedRetryResult.stderr, /job_cli_profile_unsubmitted_stale_b stayed unsubmitted/);
+  assert.match(doubleUnsubmittedRetryResult.stderr, /hosted worker may still be waking/);
   const doubleUnsubmittedRetrySummary = readFileSync(path.join(doubleUnsubmittedRetryOutputDir, "summary.md"), "utf8");
-  assert.match(doubleUnsubmittedRetrySummary, /retry recovery: replaced 2 unsubmitted jobs \(`job_cli_profile_unsubmitted_stale_a`, `job_cli_profile_unsubmitted_stale_b`\)/);
+  assert.match(doubleUnsubmittedRetrySummary, /retry recovery: replaced 2 unsubmitted hosted jobs \(`job_cli_profile_unsubmitted_stale_a`, `job_cli_profile_unsubmitted_stale_b`\); hosted worker may still be waking/);
 
   cliRunProfilePollCount = 0;
   const strictTrueOutputDir = path.join(riddlePreviewDir, "cli-profile-progress-strict-true-output");

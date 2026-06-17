@@ -179,6 +179,22 @@ or as a stronger proof base before a change loop.
 }
 ```
 
+For early proof authoring, `profile-suggest` can turn a route plus changed file,
+selector, and changed-text hints into a conservative draft profile:
+
+```sh
+riddle-proof-loop profile-suggest \
+  --route /games/signal-sprint \
+  --changed-files src/Games/SignalSprint.jsx,src/Games/SignalSprint.css \
+  --selectors .signal-sprint-start \
+  --changed-text-json '[{"selector":".signal-sprint-start","text":"Proof Run"}]' \
+  --format profile
+```
+
+The suggestion helper only drafts checks and artifacts; it does not produce a
+proof verdict. Run the generated profile with a local or hosted runner before
+treating the packet as evidence.
+
 Run a profile with the hosted Riddle runner:
 
 ```sh
