@@ -13,5 +13,6 @@ export * from "./proof-session";
 export * from "./playability";
 export * from "./basic-gameplay";
 export * from "./profile";
+export * from "./profile-suggestions";
 export * from "./riddle-client";
 export * from "./pr-comment";

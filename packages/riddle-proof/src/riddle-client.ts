@@ -5,6 +5,7 @@ import path from "node:path";
 
 export const DEFAULT_RIDDLE_API_BASE_URL = "https://api.riddledc.com";
 export const DEFAULT_RIDDLE_API_KEY_FILE = "/tmp/riddle-api-key";
+export const RIDDLE_UNSUBMITTED_WAKE_HINT = "hosted worker may still be waking or waiting for a lease";
 
 export type RiddleFetch = typeof fetch;
 
@@ -745,13 +746,16 @@ function buildPollSnapshot(
 function pollMessage(snapshot: RiddlePollProgressSnapshot, timedOut: boolean) {
   if (!timedOut) return undefined;
   const submitted = snapshot.submitted_at || "not submitted";
+  const wakeHint = snapshot.running_without_submission && !snapshot.created_at && !snapshot.submitted_at
+    ? ` ${RIDDLE_UNSUBMITTED_WAKE_HINT}.`
+    : "";
   const queue = snapshot.queue_elapsed_ms !== null
     ? ` queue_elapsed_ms=${snapshot.queue_elapsed_ms}`
     : "";
   const preSubmit = snapshot.pre_submission_elapsed_ms > 0
     ? ` pre_submission_elapsed_ms=${snapshot.pre_submission_elapsed_ms}`
     : "";
-  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${queue}${preSubmit}`;
+  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${wakeHint}${queue}${preSubmit}`;
 }
 
 export async function pollRiddleJob(

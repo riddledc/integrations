@@ -299,6 +299,24 @@ shows that a stale merge-ready recommendation violates held/no-ship public
 state, and `missing_checkpoint_audit_consumer_violates_public_state` shows that
 checkpoint audit counters cannot be hidden by a downstream surface.
 
+## Layer 10: Runner And Text-Evidence Conformance
+
+The Layer 10 model covers the product boundary seen in local/hosted live runs:
+
+- local Playwright and hosted Riddle use the same verdict contract once they
+  produce the same evidence packet
+- a hosted job that stays unsubmitted is `environmentBlocked`, never `passed`
+- retry or artifact recovery can pass only through the recovered/final evidence
+  packet, so recovered evidence and required artifacts still matter
+- exact slot assertions are stronger than broad page-text absence checks, which
+  matters for punctuation-only or substring-preserving copy changes
+
+The theorem `local_and_hosted_same_verdict_contract` pins runner parity at the
+contract layer. The theorem `blocked_unsubmitted_hosted_profile_never_passes`
+pins cold-start/unsubmitted hosted behavior. The theorem
+`exact_slot_update_can_pass_while_broad_page_absence_fails` captures why some
+copy proofs should use exact semantic assertions instead of page-wide absence.
+
 ## What Lean Caught So Far
 
 The theorem `current_impl_passes_with_missing_required_artifact` constructs a
@@ -457,6 +475,16 @@ Layer 9 adds public-state consumer checks:
 - `missing_checkpoint_audit_consumer_violates_public_state` shows that a
   public consumer cannot hide rejected, ignored, or duplicate checkpoint
   counters once public state requires that disclosure.
+
+Layer 10 adds runner and text-evidence checks:
+
+- `blocked_unsubmitted_hosted_profile_never_passes` states that cold-start
+  unsubmitted hosted work is blocked, not success.
+- `retry_recovery_passed_excludes_missing_required_artifact` keeps stale-job
+  retry recovery tied to complete final evidence.
+- `exact_slot_update_can_pass_while_broad_page_absence_fails` models the
+  punctuation/substr case where a broad old-text absence check is the wrong
+  proof shape and exact slot assertions are better.
 
 ## Build
 
