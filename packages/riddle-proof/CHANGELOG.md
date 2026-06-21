@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.66
+
+### Patch Changes
+
+- 5266304: Wait up to five minutes before retrying unsubmitted hosted profile jobs so normal scale-to-zero worker cold starts do not create duplicate hosted jobs.
+
 ## 0.8.65
 
 ### Patch Changes
