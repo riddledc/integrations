@@ -133,6 +133,38 @@ function collectArtifacts(runResponse: Record<string, unknown>) {
   return artifacts;
 }
 
+function collectProfileArtifacts(result: Record<string, unknown>) {
+  const resultArtifacts = asRecord(result.artifacts);
+  const artifacts: RiddleProofPrCommentArtifact[] = [];
+  const seen = new Set<string>();
+  for (const [index, item] of asArray(resultArtifacts.riddle_artifacts).entries()) {
+    const artifact = asRecord(item);
+    const url = stringValue(artifact.url);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const fallbackName = stringValue(artifact.kind) || `artifact-${index + 1}`;
+    const name = artifactDisplayName(artifact.name, fallbackName);
+    artifacts.push({
+      name,
+      url,
+      kind: artifactKind(name, url),
+      size_bytes: numberValue(artifact.size_bytes) ?? numberValue(artifact.size),
+    });
+  }
+  return artifacts;
+}
+
+function mergeArtifacts(...artifactLists: RiddleProofPrCommentArtifact[][]) {
+  const artifacts: RiddleProofPrCommentArtifact[] = [];
+  const seen = new Set<string>();
+  for (const artifact of artifactLists.flat()) {
+    if (seen.has(artifact.url)) continue;
+    seen.add(artifact.url);
+    artifacts.push(artifact);
+  }
+  return artifacts;
+}
+
 function pageSummaries(result: Record<string, unknown>) {
   const pages: RiddleProofPrCommentPageSummary[] = [];
   for (const page of asArray(result.pages)) {
@@ -148,6 +180,38 @@ function pageSummaries(result: Record<string, unknown>) {
     pages.push({ route, passed, failed });
   }
   return pages;
+}
+
+function profileCheckCounts(result: Record<string, unknown>) {
+  const checks = asArray(result.checks);
+  if (checks.length) {
+    let passed = 0;
+    let failed = 0;
+    for (const item of checks) {
+      const status = stringValue(asRecord(item).status);
+      if (status === "passed") passed += 1;
+      if (status === "failed") failed += 1;
+    }
+    return { passed, failed };
+  }
+
+  const checkCounts = asRecord(result.check_counts);
+  const passed = numberValue(checkCounts.passed);
+  const failed = numberValue(checkCounts.failed);
+  if (typeof passed === "number" || typeof failed === "number") {
+    return { passed: passed ?? 0, failed: failed ?? 0 };
+  }
+  return undefined;
+}
+
+function profilePageSummaries(result: Record<string, unknown>, counts: { passed: number; failed: number } | undefined) {
+  if (!counts) return [];
+  const route = asRecord(result.route);
+  return [{
+    route: firstStringValue(route.observed, route.expected_path, route.requested, result.profile_name) || "profile",
+    passed: counts.passed,
+    failed: counts.failed,
+  }];
 }
 
 function summarizeExplicitChecks(value: unknown) {
@@ -208,18 +272,30 @@ function checkpointSummaryFrom(...values: unknown[]): RiddleProofPrCommentCheckp
   return Object.values(summary).some((value) => typeof value !== "undefined") ? summary : undefined;
 }
 
+function isProfileResult(result: Record<string, unknown>) {
+  const version = stringValue(result.version);
+  return version === "riddle-proof.profile-result.v1" ||
+    version === "riddle-proof.profile-compact-result.v1";
+}
+
 export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput): RiddleProofPrCommentSummary {
   const runResponse = asRecord(input.runResponse);
   const result = asRecord(input.result);
   const proofResult = asRecord(runResponse.proofResult);
+  const profileResult = isProfileResult(result);
+  const profileRiddle = asRecord(result.riddle);
   const preview = asRecord(runResponse.preview);
   const resultRunCard = asRecord(result.run_card);
   const stopCondition = asRecord(resultRunCard.stop_condition);
   const resultDetails = asRecord(result.details);
   const resultRaw = asRecord(result.raw);
   const rawDetails = asRecord(resultRaw.details);
-  const artifacts = collectArtifacts(runResponse);
-  const pages = pageSummaries(result);
+  const profileChecks = profileResult ? profileCheckCounts(result) : undefined;
+  const artifacts = mergeArtifacts(
+    collectArtifacts(runResponse),
+    profileResult ? collectProfileArtifacts(result) : [],
+  );
+  const pages = profileResult ? profilePageSummaries(result, profileChecks) : pageSummaries(result);
   const checkSource = { ...result };
   delete checkSource.ok;
   const nestedChecks = summarizeExplicitChecks(checkSource);
@@ -242,10 +318,10 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
   );
   return {
     ok,
-    status: stringValue(proofResult.status),
+    status: firstStringValue(proofResult.status, profileRiddle.status),
     result_status: publicState.status,
-    job_id: stringValue(proofResult.job_id),
-    duration_ms: numberValue(proofResult.duration_ms),
+    job_id: firstStringValue(proofResult.job_id, profileRiddle.job_id),
+    duration_ms: numberValue(proofResult.duration_ms) ?? numberValue(profileRiddle.elapsed_ms),
     proof_url: stringValue(runResponse.proofUrl),
     preview_id: stringValue(preview.id),
     preview_url: stringValue(preview.preview_url) || stringValue(preview.url),
@@ -260,8 +336,8 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     merge_recommendation: mergeRecommendation,
     checkpoint_summary: checkpointSummary,
     public_state: publicState,
-    passed_checks: nestedChecks.passed,
-    failed_checks: nestedChecks.failed,
+    passed_checks: profileChecks?.passed ?? nestedChecks.passed,
+    failed_checks: profileChecks?.failed ?? nestedChecks.failed,
     pages,
     artifacts,
     primary_image: selectPrimaryImage(artifacts),

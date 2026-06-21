@@ -5769,12 +5769,19 @@ async function main() {
 
   if (command === "pr-comment") {
     const proofDir = optionString(options, "proofDir") || optionString(options, "outputDir") || positional[1];
-    const runResponsePath = optionString(options, "runResponse") || defaultProofDirJsonPath(proofDir, "riddle-run-response.json");
-    const resultJsonPath = optionString(options, "resultJson") || defaultProofDirJsonPath(proofDir, "result.json");
+    const explicitRunResponsePath = optionString(options, "runResponse");
+    const explicitResultJsonPath = optionString(options, "resultJson");
+    const runResponsePath = explicitRunResponsePath || defaultProofDirJsonPath(proofDir, "riddle-run-response.json");
+    const resultJsonPaths = explicitResultJsonPath
+      ? [explicitResultJsonPath]
+      : [
+          defaultProofDirJsonPath(proofDir, "result.json"),
+          defaultProofDirJsonPath(proofDir, "profile-result.json"),
+        ];
     const runResponse = readJsonFileIfExists(runResponsePath);
-    const result = readJsonFileIfExists(resultJsonPath);
+    const result = resultJsonPaths.map((candidate) => readJsonFileIfExists(candidate)).find(Boolean);
     if (!runResponse && !result) {
-      throw new Error("pr-comment requires --proof-dir with riddle-run-response.json/result.json or explicit --run-response/--result-json.");
+      throw new Error("pr-comment requires --proof-dir with riddle-run-response.json, result.json, or profile-result.json, or explicit --run-response/--result-json.");
     }
     const body = buildRiddleProofPrCommentMarkdown({
       title: optionString(options, "title"),

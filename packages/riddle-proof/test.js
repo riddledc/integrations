@@ -385,6 +385,93 @@ assert.match(prCommentCli.stdout, /Riddle Proof Evidence/);
 assert.match(prCommentCli.stdout, /job_prcomment/);
 assert.match(prCommentCli.stdout, /The generated comment preserves success criteria/);
 
+const prCommentProfileDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-pr-comment-profile-"));
+const prCommentProfileResult = {
+  version: "riddle-proof.profile-result.v1",
+  profile_name: "riddle-proof-pr-comment-profile",
+  runner: "riddle",
+  status: "passed",
+  baseline_policy: "invariant_only",
+  route: {
+    requested: "https://riddledc.com/proof/",
+    observed: "/proof/",
+    expected_path: "/proof/",
+    matched: true,
+    http_status: 200,
+  },
+  artifacts: {
+    screenshots: ["riddle-proof-pr-comment-profile-desktop"],
+    proof_json: "proof.json",
+    console: "console.json",
+    dom_summary: "dom-summary.json",
+    riddle_artifacts: [
+      { name: "proof.json", url: "https://cdn.riddledc.com/scripts/job_profile/proof.json.json", kind: "data" },
+      { name: "console.json", url: "https://cdn.riddledc.com/scripts/job_profile/console.json.json", kind: "data" },
+      { name: "riddle-proof-pr-comment-profile-desktop.png", url: "https://cdn.riddledc.com/scripts/job_profile/riddle-proof-pr-comment-profile-desktop.png", kind: "image" },
+    ],
+  },
+  checks: [
+    { type: "route_loaded", status: "passed", evidence: { checks: { ignored_nested_false: false } } },
+    { type: "selector_visible", status: "passed", evidence: { visible: true } },
+    { type: "text_visible", status: "passed", evidence: { found: true } },
+    { type: "no_fatal_console_errors", status: "passed", evidence: { fatal_count: 0 } },
+    { type: "setup_actions_succeeded", status: "passed", evidence: { checks: { ignored_nested_true: true } } },
+  ],
+  summary: "riddle-proof-pr-comment-profile passed 5 check(s) across 1 viewport(s) (desktop).",
+  captured_at: "2026-06-21T20:00:00.000Z",
+  riddle: {
+    job_id: "job_profile",
+    status: "completed",
+    elapsed_ms: 165_041,
+  },
+};
+writeFileSync(path.join(prCommentProfileDir, "profile-result.json"), JSON.stringify(prCommentProfileResult, null, 2));
+const prCommentProfileSummary = summarizeRiddleProofPrComment({ result: prCommentProfileResult });
+assert.equal(prCommentProfileSummary.job_id, "job_profile");
+assert.equal(prCommentProfileSummary.status, "completed");
+assert.equal(prCommentProfileSummary.result_status, "passed");
+assert.equal(prCommentProfileSummary.duration_ms, 165_041);
+assert.equal(prCommentProfileSummary.passed_checks, 5);
+assert.equal(prCommentProfileSummary.failed_checks, 0);
+assert.equal(prCommentProfileSummary.pages[0].route, "/proof/");
+assert.equal(prCommentProfileSummary.primary_image?.url, "https://cdn.riddledc.com/scripts/job_profile/riddle-proof-pr-comment-profile-desktop.png");
+const prCommentProfileMarkdown = buildRiddleProofPrCommentMarkdown({
+  result: prCommentProfileResult,
+});
+assert.match(prCommentProfileMarkdown, /\*\*Riddle job:\*\* `job_profile`/);
+assert.match(prCommentProfileMarkdown, /\*\*Checks:\*\* 5 passed \/ 0 failed/);
+assert.doesNotMatch(prCommentProfileMarkdown, /12 failed/);
+assert.match(prCommentProfileMarkdown, /!\[riddle-proof-pr-comment-profile-desktop\.png\]\(https:\/\/cdn\.riddledc\.com\/scripts\/job_profile\/riddle-proof-pr-comment-profile-desktop\.png\)/);
+assert.match(prCommentProfileMarkdown, /\[proof\.json\]\(https:\/\/cdn\.riddledc\.com\/scripts\/job_profile\/proof\.json\.json\)/);
+const prCommentProfileBodyFile = path.join(prCommentProfileDir, "comment.md");
+const prCommentProfileCli = await runCli([
+  "pr-comment",
+  "--proof-dir",
+  prCommentProfileDir,
+  "--dry-run",
+  "--body-file",
+  prCommentProfileBodyFile,
+]);
+assert.equal(prCommentProfileCli.stdout, readFileSync(prCommentProfileBodyFile, "utf-8"));
+assert.match(prCommentProfileCli.stdout, /job_profile/);
+assert.match(prCommentProfileCli.stdout, /5 passed \/ 0 failed/);
+
+const prCommentProfileRegressionMarkdown = buildRiddleProofPrCommentMarkdown({
+  result: {
+    ...prCommentProfileResult,
+    profile_name: "riddle-proof-pr-comment-profile-regression",
+    status: "product_regression",
+    checks: [
+      { type: "route_loaded", status: "passed", evidence: {} },
+      { type: "selector_visible", status: "failed", evidence: {}, message: "Missing selector." },
+    ],
+    summary: "riddle-proof-pr-comment-profile-regression failed 1 product invariant(s) across 1 viewport(s).",
+  },
+});
+assert.match(prCommentProfileRegressionMarkdown, /\*\*Result:\*\* product_regression/);
+assert.match(prCommentProfileRegressionMarkdown, /\*\*Evidence status:\*\* product_regression/);
+assert.match(prCommentProfileRegressionMarkdown, /\*\*Checks:\*\* 1 passed \/ 1 failed/);
+
 const heldPrCommentResult = {
   ok: true,
   status: "ready_to_ship",
