@@ -58,22 +58,27 @@ jobs:
           post_status() {
             gh api "repos/${GH_REPO}/statuses/${sha}" \
               -f state="$1" \
-              -f context="release-pr-ci" \
-              -f description="$2" \
+              -f context="$2" \
+              -f description="$3" \
               -f target_url="${RUN_URL}" >/dev/null
+          }
+
+          post_release_statuses() {
+            post_status "$1" "release-pr-ci" "$2"
+            post_status "$1" "build-test" "$3"
           }
 
           finish() {
             status="$?"
             if [ "$status" -eq 0 ]; then
-              post_status success "Release PR validation passed"
+              post_release_statuses success "Release PR validation passed" "Release PR build/test passed"
             else
-              post_status failure "Release PR validation failed"
+              post_release_statuses failure "Release PR validation failed" "Release PR build/test failed"
             fi
             exit "$status"
           }
 
-          post_status pending "Validating release PR"
+          post_release_statuses pending "Validating release PR" "Running release PR build/test"
           trap finish EXIT
 
           pnpm install --frozen-lockfile
