@@ -1055,6 +1055,47 @@ assert.equal(publicCheckpointAudit.checkpoint_summary?.audit_disclosure_required
 assert.ok(publicCheckpointAudit.required_disclosures.includes("checkpoint_audit_counters"));
 assert.ok(publicCheckpointAudit.prohibited_claims.includes("all_checkpoint_responses_accepted"));
 
+const publicProfileRegression = summarizeRiddleProofPublicState({
+  ok: false,
+  status: "product_regression",
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicProfileRegression.policy_state, "proof_failed");
+assert.equal(publicProfileRegression.result_label, "product_regression");
+assert.equal(publicProfileRegression.proof_passed, false);
+assert.equal(publicProfileRegression.merge_ready, false);
+assert.equal(publicProfileRegression.sync_allowed, false);
+assert.ok(publicProfileRegression.prohibited_claims.includes("proof_passed"));
+assert.ok(publicProfileRegression.prohibited_claims.includes("ready_to_ship"));
+
+const publicProofInsufficient = summarizeRiddleProofPublicState({
+  ok: false,
+  status: "proof_insufficient",
+});
+assert.equal(publicProofInsufficient.policy_state, "proof_blocked");
+assert.equal(publicProofInsufficient.result_label, "proof_insufficient");
+assert.equal(publicProofInsufficient.proof_passed, false);
+assert.ok(publicProofInsufficient.required_disclosures.includes("proof_insufficient"));
+assert.ok(publicProofInsufficient.prohibited_claims.includes("proof_passed"));
+
+const publicEnvironmentBlocked = summarizeRiddleProofPublicState({
+  ok: false,
+  status: "environment_blocked",
+});
+assert.equal(publicEnvironmentBlocked.policy_state, "proof_blocked");
+assert.equal(publicEnvironmentBlocked.result_label, "environment_blocked");
+assert.equal(publicEnvironmentBlocked.proof_passed, false);
+assert.ok(publicEnvironmentBlocked.required_disclosures.includes("environment_blocked"));
+
+const publicHumanReview = summarizeRiddleProofPublicState({
+  ok: false,
+  status: "needs_human_review",
+});
+assert.equal(publicHumanReview.policy_state, "proof_blocked");
+assert.equal(publicHumanReview.result_label, "needs_human_review");
+assert.equal(publicHumanReview.proof_passed, false);
+assert.ok(publicHumanReview.required_disclosures.includes("human_review_required"));
+
 const publicConsumerRunResponse = {
   proofResult: {
     status: "completed",
@@ -1195,6 +1236,31 @@ assert.equal(publicConsumerReadyHostedView.claims.merge_ready, true);
 assert.equal(publicConsumerReadyHostedView.claims.sync_allowed, true);
 assert.equal(publicConsumerReadyHostedView.handoff.merge_recommendation, "ready-to-ship");
 
+const publicConsumerRegressionHostedView = summarizeRiddleProofHostedProofViewSurface({
+  ok: false,
+  status: "product_regression",
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerRegressionHostedView.kind, "hosted_proof_view");
+assert.equal(publicConsumerRegressionHostedView.result_label, "product_regression");
+assert.equal(publicConsumerRegressionHostedView.policy_state, "proof_failed");
+assert.equal(publicConsumerRegressionHostedView.claims.proof_passed, false);
+assert.equal(publicConsumerRegressionHostedView.claims.merge_ready, false);
+assert.equal(publicConsumerRegressionHostedView.claims.sync_allowed, false);
+assert.equal(publicConsumerRegressionHostedView.handoff.merge_recommendation, undefined);
+assert.ok(publicConsumerRegressionHostedView.disclosures.prohibited_claims.includes("proof_passed"));
+assert.ok(publicConsumerRegressionHostedView.disclosures.prohibited_claims.includes("ready_to_ship"));
+
+const publicConsumerInsufficientHostedView = summarizeRiddleProofHostedProofViewSurface({
+  ok: false,
+  status: "proof_insufficient",
+});
+assert.equal(publicConsumerInsufficientHostedView.kind, "hosted_proof_view");
+assert.equal(publicConsumerInsufficientHostedView.result_label, "proof_insufficient");
+assert.equal(publicConsumerInsufficientHostedView.policy_state, "proof_blocked");
+assert.equal(publicConsumerInsufficientHostedView.claims.proof_passed, false);
+assert.ok(publicConsumerInsufficientHostedView.disclosures.required.includes("proof_insufficient"));
+
 const publicConsumerBlockedMarkdown = buildRiddleProofPrCommentMarkdown({
   runResponse: publicConsumerRunResponse,
   result: {
@@ -1246,6 +1312,37 @@ assert.equal(publicConsumerBlockedAgentSummary.claims.merge_ready, false);
 assert.equal(publicConsumerBlockedAgentSummary.claims.sync_allowed, false);
 assert.equal(publicConsumerBlockedAgentSummary.handoff.merge_recommendation, undefined);
 assert.ok(publicConsumerBlockedAgentSummary.disclosures.prohibited_claims.includes("ready_to_ship"));
+const publicConsumerEnvironmentBlockedAgentSummary = summarizeRiddleProofAgentSummarySurface({
+  ok: false,
+  status: "environment_blocked",
+  merge_recommendation: "ready-to-ship",
+});
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.kind, "agent_summary");
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.result_label, "environment_blocked");
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.policy_state, "proof_blocked");
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.claims.proof_passed, false);
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.claims.merge_ready, false);
+assert.equal(publicConsumerEnvironmentBlockedAgentSummary.handoff.merge_recommendation, undefined);
+assert.ok(publicConsumerEnvironmentBlockedAgentSummary.disclosures.required.includes("environment_blocked"));
+assert.ok(publicConsumerEnvironmentBlockedAgentSummary.disclosures.prohibited_claims.includes("proof_passed"));
+const publicConsumerInsufficientAgentSummary = summarizeRiddleProofAgentSummarySurface({
+  ok: false,
+  status: "proof_insufficient",
+});
+assert.equal(publicConsumerInsufficientAgentSummary.kind, "agent_summary");
+assert.equal(publicConsumerInsufficientAgentSummary.result_label, "proof_insufficient");
+assert.equal(publicConsumerInsufficientAgentSummary.policy_state, "proof_blocked");
+assert.equal(publicConsumerInsufficientAgentSummary.claims.proof_passed, false);
+assert.ok(publicConsumerInsufficientAgentSummary.disclosures.required.includes("proof_insufficient"));
+const publicConsumerReviewAgentSummary = summarizeRiddleProofAgentSummarySurface({
+  ok: false,
+  status: "needs_human_review",
+});
+assert.equal(publicConsumerReviewAgentSummary.kind, "agent_summary");
+assert.equal(publicConsumerReviewAgentSummary.result_label, "needs_human_review");
+assert.equal(publicConsumerReviewAgentSummary.policy_state, "proof_blocked");
+assert.equal(publicConsumerReviewAgentSummary.claims.proof_passed, false);
+assert.ok(publicConsumerReviewAgentSummary.disclosures.required.includes("human_review_required"));
 const publicConsumerDefaultSurface = summarizeRiddleProofPublicConsumerSurface({
   ok: true,
   status: "ready_to_ship",

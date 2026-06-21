@@ -176,6 +176,27 @@ function uniqueStrings(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function statusIsProofFailed(status: string | undefined) {
+  return status === "failed" ||
+    status === "product_regression";
+}
+
+function statusIsProofBlocked(status: string | undefined) {
+  return status === "blocked" ||
+    status === "proof_insufficient" ||
+    status === "environment_blocked" ||
+    status === "configuration_error" ||
+    status === "needs_human_review";
+}
+
+function statusRequiresDisclosure(status: string | undefined) {
+  if (status === "proof_insufficient") return "proof_insufficient";
+  if (status === "environment_blocked") return "environment_blocked";
+  if (status === "configuration_error") return "configuration_error";
+  if (status === "needs_human_review") return "human_review_required";
+  return undefined;
+}
+
 export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPublicStateSummary {
   const record = asRecord(input);
   const runCard = asRecord(record.run_card);
@@ -229,8 +250,8 @@ export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPubl
     asRecord(record.details).checkpoint_summary,
     asRecord(raw.details).checkpoint_summary,
   );
-  const blockedOrWaiting = status === "blocked" ||
-    status === "failed" ||
+  const blockedOrWaiting = statusIsProofBlocked(status) ||
+    statusIsProofFailed(status) ||
     status === "awaiting_checkpoint" ||
     handoffState === "proof_blocked" ||
     handoffState === "proof_review_required" ||
@@ -245,8 +266,8 @@ export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPubl
 
   let policyState: RiddleProofPublicPolicyState = "unknown";
   if (status === "awaiting_checkpoint" || handoffState === "proof_checkpoint_required") policyState = "awaiting_checkpoint";
-  else if (status === "failed" || handoffState === "proof_failed") policyState = "proof_failed";
-  else if (status === "blocked" || handoffState === "proof_blocked" || handoffState === "proof_review_required") policyState = "proof_blocked";
+  else if (statusIsProofFailed(status) || handoffState === "proof_failed") policyState = "proof_failed";
+  else if (statusIsProofBlocked(status) || handoffState === "proof_blocked" || handoffState === "proof_review_required") policyState = "proof_blocked";
   else if (handoffState === "proof_complete_ship_disabled") policyState = "proof_complete_ship_disabled";
   else if (proofComplete && shipHeld && !shipAuthorized) policyState = "proof_passed_ship_held";
   else if (proofComplete && shippingDisabled && !shipAuthorized) policyState = "proof_complete_ship_disabled";
@@ -259,6 +280,8 @@ export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPubl
   if (shippingDisabled) requiredDisclosures.push("shipping_disabled");
   if (checkpointSummary?.audit_disclosure_required) requiredDisclosures.push("checkpoint_audit_counters");
   if (status === "awaiting_checkpoint" || handoffState === "proof_checkpoint_required") requiredDisclosures.push("checkpoint_required");
+  const statusDisclosure = statusRequiresDisclosure(status);
+  if (statusDisclosure) requiredDisclosures.push(statusDisclosure);
 
   const prohibitedClaims: string[] = [];
   if (!shipAuthorized || shipHeld || shippingDisabled) prohibitedClaims.push("ship_authorized", "shipped");
@@ -272,15 +295,20 @@ export function summarizeRiddleProofPublicState(input: unknown): RiddleProofPubl
   }
 
   const resultLabel =
+    status === "product_regression" ? "product_regression" :
+    status === "proof_insufficient" ? "proof_insufficient" :
+    status === "environment_blocked" ? "environment_blocked" :
+    status === "configuration_error" ? "configuration_error" :
+    status === "needs_human_review" ? "needs_human_review" :
     policyState === "awaiting_checkpoint" ? "checkpoint required" :
-      policyState === "proof_blocked" ? "blocked" :
-      policyState === "proof_failed" ? "failed" :
-      policyState === "proof_complete_ship_disabled" ? "proof complete; shipping disabled" :
-      policyState === "proof_passed_ship_held" ? "proof passed; ship held" :
-      policyState === "ship_authorized" ? (status === "shipped" ? "shipped" : "ship authorized") :
-      policyState === "proof_passed" ? "passed" :
-      policyState === "proof_in_progress" ? "running" :
-      status || "recorded";
+    policyState === "proof_blocked" ? "blocked" :
+    policyState === "proof_failed" ? "failed" :
+    policyState === "proof_complete_ship_disabled" ? "proof complete; shipping disabled" :
+    policyState === "proof_passed_ship_held" ? "proof passed; ship held" :
+    policyState === "ship_authorized" ? (status === "shipped" ? "shipped" : "ship authorized") :
+    policyState === "proof_passed" ? "passed" :
+    policyState === "proof_in_progress" ? "running" :
+    status || "recorded";
 
   return {
     status,
