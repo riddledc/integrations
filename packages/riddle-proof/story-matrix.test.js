@@ -172,12 +172,29 @@ for (const row of uxRows) {
 for (const requiredUxId of [
   "rp-story-pr-comment-renders-only-evidence-backed-status",
   "rp-ux-local-playwright-runner-smoke",
-  "rp-story-hosted-proof-view-uses-contract",
-  "rp-ux-agent-summary-uses-contract",
+  "rp-ux-hosted-proof-view-contract-passed",
+  "rp-ux-hosted-proof-view-contract-product-regression",
+  "rp-ux-hosted-proof-view-contract-proof-insufficient",
+  "rp-ux-hosted-proof-view-product-renderer-imports-contract",
+  "rp-ux-agent-summary-contract-proof-insufficient",
+  "rp-ux-agent-summary-contract-environment-blocked",
+  "rp-ux-agent-summary-contract-human-review",
+  "rp-ux-agent-summary-product-wiring-uses-contract",
   "rp-ux-release-publish-flow",
 ]) {
   assert.equal(uxIds.has(requiredUxId), true, `UX coverage missing ${requiredUxId}`);
 }
+
+assert.equal(
+  uxRows.some((row) => row.user_story_id === "rp-story-hosted-proof-view-uses-contract"),
+  false,
+  "hosted proof view coverage should stay split into concrete contract and product-wiring rows",
+);
+assert.equal(
+  uxRows.some((row) => row.user_story_id === "rp-ux-agent-summary-uses-contract"),
+  false,
+  "agent summary coverage should stay split into concrete contract and product-wiring rows",
+);
 
 console.log(JSON.stringify({
   ok: true,

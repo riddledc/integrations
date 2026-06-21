@@ -2673,6 +2673,11 @@ inductive PublicRunStatus where
   | awaitingCheckpoint
   | blocked
   | failed
+  | productRegression
+  | proofInsufficient
+  | environmentBlocked
+  | configurationError
+  | needsHumanReview
   | readyToShip
   | shipped
   | completed
@@ -2784,6 +2789,11 @@ def publicProofComplete (input : PublicStateInput) : Bool :=
 def publicBlockedOrWaiting (input : PublicStateInput) : Bool :=
   input.status == PublicRunStatus.blocked
     || input.status == PublicRunStatus.failed
+    || input.status == PublicRunStatus.productRegression
+    || input.status == PublicRunStatus.proofInsufficient
+    || input.status == PublicRunStatus.environmentBlocked
+    || input.status == PublicRunStatus.configurationError
+    || input.status == PublicRunStatus.needsHumanReview
     || input.status == PublicRunStatus.awaitingCheckpoint
     || input.handoffState == PublicHandoffState.proofBlocked
     || input.handoffState == PublicHandoffState.proofReviewRequired
@@ -2817,9 +2827,14 @@ def publicPolicyState (input : PublicStateInput) : PublicPolicyState :=
       || input.handoffState == PublicHandoffState.proofCheckpointRequired then
     PublicPolicyState.awaitingCheckpoint
   else if input.status == PublicRunStatus.failed
+      || input.status == PublicRunStatus.productRegression
       || input.handoffState == PublicHandoffState.proofFailed then
     PublicPolicyState.proofFailed
   else if input.status == PublicRunStatus.blocked
+      || input.status == PublicRunStatus.proofInsufficient
+      || input.status == PublicRunStatus.environmentBlocked
+      || input.status == PublicRunStatus.configurationError
+      || input.status == PublicRunStatus.needsHumanReview
       || input.handoffState == PublicHandoffState.proofBlocked
       || input.handoffState == PublicHandoffState.proofReviewRequired then
     PublicPolicyState.proofBlocked
@@ -3483,12 +3498,72 @@ def publicExampleCheckpointAudit : PublicStateInput where
     duplicateResponseCount := 1
   }
 
+def publicExampleProductRegression : PublicStateInput where
+  status := PublicRunStatus.productRegression
+  ok := some false
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleProofInsufficient : PublicStateInput where
+  status := PublicRunStatus.proofInsufficient
+  ok := some false
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleEnvironmentBlocked : PublicStateInput where
+  status := PublicRunStatus.environmentBlocked
+  ok := some false
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
+def publicExampleNeedsHumanReview : PublicStateInput where
+  status := PublicRunStatus.needsHumanReview
+  ok := some false
+  handoffState := PublicHandoffState.none
+  handoffProofComplete := false
+  shipModeNone := false
+  shippingDisabledExplicit := none
+  shipAuthorizedExplicit := none
+  authorizationEvidence := false
+  shipHeldExplicit := none
+  mergeReadyExplicit := some true
+  normalPrAllowed := some true
+  checkpoint := publicNoCheckpointCounters
+
 #eval publicStateSummary publicExampleHeldReadyNoShip
 #eval publicStateSummary publicExampleNoShipHandoff
 #eval publicStateSummary publicExampleHandoffReadyNotAuthorized
 #eval publicStateSummary publicExampleBlockedStaleCompleted
 #eval publicStateSummary publicExampleShippedAuthorized
 #eval publicStateSummary publicExampleCheckpointAudit
+#eval publicStateSummary publicExampleProductRegression
+#eval publicStateSummary publicExampleProofInsufficient
+#eval publicStateSummary publicExampleEnvironmentBlocked
+#eval publicStateSummary publicExampleNeedsHumanReview
 
 theorem public_held_ready_no_ship_blocks_public_handoff :
     publicPolicyState publicExampleHeldReadyNoShip =
@@ -3541,6 +3616,42 @@ theorem public_checkpoint_audit_counters_require_disclosure :
     publicCheckpointAuditDisclosureRequired publicExampleCheckpointAudit = true
       ∧ publicProhibitsAllCheckpointResponsesAcceptedClaim
         publicExampleCheckpointAudit = true := by
+  native_decide
+
+theorem public_profile_regression_blocks_public_success_claims :
+    publicPolicyState publicExampleProductRegression =
+        PublicPolicyState.proofFailed
+      ∧ publicProofPassed publicExampleProductRegression = false
+      ∧ publicMergeReady publicExampleProductRegression = false
+      ∧ publicSyncAllowed publicExampleProductRegression = false
+      ∧ publicBlockedOrWaiting publicExampleProductRegression = true := by
+  native_decide
+
+theorem public_proof_insufficient_blocks_public_success_claims :
+    publicPolicyState publicExampleProofInsufficient =
+        PublicPolicyState.proofBlocked
+      ∧ publicProofPassed publicExampleProofInsufficient = false
+      ∧ publicMergeReady publicExampleProofInsufficient = false
+      ∧ publicSyncAllowed publicExampleProofInsufficient = false
+      ∧ publicBlockedOrWaiting publicExampleProofInsufficient = true := by
+  native_decide
+
+theorem public_environment_blocked_blocks_public_success_claims :
+    publicPolicyState publicExampleEnvironmentBlocked =
+        PublicPolicyState.proofBlocked
+      ∧ publicProofPassed publicExampleEnvironmentBlocked = false
+      ∧ publicMergeReady publicExampleEnvironmentBlocked = false
+      ∧ publicSyncAllowed publicExampleEnvironmentBlocked = false
+      ∧ publicBlockedOrWaiting publicExampleEnvironmentBlocked = true := by
+  native_decide
+
+theorem public_human_review_blocks_public_success_claims :
+    publicPolicyState publicExampleNeedsHumanReview =
+        PublicPolicyState.proofBlocked
+      ∧ publicProofPassed publicExampleNeedsHumanReview = false
+      ∧ publicMergeReady publicExampleNeedsHumanReview = false
+      ∧ publicSyncAllowed publicExampleNeedsHumanReview = false
+      ∧ publicBlockedOrWaiting publicExampleNeedsHumanReview = true := by
   native_decide
 
 def publicConsumerStaleMergeRecommendation : PublicConsumerSurface where
@@ -3611,6 +3722,30 @@ theorem generated_agent_summary_surface_from_public_state_conforms
     publicConsumerSurfaceConforms input
       (publicAgentSummarySurfaceFromState input) = true := by
   exact public_consumer_surface_from_state_conforms input
+
+theorem generated_hosted_proof_view_blocks_profile_regression_claims :
+    publicConsumerSurfaceConforms publicExampleProductRegression
+        (publicHostedProofViewSurfaceFromState
+          publicExampleProductRegression) = true
+      ∧ (publicHostedProofViewSurfaceFromState
+          publicExampleProductRegression).claimsProofPassed = false
+      ∧ (publicHostedProofViewSurfaceFromState
+          publicExampleProductRegression).claimsMergeReady = false
+      ∧ (publicHostedProofViewSurfaceFromState
+          publicExampleProductRegression).claimsSyncAllowed = false := by
+  native_decide
+
+theorem generated_agent_summary_blocks_proof_insufficient_claims :
+    publicConsumerSurfaceConforms publicExampleProofInsufficient
+        (publicAgentSummarySurfaceFromState
+          publicExampleProofInsufficient) = true
+      ∧ (publicAgentSummarySurfaceFromState
+          publicExampleProofInsufficient).claimsProofPassed = false
+      ∧ (publicAgentSummarySurfaceFromState
+          publicExampleProofInsufficient).claimsMergeReady = false
+      ∧ (publicAgentSummarySurfaceFromState
+          publicExampleProofInsufficient).claimsSyncAllowed = false := by
+  native_decide
 
 theorem stale_run_status_surface_violates_held_public_state :
     publicConsumerSurfaceConforms publicExampleHeldReadyNoShip
