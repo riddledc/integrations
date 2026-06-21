@@ -1,0 +1,299 @@
+{
+  "version": "riddle-proof.story-matrix.v1",
+  "matrix_id": "riddle-proof-bounded-loop-2026-06",
+  "public_name": "Riddle Proof Bounded Dogfood Loop",
+  "description": "A small canonical matrix for exercising Riddle Proof as its own proving-ground product before scaling to broad generated user-story sweeps.",
+  "operating_rules": [
+    "Keep each pass bounded: choose one batch, run it, classify findings, fix only high-signal issues, then rerun the same batch.",
+    "A story is not passed until it records concrete evidence receipts such as command output, profile-result.json, proof.json, screenshots, PR comment body, or a formal/test artifact.",
+    "Do not count GitHub Actions failures caused by billing or unavailable runners as product regressions. Classify those as environment_blocked.",
+    "Prefer generic Riddle Proof surfaces over adapter-specific wrapper behavior unless the story explicitly names an adapter.",
+    "Negative-control stories are first-class: a correct product_regression or proof_insufficient result can be a pass for the framework."
+  ],
+  "batch_policy": {
+    "default_batch_size": 8,
+    "max_batch_size": 20,
+    "rerun_rule": "After fixing a product or contract issue found by the batch, rerun every story in the same batch before advancing.",
+    "promotion_rule": "Promote a story from candidate to recurring only after it has at least one saved evidence packet and a stable expected verdict."
+  },
+  "status_values": [
+    "candidate",
+    "ready_to_run",
+    "covered_existing",
+    "blocked_external",
+    "needs_product_hook",
+    "recurring"
+  ],
+  "failure_classes": [
+    "product_regression",
+    "proof_insufficient",
+    "environment_blocked",
+    "configuration_error",
+    "needs_human_review",
+    "contract_gap",
+    "doc_or_ux_gap"
+  ],
+  "evidence_receipt_types": [
+    "profile-result.json",
+    "proof.json",
+    "summary.md",
+    "screenshot",
+    "console.json",
+    "dom-summary.json",
+    "regression-pack-result.json",
+    "pr-comment-body.md",
+    "preflight-json",
+    "formal-kernel-build",
+    "runtime-test-log",
+    "manual-review-note"
+  ],
+  "stories": [
+    {
+      "id": "rp-story-profile-suggest-drafts-not-verdicts",
+      "batch": "authoring",
+      "surface": "profile-suggest",
+      "user_story": "As a proof author, I can ask Riddle Proof to suggest checks for a changed route without accidentally treating suggestions as proof.",
+      "expected_behavior": "The command emits a draft profile or JSON suggestion and clearly does not produce a proof verdict.",
+      "primary_runner": "local-cli",
+      "command": "riddle-proof-loop profile-suggest --route /proof --changed-files docs/proof.md --selectors main#main-content --format profile",
+      "expected_verdict": "draft_only",
+      "evidence_required": [
+        "generated profile includes route_loaded or selector checks",
+        "output contains no passed/product_regression/proof_insufficient verdict",
+        "operator records the saved draft path or stdout capture"
+      ],
+      "receipt_types": ["manual-review-note"],
+      "failure_classes": ["doc_or_ux_gap", "contract_gap"],
+      "status": "candidate"
+    },
+    {
+      "id": "rp-story-hosted-happy-path-produces-artifacts",
+      "batch": "hosted-profile",
+      "surface": "run-profile hosted runner",
+      "user_story": "As a product maintainer, I can run a hosted profile against a live route and receive a passed verdict tied to screenshots and structured artifacts.",
+      "expected_behavior": "Hosted run-profile returns passed, writes profile-result.json, summary.md, proof.json, console.json, dom-summary.json, and records screenshot artifact names.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop run-profile --profile <route-smoke-profile> --url https://riddledc.com --runner riddle --output artifacts/riddle-proof/<story-id> --result-format compact-json",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "profile-result.json status is passed",
+        "riddle.job_id is present",
+        "proof_json and screenshot artifacts are listed"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "summary.md", "screenshot"],
+      "failure_classes": ["product_regression", "proof_insufficient", "environment_blocked"],
+      "existing_coverage": ["examples/regression-packs/oc-flow-regression.json: hosted-home-to-proof-route-change-pass"],
+      "status": "covered_existing"
+    },
+    {
+      "id": "rp-story-hosted-negative-control-stays-regression",
+      "batch": "hosted-profile",
+      "surface": "run-profile hosted runner",
+      "user_story": "As a maintainer, I can run a negative-control profile and see a product_regression instead of a false pass.",
+      "expected_behavior": "A missing selector or missing query parameter produces product_regression with evidence, not passed and not a lifecycle crash.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop regression-pack run --pack oc-flow-regression --local-core false --hosted-riddle true --format markdown --output artifacts/riddle-proof/hosted-regression",
+      "expected_verdict": "product_regression",
+      "evidence_required": [
+        "negative case expected status is product_regression",
+        "profile-result.json includes the failed check",
+        "summary names the failed invariant without hiding artifacts"
+      ],
+      "receipt_types": ["profile-result.json", "summary.md", "console.json"],
+      "failure_classes": ["contract_gap", "proof_insufficient", "environment_blocked"],
+      "existing_coverage": [
+        "examples/regression-packs/oc-flow-regression.json: hosted-pricing-query-hash-dropped-blocker",
+        "examples/regression-packs/oc-flow-regression.json: hosted-missing-selector-timeout-blocker"
+      ],
+      "status": "covered_existing"
+    },
+    {
+      "id": "rp-story-cold-start-does-not-duplicate-too-soon",
+      "batch": "hosted-profile",
+      "surface": "hosted worker cold start",
+      "user_story": "As a hosted runner user, I can submit work while workers are scaled to zero without the client declaring the job stale before normal cold-start readiness.",
+      "expected_behavior": "The unsubmitted retry window is long enough for accepted scale-to-zero cold starts, and progress output explains worker-wake waiting.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop run-profile --profile <small-profile> --url <site> --runner riddle --output artifacts/riddle-proof/cold-start-smoke --result-format compact-json --progress-every-ms 5000",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "attempts budget corresponds to a five-minute unsubmitted timeout",
+        "progress output reports waiting_for_worker_submit before submission",
+        "profile-result.json passes or returns environment_blocked with the specific infra blocker"
+      ],
+      "receipt_types": ["profile-result.json", "summary.md", "manual-review-note"],
+      "failure_classes": ["environment_blocked", "contract_gap"],
+      "existing_coverage": ["README cold-start retry documentation", "cli default timeout test"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-local-core-trust-boundary",
+      "batch": "local-core",
+      "surface": "runtime trust boundary",
+      "user_story": "As a framework maintainer, I can run the generic local core suite and prove route, query/hash, thrown-error, missing-selector, and no-diff cases without hosted infrastructure.",
+      "expected_behavior": "The local core regression suite passes all required cases and reports no forbidden terminal markers.",
+      "primary_runner": "local-core",
+      "command": "riddle-proof-loop regression-pack run --pack oc-flow-regression --local-core true --hosted-riddle false --format compact-json --output artifacts/riddle-proof/local-core",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "regression-pack-result.json local_core.ok is true",
+        "missing_required_cases is empty",
+        "forbidden_terminal_markers_seen is empty"
+      ],
+      "receipt_types": ["regression-pack-result.json", "runtime-test-log"],
+      "failure_classes": ["contract_gap", "configuration_error"],
+      "existing_coverage": ["runtime/tests/trust_boundary_regression.py"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-pr-comment-renders-only-evidence-backed-status",
+      "batch": "reporting",
+      "surface": "pr-comment",
+      "user_story": "As a reviewer, I can get a PR comment whose badge, artifact links, and failed checks reflect the saved proof packet rather than raw guessed fields.",
+      "expected_behavior": "Dry-run PR comment generation renders status and artifacts from proof outputs and refuses missing required inputs.",
+      "primary_runner": "local-cli",
+      "command": "riddle-proof-loop pr-comment --proof-dir artifacts/riddle-proof/<story-id> --pr <number> --repo <owner/repo> --dry-run --body-file artifacts/riddle-proof/<story-id>/pr-comment-body.md",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "body file includes the same status as profile-result.json",
+        "required artifact links or local names are present",
+        "missing proof-dir inputs fail rather than rendering passed"
+      ],
+      "receipt_types": ["pr-comment-body.md", "profile-result.json"],
+      "failure_classes": ["contract_gap", "doc_or_ux_gap"],
+      "existing_coverage": ["test.js pr-comment cases"],
+      "status": "ready_to_run"
+    },
+    {
+      "id": "rp-story-profile-body-assertions-derive-from-real-artifact",
+      "batch": "artifact-publication",
+      "surface": "profile-body-assertions",
+      "user_story": "As a profile promoter, I can derive body assertions from a real artifact before making a public proof/profile claim.",
+      "expected_behavior": "The command emits snippets only when they are present in the artifact and fails when required fragments are missing.",
+      "primary_runner": "local-cli",
+      "command": "riddle-proof-loop profile-body-assertions --artifact <proof-json-or-url> --candidates-json '[\"product_regression\",\"passed\"]' --required-json '[\"product_regression\"]' --format body-contains",
+      "expected_verdict": "passed_or_failed_by_artifact",
+      "evidence_required": [
+        "required present fragment is emitted",
+        "required missing fragment exits nonzero",
+        "promoted profile records derived snippets instead of hand-authored guesses"
+      ],
+      "receipt_types": ["preflight-json", "manual-review-note"],
+      "failure_classes": ["contract_gap", "proof_insufficient"],
+      "existing_coverage": ["README profile-body-assertions guidance", "test.js body assertion cases"],
+      "status": "ready_to_run"
+    },
+    {
+      "id": "rp-story-http-preflight-catches-publication-mismatch",
+      "batch": "artifact-publication",
+      "surface": "profile-http-status-preflight",
+      "user_story": "As a public proof publisher, I can check artifact URLs and body fragments before spending a hosted browser run.",
+      "expected_behavior": "The preflight returns success only when status, content type, byte size, required body text, and forbidden body text all satisfy the profile.",
+      "primary_runner": "local-cli",
+      "command": "riddle-proof-loop profile-http-status-preflight --profile <public-promotion-profile> --url <preview-url> --format json",
+      "expected_verdict": "passed_or_product_regression",
+      "evidence_required": [
+        "preflight output lists every checked URL",
+        "missing required body text fails",
+        "forbidden escaped/raw artifact text fails"
+      ],
+      "receipt_types": ["preflight-json"],
+      "failure_classes": ["product_regression", "proof_insufficient", "configuration_error"],
+      "existing_coverage": ["test.js http preflight cases"],
+      "status": "ready_to_run"
+    },
+    {
+      "id": "rp-story-run-profile-recover-preserves-artifacts",
+      "batch": "hosted-profile",
+      "surface": "run-profile recover",
+      "user_story": "As a user whose local process was interrupted, I can recover a hosted job and still get the proof artifacts and summary.",
+      "expected_behavior": "Recover fetches the hosted job artifacts, writes the same profile-result/summary/proof files, and preserves the original job id.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop run-profile recover --profile <profile> --url <base-url> --job <job-id> --output artifacts/riddle-proof/<story-id>-recovered --result-format compact-json",
+      "expected_verdict": "passed_or_original_verdict",
+      "evidence_required": [
+        "recovered profile-result.json includes the requested job id",
+        "summary.md is written",
+        "proof.json and screenshots are recovered or explicitly reported missing"
+      ],
+      "receipt_types": ["profile-result.json", "summary.md", "proof.json", "screenshot"],
+      "failure_classes": ["environment_blocked", "proof_insufficient", "contract_gap"],
+      "status": "candidate"
+    },
+    {
+      "id": "rp-story-viewport-aggregate-does-not-hide-child-failure",
+      "batch": "hosted-profile",
+      "surface": "run-profile aggregate",
+      "user_story": "As a maintainer running viewport matrices, I can aggregate child runs without losing the failing viewport or overstating total latency.",
+      "expected_behavior": "Aggregate returns the worst required child verdict, lists child outputs, and separates summed poll time from max child latency.",
+      "primary_runner": "local-cli",
+      "command": "riddle-proof-loop run-profile aggregate --profile <matrix-profile> --url <base-url> --input-dir artifacts/riddle-proof/<matrix-dir> --output artifacts/riddle-proof/<matrix-dir>",
+      "expected_verdict": "worst_child_verdict",
+      "evidence_required": [
+        "aggregate profile-result.json names all child viewports",
+        "any failed child remains visible in checks",
+        "summary reports child timing without implying a single hosted job"
+      ],
+      "receipt_types": ["profile-result.json", "summary.md"],
+      "failure_classes": ["contract_gap", "proof_insufficient"],
+      "existing_coverage": ["test.js aggregate cases"],
+      "status": "ready_to_run"
+    },
+    {
+      "id": "rp-story-formal-kernel-matches-runtime-contract",
+      "batch": "formal-contract",
+      "surface": "formal/riddle-proof-kernel",
+      "user_story": "As a framework maintainer, I can prove the result/status contract that runtime tests depend on, without putting Lean in the evidence-collection hot path.",
+      "expected_behavior": "The formal kernel builds, and conformance tests map the same runtime cases into executable checks.",
+      "primary_runner": "lean-kernel",
+      "command": "cd formal/riddle-proof-kernel && lake build && cd ../.. && node packages/riddle-proof/formal-conformance.test.js",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "lake build exits zero",
+        "formal-conformance.test.js exits zero",
+        "new runtime status cases are either mirrored in Lean or explicitly classified as out of formal scope"
+      ],
+      "receipt_types": ["formal-kernel-build", "runtime-test-log"],
+      "failure_classes": ["contract_gap", "configuration_error"],
+      "existing_coverage": ["formal/riddle-proof-kernel", "formal-conformance.test.js"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-agent-loop-checkpoint-stale-response",
+      "batch": "agent-loop",
+      "surface": "checkpoint/respond/status",
+      "user_story": "As a host integration, I can ignore a stale checkpoint response after the run has already reached a terminal status.",
+      "expected_behavior": "A late response is recorded as ignored and does not reopen the run or start background resume.",
+      "primary_runner": "local-core",
+      "command": "riddle-proof-loop regression-pack run --pack oc-flow-regression --local-core true --hosted-riddle false --format json --output artifacts/riddle-proof/checkpoint-stale",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "late-stale-checkpoint-ignored case is present",
+        "ignored_checkpoint_response is true",
+        "background_resume_started is false"
+      ],
+      "receipt_types": ["regression-pack-result.json", "runtime-test-log"],
+      "failure_classes": ["contract_gap"],
+      "existing_coverage": ["examples/regression-packs/oc-flow-regression.json: late-stale-checkpoint-ignored"],
+      "status": "covered_existing"
+    },
+    {
+      "id": "rp-story-hosted-proof-view-uses-contract",
+      "batch": "hosted-proof-view",
+      "surface": "hosted proof renderer",
+      "user_story": "As a viewer of a hosted proof page, I see the contract-derived status, artifacts, and missing-evidence explanation rather than raw backend fields.",
+      "expected_behavior": "Hosted proof views and any agent-facing summaries import/use the same status/artifact contract as PR comments.",
+      "primary_runner": "manual-review",
+      "command": "Inspect hosted proof renderer imports and run a hosted proof view smoke with a passed and a negative-control packet.",
+      "expected_verdict": "needs_human_review",
+      "evidence_required": [
+        "renderer uses shared contract code or has a documented gap",
+        "passed packet renders passed with artifacts",
+        "negative-control packet renders product_regression or proof_insufficient, never passed"
+      ],
+      "receipt_types": ["manual-review-note", "screenshot", "profile-result.json"],
+      "failure_classes": ["contract_gap", "doc_or_ux_gap"],
+      "status": "needs_product_hook"
+    }
+  ]
+}
