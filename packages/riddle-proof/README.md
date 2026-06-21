@@ -261,6 +261,17 @@ is generated only as wrapper/runtime validation guidance; the browser evidence,
 required cases, forbidden lifecycle markers, and version gate remain owned by
 the generic pack manifest.
 
+For broader dogfood loops, keep a bounded story matrix instead of asking an
+agent to sweep every feature at once. The starter matrix lives at
+`examples/story-matrices/riddle-proof-bounded-loop.json`; see
+`examples/story-matrices/README.md` for the package-local loop notes and
+`docs/riddle-proof-story-matrix.md` in the repository for the longer workflow.
+Each story names its surface, expected behavior, runner, evidence receipts,
+likely failure classes, and whether it is candidate, ready, covered by existing
+tests, blocked by external infrastructure, or recurring. Treat negative
+controls as successful framework stories when they return the expected non-pass
+verdict with evidence.
+
 Before counting live wrapper runs, use the pack's runtime gate: verify
 `riddle_proof_status` reports the loaded `@riddledc/openclaw-riddle-proof` and
 `@riddledc/riddle-proof` versions. Disk package versions alone are not enough.
