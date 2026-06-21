@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.8.69
+
+### Patch Changes
+
+- fadbf07: Add a spreadsheet-style Riddle Proof UX coverage ledger.
+
+  The new CSV example tracks product surfaces, user stories, expected behavior, runners, evidence requirements, last results, findings, next actions, priorities, and failure classes for bounded dogfood loops.
+
 ## 0.8.68
 
 ### Patch Changes
