@@ -122,6 +122,13 @@ assert.equal(typeof cjsPublicState.summarizeRiddleProofPublicState, "function");
 assert.equal(typeof cjs.buildRiddleProofPrCommentMarkdown, "function");
 assert.equal(typeof cjs.summarizeRiddleProofPrComment, "function");
 
+const cliSource = readFileSync(new URL("./src/cli.ts", import.meta.url), "utf8");
+assert.match(
+  cliSource,
+  /DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 300_000/,
+  "hosted profile unsubmitted retry default should cover scale-to-zero worker cold starts",
+);
+
 function runCli(args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [

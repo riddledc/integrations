@@ -208,6 +208,9 @@ riddle-proof-loop run-profile \
 Hosted profile runs emit Riddle poll progress to stderr while waiting. Use
 `--quiet` to suppress progress lines, or `--progress-every-ms` to tune the
 heartbeat cadence for long route-inventory or workflow profiles.
+When a hosted worker fleet is scaled to zero, `run-profile` waits up to five
+minutes for an unsubmitted job before retrying by default; use
+`--unsubmitted-timeout-ms` for shorter warm-worker tripwires.
 By default, `run-profile` writes the full JSON result to stdout for automation.
 For agent loops where the saved artifacts are the source of truth, use
 `--result-format summary` to print the same compact Markdown summary that is

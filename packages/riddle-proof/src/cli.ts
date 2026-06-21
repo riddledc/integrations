@@ -277,7 +277,7 @@ function runProfileViewportNamesOption(options: CliOptions) {
   return raw.split(",").map((part) => part.trim()).filter(Boolean);
 }
 
-const DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 90_000;
+const DEFAULT_PROFILE_UNSUBMITTED_RETRY_TIMEOUT_MS = 300_000;
 const DEFAULT_PROFILE_UNSUBMITTED_RETRIES = 2;
 
 function cliPackageRoot() {
