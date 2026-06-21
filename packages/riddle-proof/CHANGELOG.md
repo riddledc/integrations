@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.70
+
+### Patch Changes
+
+- c0b64fa: Classify profile verdicts in public consumer surfaces so product regressions, insufficient evidence, environment blockers, and human-review packets cannot expose pass or merge-ready claims.
+
 ## 0.8.69
 
 ### Patch Changes
