@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.67
+
+### Patch Changes
+
+- f64eb27: Add a bounded Riddle Proof dogfood story matrix with validation coverage.
+
 ## 0.8.66
 
 ### Patch Changes
