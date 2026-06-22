@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.71
+
+### Patch Changes
+
+- c0ac589: Add neutral fixture-site profiles and public-state matrix fixtures for non-docs Riddle Proof experience coverage.
+
 ## 0.8.70
 
 ### Patch Changes
