@@ -1,5 +1,12 @@
 # @riddledc/riddle-proof
 
+## 0.8.73
+
+### Patch Changes
+
+- 96aa49c: Make run-profile summaries start with a human-readable result, checked scope,
+  evidence artifact, and next action, and add a neutral auth/session fixture smoke.
+
 ## 0.8.72
 
 ### Patch Changes
