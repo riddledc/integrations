@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.72
+
+### Patch Changes
+
+- 8e723ec: Add a hosted run-profile preflight for local-only artifact_manifest requirements.
+
 ## 0.8.71
 
 ### Patch Changes
