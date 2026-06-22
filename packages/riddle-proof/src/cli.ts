@@ -1418,15 +1418,99 @@ function profileHttpStatusPreflightSummary(result: RiddleProofProfileHttpStatusP
   return `${lines.join("\n")}\n`;
 }
 
+function profilePlainStatusLabel(status: RiddleProofProfileResult["status"]) {
+  if (status === "passed") return "passed";
+  if (status === "product_regression") return "product issue";
+  if (status === "proof_insufficient") return "missing evidence";
+  if (status === "environment_blocked") return "environment blocked";
+  if (status === "configuration_error") return "configuration issue";
+  return "needs review";
+}
+
+function profilePlainCheckSummary(result: RiddleProofProfileResult) {
+  const total = result.checks.length;
+  const passed = result.checks.filter((check) => check.status === "passed").length;
+  const failed = result.checks.filter((check) => check.status === "failed").length;
+  const review = result.checks.filter((check) => check.status === "needs_human_review").length;
+  const skipped = result.checks.filter((check) => check.status === "skipped").length;
+  const evidenceViewportNames = (result.evidence?.viewports || [])
+    .map((viewport) => cliString(viewport.name))
+    .filter((name): name is string => Boolean(name));
+  const setupViewportNames = evidenceViewportNames.length
+    ? []
+    : profileSetupSummaryViewports(result)
+      .map((viewport) => cliString(viewport.name))
+      .filter((name): name is string => Boolean(name));
+  const viewportNames = evidenceViewportNames.length ? evidenceViewportNames : setupViewportNames;
+  const route = result.route?.requested || result.route?.observed;
+  const countText = total === 1 ? "1 check" : `${total} checks`;
+  const viewportText = viewportNames.length
+    ? ` across ${viewportNames.length} viewport${viewportNames.length === 1 ? "" : "s"} (${viewportNames.join(", ")})`
+    : "";
+  const routeText = route ? ` on ${markdownInlineCode(route, 120)}` : "";
+  const outcomes = [
+    passed ? `${passed} passed` : "",
+    failed ? `${failed} failed` : "",
+    review ? `${review} needs review` : "",
+    skipped ? `${skipped} skipped` : "",
+  ].filter(Boolean).join(", ");
+  if (!total) return route ? `No browser checks were recorded for ${markdownInlineCode(route, 120)}.` : "No browser checks were recorded.";
+  return `${countText}${viewportText}${routeText}; ${outcomes || "no completed checks"}.`;
+}
+
+function profileArtifactRefIsScreenshot(artifact: RiddleProofProfileArtifactRef) {
+  const kind = cliString(artifact.kind)?.toLowerCase() || "";
+  const contentType = cliString(artifact.content_type)?.toLowerCase() || "";
+  const text = [artifact.name, artifact.url, artifact.path].map((value) => cliString(value)).filter(Boolean).join(" ");
+  return kind === "screenshot"
+    || contentType.startsWith("image/")
+    || /\.(png|jpe?g|webp)(?:$|[?#])/i.test(text);
+}
+
+function profileArtifactDisplay(artifact: RiddleProofProfileArtifactRef) {
+  const name = artifact.name || artifact.kind || "artifact";
+  const location = artifact.url || artifact.path;
+  return location ? `${name}: ${location}` : name;
+}
+
+function profilePlainArtifactSummary(result: RiddleProofProfileResult) {
+  const hostedArtifacts = result.artifacts.riddle_artifacts || [];
+  const hostedScreenshot = hostedArtifacts.find(profileArtifactRefIsScreenshot);
+  if (hostedScreenshot) return `Hosted screenshot ${profileArtifactDisplay(hostedScreenshot)}`;
+  const hostedProof = hostedArtifacts.find((artifact) => {
+    const name = (artifact.name || artifact.url || artifact.path || "").toLowerCase();
+    return name.includes("proof.json");
+  });
+  if (hostedProof) return `Hosted proof JSON ${profileArtifactDisplay(hostedProof)}`;
+  if (result.artifacts.screenshots?.length) return `Screenshot ${markdownInlineCode(result.artifacts.screenshots[0])}`;
+  if (result.artifacts.proof_json) return `Proof JSON ${markdownInlineCode(result.artifacts.proof_json)}`;
+  return "profile-result.json and summary.md";
+}
+
+function profilePlainNextStep(result: RiddleProofProfileResult) {
+  if (result.status === "passed") return "Use this packet as scoped browser evidence, then review the linked artifacts before merge.";
+  if (result.status === "product_regression") return "Fix the failed product check(s), then rerun this profile.";
+  if (result.status === "proof_insufficient") return "Adjust the profile or runner so the required evidence artifacts are produced, then rerun.";
+  if (result.status === "environment_blocked") return "Fix the runner or environment blocker, then rerun.";
+  if (result.status === "configuration_error") return result.error ? `Fix the profile setup: ${result.error}` : "Fix the profile setup, then rerun.";
+  return "Review the artifacts manually, then refine the profile if the verdict should be automated.";
+}
+
 function profileResultMarkdown(result: RiddleProofProfileResult) {
   const lines = [
     `# Riddle Proof Profile: ${result.profile_name}`,
     "",
-    `Status: ${result.status}`,
-    `Runner: ${result.runner}`,
-    `Captured: ${result.captured_at}`,
+    `Result: ${profilePlainStatusLabel(result.status)}`,
+    `What was checked: ${profilePlainCheckSummary(result)}`,
+    `Artifact that proves it: ${profilePlainArtifactSummary(result)}`,
+    `What to do next: ${profilePlainNextStep(result)}`,
     "",
-    result.summary,
+    "## Details",
+    "",
+    `- Status: ${result.status}`,
+    `- Runner: ${result.runner}`,
+    `- Captured: ${result.captured_at}`,
+    `- Summary: ${result.summary}`,
     "",
   ];
   if (Array.isArray(result.warnings) && result.warnings.length) {

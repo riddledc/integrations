@@ -17,3 +17,11 @@ packages/riddle-proof-runner-playwright/bin/riddle-proof-playwright run-profile 
 The sibling `neutral-fixture-product-regression.json` profile intentionally
 looks for a missing selector. A correct Riddle Proof run reports
 `product_regression`, not `passed`.
+
+`neutral-fixture-auth-session.json` exercises a stored browser-state handoff by
+writing a deterministic localStorage token, reloading `auth.html`, and proving
+that the authenticated fixture state is visible.
+
+The auth profile keeps its readiness wait inside `setup_actions`, after the
+localStorage write and reload. A target-level `wait_for_selector` would run
+before setup and would block the token handoff.

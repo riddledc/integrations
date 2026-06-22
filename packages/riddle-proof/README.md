@@ -545,6 +545,10 @@ stable enough for Playwright's default click actionability checks. Use `press`
 with a Playwright key name, such as `Enter`, `Space`, or `ArrowLeft`,
 when a route's intended browser control is keyboard-driven; omit `selector` for
 a page-level key press, or provide `selector` to press against a focused element.
+Target-level `wait_for_selector` runs immediately after navigation and before
+`setup_actions`. If setup creates the ready state, for example by seeding
+localStorage and reloading an authenticated fixture, put the readiness wait in
+`setup_actions` after the state change instead.
 For canvas games that read key state rather than keypress events, add `hold_ms`
 or `holdMs` to keep the key down before releasing it. When the profile needs
 to observe or wait on runtime evidence while a key remains held, use paired
