@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Riddle Proof Auth Fixture</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="fixture-shell" data-rp-fixture="auth">
+      <p class="eyebrow">Neutral fixture</p>
+      <h1>Stored Auth Smoke</h1>
+      <p class="lead">
+        This page only exposes the success state when the runner supplies the
+        expected stored browser token.
+      </p>
+      <section class="evidence-panel auth-state" id="auth-state" data-rp-fixture="auth-pending" aria-live="polite">
+        Checking stored browser state.
+      </section>
+    </main>
+    <script>
+      (() => {
+        const expectedToken = "riddle-proof-fixture-token";
+        const observedToken = window.localStorage.getItem("rp_fixture_auth_token") || "";
+        const panel = document.getElementById("auth-state");
+        if (!panel) return;
+        if (observedToken === expectedToken) {
+          document.documentElement.dataset.authState = "passed";
+          panel.dataset.rpFixture = "auth-passed";
+          panel.innerHTML = [
+            "<strong>Authenticated fixture passed</strong>",
+            "<span>Stored browser state reached the page before checks ran.</span>",
+          ].join("");
+          return;
+        }
+        document.documentElement.dataset.authState = "blocked";
+        panel.dataset.rpFixture = "auth-blocked";
+        panel.innerHTML = [
+          "<strong>Sign in required</strong>",
+          "<span>The expected stored browser token was not present.</span>",
+        ].join("");
+      })();
+    </script>
+  </body>
+</html>

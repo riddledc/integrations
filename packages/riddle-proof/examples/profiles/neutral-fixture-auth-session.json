@@ -1,0 +1,44 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "neutral-fixture-auth-session",
+  "target": {
+    "route": "/auth.html",
+    "viewports": [
+      { "name": "phone", "width": 390, "height": 844 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "auth": "stored-browser-state-fixture",
+    "setup_actions": [
+      {
+        "type": "local_storage",
+        "key": "rp_fixture_auth_token",
+        "value": "riddle-proof-fixture-token",
+        "reload": true
+      },
+      {
+        "type": "wait_for_selector",
+        "selector": "[data-rp-fixture=\"auth-passed\"]",
+        "timeout_ms": 10000
+      },
+      { "type": "wait", "ms": 100 }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/auth.html" },
+    { "type": "selector_visible", "selector": "[data-rp-fixture=\"auth-passed\"]" },
+    { "type": "selector_text_visible", "selector": "[data-rp-fixture=\"auth-passed\"]", "text": "Authenticated fixture passed" },
+    { "type": "selector_text_absent", "selector": "body", "text": "Sign in required" },
+    { "type": "no_mobile_horizontal_overflow" },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "metadata": {
+    "fixture_kind": "stored_auth_session",
+    "covers": "localStorage auth/session handoff before browser checks"
+  },
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  }
+}

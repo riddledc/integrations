@@ -10,6 +10,7 @@ const uxCoverageCsv = readFileSync(new URL("./examples/story-matrices/riddle-pro
 const neutralPublicStateFixtures = JSON.parse(readFileSync(new URL("./examples/story-matrices/riddle-proof-neutral-public-state-fixtures.json", import.meta.url), "utf8"));
 const neutralPassProfile = JSON.parse(readFileSync(new URL("./examples/profiles/neutral-fixture-pass.json", import.meta.url), "utf8"));
 const neutralRegressionProfile = JSON.parse(readFileSync(new URL("./examples/profiles/neutral-fixture-product-regression.json", import.meta.url), "utf8"));
+const neutralAuthProfile = JSON.parse(readFileSync(new URL("./examples/profiles/neutral-fixture-auth-session.json", import.meta.url), "utf8"));
 
 function parseCsv(text) {
   const rows = [];
@@ -80,6 +81,7 @@ const requiredRecurringStories = new Set([
   "rp-story-neutral-fixture-negative-control",
   "rp-story-neutral-fixture-hosted-pass",
   "rp-story-neutral-fixture-hosted-negative-control",
+  "rp-story-neutral-fixture-auth-session-smoke",
   "rp-story-neutral-fixture-public-state-blockers",
 ]);
 
@@ -197,6 +199,7 @@ for (const requiredUxId of [
   "rp-ux-neutral-fixture-negative-control",
   "rp-ux-neutral-fixture-hosted-pass",
   "rp-ux-neutral-fixture-hosted-negative-control",
+  "rp-story-neutral-fixture-auth-session-smoke",
   "rp-ux-release-publish-flow",
 ]) {
   assert.equal(uxIds.has(requiredUxId), true, `UX coverage missing ${requiredUxId}`);
@@ -227,6 +230,19 @@ assert.equal(
   neutralRegressionProfile.checks.some((check) => check.selector === "[data-rp-fixture=\"missing-required-control\"]"),
   true,
   "neutral regression profile should contain the deliberate missing selector",
+);
+assert.equal(neutralAuthProfile.version, "riddle-proof.profile.v1");
+assert.equal(neutralAuthProfile.name, "neutral-fixture-auth-session");
+assert.equal(neutralAuthProfile.target.route, "/auth.html");
+assert.equal(
+  neutralAuthProfile.target.setup_actions.some((action) => action.type === "local_storage" && action.key === "rp_fixture_auth_token" && action.reload === true),
+  true,
+  "neutral auth profile should prove stored auth/session handoff with localStorage plus reload",
+);
+assert.equal(
+  neutralAuthProfile.checks.some((check) => check.type === "selector_text_absent" && check.text === "Sign in required"),
+  true,
+  "neutral auth profile should prove the unauthenticated state is absent",
 );
 
 assert.equal(neutralPublicStateFixtures.version, "riddle-proof.neutral-public-state-fixtures.v1");

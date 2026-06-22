@@ -22,6 +22,13 @@ a {
   font-weight: 700;
 }
 
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+  margin-top: 28px;
+}
+
 .fixture-shell {
   width: min(100% - 32px, 760px);
   margin: 0 auto;
@@ -88,6 +95,31 @@ dd {
   margin: 4px 0 0;
   overflow-wrap: anywhere;
   font-weight: 700;
+}
+
+.auth-state {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+}
+
+.auth-state strong,
+.auth-state span {
+  display: block;
+}
+
+.auth-state strong {
+  font-size: 1.05rem;
+}
+
+.auth-state[data-rp-fixture="auth-passed"] {
+  border-color: #7bb69c;
+  background: #f1fbf6;
+}
+
+.auth-state[data-rp-fixture="auth-blocked"] {
+  border-color: #c58b8b;
+  background: #fff6f4;
 }
 
 @media (max-width: 640px) {

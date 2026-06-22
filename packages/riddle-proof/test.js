@@ -5862,6 +5862,11 @@ try {
   assert.equal(cliRunProfileRequests[baseUrlAliasRequestStart].body.url, "https://preview.example.test/s/ps_alias/profile");
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
+  assert.match(profileSummaryMarkdown, /^Result: passed$/m);
+  assert.match(profileSummaryMarkdown, /What was checked: 16 checks across 1 viewport \(desktop\) on `https:\/\/example\.com\/profile`; 16 passed\./);
+  assert.match(profileSummaryMarkdown, /Artifact that proves it: Hosted screenshot cli-profile-progress-desktop-ready\.png: http:\/\/127\.0\.0\.1:\d+\/cli-profile-progress-desktop-ready\.png/);
+  assert.match(profileSummaryMarkdown, /What to do next: Use this packet as scoped browser evidence, then review the linked artifacts before merge\./);
+  assert.match(profileSummaryMarkdown, /## Details/);
   assert.match(profileSummaryMarkdown, /passed: route_loaded \(`\/profile`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_visible \(`\.dashboard-content`\)/);
   assert.match(profileSummaryMarkdown, /passed: selector_text_visible \(`\.dashboard-content` contains `Start building`\)/);
@@ -5951,6 +5956,7 @@ try {
     "summary",
   ]);
   assert.match(cliProfileSummaryResult.stdout, /^# Riddle Proof Profile: cli-profile-progress/m);
+  assert.match(cliProfileSummaryResult.stdout, /^Result: passed$/m);
   assert.match(cliProfileSummaryResult.stdout, /Status: passed/);
   assert.match(cliProfileSummaryResult.stdout, /## Riddle Job/);
   assert.throws(() => JSON.parse(cliProfileSummaryResult.stdout));

@@ -335,6 +335,25 @@
       "status": "recurring"
     },
     {
+      "id": "rp-story-neutral-fixture-auth-session-smoke",
+      "batch": "neutral-fixture",
+      "surface": "neutral fixture auth/session profile",
+      "user_story": "As a Riddle Proof user, I can run a browser profile that supplies stored auth/session state before page checks execute.",
+      "expected_behavior": "The profile writes a deterministic localStorage token, reloads the page, reaches the authenticated fixture state, and produces normal proof artifacts locally and hosted.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop run-profile --profile packages/riddle-proof/examples/profiles/neutral-fixture-auth-session.json --url <preview-url> --runner riddle --output artifacts/riddle-proof/neutral-fixture-auth-session-hosted --result-format compact-json",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "profile-result.json status is passed",
+        "setup_actions_succeeded records local_storage with reload",
+        "hosted or local screenshots show the authenticated fixture state"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "summary.md", "screenshot"],
+      "failure_classes": ["product_regression", "proof_insufficient", "environment_blocked"],
+      "existing_coverage": ["examples/profiles/neutral-fixture-auth-session.json", "examples/neutral-fixture-site/auth.html"],
+      "status": "recurring"
+    },
+    {
       "id": "rp-story-neutral-fixture-public-state-blockers",
       "batch": "neutral-fixture",
       "surface": "neutral public-state packet fixtures",
