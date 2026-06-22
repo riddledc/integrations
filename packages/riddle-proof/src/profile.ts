@@ -584,6 +584,7 @@ export interface RiddleProofProfileResult {
     }>;
   };
   environment_blocker?: Record<string, JsonValue>;
+  configuration_blocker?: Record<string, JsonValue>;
   error?: string;
 }
 
@@ -4736,6 +4737,52 @@ export interface RiddleProofProfileArtifactCompleteness {
   missing: string[];
 }
 
+export const RIDDLE_PROOF_HOSTED_PROFILE_ARTIFACTS = [
+  "screenshot",
+  "console",
+  "dom_summary",
+  "proof_json",
+] as const;
+
+export interface RiddleProofProfileRunnerArtifactPreflight {
+  ok: boolean;
+  runner: RiddleProofProfileRunner;
+  requested: string[];
+  local_only: string[];
+  hosted_artifacts: string[];
+  message?: string;
+}
+
+export function preflightRiddleProofProfileRunnerArtifacts(
+  profile: RiddleProofProfile,
+  runner: RiddleProofProfileRunner,
+): RiddleProofProfileRunnerArtifactPreflight {
+  const requested = uniqueNonEmptyStrings(profile.artifacts || []);
+  if (runner !== "riddle") {
+    return {
+      ok: true,
+      runner,
+      requested,
+      local_only: [],
+      hosted_artifacts: [...RIDDLE_PROOF_HOSTED_PROFILE_ARTIFACTS],
+    };
+  }
+
+  const localOnly = requested.filter(profileArtifactIsHostedLocalOnly);
+  const subject = localOnly.join(", ");
+  const message = localOnly.length
+    ? `${subject} ${localOnly.length === 1 ? "is" : "are"} local-runner output; hosted runs produce proof_json, console, dom_summary, and screenshots. Remove ${localOnly.length === 1 ? "it" : "them"} from profile.artifacts for --runner riddle.`
+    : undefined;
+  return {
+    ok: localOnly.length === 0,
+    runner,
+    requested,
+    local_only: localOnly,
+    hosted_artifacts: [...RIDDLE_PROOF_HOSTED_PROFILE_ARTIFACTS],
+    message,
+  };
+}
+
 export function assessRiddleProofProfileArtifactCompleteness(
   profile: RiddleProofProfile,
   result: RiddleProofProfileResult,
@@ -4811,6 +4858,17 @@ function normalizeProfileArtifactRole(input: string) {
   if (normalized === "dom_summary" || normalized === "dom_summary_json" || normalized === "dom-summary.json") return "dom-summary.json";
   if (normalized === "proof" || normalized === "proof_json" || normalized === "proof.json") return "proof.json";
   return normalizeRiddleProfileArtifactName(input.trim()).toLowerCase();
+}
+
+function profileArtifactIsHostedLocalOnly(input: string) {
+  const raw = input.trim().toLowerCase();
+  const normalized = raw.replace(/[\s-]+/g, "_");
+  const role = normalizeProfileArtifactRole(input);
+  return [
+    raw,
+    normalized,
+    role,
+  ].some((value) => value === "artifact_manifest" || value === "artifact_manifest.json" || value === "artifact-manifest" || value === "artifact-manifest.json");
 }
 
 function profileArtifactKeyPresent(key: string, artifacts: RiddleProofProfileArtifactRef[]) {
@@ -4926,22 +4984,36 @@ export function profileStatusExitCode(profile: RiddleProofProfile, status: Riddl
 }
 
 export function createRiddleProofProfileConfigurationError(
-  name: string,
+  profileOrName: RiddleProofProfile | string,
   error: unknown,
   runner: RiddleProofProfileRunner = "riddle",
+  options: { warnings?: string[]; configurationBlocker?: Record<string, JsonValue> } = {},
 ): RiddleProofProfileResult {
+  const profile = typeof profileOrName === "string" ? undefined : profileOrName;
+  const name = profile ? profile.name : String(profileOrName);
   const message = error instanceof Error ? error.message : String(error);
+  let requested = "";
+  if (profile) {
+    try {
+      requested = resolveRiddleProofProfileTargetUrl(profile);
+    } catch {
+      requested = "";
+    }
+  }
   return {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: name,
     runner,
     status: "configuration_error",
-    baseline_policy: "invariant_only",
-    route: { requested: "", observed: "", matched: false, error: message },
+    baseline_policy: profile?.baseline_policy || "invariant_only",
+    route: { requested, observed: "", matched: false, error: message },
     artifacts: { screenshots: [], proof_json: "proof.json" },
     checks: [],
     summary: `${name} has a profile configuration error.`,
     captured_at: new Date().toISOString(),
+    metadata: profile?.metadata,
+    warnings: options.warnings?.length ? options.warnings : undefined,
+    configuration_blocker: options.configurationBlocker,
     error: message,
   };
 }

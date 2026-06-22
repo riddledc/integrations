@@ -226,6 +226,12 @@ split viewport matrix, the preflight estimates the 30-second hosted minimum per
 viewport and returns an `environment_blocked` result without starting partial
 jobs when the account balance cannot cover the intended sweep. Use
 `--balance-preflight=false` to bypass this check.
+Hosted runs also preflight profile artifact requirements before spending a
+browser job. `artifact_manifest` / `artifact-manifest.json` are local runner
+receipts, so a hosted profile that requires them returns `configuration_error`
+with an explanation instead of submitting a job. Hosted profiles should require
+only artifacts the hosted browser run produces: `screenshot`, `console`,
+`dom_summary`, and `proof_json`.
 
 ## Regression Packs
 
