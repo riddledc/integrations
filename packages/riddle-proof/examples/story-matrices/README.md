@@ -9,6 +9,11 @@ in a spreadsheet editor when you want the "status bar" view: surface, user story
 expected behavior, runner, required evidence, last result, finding, next action,
 and priority.
 
+`riddle-proof-neutral-public-state-fixtures.json` contains deterministic
+non-docs packets for public-state, hosted proof view, and agent-summary
+semantics. Pair it with `../neutral-fixture-site/` when you want a browser target
+that is not explaining Riddle Proof while being tested by Riddle Proof.
+
 Each story names:
 
 - the Riddle Proof surface under test

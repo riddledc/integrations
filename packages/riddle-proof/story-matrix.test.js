@@ -1,8 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  summarizeRiddleProofAgentSummarySurface,
+  summarizeRiddleProofHostedProofViewSurface,
+} from "./dist/public-state.js";
 
 const matrix = JSON.parse(readFileSync(new URL("./examples/story-matrices/riddle-proof-bounded-loop.json", import.meta.url), "utf8"));
 const uxCoverageCsv = readFileSync(new URL("./examples/story-matrices/riddle-proof-ux-coverage.csv", import.meta.url), "utf8");
+const neutralPublicStateFixtures = JSON.parse(readFileSync(new URL("./examples/story-matrices/riddle-proof-neutral-public-state-fixtures.json", import.meta.url), "utf8"));
+const neutralPassProfile = JSON.parse(readFileSync(new URL("./examples/profiles/neutral-fixture-pass.json", import.meta.url), "utf8"));
+const neutralRegressionProfile = JSON.parse(readFileSync(new URL("./examples/profiles/neutral-fixture-product-regression.json", import.meta.url), "utf8"));
 
 function parseCsv(text) {
   const rows = [];
@@ -69,6 +76,11 @@ const requiredRecurringStories = new Set([
   "rp-story-cold-start-does-not-duplicate-too-soon",
   "rp-story-local-core-trust-boundary",
   "rp-story-formal-kernel-matches-runtime-contract",
+  "rp-story-neutral-fixture-local-pass",
+  "rp-story-neutral-fixture-negative-control",
+  "rp-story-neutral-fixture-hosted-pass",
+  "rp-story-neutral-fixture-hosted-negative-control",
+  "rp-story-neutral-fixture-public-state-blockers",
 ]);
 
 for (const story of stories) {
@@ -111,7 +123,7 @@ for (const storyId of requiredRecurringStories) {
   assert.equal(ids.has(storyId), true, `required recurring story missing ${storyId}`);
 }
 
-for (const batch of ["local-core", "hosted-profile", "reporting", "artifact-publication", "formal-contract"]) {
+for (const batch of ["local-core", "hosted-profile", "reporting", "artifact-publication", "formal-contract", "neutral-fixture"]) {
   assert.equal(batches.has(batch), true, `expected batch missing ${batch}`);
 }
 
@@ -180,6 +192,11 @@ for (const requiredUxId of [
   "rp-ux-agent-summary-contract-environment-blocked",
   "rp-ux-agent-summary-contract-human-review",
   "rp-ux-agent-summary-product-wiring-uses-contract",
+  "rp-ux-neutral-fixture-public-state-blockers",
+  "rp-ux-neutral-fixture-local-pass",
+  "rp-ux-neutral-fixture-negative-control",
+  "rp-ux-neutral-fixture-hosted-pass",
+  "rp-ux-neutral-fixture-hosted-negative-control",
   "rp-ux-release-publish-flow",
 ]) {
   assert.equal(uxIds.has(requiredUxId), true, `UX coverage missing ${requiredUxId}`);
@@ -196,6 +213,57 @@ assert.equal(
   "agent summary coverage should stay split into concrete contract and product-wiring rows",
 );
 
+assert.equal(neutralPassProfile.version, "riddle-proof.profile.v1");
+assert.equal(neutralPassProfile.name, "neutral-fixture-pass");
+assert.equal(neutralPassProfile.target.route, "/pass.html");
+assert.equal(
+  neutralPassProfile.checks.some((check) => check.type === "selector_text_absent" && check.text === "Product-specific Riddle docs"),
+  true,
+  "neutral pass profile should explicitly avoid Riddle-docs-specific copy",
+);
+assert.equal(neutralRegressionProfile.version, "riddle-proof.profile.v1");
+assert.equal(neutralRegressionProfile.name, "neutral-fixture-product-regression");
+assert.equal(
+  neutralRegressionProfile.checks.some((check) => check.selector === "[data-rp-fixture=\"missing-required-control\"]"),
+  true,
+  "neutral regression profile should contain the deliberate missing selector",
+);
+
+assert.equal(neutralPublicStateFixtures.version, "riddle-proof.neutral-public-state-fixtures.v1");
+assert.equal(Array.isArray(neutralPublicStateFixtures.fixtures), true);
+assert.ok(neutralPublicStateFixtures.fixtures.length >= 5, "neutral public-state fixture set should cover pass plus blockers");
+assert.doesNotMatch(
+  JSON.stringify(neutralPublicStateFixtures),
+  /riddledc\.com\/docs\/riddle-proof|examples\/riddle-proof/,
+  "neutral public-state fixtures should not depend on the Riddle Proof docs target",
+);
+for (const fixture of neutralPublicStateFixtures.fixtures) {
+  assert.match(fixture.id, /^rp-fixture-neutral-[a-z0-9-]+$/, `${fixture.id} must use the neutral fixture id shape`);
+  assert.equal(typeof fixture.title, "string", `${fixture.id} missing title`);
+  assert.equal(typeof fixture.input, "object", `${fixture.id} missing input`);
+  assert.equal(typeof fixture.expected, "object", `${fixture.id} missing expected`);
+  assert.ok(String(fixture.input?.target?.url || "").startsWith("https://neutral-fixture.invalid/"), `${fixture.id} should target the neutral fixture origin`);
+
+  for (const surface of [
+    summarizeRiddleProofHostedProofViewSurface(fixture.input),
+    summarizeRiddleProofAgentSummarySurface(fixture.input),
+  ]) {
+    assert.ok(["hosted_proof_view", "agent_summary"].includes(surface.kind), `${fixture.id} unexpected surface kind ${surface.kind}`);
+    assert.equal(surface.policy_state, fixture.expected.policy_state, `${fixture.id} ${surface.kind} policy_state`);
+    assert.equal(surface.result_label, fixture.expected.result_label, `${fixture.id} ${surface.kind} result_label`);
+    for (const [claim, expected] of Object.entries(fixture.expected.claims)) {
+      assert.equal(surface.claims[claim], expected, `${fixture.id} ${surface.kind} claim ${claim}`);
+    }
+    assert.equal(surface.handoff.merge_recommendation ?? null, fixture.expected.handoff_merge_recommendation, `${fixture.id} ${surface.kind} merge recommendation`);
+    for (const disclosure of fixture.expected.required_disclosures) {
+      assert.equal(surface.disclosures.required.includes(disclosure), true, `${fixture.id} ${surface.kind} missing disclosure ${disclosure}`);
+    }
+    for (const prohibitedClaim of fixture.expected.prohibited_claims) {
+      assert.equal(surface.disclosures.prohibited_claims.includes(prohibitedClaim), true, `${fixture.id} ${surface.kind} missing prohibited claim ${prohibitedClaim}`);
+    }
+  }
+}
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.story-matrix",
@@ -203,4 +271,5 @@ console.log(JSON.stringify({
   story_count: stories.length,
   batch_count: batches.size,
   ux_coverage_count: uxRows.length,
+  neutral_fixture_count: neutralPublicStateFixtures.fixtures.length,
 }));

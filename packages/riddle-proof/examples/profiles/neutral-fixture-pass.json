@@ -1,0 +1,30 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "neutral-fixture-pass",
+  "target": {
+    "route": "/pass.html",
+    "viewports": [
+      { "name": "phone", "width": 390, "height": 844 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "auth": "none",
+    "wait_for_selector": "[data-rp-fixture=\"pass\"]",
+    "setup_actions": [
+      { "type": "wait", "ms": 100 }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/pass.html" },
+    { "type": "selector_visible", "selector": "[data-rp-fixture=\"pass\"]" },
+    { "type": "selector_text_visible", "selector": "[data-rp-fixture=\"pass\"]", "text": "Neutral fixture passed" },
+    { "type": "selector_text_absent", "selector": "[data-rp-fixture=\"pass\"]", "text": "Product-specific Riddle docs" },
+    { "type": "no_mobile_horizontal_overflow" },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  }
+}
