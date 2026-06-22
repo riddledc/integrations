@@ -43,6 +43,7 @@ import {
   normalizeRiddleProofProfile,
   normalizeTerminalMetadata,
   preflightRiddleProofProfileHttpStatusChecks,
+  preflightRiddleProofProfileRunnerArtifacts,
   suggestRiddleProofProfileChecks,
   resolveRiddleProofProfileTimeoutSec,
   resolveRiddleProofProfileRouteUrl,
@@ -107,6 +108,7 @@ assert.equal(typeof cjs.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.normalizeRiddleProofProfile, "function");
 assert.equal(typeof cjsProfile.collectRiddleProofProfileWarnings, "function");
 assert.equal(typeof cjsProfile.preflightRiddleProofProfileHttpStatusChecks, "function");
+assert.equal(typeof cjsProfile.preflightRiddleProofProfileRunnerArtifacts, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
@@ -315,6 +317,44 @@ const artifactAssertionCliJson = JSON.parse(artifactAssertionCli.stdout);
 assert.equal(artifactAssertionCliJson.ok, true);
 assert.deepEqual(artifactAssertionCliJson.body_contains, ["product_regression", "partial results available"]);
 assert.deepEqual(artifactAssertionCliJson.missing_candidates, ["completed_timeout"]);
+
+const hostedLocalOnlyArtifactProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "hosted-local-only-artifact",
+  target: { url: "https://example.com" },
+  checks: [{ type: "route_loaded", expected_path: "/" }],
+  artifacts: ["screenshot", "artifact_manifest"],
+});
+const hostedLocalOnlyArtifactPreflight = preflightRiddleProofProfileRunnerArtifacts(hostedLocalOnlyArtifactProfile, "riddle");
+assert.equal(hostedLocalOnlyArtifactPreflight.ok, false);
+assert.deepEqual(hostedLocalOnlyArtifactPreflight.local_only, ["artifact_manifest"]);
+assert.match(hostedLocalOnlyArtifactPreflight.message || "", /artifact_manifest is local-runner output/);
+assert.deepEqual(hostedLocalOnlyArtifactPreflight.hosted_artifacts, ["screenshot", "console", "dom_summary", "proof_json"]);
+const localRunnerArtifactPreflight = preflightRiddleProofProfileRunnerArtifacts(hostedLocalOnlyArtifactProfile, "local-playwright");
+assert.equal(localRunnerArtifactPreflight.ok, true);
+const hostedLocalOnlyArtifactOutputDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-hosted-local-only-artifact-"));
+const hostedLocalOnlyArtifactCli = await runCli([
+  "run-profile",
+  "--profile",
+  JSON.stringify(hostedLocalOnlyArtifactProfile),
+  "--runner",
+  "riddle",
+  "--output",
+  hostedLocalOnlyArtifactOutputDir,
+  "--result-format",
+  "compact-json",
+], { expectFailure: true });
+const hostedLocalOnlyArtifactCliJson = JSON.parse(hostedLocalOnlyArtifactCli.stdout);
+assert.equal(hostedLocalOnlyArtifactCliJson.status, "configuration_error");
+assert.match(hostedLocalOnlyArtifactCliJson.summary, /configuration error/);
+assert.deepEqual(hostedLocalOnlyArtifactCliJson.configuration_blocker.local_only_artifacts, ["artifact_manifest"]);
+assert.deepEqual(hostedLocalOnlyArtifactCliJson.configuration_blocker.hosted_artifacts, ["screenshot", "console", "dom_summary", "proof_json"]);
+assert.match(hostedLocalOnlyArtifactCliJson.warnings[0], /hosted runs produce proof_json, console, dom_summary, and screenshots/);
+assert.match(hostedLocalOnlyArtifactCli.stderr, /configuration_error: artifact_manifest is local-runner output/);
+const hostedLocalOnlyArtifactSummary = readFileSync(path.join(hostedLocalOnlyArtifactOutputDir, "summary.md"), "utf8");
+assert.match(hostedLocalOnlyArtifactSummary, /## Configuration Blocker/);
+assert.match(hostedLocalOnlyArtifactSummary, /local-only artifact\(s\): `artifact_manifest`/);
+assert.doesNotMatch(hostedLocalOnlyArtifactSummary, /## Riddle Job/);
 
 const prCommentDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-pr-comment-"));
 const prCommentRunResponse = {

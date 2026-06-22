@@ -28,3 +28,14 @@ Branch: `codex/riddle-proof-neutral-fixture-matrix`
 
 - This batch is intentionally not a Riddle Proof docs dogfood test. The browser target is `packages/riddle-proof/examples/neutral-fixture-site/`.
 - First hosted pass attempt `job_a53b91e0` returned `proof_insufficient` because the new profile mistakenly required `artifact_manifest`, which is a local runner receipt rather than a hosted browser artifact. The profile was calibrated to require browser artifacts only, then hosted pass/negative-control both behaved as expected.
+
+## Hosted Artifact Preflight Follow-Up
+
+- Change: hosted `run-profile` now preflights local-only `artifact_manifest` / `artifact-manifest.json` requirements and returns `configuration_error` before checking balance or submitting a hosted job.
+- Focused evidence: `node packages/riddle-proof/test.js` covers the exported runner-artifact preflight helper, compact CLI JSON, stderr diagnostic, saved summary, and absence of a Riddle job section.
+- Full package evidence: `corepack pnpm --filter @riddledc/riddle-proof test` passed.
+- Local neutral pass: `artifacts/riddle-proof/neutral-fixture-pass-local-preflight/profile-result.json` returned `passed`.
+- Local neutral negative control: `artifacts/riddle-proof/neutral-fixture-product-regression-local-preflight/profile-result.json` returned `product_regression`.
+- Hosted neutral pass: static preview `ps_23ba0479`; split jobs `job_e8fbf626` and `job_242530bc`; result `passed`.
+- Hosted neutral negative control: static preview `ps_23ba0479`; job `job_1c6b2002`; result `product_regression`.
+- Hosted timing note: the first cold hosted viewport queued for about 2m25s before submit; the warm follow-up viewport/job completed in about 3s.

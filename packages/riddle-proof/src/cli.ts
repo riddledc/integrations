@@ -33,12 +33,14 @@ import {
   applyRiddleProofProfileArtifactCompleteness,
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
+  createRiddleProofProfileConfigurationError,
   createRiddleProofProfileEnvironmentBlockedResult,
   createRiddleProofProfileInsufficientResult,
   deriveRiddleProofArtifactBodyAssertions,
   extractRiddleProofProfileResult,
   normalizeRiddleProofProfile,
   preflightRiddleProofProfileHttpStatusChecks,
+  preflightRiddleProofProfileRunnerArtifacts,
   RIDDLE_PROOF_PROFILE_EVIDENCE_VERSION,
   profileStatusExitCode,
   resolveRiddleProofProfileTargetUrl,
@@ -366,6 +368,7 @@ function compactRunProfileResult(result: RiddleProofProfileResult, options: CliO
     checks: compactProfileChecks(result),
     warnings: result.warnings,
     environment_blocker: result.environment_blocker,
+    configuration_blocker: result.configuration_blocker,
     metadata: result.metadata,
     riddle: result.riddle,
     artifacts: result.artifacts,
@@ -1474,6 +1477,10 @@ function profileResultMarkdown(result: RiddleProofProfileResult) {
   const httpStatusSummaryLines = profileHttpStatusSummaryMarkdown(result);
   if (httpStatusSummaryLines.length) {
     lines.push("", "## HTTP Status", "", ...httpStatusSummaryLines);
+  }
+  const configurationBlockerLines = profileConfigurationBlockerMarkdown(result);
+  if (configurationBlockerLines.length) {
+    lines.push("", "## Configuration Blocker", "", ...configurationBlockerLines);
   }
   const environmentBlockerLines = profileEnvironmentBlockerMarkdown(result);
   if (environmentBlockerLines.length) {
@@ -3911,7 +3918,30 @@ function profileEnvironmentBlockerMarkdown(result: RiddleProofProfileResult): st
   return lines;
 }
 
+function profileConfigurationBlockerMarkdown(result: RiddleProofProfileResult): string[] {
+  const blocker = cliRecord(result.configuration_blocker);
+  if (!blocker) return [];
+
+  const lines: string[] = [];
+  const reason = cliString(blocker.reason);
+  const source = cliString(blocker.source);
+  const requestedArtifacts = cliStringArray(blocker.requested_artifacts);
+  const localOnlyArtifacts = cliStringArray(blocker.local_only_artifacts);
+  const hostedArtifacts = cliStringArray(blocker.hosted_artifacts);
+
+  if (reason) lines.push(`- reason: ${reason}`);
+  if (source) lines.push(`- source: ${source}`);
+  if (localOnlyArtifacts.length) lines.push(`- local-only artifact(s): ${localOnlyArtifacts.map((value) => markdownInlineCode(value)).join(", ")}`);
+  if (hostedArtifacts.length) lines.push(`- hosted artifact(s): ${hostedArtifacts.map((value) => markdownInlineCode(value)).join(", ")}`);
+  if (requestedArtifacts.length) lines.push(`- requested artifact(s): ${requestedArtifacts.map((value) => markdownInlineCode(value)).join(", ")}`);
+  return lines;
+}
+
 function profileCliDiagnosticLine(result: RiddleProofProfileResult): string | undefined {
+  if (result.status === "configuration_error") {
+    return result.error ? `[riddle-profile] configuration_error: ${result.error}` : undefined;
+  }
+
   if (result.status !== "environment_blocked") return undefined;
 
   const blocker = cliRecord(result.environment_blocker);
@@ -5676,6 +5706,20 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
   const runner = (optionString(options, "runner") || "riddle") as RiddleProofProfileRunner;
   if (runner !== "riddle") {
     throw new Error(`Unsupported --runner ${runner}. The current CLI supports --runner riddle.`);
+  }
+  const artifactPreflight = preflightRiddleProofProfileRunnerArtifacts(profile, runner);
+  if (!artifactPreflight.ok) {
+    const message = artifactPreflight.message || "Profile artifacts are not supported by the selected runner.";
+    return createRiddleProofProfileConfigurationError(profile, message, runner, {
+      warnings: [message],
+      configurationBlocker: {
+        source: "profile_artifacts",
+        reason: "local_only_artifact_requested",
+        requested_artifacts: artifactPreflight.requested,
+        local_only_artifacts: artifactPreflight.local_only,
+        hosted_artifacts: artifactPreflight.hosted_artifacts,
+      },
+    });
   }
   const client = createRiddleApiClient(riddleClientConfig(options));
   const balanceBlocked = await preflightRiddleProfileBalanceForCli(profile, options, { client, runner });
