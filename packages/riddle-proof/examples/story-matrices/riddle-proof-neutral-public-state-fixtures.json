@@ -1,0 +1,144 @@
+{
+  "version": "riddle-proof.neutral-public-state-fixtures.v1",
+  "purpose": "Deterministic non-docs packets for public-state, hosted-view, and agent-summary semantics.",
+  "fixtures": [
+    {
+      "id": "rp-fixture-neutral-passed-ready-handoff",
+      "title": "Passed packet with merge handoff allowed but ship not authorized",
+      "input": {
+        "target": { "url": "https://neutral-fixture.invalid/pass.html" },
+        "ok": true,
+        "status": "ready_to_ship",
+        "merge_recommendation": "ready-to-ship",
+        "pr_handoff_policy": {
+          "state": "proof_complete",
+          "proof_complete": true,
+          "merge_ready": true,
+          "normal_pr_allowed": true
+        }
+      },
+      "expected": {
+        "policy_state": "proof_passed",
+        "result_label": "passed",
+        "claims": {
+          "proof_passed": true,
+          "ship_authorized": false,
+          "merge_ready": true,
+          "sync_allowed": true,
+          "all_checkpoint_responses_accepted": false
+        },
+        "handoff_merge_recommendation": "ready-to-ship",
+        "required_disclosures": [],
+        "prohibited_claims": ["ship_authorized", "shipped"]
+      }
+    },
+    {
+      "id": "rp-fixture-neutral-product-regression-stale-merge",
+      "title": "Product regression suppresses stale merge recommendation",
+      "input": {
+        "target": { "url": "https://neutral-fixture.invalid/pass.html" },
+        "ok": false,
+        "status": "product_regression",
+        "merge_recommendation": "ready-to-ship"
+      },
+      "expected": {
+        "policy_state": "proof_failed",
+        "result_label": "product_regression",
+        "claims": {
+          "proof_passed": false,
+          "ship_authorized": false,
+          "merge_ready": false,
+          "sync_allowed": false,
+          "all_checkpoint_responses_accepted": false
+        },
+        "handoff_merge_recommendation": null,
+        "required_disclosures": [],
+        "prohibited_claims": ["proof_passed", "ready_to_ship", "merge_ready", "sync_allowed"]
+      }
+    },
+    {
+      "id": "rp-fixture-neutral-proof-insufficient",
+      "title": "Incomplete evidence stays blocked",
+      "input": {
+        "target": { "url": "https://neutral-fixture.invalid/pass.html" },
+        "ok": false,
+        "status": "proof_insufficient"
+      },
+      "expected": {
+        "policy_state": "proof_blocked",
+        "result_label": "proof_insufficient",
+        "claims": {
+          "proof_passed": false,
+          "ship_authorized": false,
+          "merge_ready": false,
+          "sync_allowed": false,
+          "all_checkpoint_responses_accepted": false
+        },
+        "handoff_merge_recommendation": null,
+        "required_disclosures": ["proof_insufficient"],
+        "prohibited_claims": ["proof_passed", "ready_to_ship"]
+      }
+    },
+    {
+      "id": "rp-fixture-neutral-environment-blocked",
+      "title": "Environment blocker stays outside product correctness",
+      "input": {
+        "target": { "url": "https://neutral-fixture.invalid/pass.html" },
+        "ok": false,
+        "status": "environment_blocked",
+        "merge_recommendation": "ready-to-ship"
+      },
+      "expected": {
+        "policy_state": "proof_blocked",
+        "result_label": "environment_blocked",
+        "claims": {
+          "proof_passed": false,
+          "ship_authorized": false,
+          "merge_ready": false,
+          "sync_allowed": false,
+          "all_checkpoint_responses_accepted": false
+        },
+        "handoff_merge_recommendation": null,
+        "required_disclosures": ["environment_blocked"],
+        "prohibited_claims": ["proof_passed", "ready_to_ship", "merge_ready"]
+      }
+    },
+    {
+      "id": "rp-fixture-neutral-checkpoint-audit",
+      "title": "Checkpoint audit counters require disclosure",
+      "input": {
+        "target": { "url": "https://neutral-fixture.invalid/pass.html" },
+        "ok": true,
+        "status": "ready_to_ship",
+        "merge_recommendation": "ready-to-ship",
+        "pr_handoff_policy": {
+          "state": "proof_complete",
+          "proof_complete": true,
+          "merge_ready": true,
+          "normal_pr_allowed": true
+        },
+        "checkpoint_summary": {
+          "pending": false,
+          "response_count": 1,
+          "rejected_response_count": 1,
+          "ignored_response_count": 1,
+          "duplicate_response_count": 1
+        }
+      },
+      "expected": {
+        "policy_state": "proof_passed",
+        "result_label": "passed",
+        "claims": {
+          "proof_passed": true,
+          "ship_authorized": false,
+          "merge_ready": true,
+          "sync_allowed": true,
+          "all_checkpoint_responses_accepted": false
+        },
+        "handoff_merge_recommendation": "ready-to-ship",
+        "required_disclosures": ["checkpoint_audit_counters"],
+        "prohibited_claims": ["all_checkpoint_responses_accepted"]
+      }
+    }
+  ]
+}

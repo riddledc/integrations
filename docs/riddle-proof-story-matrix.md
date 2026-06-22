@@ -39,6 +39,8 @@ out of the proof verdict unless the story is specifically about CI behavior.
   artifact bodies instead of guessed strings.
 - `formal-contract`: proves Lean stays in the contract-hardening layer rather
   than becoming a runtime evidence dependency.
+- `neutral-fixture`: proves public-state semantics and local browser evidence
+  against a deterministic non-Riddle static target.
 
 ## UX Coverage Status Values
 

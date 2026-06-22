@@ -259,6 +259,101 @@
       "status": "recurring"
     },
     {
+      "id": "rp-story-neutral-fixture-local-pass",
+      "batch": "neutral-fixture",
+      "surface": "neutral fixture browser profile",
+      "user_story": "As a Riddle Proof maintainer, I can run a non-Riddle static page through the local Playwright profile runner and receive the normal evidence packet.",
+      "expected_behavior": "The neutral pass profile returns passed, writes profile-result.json, proof.json, console.json, dom-summary.json, artifact-manifest.json, and screenshots.",
+      "primary_runner": "local-playwright",
+      "command": "python3 -m http.server 4179 --directory packages/riddle-proof/examples/neutral-fixture-site && packages/riddle-proof-runner-playwright/bin/riddle-proof-playwright run-profile --profile packages/riddle-proof/examples/profiles/neutral-fixture-pass.json --url http://127.0.0.1:4179 --output artifacts/riddle-proof/neutral-fixture-pass-local",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "profile-result.json status is passed",
+        "artifact-manifest.json records local artifacts",
+        "phone and desktop screenshots are written"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "console.json", "dom-summary.json", "screenshot"],
+      "failure_classes": ["product_regression", "proof_insufficient", "configuration_error"],
+      "existing_coverage": ["examples/neutral-fixture-site", "examples/profiles/neutral-fixture-pass.json"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-neutral-fixture-negative-control",
+      "batch": "neutral-fixture",
+      "surface": "neutral fixture browser profile",
+      "user_story": "As a Riddle Proof maintainer, I can run a non-Riddle negative-control page profile and see product_regression instead of a false pass.",
+      "expected_behavior": "The neutral negative-control profile reaches the page, then fails only the deliberate missing selector and returns product_regression with evidence.",
+      "primary_runner": "local-playwright",
+      "command": "python3 -m http.server 4179 --directory packages/riddle-proof/examples/neutral-fixture-site && packages/riddle-proof-runner-playwright/bin/riddle-proof-playwright run-profile --profile packages/riddle-proof/examples/profiles/neutral-fixture-product-regression.json --url http://127.0.0.1:4179 --output artifacts/riddle-proof/neutral-fixture-product-regression-local",
+      "expected_verdict": "product_regression",
+      "evidence_required": [
+        "profile-result.json status is product_regression",
+        "failed check names [data-rp-fixture=\"missing-required-control\"]",
+        "proof artifacts are still written for review"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "summary.md", "screenshot"],
+      "failure_classes": ["contract_gap", "proof_insufficient", "configuration_error"],
+      "existing_coverage": ["examples/neutral-fixture-site", "examples/profiles/neutral-fixture-product-regression.json"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-neutral-fixture-hosted-pass",
+      "batch": "neutral-fixture",
+      "surface": "neutral fixture hosted profile",
+      "user_story": "As a hosted Riddle Proof user, I can run a non-Riddle static preview through hosted Riddle and receive a passed evidence packet.",
+      "expected_behavior": "The hosted neutral pass profile returns passed, includes the hosted job id, and lists proof JSON, console, DOM summary, and screenshots.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop riddle-preview-deploy packages/riddle-proof/examples/neutral-fixture-site neutral-fixture-matrix --framework static && riddle-proof-loop run-profile --profile packages/riddle-proof/examples/profiles/neutral-fixture-pass.json --url <preview-url> --runner riddle --output artifacts/riddle-proof/neutral-fixture-pass-hosted --result-format compact-json",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "profile-result.json status is passed",
+        "riddle.job_id is present",
+        "hosted screenshot and JSON artifact URLs are listed"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "console.json", "dom-summary.json", "screenshot"],
+      "failure_classes": ["product_regression", "proof_insufficient", "environment_blocked"],
+      "existing_coverage": ["docs/riddle-proof-story-matrix-runs/2026-06-22-neutral-fixture-batch.md"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-neutral-fixture-hosted-negative-control",
+      "batch": "neutral-fixture",
+      "surface": "neutral fixture hosted profile",
+      "user_story": "As a hosted Riddle Proof user, I can run a non-Riddle negative-control static preview and see product_regression instead of a false pass.",
+      "expected_behavior": "The hosted neutral negative-control profile reaches the preview page, fails the deliberate missing selector, and returns product_regression with review artifacts.",
+      "primary_runner": "hosted-riddle",
+      "command": "riddle-proof-loop run-profile --profile packages/riddle-proof/examples/profiles/neutral-fixture-product-regression.json --url <preview-url> --runner riddle --output artifacts/riddle-proof/neutral-fixture-product-regression-hosted --result-format compact-json",
+      "expected_verdict": "product_regression",
+      "evidence_required": [
+        "profile-result.json status is product_regression",
+        "failed check names [data-rp-fixture=\"missing-required-control\"]",
+        "hosted screenshot and JSON artifact URLs are listed"
+      ],
+      "receipt_types": ["profile-result.json", "proof.json", "summary.md", "screenshot"],
+      "failure_classes": ["contract_gap", "proof_insufficient", "environment_blocked"],
+      "existing_coverage": ["docs/riddle-proof-story-matrix-runs/2026-06-22-neutral-fixture-batch.md"],
+      "status": "recurring"
+    },
+    {
+      "id": "rp-story-neutral-fixture-public-state-blockers",
+      "batch": "neutral-fixture",
+      "surface": "neutral public-state packet fixtures",
+      "user_story": "As a consumer of Riddle Proof summaries, I can evaluate passed, product_regression, proof_insufficient, environment_blocked, and checkpoint-audit packets without using Riddle docs as the target.",
+      "expected_behavior": "Neutral fixture packets generate hosted proof view and agent summary surfaces with the expected policy state, claims, disclosures, and suppressed stale merge recommendations.",
+      "primary_runner": "runtime-test",
+      "command": "node packages/riddle-proof/story-matrix.test.js",
+      "expected_verdict": "passed",
+      "evidence_required": [
+        "neutral fixture packet set contains no Riddle Proof docs URLs",
+        "hosted proof view helper matches every expected fixture claim",
+        "agent summary helper matches every expected fixture claim"
+      ],
+      "receipt_types": ["runtime-test-log"],
+      "failure_classes": ["contract_gap", "doc_or_ux_gap"],
+      "existing_coverage": ["examples/story-matrices/riddle-proof-neutral-public-state-fixtures.json", "story-matrix.test.js"],
+      "status": "recurring"
+    },
+    {
       "id": "rp-story-agent-loop-checkpoint-stale-response",
       "batch": "agent-loop",
       "surface": "checkpoint/respond/status",
