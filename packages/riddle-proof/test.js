@@ -26,6 +26,7 @@ import {
   createCaptureDiagnostic,
   createCheckpointResponseTemplate,
   assessRiddleProofProfileEvidence,
+  assessRiddleProofChange,
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
   collectRiddleProofProfileWarnings,
@@ -69,6 +70,9 @@ import {
   RIDDLE_PROOF_PROFILE_SETUP_ACTION_TYPES,
 } from "./dist/index.js";
 import {
+  assessRiddleProofChange as assessRiddleProofChangeSubpath,
+} from "./dist/change-proof.js";
+import {
   parseOpenClawAssertions,
   parseOpenClawJsonObjectOrArray,
   toRiddleProofRunParams,
@@ -81,6 +85,7 @@ const cjsPlayability = require("./dist/playability.cjs");
 const cjsBasicGameplay = require("./dist/basic-gameplay.cjs");
 const cjsProfile = require("./dist/profile.cjs");
 const cjsProfileSuggestions = require("./dist/profile-suggestions.cjs");
+const cjsChangeProof = require("./dist/change-proof.cjs");
 const cjsOpenClaw = require("./dist/openclaw.cjs");
 const cjsPublicState = require("./dist/public-state.cjs");
 assert.equal(typeof cjs.normalizeTerminalMetadata, "function");
@@ -99,6 +104,8 @@ assert.equal(typeof cjs.createBasicGameplayCatchSummary, "function");
 assert.equal(typeof cjsBasicGameplay.extractBasicGameplayEvidence, "function");
 assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
+assert.equal(typeof cjs.assessRiddleProofChange, "function");
+assert.equal(typeof cjsChangeProof.assessRiddleProofChange, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileArtifactCompleteness, "function");
 assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
 assert.equal(typeof cjs.preflightRiddleProofProfileHttpStatusChecks, "function");
@@ -113,6 +120,7 @@ assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
 assert.equal(typeof cjsProfileSuggestions.suggestRiddleProofProfileChecks, "function");
+assert.equal(typeof assessRiddleProofChangeSubpath, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
 assert.equal(typeof cjsOpenClaw.toRiddleProofRunParams, "function");
 assert.equal(typeof cjs.createRiddleApiClient, "function");
@@ -205,6 +213,102 @@ const parsedSuggestedProfileCli = JSON.parse(suggestedProfileCli.stdout);
 assert.equal(parsedSuggestedProfileCli.version, "riddle-proof.profile.v1");
 assert.equal(parsedSuggestedProfileCli.target.route, "/games/signal-sprint");
 assert.ok(parsedSuggestedProfileCli.checks.some((check) => check.type === "selector_text_visible"));
+
+function profileResultFixture(overrides = {}) {
+  return {
+    version: "riddle-proof.profile-result.v1",
+    profile_name: "Example effect profile",
+    runner: "local-playwright",
+    status: "passed",
+    baseline_policy: "invariant_only",
+    route: { url: "https://example.test/feature", path: "/feature", search: "" },
+    artifacts: { screenshots: ["example-desktop.png"], console: "console.json", proof_json: "proof.json", dom_summary: "dom-summary.json" },
+    checks: [
+      {
+        type: "selector_visible",
+        label: "hero-art-visible",
+        status: "passed",
+        evidence: { selector: ".hero-art" },
+      },
+    ],
+    summary: "Example effect profile passed.",
+    captured_at: "2026-07-03T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const changeContract = {
+  version: "riddle-proof.change-contract.v1",
+  name: "Hero art appears after change",
+  deltas: [
+    {
+      type: "check_status_transition",
+      label: "hero art becomes visible",
+      check_label: "hero-art-visible",
+      before_status: "failed",
+      after_status: "passed",
+    },
+  ],
+};
+
+const passingChange = assessRiddleProofChange(changeContract, {
+  before_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+  after_result: profileResultFixture(),
+});
+assert.equal(passingChange.status, "passed");
+assert.equal(passingChange.deltas[0].status, "passed");
+
+const passingChangeFromSubpath = assessRiddleProofChangeSubpath(changeContract, {
+  before_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+  after_result: profileResultFixture(),
+});
+assert.equal(passingChangeFromSubpath.status, "passed");
+
+const missingBeforeChange = assessRiddleProofChange(changeContract, {
+  after_result: profileResultFixture(),
+});
+assert.equal(missingBeforeChange.status, "proof_insufficient");
+assert.equal(missingBeforeChange.groups.before.status, "missing");
+
+const blockedBeforeChange = assessRiddleProofChange(changeContract, {
+  before_result: profileResultFixture({ status: "environment_blocked" }),
+  after_result: profileResultFixture(),
+});
+assert.equal(blockedBeforeChange.status, "environment_blocked");
+
+const afterStillFailingChange = assessRiddleProofChange(changeContract, {
+  before_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+  after_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+});
+assert.equal(afterStillFailingChange.status, "product_regression");
+
+const missingNamedCheckChange = assessRiddleProofChange(changeContract, {
+  before_result: profileResultFixture({ status: "product_regression", checks: [] }),
+  after_result: profileResultFixture(),
+});
+assert.equal(missingNamedCheckChange.status, "proof_insufficient");
+assert.equal(missingNamedCheckChange.deltas[0].status, "proof_insufficient");
+
+const statusTransitionChange = assessRiddleProofChange({
+  name: "Profile status improves",
+  deltas: [{ type: "profile_status_transition" }],
+}, {
+  before_result: profileResultFixture({ status: "product_regression" }),
+  after_result: profileResultFixture({ status: "passed" }),
+});
+assert.equal(statusTransitionChange.status, "passed");
 
 const eventOnlyCodexFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-event-only-codex-"));
 const eventOnlyCodexCommand = path.join(eventOnlyCodexFixture, "fake-codex.mjs");

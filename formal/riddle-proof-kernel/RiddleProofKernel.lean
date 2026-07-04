@@ -3762,4 +3762,168 @@ theorem stale_agent_summary_surface_violates_held_public_state :
       publicConsumerStaleMergeRecommendation = false := by
   native_decide
 
+/-!
+Layer 6: before/after change proof contracts.
+
+This models the "two grouped contracts" shape:
+
+* a before page-proof verdict,
+* an after page-proof verdict,
+* explicit delta checks comparing the two groups.
+
+The model deliberately does not say how a browser run discovers a delta. It
+only proves the collapse rule: a change proof cannot pass when either group is
+blocked or insufficient, when there is no delta evidence, or when a required
+delta failed.
+-/
+
+inductive DeltaStatus where
+  | passed
+  | failed
+  | missing
+  deriving DecidableEq, Repr, BEq
+
+structure ChangeProofInput where
+  beforeVerdict : Verdict
+  afterVerdict : Verdict
+  deltaStatuses : List DeltaStatus
+  deriving Repr
+
+def hasDeltaStatus
+    (status : DeltaStatus)
+    (deltas : List DeltaStatus) : Bool :=
+  deltas.any (fun delta => delta == status)
+
+def beforeGroupUsable (verdict : Verdict) : Bool :=
+  verdict == Verdict.passed || verdict == Verdict.productRegression
+
+def afterGroupUsable (verdict : Verdict) : Bool :=
+  verdict == Verdict.passed
+
+def changeBlocked (input : ChangeProofInput) : Bool :=
+  input.beforeVerdict == Verdict.environmentBlocked
+    || input.afterVerdict == Verdict.environmentBlocked
+
+def changeGroupEvidenceMissing (input : ChangeProofInput) : Bool :=
+  input.beforeVerdict == Verdict.proofInsufficient
+    || input.afterVerdict == Verdict.proofInsufficient
+
+def changeNeedsHumanReview (input : ChangeProofInput) : Bool :=
+  input.beforeVerdict == Verdict.needsHumanReview
+    || input.afterVerdict == Verdict.needsHumanReview
+
+def changeDeltaEvidenceMissing (input : ChangeProofInput) : Bool :=
+  input.deltaStatuses = []
+    || hasDeltaStatus DeltaStatus.missing input.deltaStatuses
+
+def changeDeltaFailed (input : ChangeProofInput) : Bool :=
+  hasDeltaStatus DeltaStatus.failed input.deltaStatuses
+
+def changeVerdict (input : ChangeProofInput) : Verdict :=
+  if changeBlocked input = true then
+    Verdict.environmentBlocked
+  else if changeGroupEvidenceMissing input = true then
+    Verdict.proofInsufficient
+  else if changeNeedsHumanReview input = true then
+    Verdict.needsHumanReview
+  else if beforeGroupUsable input.beforeVerdict = false then
+    Verdict.proofInsufficient
+  else if afterGroupUsable input.afterVerdict = false then
+    Verdict.productRegression
+  else if changeDeltaEvidenceMissing input = true then
+    Verdict.proofInsufficient
+  else if changeDeltaFailed input = true then
+    Verdict.productRegression
+  else
+    Verdict.passed
+
+theorem change_blocked_dominates
+    (input : ChangeProofInput)
+    (hBlocked : changeBlocked input = true) :
+    changeVerdict input = Verdict.environmentBlocked := by
+  simp [changeVerdict, hBlocked]
+
+theorem change_group_evidence_missing_is_insufficient
+    (input : ChangeProofInput)
+    (hBlocked : changeBlocked input ≠ true)
+    (hMissing : changeGroupEvidenceMissing input = true) :
+    changeVerdict input = Verdict.proofInsufficient := by
+  simp [changeVerdict, hBlocked, hMissing]
+
+theorem change_delta_evidence_missing_is_insufficient
+    (input : ChangeProofInput)
+    (hBlocked : changeBlocked input ≠ true)
+    (hGroupMissing : changeGroupEvidenceMissing input ≠ true)
+    (hReview : changeNeedsHumanReview input ≠ true)
+    (hBefore : beforeGroupUsable input.beforeVerdict ≠ false)
+    (hAfter : afterGroupUsable input.afterVerdict ≠ false)
+    (hDeltaMissing : changeDeltaEvidenceMissing input = true) :
+    changeVerdict input = Verdict.proofInsufficient := by
+  simp [
+    changeVerdict,
+    hBlocked,
+    hGroupMissing,
+    hReview,
+    hBefore,
+    hAfter,
+    hDeltaMissing
+  ]
+
+theorem change_delta_failed_is_regression
+    (input : ChangeProofInput)
+    (hBlocked : changeBlocked input ≠ true)
+    (hGroupMissing : changeGroupEvidenceMissing input ≠ true)
+    (hReview : changeNeedsHumanReview input ≠ true)
+    (hBefore : beforeGroupUsable input.beforeVerdict ≠ false)
+    (hAfter : afterGroupUsable input.afterVerdict ≠ false)
+    (hDeltaMissing : changeDeltaEvidenceMissing input ≠ true)
+    (hDeltaFailed : changeDeltaFailed input = true) :
+    changeVerdict input = Verdict.productRegression := by
+  simp [
+    changeVerdict,
+    hBlocked,
+    hGroupMissing,
+    hReview,
+    hBefore,
+    hAfter,
+    hDeltaMissing,
+    hDeltaFailed
+  ]
+
+def changeExamplePasses : ChangeProofInput where
+  beforeVerdict := Verdict.productRegression
+  afterVerdict := Verdict.passed
+  deltaStatuses := [DeltaStatus.passed]
+
+def changeExampleMissingBefore : ChangeProofInput where
+  beforeVerdict := Verdict.proofInsufficient
+  afterVerdict := Verdict.passed
+  deltaStatuses := [DeltaStatus.passed]
+
+def changeExampleMissingDelta : ChangeProofInput where
+  beforeVerdict := Verdict.productRegression
+  afterVerdict := Verdict.passed
+  deltaStatuses := []
+
+def changeExampleFailedDelta : ChangeProofInput where
+  beforeVerdict := Verdict.productRegression
+  afterVerdict := Verdict.passed
+  deltaStatuses := [DeltaStatus.failed]
+
+theorem change_example_passes :
+    changeVerdict changeExamplePasses = Verdict.passed := by
+  native_decide
+
+theorem change_example_missing_before_is_insufficient :
+    changeVerdict changeExampleMissingBefore = Verdict.proofInsufficient := by
+  native_decide
+
+theorem change_example_missing_delta_is_insufficient :
+    changeVerdict changeExampleMissingDelta = Verdict.proofInsufficient := by
+  native_decide
+
+theorem change_example_failed_delta_is_regression :
+    changeVerdict changeExampleFailedDelta = Verdict.productRegression := by
+  native_decide
+
 end RiddleProofKernel
