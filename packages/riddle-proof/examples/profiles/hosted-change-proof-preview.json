@@ -1,0 +1,36 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "hosted-change-proof-preview",
+  "target": {
+    "route": "/pass.html",
+    "viewports": [
+      { "name": "phone", "width": 390, "height": 844 },
+      { "name": "desktop", "width": 1440, "height": 1000 }
+    ],
+    "auth": "none",
+    "wait_for_selector": "[data-rp-fixture=\"pass\"]",
+    "setup_actions": [
+      { "type": "screenshot", "label": "initial-fixture-state", "full_page": false },
+      { "type": "wait", "ms": 100 }
+    ],
+    "screenshot_full_page": false
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/pass.html" },
+    { "type": "selector_visible", "selector": "[data-rp-fixture=\"pass\"]" },
+    {
+      "type": "selector_text_visible",
+      "label": "hosted-preview-marker-visible",
+      "selector": "[data-rp-change-proof=\"hosted-preview\"]",
+      "text": "hosted preview change proof"
+    },
+    { "type": "no_mobile_horizontal_overflow" },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "failure_policy": {
+    "environment_blocked": "neutral",
+    "proof_insufficient": "fail",
+    "product_regression": "fail"
+  }
+}
