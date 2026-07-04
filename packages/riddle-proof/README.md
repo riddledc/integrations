@@ -86,6 +86,35 @@ group may be `passed` or `product_regression`, while the after group must be
 `proof_insufficient`, and a missing or failed required delta cannot become a
 passing change proof.
 
+The CLI can collect the two sides against hosted Riddle targets and write one
+change receipt:
+
+```sh
+riddle-proof-loop run-change-proof \
+  --profile .riddle-proof/profiles/hero-art.json \
+  --change-contract .riddle-proof/change-contracts/hero-art-change.json \
+  --before-url https://example.com \
+  --after-url https://preview.example.com \
+  --output artifacts/riddle-proof/hero-art-change
+```
+
+It can also compare saved profile packets without starting new browser jobs:
+
+```sh
+riddle-proof-loop run-change-proof \
+  --profile .riddle-proof/profiles/hero-art.json \
+  --change-contract .riddle-proof/change-contracts/hero-art-change.json \
+  --before-result artifacts/before/profile-result.json \
+  --after-result artifacts/after/profile-result.json \
+  --result-format compact-json
+```
+
+When `--output` / `--output-dir` is set, the command writes
+`change-proof-result.json`, `summary.md`, and normalized copies of the
+`before/profile-result.json` and `after/profile-result.json` inputs. A
+non-passing change proof exits nonzero so CI and PR-comment automation can use
+the receipt as a gate.
+
 ## Durable Loop CLI
 
 The package publishes `riddle-proof-loop` as a host-agnostic runner surface for

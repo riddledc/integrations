@@ -310,6 +310,67 @@ const statusTransitionChange = assessRiddleProofChange({
 });
 assert.equal(statusTransitionChange.status, "passed");
 
+const changeProofCliDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-change-cli-"));
+const changeProofProfilePath = path.join(changeProofCliDir, "profile.json");
+const changeProofContractPath = path.join(changeProofCliDir, "change-contract.json");
+const changeProofBeforePath = path.join(changeProofCliDir, "before-result.json");
+const changeProofAfterPath = path.join(changeProofCliDir, "after-result.json");
+const changeProofOutputDir = path.join(changeProofCliDir, "output");
+writeFileSync(changeProofProfilePath, JSON.stringify({
+  version: "riddle-proof.profile.v1",
+  name: "Hero art profile",
+  target: { route: "/feature", viewports: [{ name: "desktop", width: 1280, height: 720 }] },
+  checks: [{ type: "selector_visible", label: "hero-art-visible", selector: ".hero-art" }],
+}, null, 2));
+writeFileSync(changeProofContractPath, JSON.stringify(changeContract, null, 2));
+writeFileSync(changeProofBeforePath, JSON.stringify(profileResultFixture({
+  status: "product_regression",
+  checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+}), null, 2));
+writeFileSync(changeProofAfterPath, JSON.stringify(profileResultFixture(), null, 2));
+const changeProofCli = await runCli([
+  "run-change-proof",
+  "--profile",
+  changeProofProfilePath,
+  "--change-contract",
+  changeProofContractPath,
+  "--before-result",
+  changeProofBeforePath,
+  "--after-result",
+  changeProofAfterPath,
+  "--output",
+  changeProofOutputDir,
+  "--result-format",
+  "compact-json",
+]);
+const parsedChangeProofCli = JSON.parse(changeProofCli.stdout);
+assert.equal(parsedChangeProofCli.status, "passed");
+assert.equal(parsedChangeProofCli.output_files.change_proof_result, "change-proof-result.json");
+assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "change-proof-result.json"), "utf8")).status, "passed");
+assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "before", "profile-result.json"), "utf8")).status, "product_regression");
+assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "after", "profile-result.json"), "utf8")).status, "passed");
+assert.match(readFileSync(path.join(changeProofOutputDir, "summary.md"), "utf8"), /Hero art appears after change/);
+
+const changeProofStillFailingAfterPath = path.join(changeProofCliDir, "after-still-failing-result.json");
+writeFileSync(changeProofStillFailingAfterPath, JSON.stringify(profileResultFixture({
+  status: "product_regression",
+  checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+}), null, 2));
+const failingChangeProofCli = await runCli([
+  "run-change-proof",
+  "--profile",
+  changeProofProfilePath,
+  "--change-contract",
+  changeProofContractPath,
+  "--before-result",
+  changeProofBeforePath,
+  "--after-result",
+  changeProofStillFailingAfterPath,
+  "--result-format",
+  "compact-json",
+], { expectFailure: true });
+assert.equal(JSON.parse(failingChangeProofCli.stdout).status, "product_regression");
+
 const eventOnlyCodexFixture = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-event-only-codex-"));
 const eventOnlyCodexCommand = path.join(eventOnlyCodexFixture, "fake-codex.mjs");
 writeFileSync(eventOnlyCodexCommand, `#!/usr/bin/env node

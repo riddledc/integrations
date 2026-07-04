@@ -60,6 +60,11 @@ import {
   summarizeRiddleProofPrComment,
 } from "./pr-comment";
 import { suggestRiddleProofProfileChecks } from "./profile-suggestions";
+import {
+  assessRiddleProofChange,
+  type RiddleProofChangeContract,
+  type RiddleProofChangeResult,
+} from "./change-proof";
 
 type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
@@ -74,8 +79,13 @@ const KNOWN_CLI_OPTIONS = new Set([
   "attempts",
   "balancePreflight",
   "baseUrl",
+  "afterResult",
+  "afterUrl",
+  "beforeResult",
+  "beforeUrl",
   "candidateJson",
   "candidatesJson",
+  "changeContract",
   "checkpointMode",
   "checkpointVisibility",
   "changedFiles",
@@ -183,6 +193,7 @@ function usage() {
     "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop run-change-proof --profile <file|json|-> --change-contract <file|json|-> (--before-url <url> --after-url <url> | --before-result <file> --after-result <file>) [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop profile-suggest --route /path|--url <url> [--changed-files a,b] [--selectors .a,.b] [--changed-text-json <file|json|->] [--format json|profile]",
     "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop pr-comment --proof-dir <dir>|--run-response <file> [--result-json <file>] --pr <number|url> [--repo owner/name] [--dry-run] [--body-file <file>] [--comment-mode update|append]",
@@ -1388,13 +1399,20 @@ function parseProfileViewports(value: string | undefined): RiddleProofProfileVie
   });
 }
 
-function normalizeProfileForCli(options: CliOptions): RiddleProofProfile {
-  const rawProfile = readJsonValue(optionString(options, "profile"), "--profile");
+function readProfileRecordForCli(options: CliOptions): Record<string, unknown> {
+  return readJsonValue(optionString(options, "profile"), "--profile");
+}
+
+function normalizeProfileRecordForCli(rawProfile: Record<string, unknown>, options: CliOptions): RiddleProofProfile {
   return normalizeRiddleProofProfile(rawProfile, {
     url: optionString(options, "url") ?? optionString(options, "baseUrl"),
     route: optionString(options, "route"),
     viewports: parseProfileViewports(optionString(options, "viewports") || optionString(options, "viewport")),
   });
+}
+
+function normalizeProfileForCli(options: CliOptions): RiddleProofProfile {
+  return normalizeProfileRecordForCli(readProfileRecordForCli(options), options);
 }
 
 function profileHttpStatusPreflightSummary(result: RiddleProofProfileHttpStatusPreflightResult): string {
@@ -4786,6 +4804,151 @@ function writeProfileOutput(outputDir: string | undefined, result: RiddleProofPr
   if (result.evidence?.dom_summary) writeFileSync(path.join(outputDir, "dom-summary.json"), `${JSON.stringify(result.evidence.dom_summary, null, 2)}\n`);
 }
 
+interface RunChangeProofCliResult {
+  profile: RiddleProofProfile;
+  contract: RiddleProofChangeContract;
+  beforeResult: RiddleProofProfileResult;
+  afterResult: RiddleProofProfileResult;
+  result: RiddleProofChangeResult;
+  beforeSource: string;
+  afterSource: string;
+}
+
+function readChangeContractForCli(options: CliOptions): RiddleProofChangeContract {
+  const parsed = readJsonValue(optionString(options, "changeContract"), "--change-contract");
+  if (parsed.version !== undefined && parsed.version !== "riddle-proof.change-contract.v1") {
+    throw new Error(`Unsupported change contract version ${parsed.version}. Expected riddle-proof.change-contract.v1.`);
+  }
+  if (typeof parsed.name !== "string" || !parsed.name.trim()) {
+    throw new Error("--change-contract must include a non-empty name.");
+  }
+  if (!Array.isArray(parsed.deltas) || !parsed.deltas.length) {
+    throw new Error("--change-contract must include at least one delta.");
+  }
+  return parsed as unknown as RiddleProofChangeContract;
+}
+
+function changeProofSideOutputDir(outputDir: string | undefined, side: "before" | "after") {
+  return outputDir ? path.join(outputDir, side) : undefined;
+}
+
+function profileOptionsForChangeProofSide(options: CliOptions, url: string, outputDir: string | undefined): CliOptions {
+  const next: CliOptions = {
+    ...options,
+    url,
+    baseUrl: url,
+  };
+  if (outputDir) {
+    next.output = outputDir;
+    next.outputDir = outputDir;
+  } else {
+    delete next.output;
+    delete next.outputDir;
+  }
+  return next;
+}
+
+function compactChangeProofResult(run: RunChangeProofCliResult, options: CliOptions) {
+  const outputDir = profileOutputDirOption(options);
+  return {
+    version: "riddle-proof.change-compact-result.v1",
+    contract_name: run.result.contract_name,
+    profile_name: run.profile.name,
+    status: run.result.status,
+    summary: run.result.summary,
+    before: {
+      source: run.beforeSource,
+      profile_name: run.beforeResult.profile_name,
+      status: run.beforeResult.status,
+      summary: run.beforeResult.summary,
+    },
+    after: {
+      source: run.afterSource,
+      profile_name: run.afterResult.profile_name,
+      status: run.afterResult.status,
+      summary: run.afterResult.summary,
+    },
+    deltas: run.result.deltas.map((delta) => ({
+      type: delta.type,
+      label: delta.label,
+      status: delta.status,
+      before_observed: delta.before_observed,
+      after_observed: delta.after_observed,
+      message: delta.message,
+    })),
+    metadata: run.result.metadata,
+    output_dir: outputDir,
+    output_files: outputDir ? {
+      change_proof_result: "change-proof-result.json",
+      summary: "summary.md",
+      before_profile_result: "before/profile-result.json",
+      after_profile_result: "after/profile-result.json",
+    } : undefined,
+  };
+}
+
+function changeProofResultMarkdown(run: RunChangeProofCliResult) {
+  const lines = [
+    "# Riddle Proof Change Proof",
+    "",
+    `Contract: ${run.result.contract_name}`,
+    `Profile: ${run.profile.name}`,
+    `Status: ${run.result.status}`,
+    "",
+    run.result.summary,
+    "",
+    "## Before",
+    "",
+    `- source: ${markdownInlineCode(run.beforeSource, 160)}`,
+    `- profile: ${run.beforeResult.profile_name}`,
+    `- status: ${run.beforeResult.status}`,
+    `- summary: ${run.beforeResult.summary}`,
+    "",
+    "## After",
+    "",
+    `- source: ${markdownInlineCode(run.afterSource, 160)}`,
+    `- profile: ${run.afterResult.profile_name}`,
+    `- status: ${run.afterResult.status}`,
+    `- summary: ${run.afterResult.summary}`,
+    "",
+    "## Deltas",
+    "",
+  ];
+
+  for (const delta of run.result.deltas) {
+    const observed = [
+      delta.before_observed !== undefined ? `before ${markdownInlineCode(String(delta.before_observed))}` : "",
+      delta.after_observed !== undefined ? `after ${markdownInlineCode(String(delta.after_observed))}` : "",
+    ].filter(Boolean).join(" -> ");
+    lines.push(`- ${delta.status}: ${delta.label}${observed ? ` (${observed})` : ""}${delta.message ? ` - ${delta.message}` : ""}`);
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function writeChangeProofOutput(outputDir: string | undefined, run: RunChangeProofCliResult) {
+  if (!outputDir) return;
+  mkdirSync(outputDir, { recursive: true });
+  writeFileSync(path.join(outputDir, "change-proof-result.json"), `${JSON.stringify(run.result, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "summary.md"), changeProofResultMarkdown(run));
+  writeProfileOutput(changeProofSideOutputDir(outputDir, "before"), run.beforeResult);
+  writeProfileOutput(changeProofSideOutputDir(outputDir, "after"), run.afterResult);
+}
+
+function writeRunChangeProofResult(run: RunChangeProofCliResult, options: CliOptions) {
+  const format = runProfileResultFormatOption(options);
+  if (format === "none") return;
+  if (format === "summary") {
+    process.stdout.write(changeProofResultMarkdown(run));
+    return;
+  }
+  if (format === "compact-json") {
+    process.stdout.write(`${JSON.stringify(compactChangeProofResult(run, options), null, 2)}\n`);
+    return;
+  }
+  process.stdout.write(`${JSON.stringify(run.result, null, 2)}\n`);
+}
+
 function writeRiddleJobReceipt(
   outputDir: string | undefined,
   input: {
@@ -5181,12 +5344,16 @@ function runProfileAggregateInputPathsOption(options: CliOptions): string[] {
   return uniquePaths;
 }
 
-function readProfileResultForAggregate(resultPath: string): RiddleProofProfileResult {
-  const parsed = readJsonValue(resultPath, resultPath);
+function readProfileResultForCli(resultPath: string, label = resultPath): RiddleProofProfileResult {
+  const parsed = readJsonValue(resultPath, label);
   if (parsed.version !== "riddle-proof.profile-result.v1" || !Array.isArray(parsed.checks)) {
-    throw new Error(`Profile aggregate input is not a riddle-proof.profile-result.v1 result: ${resultPath}`);
+    throw new Error(`${label} is not a riddle-proof.profile-result.v1 result: ${resultPath}`);
   }
   return parsed as unknown as RiddleProofProfileResult;
+}
+
+function readProfileResultForAggregate(resultPath: string): RiddleProofProfileResult {
+  return readProfileResultForCli(resultPath, resultPath);
 }
 
 function profileResultIsAggregateParent(result: RiddleProofProfileResult): boolean {
@@ -5814,6 +5981,62 @@ async function runProfileForCli(profile: RiddleProofProfile, options: CliOptions
   return runSingleRiddleProfileForCli(profile, options, { client, runner, outputDir: profileOutputDirOption(options) });
 }
 
+async function runChangeProofForCli(rawProfile: Record<string, unknown>, options: CliOptions): Promise<RunChangeProofCliResult> {
+  const contract = readChangeContractForCli(options);
+  const beforeResultPath = optionString(options, "beforeResult");
+  const afterResultPath = optionString(options, "afterResult");
+  const beforeUrl = optionString(options, "beforeUrl");
+  const afterUrl = optionString(options, "afterUrl");
+  const hasResultInputs = Boolean(beforeResultPath || afterResultPath);
+  const hasUrlInputs = Boolean(beforeUrl || afterUrl);
+  if (hasResultInputs && hasUrlInputs) {
+    throw new Error("run-change-proof accepts either --before-result/--after-result or --before-url/--after-url, not both.");
+  }
+  if (hasResultInputs && (!beforeResultPath || !afterResultPath)) {
+    throw new Error("run-change-proof requires both --before-result and --after-result.");
+  }
+  if (!hasResultInputs && (!beforeUrl || !afterUrl)) {
+    throw new Error("run-change-proof requires both --before-url and --after-url unless saved results are provided.");
+  }
+
+  const outputDir = profileOutputDirOption(options);
+  let profile: RiddleProofProfile;
+  let beforeResult: RiddleProofProfileResult;
+  let afterResult: RiddleProofProfileResult;
+  let beforeSource: string;
+  let afterSource: string;
+
+  if (hasResultInputs) {
+    if (!beforeResultPath || !afterResultPath) {
+      throw new Error("run-change-proof requires both --before-result and --after-result.");
+    }
+    profile = profileWithSelectedViewportNamesForCli(normalizeProfileRecordForCli(rawProfile, options), options);
+    beforeResult = readProfileResultForCli(beforeResultPath, "--before-result");
+    afterResult = readProfileResultForCli(afterResultPath, "--after-result");
+    beforeSource = beforeResultPath;
+    afterSource = afterResultPath;
+  } else {
+    if (!beforeUrl || !afterUrl) {
+      throw new Error("run-change-proof requires both --before-url and --after-url unless saved results are provided.");
+    }
+    const beforeOptions = profileOptionsForChangeProofSide(options, beforeUrl, changeProofSideOutputDir(outputDir, "before"));
+    const afterOptions = profileOptionsForChangeProofSide(options, afterUrl, changeProofSideOutputDir(outputDir, "after"));
+    const beforeProfile = profileWithSelectedViewportNamesForCli(normalizeProfileRecordForCli(rawProfile, beforeOptions), beforeOptions);
+    const afterProfile = profileWithSelectedViewportNamesForCli(normalizeProfileRecordForCli(rawProfile, afterOptions), afterOptions);
+    profile = beforeProfile;
+    beforeResult = await runProfileForCli(beforeProfile, beforeOptions);
+    afterResult = await runProfileForCli(afterProfile, afterOptions);
+    beforeSource = beforeUrl;
+    afterSource = afterUrl;
+  }
+
+  const result = assessRiddleProofChange(contract, {
+    before_result: beforeResult,
+    after_result: afterResult,
+  });
+  return { profile, contract, beforeResult, afterResult, result, beforeSource, afterSource };
+}
+
 function requestForRun(options: CliOptions): RiddleProofRunParams {
   const statePath = optionString(options, "statePath");
   const withEngineModuleUrl = (request: RiddleProofRunParams): RiddleProofRunParams => {
@@ -5883,6 +6106,14 @@ async function main() {
     }
     writeRunProfileResult(result, options);
     process.exitCode = profileStatusExitCode(profile, result.status);
+    return;
+  }
+
+  if (command === "run-change-proof") {
+    const run = await runChangeProofForCli(readProfileRecordForCli(options), options);
+    writeChangeProofOutput(profileOutputDirOption(options), run);
+    writeRunChangeProofResult(run, options);
+    process.exitCode = run.result.status === "passed" ? 0 : 1;
     return;
   }
 
