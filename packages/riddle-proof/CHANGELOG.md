@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.74
+
+### Patch Changes
+
+- 74ef771: Add first-class before/after change proof contract evaluation with Lean-backed verdict semantics.
+
 ## 0.8.73
 
 ### Patch Changes
