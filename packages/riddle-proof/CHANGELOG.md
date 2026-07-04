@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.76
+
+### Patch Changes
+
+- 214cc27: Add a hosted preview change-proof dogfood fixture and example contract.
+
 ## 0.8.75
 
 ### Patch Changes
