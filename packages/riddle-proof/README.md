@@ -115,6 +115,10 @@ When `--output` / `--output-dir` is set, the command writes
 non-passing change proof exits nonzero so CI and PR-comment automation can use
 the receipt as a gate.
 
+For a small hosted-preview dogfood target, see
+`examples/profiles/hosted-change-proof-preview.json` and
+`examples/change-contracts/hosted-change-proof-preview.json`.
+
 ## Durable Loop CLI
 
 The package publishes `riddle-proof-loop` as a host-agnostic runner surface for

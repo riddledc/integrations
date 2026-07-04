@@ -1,0 +1,16 @@
+{
+  "version": "riddle-proof.change-contract.v1",
+  "name": "Hosted preview marker appears after change",
+  "deltas": [
+    {
+      "type": "check_status_transition",
+      "label": "hosted preview marker becomes visible",
+      "check_label": "hosted-preview-marker-visible",
+      "before_status": "failed",
+      "after_status": "passed"
+    }
+  ],
+  "metadata": {
+    "example": "hosted preview before/after proof"
+  }
+}
