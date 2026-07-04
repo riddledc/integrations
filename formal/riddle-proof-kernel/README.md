@@ -4,7 +4,7 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` now has thirteen named layers.
+The model in `RiddleProofKernel.lean` is organized into named semantic layers.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -98,6 +98,24 @@ It models these obligations:
 
 The theorem `reported_whole_flow_passed_implies_ship_gate_ok` proves that the
 reported verdict cannot be `passed` unless the whole ship gate is true.
+
+## Layer 6: Before/After Change Proofs
+
+The Layer 6 model covers the first-class change-proof contract shape:
+
+- a before profile verdict
+- an after profile verdict
+- explicit delta checks comparing the two groups
+
+The before group may be `productRegression` when the point of the run is to
+show that the old target lacked the desired effect. The after group must be
+usable, and the composed change proof cannot pass without delta evidence.
+
+The theorems `change_blocked_dominates`,
+`change_group_evidence_missing_is_insufficient`,
+`change_delta_evidence_missing_is_insufficient`, and
+`change_delta_failed_is_regression` pin the collapse rule used by
+`assessRiddleProofChange` in `packages/riddle-proof/src/change-proof.ts`.
 
 ## Layer 3.1: Interaction Proof Evidence
 

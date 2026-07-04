@@ -49,12 +49,42 @@ import { createRunResult, createRunState } from "@riddledc/riddle-proof";
 import { runRiddleProof } from "@riddledc/riddle-proof/runner";
 import { createCaptureDiagnostic } from "@riddledc/riddle-proof/diagnostics";
 import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
+import { assessRiddleProofChange } from "@riddledc/riddle-proof/change-proof";
 ```
 
 The root export provides generic contracts and helpers. Integration-specific
 adapters are exposed through subpaths such as
 `@riddledc/riddle-proof/openclaw`, so wrappers can reuse the mapping logic
 without depending on another plugin runtime.
+
+### Change Proof Contracts
+
+Use `assessRiddleProofChange` when one proof needs to compose two profile
+results: a before target and an after target. The profile contract remains the
+portable page-level sensor; the change contract binds that sensor to two
+environments and checks the expected delta.
+
+```ts
+const result = assessRiddleProofChange({
+  version: "riddle-proof.change-contract.v1",
+  name: "Hero art appears after change",
+  deltas: [{
+    type: "check_status_transition",
+    check_label: "hero-art-visible",
+    before_status: "failed",
+    after_status: "passed",
+  }],
+}, {
+  before_result: productionProfileResult,
+  after_result: previewProfileResult,
+});
+```
+
+The default group semantics are intentionally change-oriented: the before
+group may be `passed` or `product_regression`, while the after group must be
+`passed`. Environment blockers dominate, missing before/after evidence is
+`proof_insufficient`, and a missing or failed required delta cannot become a
+passing change proof.
 
 ## Durable Loop CLI
 
