@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.75
+
+### Patch Changes
+
+- a9580c1: Add a run-change-proof CLI command for before/after profile comparison receipts.
+
 ## 0.8.74
 
 ### Patch Changes
