@@ -27,6 +27,9 @@ import {
   createCheckpointResponseTemplate,
   assessRiddleProofProfileEvidence,
   assessRiddleProofChange,
+  createRiddleProofChangeReceipt,
+  riddleProofChangeReceiptHtml,
+  riddleProofChangeReceiptMarkdown,
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
   collectRiddleProofProfileWarnings,
@@ -106,6 +109,10 @@ assert.equal(typeof cjsBasicGameplay.compactBasicGameplayText, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileEvidence, "function");
 assert.equal(typeof cjs.assessRiddleProofChange, "function");
 assert.equal(typeof cjsChangeProof.assessRiddleProofChange, "function");
+assert.equal(typeof cjs.createRiddleProofChangeReceipt, "function");
+assert.equal(typeof cjsChangeProof.createRiddleProofChangeReceipt, "function");
+assert.equal(typeof cjsChangeProof.riddleProofChangeReceiptMarkdown, "function");
+assert.equal(typeof cjsChangeProof.riddleProofChangeReceiptHtml, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileArtifactCompleteness, "function");
 assert.equal(typeof cjs.deriveRiddleProofArtifactBodyAssertions, "function");
 assert.equal(typeof cjs.preflightRiddleProofProfileHttpStatusChecks, "function");
@@ -249,6 +256,10 @@ const changeContract = {
       after_status: "passed",
     },
   ],
+  metadata: {
+    required_receipts: ["before evidence shows hero art missing", "after evidence shows hero art visible"],
+    does_not_prove: ["subjective art quality"],
+  },
 };
 
 const passingChange = assessRiddleProofChange(changeContract, {
@@ -260,6 +271,23 @@ const passingChange = assessRiddleProofChange(changeContract, {
 });
 assert.equal(passingChange.status, "passed");
 assert.equal(passingChange.deltas[0].status, "passed");
+const passingChangeReceipt = createRiddleProofChangeReceipt({
+  contract: changeContract,
+  result: passingChange,
+  before_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+  after_result: profileResultFixture(),
+  before_source: "https://example.test/before",
+  after_source: "https://example.test/after",
+  profile_name: "Hero art profile",
+});
+assert.equal(passingChangeReceipt.version, "riddle-proof.change-receipt.v1");
+assert.equal(passingChangeReceipt.verdict, "mergeable");
+assert.deepEqual(passingChangeReceipt.proves, ["before evidence shows hero art missing", "after evidence shows hero art visible"]);
+assert.match(riddleProofChangeReceiptMarkdown(passingChangeReceipt), /What This Proves/);
+assert.match(riddleProofChangeReceiptHtml(passingChangeReceipt), /<!doctype html>/);
 
 const passingChangeFromSubpath = assessRiddleProofChangeSubpath(changeContract, {
   before_result: profileResultFixture({
@@ -325,9 +353,28 @@ writeFileSync(changeProofProfilePath, JSON.stringify({
 writeFileSync(changeProofContractPath, JSON.stringify(changeContract, null, 2));
 writeFileSync(changeProofBeforePath, JSON.stringify(profileResultFixture({
   status: "product_regression",
+  artifacts: {
+    screenshots: ["before-hero.png"],
+    console: "console.json",
+    proof_json: "proof.json",
+    dom_summary: "dom-summary.json",
+    riddle_artifacts: [
+      { name: "before-hero.png", url: "https://cdn.example.test/before-hero.png", source: "artifacts" },
+    ],
+  },
   checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
 }), null, 2));
-writeFileSync(changeProofAfterPath, JSON.stringify(profileResultFixture(), null, 2));
+writeFileSync(changeProofAfterPath, JSON.stringify(profileResultFixture({
+  artifacts: {
+    screenshots: ["after-hero.png"],
+    console: "console.json",
+    proof_json: "proof.json",
+    dom_summary: "dom-summary.json",
+    riddle_artifacts: [
+      { name: "after-hero.png", url: "https://cdn.example.test/after-hero.png", source: "artifacts" },
+    ],
+  },
+}), null, 2));
 const changeProofCli = await runCli([
   "run-change-proof",
   "--profile",
@@ -346,10 +393,25 @@ const changeProofCli = await runCli([
 const parsedChangeProofCli = JSON.parse(changeProofCli.stdout);
 assert.equal(parsedChangeProofCli.status, "passed");
 assert.equal(parsedChangeProofCli.output_files.change_proof_result, "change-proof-result.json");
+assert.equal(parsedChangeProofCli.output_files.change_proof_receipt, "change-proof-receipt.json");
+assert.equal(parsedChangeProofCli.output_files.change_proof_receipt_markdown, "change-proof-receipt.md");
+assert.equal(parsedChangeProofCli.output_files.change_proof_receipt_html, "change-proof-receipt.html");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "change-proof-result.json"), "utf8")).status, "passed");
+const parsedChangeProofReceipt = JSON.parse(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.json"), "utf8"));
+assert.equal(parsedChangeProofReceipt.verdict, "mergeable");
+assert.equal(parsedChangeProofReceipt.after.screenshots[0].url, "https://cdn.example.test/after-hero.png");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "before", "profile-result.json"), "utf8")).status, "product_regression");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "after", "profile-result.json"), "utf8")).status, "passed");
 assert.match(readFileSync(path.join(changeProofOutputDir, "summary.md"), "utf8"), /Hero art appears after change/);
+assert.match(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.md"), "utf8"), /What This Does Not Prove/);
+assert.match(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.html"), "utf8"), /after-hero\.png/);
+const changeProofPrSummary = summarizeRiddleProofPrComment({ result: parsedChangeProofReceipt });
+assert.equal(changeProofPrSummary.ok, true);
+assert.equal(changeProofPrSummary.result_status, "passed");
+assert.equal(changeProofPrSummary.passed_checks, 1);
+assert.equal(changeProofPrSummary.pages.length, 2);
+assert.equal(changeProofPrSummary.primary_image?.url, "https://cdn.example.test/after-hero.png");
+assert.match(buildRiddleProofPrCommentMarkdown({ result: parsedChangeProofReceipt, title: "Change proof" }), /after-hero\.png/);
 
 const changeProofStillFailingAfterPath = path.join(changeProofCliDir, "after-still-failing-result.json");
 writeFileSync(changeProofStillFailingAfterPath, JSON.stringify(profileResultFixture({
