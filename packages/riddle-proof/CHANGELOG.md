@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.77
+
+### Patch Changes
+
+- c038856: Add first-class change proof receipt artifacts with JSON, Markdown, and static HTML outputs, and make PR comments consume change-proof receipts directly.
+
 ## 0.8.76
 
 ### Patch Changes
