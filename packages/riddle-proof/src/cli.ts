@@ -62,8 +62,12 @@ import {
 import { suggestRiddleProofProfileChecks } from "./profile-suggestions";
 import {
   assessRiddleProofChange,
+  createRiddleProofChangeReceipt,
+  riddleProofChangeReceiptHtml,
+  riddleProofChangeReceiptMarkdown,
   type RiddleProofChangeContract,
   type RiddleProofChangeResult,
+  type RiddleProofChangeReceipt,
 } from "./change-proof";
 
 type CliOptions = Record<string, string | boolean>;
@@ -4810,6 +4814,7 @@ interface RunChangeProofCliResult {
   beforeResult: RiddleProofProfileResult;
   afterResult: RiddleProofProfileResult;
   result: RiddleProofChangeResult;
+  receipt: RiddleProofChangeReceipt;
   beforeSource: string;
   afterSource: string;
 }
@@ -4880,6 +4885,9 @@ function compactChangeProofResult(run: RunChangeProofCliResult, options: CliOpti
     output_dir: outputDir,
     output_files: outputDir ? {
       change_proof_result: "change-proof-result.json",
+      change_proof_receipt: "change-proof-receipt.json",
+      change_proof_receipt_markdown: "change-proof-receipt.md",
+      change_proof_receipt_html: "change-proof-receipt.html",
       summary: "summary.md",
       before_profile_result: "before/profile-result.json",
       after_profile_result: "after/profile-result.json",
@@ -4888,48 +4896,16 @@ function compactChangeProofResult(run: RunChangeProofCliResult, options: CliOpti
 }
 
 function changeProofResultMarkdown(run: RunChangeProofCliResult) {
-  const lines = [
-    "# Riddle Proof Change Proof",
-    "",
-    `Contract: ${run.result.contract_name}`,
-    `Profile: ${run.profile.name}`,
-    `Status: ${run.result.status}`,
-    "",
-    run.result.summary,
-    "",
-    "## Before",
-    "",
-    `- source: ${markdownInlineCode(run.beforeSource, 160)}`,
-    `- profile: ${run.beforeResult.profile_name}`,
-    `- status: ${run.beforeResult.status}`,
-    `- summary: ${run.beforeResult.summary}`,
-    "",
-    "## After",
-    "",
-    `- source: ${markdownInlineCode(run.afterSource, 160)}`,
-    `- profile: ${run.afterResult.profile_name}`,
-    `- status: ${run.afterResult.status}`,
-    `- summary: ${run.afterResult.summary}`,
-    "",
-    "## Deltas",
-    "",
-  ];
-
-  for (const delta of run.result.deltas) {
-    const observed = [
-      delta.before_observed !== undefined ? `before ${markdownInlineCode(String(delta.before_observed))}` : "",
-      delta.after_observed !== undefined ? `after ${markdownInlineCode(String(delta.after_observed))}` : "",
-    ].filter(Boolean).join(" -> ");
-    lines.push(`- ${delta.status}: ${delta.label}${observed ? ` (${observed})` : ""}${delta.message ? ` - ${delta.message}` : ""}`);
-  }
-
-  return `${lines.join("\n")}\n`;
+  return riddleProofChangeReceiptMarkdown(run.receipt);
 }
 
 function writeChangeProofOutput(outputDir: string | undefined, run: RunChangeProofCliResult) {
   if (!outputDir) return;
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(path.join(outputDir, "change-proof-result.json"), `${JSON.stringify(run.result, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "change-proof-receipt.json"), `${JSON.stringify(run.receipt, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "change-proof-receipt.md"), riddleProofChangeReceiptMarkdown(run.receipt));
+  writeFileSync(path.join(outputDir, "change-proof-receipt.html"), riddleProofChangeReceiptHtml(run.receipt));
   writeFileSync(path.join(outputDir, "summary.md"), changeProofResultMarkdown(run));
   writeProfileOutput(changeProofSideOutputDir(outputDir, "before"), run.beforeResult);
   writeProfileOutput(changeProofSideOutputDir(outputDir, "after"), run.afterResult);
@@ -6034,7 +6010,16 @@ async function runChangeProofForCli(rawProfile: Record<string, unknown>, options
     before_result: beforeResult,
     after_result: afterResult,
   });
-  return { profile, contract, beforeResult, afterResult, result, beforeSource, afterSource };
+  const receipt = createRiddleProofChangeReceipt({
+    contract,
+    result,
+    before_result: beforeResult,
+    after_result: afterResult,
+    before_source: beforeSource,
+    after_source: afterSource,
+    profile_name: profile.name,
+  });
+  return { profile, contract, beforeResult, afterResult, result, receipt, beforeSource, afterSource };
 }
 
 function requestForRun(options: CliOptions): RiddleProofRunParams {
@@ -6135,6 +6120,8 @@ async function main() {
       ? [explicitResultJsonPath]
       : [
           defaultProofDirJsonPath(proofDir, "result.json"),
+          defaultProofDirJsonPath(proofDir, "change-proof-receipt.json"),
+          defaultProofDirJsonPath(proofDir, "change-proof-result.json"),
           defaultProofDirJsonPath(proofDir, "profile-result.json"),
         ];
     const runResponse = readJsonFileIfExists(runResponsePath);

@@ -154,6 +154,34 @@ function collectProfileArtifacts(result: Record<string, unknown>) {
   return artifacts;
 }
 
+function collectChangeReceiptArtifacts(result: Record<string, unknown>) {
+  const artifacts: RiddleProofPrCommentArtifact[] = [];
+  const seen = new Set<string>();
+  const collectSide = (sideName: string, side: Record<string, unknown>) => {
+    const candidates = [
+      ...asArray(side.screenshots),
+      ...asArray(side.artifacts),
+    ];
+    for (const [index, item] of candidates.entries()) {
+      const artifact = asRecord(item);
+      const url = stringValue(artifact.url) || stringValue(artifact.path);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const fallbackName = `${sideName}-artifact-${index + 1}`;
+      const name = `${sideName}/${artifactDisplayName(artifact.name, fallbackName)}`;
+      artifacts.push({
+        name,
+        url,
+        kind: artifactKind(name, url),
+        size_bytes: numberValue(artifact.size_bytes) ?? numberValue(artifact.size),
+      });
+    }
+  };
+  collectSide("before", asRecord(result.before));
+  collectSide("after", asRecord(result.after));
+  return artifacts;
+}
+
 function mergeArtifacts(...artifactLists: RiddleProofPrCommentArtifact[][]) {
   const artifacts: RiddleProofPrCommentArtifact[] = [];
   const seen = new Set<string>();
@@ -212,6 +240,34 @@ function profilePageSummaries(result: Record<string, unknown>, counts: { passed:
     passed: counts.passed,
     failed: counts.failed,
   }];
+}
+
+function changeReceiptCheckCounts(result: Record<string, unknown>) {
+  const deltas = asArray(result.deltas);
+  if (!deltas.length) return undefined;
+  let passed = 0;
+  let failed = 0;
+  for (const item of deltas) {
+    const status = stringValue(asRecord(item).status);
+    if (status === "passed") passed += 1;
+    if (status === "failed" || status === "proof_insufficient" || status === "configuration_error") failed += 1;
+  }
+  return { passed, failed };
+}
+
+function changeReceiptPageSummaries(result: Record<string, unknown>) {
+  const pages: RiddleProofPrCommentPageSummary[] = [];
+  for (const sideName of ["before", "after"]) {
+    const side = asRecord(result[sideName]);
+    if (!Object.keys(side).length) continue;
+    const checks = asRecord(side.checks);
+    pages.push({
+      route: firstStringValue(side.source, side.profile_name) || sideName,
+      passed: numberValue(checks.passed) ?? 0,
+      failed: numberValue(checks.failed) ?? 0,
+    });
+  }
+  return pages;
 }
 
 function summarizeExplicitChecks(value: unknown) {
@@ -278,11 +334,23 @@ function isProfileResult(result: Record<string, unknown>) {
     version === "riddle-proof.profile-compact-result.v1";
 }
 
+function isChangeReceiptResult(result: Record<string, unknown>) {
+  return stringValue(result.version) === "riddle-proof.change-receipt.v1";
+}
+
+function isChangeResult(result: Record<string, unknown>) {
+  const version = stringValue(result.version);
+  return version === "riddle-proof.change-result.v1" ||
+    version === "riddle-proof.change-compact-result.v1";
+}
+
 export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput): RiddleProofPrCommentSummary {
   const runResponse = asRecord(input.runResponse);
   const result = asRecord(input.result);
   const proofResult = asRecord(runResponse.proofResult);
   const profileResult = isProfileResult(result);
+  const changeReceiptResult = isChangeReceiptResult(result);
+  const changeResult = changeReceiptResult || isChangeResult(result);
   const profileRiddle = asRecord(result.riddle);
   const preview = asRecord(runResponse.preview);
   const resultRunCard = asRecord(result.run_card);
@@ -291,15 +359,24 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
   const resultRaw = asRecord(result.raw);
   const rawDetails = asRecord(resultRaw.details);
   const profileChecks = profileResult ? profileCheckCounts(result) : undefined;
+  const changeChecks = changeResult ? changeReceiptCheckCounts(result) : undefined;
   const artifacts = mergeArtifacts(
     collectArtifacts(runResponse),
     profileResult ? collectProfileArtifacts(result) : [],
+    changeReceiptResult ? collectChangeReceiptArtifacts(result) : [],
   );
-  const pages = profileResult ? profilePageSummaries(result, profileChecks) : pageSummaries(result);
+  const pages = changeReceiptResult
+    ? changeReceiptPageSummaries(result)
+    : profileResult
+      ? profilePageSummaries(result, profileChecks)
+      : pageSummaries(result);
   const checkSource = { ...result };
   delete checkSource.ok;
   const nestedChecks = summarizeExplicitChecks(checkSource);
-  const ok = booleanValue(result.ok) ?? booleanValue(runResponse.ok) ?? null;
+  const resultStatus = firstStringValue(result.status, stopCondition.status);
+  const ok = changeResult
+    ? resultStatus === "passed"
+    : booleanValue(result.ok) ?? booleanValue(runResponse.ok) ?? null;
   const checkpointSummary = checkpointSummaryFrom(
     result.checkpoint_summary,
     stopCondition.checkpoint_summary,
@@ -309,7 +386,7 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
   );
   const publicState = summarizeRiddleProofPublicState({
     ...result,
-    status: firstStringValue(result.status, stopCondition.status),
+    status: resultStatus,
     checkpoint_summary: checkpointSummary || result.checkpoint_summary,
   });
   const mergeRecommendation = riddleProofPublicStateMergeRecommendation(
@@ -319,7 +396,7 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
   return {
     ok,
     status: firstStringValue(proofResult.status, profileRiddle.status),
-    result_status: publicState.status,
+    result_status: changeResult ? resultStatus : publicState.status,
     job_id: firstStringValue(proofResult.job_id, profileRiddle.job_id),
     duration_ms: numberValue(proofResult.duration_ms) ?? numberValue(profileRiddle.elapsed_ms),
     proof_url: stringValue(runResponse.proofUrl),
@@ -333,11 +410,13 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     merge_ready: publicState.merge_ready,
     sync_allowed: publicState.sync_allowed,
     proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
-    merge_recommendation: mergeRecommendation,
+    merge_recommendation: changeReceiptResult && resultStatus
+      ? stringValue(result.verdict)
+      : mergeRecommendation,
     checkpoint_summary: checkpointSummary,
     public_state: publicState,
-    passed_checks: profileChecks?.passed ?? nestedChecks.passed,
-    failed_checks: profileChecks?.failed ?? nestedChecks.failed,
+    passed_checks: changeChecks?.passed ?? profileChecks?.passed ?? nestedChecks.passed,
+    failed_checks: changeChecks?.failed ?? profileChecks?.failed ?? nestedChecks.failed,
     pages,
     artifacts,
     primary_image: selectPrimaryImage(artifacts),

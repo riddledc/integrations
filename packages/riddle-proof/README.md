@@ -110,10 +110,17 @@ riddle-proof-loop run-change-proof \
 ```
 
 When `--output` / `--output-dir` is set, the command writes
-`change-proof-result.json`, `summary.md`, and normalized copies of the
-`before/profile-result.json` and `after/profile-result.json` inputs. A
-non-passing change proof exits nonzero so CI and PR-comment automation can use
-the receipt as a gate.
+`change-proof-result.json`, `change-proof-receipt.json`,
+`change-proof-receipt.md`, `change-proof-receipt.html`, `summary.md`, and
+normalized copies of the `before/profile-result.json` and
+`after/profile-result.json` inputs. The receipt files are the human-facing
+handoff: they show the before/after evidence pair, delta verdicts, screenshot
+links when hosted artifacts are available, explicit proof claims from
+`metadata.required_receipts`, and limits from `metadata.does_not_prove`.
+`riddle-proof-loop pr-comment --proof-dir <dir>` recognizes the receipt JSON
+and uses it as the PR review summary. A non-passing change proof exits nonzero
+so CI and on-demand PR automation can use the receipt as a gate without running
+noisy scheduled workflows.
 
 For a small hosted-preview dogfood target, see
 `examples/profiles/hosted-change-proof-preview.json` and
