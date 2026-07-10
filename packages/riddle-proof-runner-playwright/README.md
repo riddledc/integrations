@@ -12,6 +12,9 @@ pnpm add -D playwright
 ```
 
 `playwright` is a peer dependency and must be installed in your environment.
+Install its bundled browser with `npx playwright install chromium`. If that
+executable is absent and `PLAYWRIGHT_BROWSERS_PATH` was not explicitly set, the
+Chromium runner can use an installed system Chrome instead.
 
 ## CLI
 

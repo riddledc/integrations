@@ -11,6 +11,29 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runProfileLocal } from "./dist/index.js";
+import { launchPlaywrightBrowser } from "./dist/browser.js";
+
+const fallbackLaunches = [];
+const fallbackBrowser = { close: async () => {} };
+const fallbackLauncher = {
+  launch: async (options) => {
+    fallbackLaunches.push(options);
+    if (!options.channel) throw new Error("Executable doesn't exist; run playwright install");
+    return fallbackBrowser;
+  },
+};
+assert.equal(
+  await launchPlaywrightBrowser(fallbackLauncher, { headless: true }, { browserName: "chromium" }),
+  fallbackBrowser,
+);
+assert.deepEqual(fallbackLaunches, [{ headless: true }, { headless: true, channel: "chrome" }]);
+await assert.rejects(
+  () => launchPlaywrightBrowser(fallbackLauncher, { headless: true }, {
+    browserName: "chromium",
+    playwrightBrowsersPath: "/explicit/browser/path",
+  }),
+  /Executable doesn't exist/,
+);
 
 const workspace = mkdtempSync(path.join(tmpdir(), "riddle-proof-runner-playwright-"));
 const outputDir = path.join(workspace, "artifacts");
@@ -50,7 +73,10 @@ try {
   assert.equal(output.result.profile_name, "local-runner-smoke");
   assert.equal(path.resolve(output.outputDir), path.resolve(outputDir));
   assert.equal(output.result.artifacts.proof_json, "proof.json");
-  assert.ok(output.result.artifacts.riddle_artifacts?.some((artifact) => artifact.kind === "screenshot"));
+  assert.ok(
+    output.result.artifacts.riddle_artifacts?.some((artifact) => artifact.kind === "screenshot"),
+    JSON.stringify({ status: output.result.status, route: output.result.route, page_errors: output.result.evidence?.page_errors }),
+  );
   const requiredFiles = [
     path.join(outputDir, "profile-result.json"),
     path.join(outputDir, "proof.json"),

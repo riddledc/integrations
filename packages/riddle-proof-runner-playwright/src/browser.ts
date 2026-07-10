@@ -4,6 +4,7 @@ type PlaywrightModule = {
       newContext: (options: Record<string, unknown>) => Promise<{
         newPage: () => Promise<{
           goto: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
+          screenshot: (options?: Record<string, unknown>) => Promise<Buffer>;
           setDefaultTimeout: (ms: number) => void;
           setDefaultNavigationTimeout: (ms: number) => void;
           close: () => Promise<void>;
@@ -14,6 +15,8 @@ type PlaywrightModule = {
     }>;
   };
 };
+
+type PlaywrightBrowserLauncher = PlaywrightModule["chromium"];
 
 let cachedPlaywrightModule: PlaywrightModule | undefined;
 let cachedPlaywrightError: Error | undefined;
@@ -44,6 +47,27 @@ export async function loadPlaywright() {
   }
 }
 
+function isMissingPlaywrightExecutable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Executable doesn't exist|playwright install/i.test(message);
+}
+
+export async function launchPlaywrightBrowser(
+  launcher: PlaywrightBrowserLauncher,
+  launchOptions: Record<string, unknown>,
+  options: { browserName: string; playwrightBrowsersPath?: string } = { browserName: "chromium" },
+) {
+  try {
+    return await launcher.launch(launchOptions);
+  } catch (error) {
+    const canUseSystemChrome = options.browserName === "chromium"
+      && options.playwrightBrowsersPath === undefined
+      && isMissingPlaywrightExecutable(error);
+    if (!canUseSystemChrome) throw error;
+    return launcher.launch({ ...launchOptions, channel: "chrome" });
+  }
+}
+
 export async function createPlaywrightBrowserSession(options: {
   viewport?: { width: number; height: number };
   timeoutMs?: number;
@@ -57,7 +81,10 @@ export async function createPlaywrightBrowserSession(options: {
     headless: options.headless !== false,
     args: options.launchArgs || [],
   };
-  const browser = await playwright[browserName].launch(launchOptions);
+  const browser = await launchPlaywrightBrowser(playwright[browserName], launchOptions, {
+    browserName,
+    playwrightBrowsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH,
+  });
   const context = await browser.newContext({
     viewport: options.viewport || undefined,
   });
