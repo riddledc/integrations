@@ -1,7 +1,13 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 import { runProfileLocal, type RunProfileLocalOptions } from "./runProfileLocal";
-import { normalizeRiddleProofProfile, profileStatusExitCode } from "@riddledc/riddle-proof";
+import {
+  normalizeRiddleProofProfile,
+  parseRiddlePreviewReceipt,
+  profileStatusExitCode,
+  type RiddlePreviewReceipt,
+  type RiddleProofSourceIdentity,
+} from "@riddledc/riddle-proof";
 
 const USAGE = `riddle-proof-playwright run-profile --profile <path|json|-> [options]
 
@@ -13,6 +19,10 @@ Options:
   --timeout <seconds>        profile timeout in seconds.
   --output <dir>             write outputs under this directory.
   --output-dir <dir>         alias for --output.
+  --preview-receipt <value>  Preview receipt JSON, file path, or '-' for stdin.
+  --source-revision <sha>    override the observed source Git revision.
+  --source-repository <url>  override the observed source repository.
+  --source-dirty <boolean>   override whether the observed source is dirty.
   --browser <name>           chromium|firefox|webkit (default: chromium).
   --headful                  run browser with UI.
   --always-zero              collect evidence without a failing process exit.
@@ -30,6 +40,8 @@ type ParsedArgs = {
   headful: boolean;
   alwaysZero: boolean;
   browser?: "chromium" | "firefox" | "webkit";
+  previewReceipt?: RiddlePreviewReceipt;
+  source: RiddleProofSourceIdentity;
 };
 
 function parseProfileInput(value: string): unknown {
@@ -56,6 +68,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     viewportNames: [],
     headful: false,
     alwaysZero: false,
+    source: {},
   };
 
   for (let index = 0; index < raw.length; index += 1) {
@@ -106,6 +119,36 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (arg === "--preview-receipt") {
+      const value = raw[index + 1];
+      if (!value) throw new Error("--preview-receipt requires a value.");
+      parsed.previewReceipt = parseRiddlePreviewReceipt(parseProfileInput(value));
+      index += 1;
+      continue;
+    }
+    if (arg === "--source-revision") {
+      const value = raw[index + 1];
+      if (!value) throw new Error("--source-revision requires a value.");
+      parsed.source.git_revision = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--source-repository") {
+      const value = raw[index + 1];
+      if (!value) throw new Error("--source-repository requires a value.");
+      parsed.source.repository = value;
+      index += 1;
+      continue;
+    }
+    if (arg === "--source-dirty") {
+      const value = raw[index + 1];
+      if (value !== "true" && value !== "false") {
+        throw new Error("--source-dirty requires true or false.");
+      }
+      parsed.source.dirty = value === "true";
+      index += 1;
+      continue;
+    }
     if (arg === "--browser") {
       const value = raw[index + 1];
       if (!value) throw new Error("--browser requires a value.");
@@ -147,6 +190,10 @@ async function main() {
     timeout: args.timeout,
     headful: args.headful,
     browser: args.browser,
+    previewReceipt: args.previewReceipt,
+    source: Object.keys(args.source).length
+      ? { ...args.previewReceipt?.source, ...args.source }
+      : undefined,
   };
   const result = await runProfileLocal(input);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

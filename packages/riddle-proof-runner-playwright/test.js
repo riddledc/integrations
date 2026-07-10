@@ -63,6 +63,22 @@ const profile = {
   ],
 };
 
+const previewReceiptPath = path.join(workspace, "preview-receipt.json");
+const previewReceipt = {
+  version: "riddle.preview-receipt.v1",
+  preview_id: "pv_local_runner_smoke",
+  url: `file://${targetPath}`,
+  expires_at: "2030-01-02T00:00:00.000Z",
+  content_digest: `sha256:${"a".repeat(64)}`,
+  source: {
+    git_revision: "preview-source-revision",
+    repository: "https://github.com/riddledc/integrations.git",
+    dirty: false,
+  },
+  published_at: "2030-01-01T00:00:00.000Z",
+};
+writeFileSync(previewReceiptPath, JSON.stringify(previewReceipt), "utf8");
+
 try {
   const output = await runProfileLocal({
     profile,
@@ -107,6 +123,36 @@ try {
   assert.equal(helpResult.status, 0);
   assert.equal(helpResult.stderr, "");
   assert.equal(helpResult.stdout.includes("riddle-proof-playwright"), true);
+  assert.equal(helpResult.stdout.includes("--preview-receipt"), true);
+
+  const previewOutputDir = path.join(workspace, "preview-artifacts");
+  const previewResult = spawnSync(process.execPath, [
+    "./bin/riddle-proof-playwright",
+    "run-profile",
+    "--profile",
+    JSON.stringify(profile),
+    "--url",
+    `file://${targetPath}`,
+    "--preview-receipt",
+    previewReceiptPath,
+    "--source-revision",
+    "explicit-source-revision",
+    "--output",
+    previewOutputDir,
+  ], {
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+  assert.equal(previewResult.signal, null, previewResult.stderr || previewResult.stdout);
+  assert.equal(previewResult.status, 0, previewResult.stderr || previewResult.stdout);
+  const previewObservation = JSON.parse(
+    readFileSync(path.join(previewOutputDir, "observation-receipt.json"), "utf8"),
+  );
+  assert.equal(previewObservation.target.kind, "preview");
+  assert.deepEqual(previewObservation.target.preview, previewReceipt);
+  assert.equal(previewObservation.source.git_revision, "explicit-source-revision");
+  assert.equal(previewObservation.source.repository, previewReceipt.source.repository);
+  assert.equal(previewObservation.source.dirty, false);
 
   const timeoutProfilePath = path.join(workspace, "profile-with-timeout.json");
   const timeoutOutputDir = path.join(workspace, "timeout-artifacts");
