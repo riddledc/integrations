@@ -4,6 +4,16 @@ import {
   summarizeRiddleProofPublicState,
   type RiddleProofPublicStateSummary,
 } from "./public-state";
+import {
+  createRiddleProofHandoffReceipt,
+  parseRiddleProofChangeReceipt,
+  parseRiddleProofHandoffReceipt,
+  RIDDLE_PROOF_CHANGE_RECEIPT_V1_VERSION,
+  RIDDLE_PROOF_CHANGE_RECEIPT_VERSION,
+  RIDDLE_PROOF_HANDOFF_RECEIPT_VERSION,
+  type RiddleProofHandoffReceipt,
+} from "./change-proof";
+import type { RiddleProofObservationArtifact } from "./receipts";
 
 export const RIDDLE_PROOF_PR_COMMENT_MARKER = "<!-- riddle-proof:pr-comment:v1 -->";
 
@@ -159,9 +169,10 @@ function collectChangeReceiptArtifacts(result: Record<string, unknown>) {
   const seen = new Set<string>();
   const collectSide = (sideName: string, side: Record<string, unknown>) => {
     const candidates = [
+      side.canonical_screenshot,
       ...asArray(side.screenshots),
       ...asArray(side.artifacts),
-    ];
+    ].filter(Boolean);
     for (const [index, item] of candidates.entries()) {
       const artifact = asRecord(item);
       const url = stringValue(artifact.url) || stringValue(artifact.path);
@@ -260,9 +271,10 @@ function changeReceiptPageSummaries(result: Record<string, unknown>) {
   for (const sideName of ["before", "after"]) {
     const side = asRecord(result[sideName]);
     if (!Object.keys(side).length) continue;
-    const checks = asRecord(side.checks);
+    const profileSummary = asRecord(side.profile_summary);
+    const checks = Object.keys(asRecord(side.checks)).length ? asRecord(side.checks) : asRecord(profileSummary.checks);
     pages.push({
-      route: firstStringValue(side.source, side.profile_name) || sideName,
+      route: firstStringValue(asRecord(side.target).url, side.source, profileSummary.profile_name, side.profile_name) || sideName,
       passed: numberValue(checks.passed) ?? 0,
       failed: numberValue(checks.failed) ?? 0,
     });
@@ -335,7 +347,12 @@ function isProfileResult(result: Record<string, unknown>) {
 }
 
 function isChangeReceiptResult(result: Record<string, unknown>) {
-  return stringValue(result.version) === "riddle-proof.change-receipt.v1";
+  const version = stringValue(result.version);
+  return version === RIDDLE_PROOF_CHANGE_RECEIPT_V1_VERSION || version === RIDDLE_PROOF_CHANGE_RECEIPT_VERSION;
+}
+
+function isHandoffReceiptResult(result: Record<string, unknown>) {
+  return stringValue(result.version) === RIDDLE_PROOF_HANDOFF_RECEIPT_VERSION;
 }
 
 function isChangeResult(result: Record<string, unknown>) {
@@ -346,10 +363,13 @@ function isChangeResult(result: Record<string, unknown>) {
 
 export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput): RiddleProofPrCommentSummary {
   const runResponse = asRecord(input.runResponse);
-  const result = asRecord(input.result);
+  const inputResult = asRecord(input.result);
+  const handoffReceipt = isHandoffReceiptResult(inputResult) ? parseRiddleProofHandoffReceipt(inputResult) : undefined;
+  const parsedChangeReceipt = handoffReceipt?.change || (isChangeReceiptResult(inputResult) ? parseRiddleProofChangeReceipt(inputResult) : undefined);
+  const result = parsedChangeReceipt ? asRecord(parsedChangeReceipt) : inputResult;
   const proofResult = asRecord(runResponse.proofResult);
   const profileResult = isProfileResult(result);
-  const changeReceiptResult = isChangeReceiptResult(result);
+  const changeReceiptResult = Boolean(parsedChangeReceipt);
   const changeResult = changeReceiptResult || isChangeResult(result);
   const profileRiddle = asRecord(result.riddle);
   const preview = asRecord(runResponse.preview);
@@ -374,8 +394,10 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
   delete checkSource.ok;
   const nestedChecks = summarizeExplicitChecks(checkSource);
   const resultStatus = firstStringValue(result.status, stopCondition.status);
-  const ok = changeResult
-    ? resultStatus === "passed"
+  const ok = changeReceiptResult
+    ? parsedChangeReceipt?.recommendation.merge_recommended ?? false
+    : changeResult
+      ? resultStatus === "passed"
     : booleanValue(result.ok) ?? booleanValue(runResponse.ok) ?? null;
   const checkpointSummary = checkpointSummaryFrom(
     result.checkpoint_summary,
@@ -384,19 +406,19 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     rawDetails.checkpoint_summary,
     proofResult.checkpoint_summary,
   );
-  const publicState = summarizeRiddleProofPublicState({
+  const publicState = changeReceiptResult ? undefined : summarizeRiddleProofPublicState({
     ...result,
     status: resultStatus,
     checkpoint_summary: checkpointSummary || result.checkpoint_summary,
   });
-  const mergeRecommendation = riddleProofPublicStateMergeRecommendation(
+  const mergeRecommendation = publicState ? riddleProofPublicStateMergeRecommendation(
     publicState,
     firstStringValue(result.merge_recommendation, stopCondition.merge_recommendation, resultRaw.merge_recommendation),
-  );
+  ) : undefined;
   return {
     ok,
     status: firstStringValue(proofResult.status, profileRiddle.status),
-    result_status: changeResult ? resultStatus : publicState.status,
+    result_status: changeResult ? resultStatus : publicState?.status,
     job_id: firstStringValue(proofResult.job_id, profileRiddle.job_id),
     duration_ms: numberValue(proofResult.duration_ms) ?? numberValue(profileRiddle.elapsed_ms),
     proof_url: stringValue(runResponse.proofUrl),
@@ -404,14 +426,14 @@ export function summarizeRiddleProofPrComment(input: RiddleProofPrCommentInput):
     preview_url: stringValue(preview.preview_url) || stringValue(preview.url),
     preview_publish_recovered: booleanValue(preview.publish_recovered),
     preview_publish_error: stringValue(preview.publish_error),
-    ship_held: publicState.ship_held,
-    shipping_disabled: publicState.shipping_disabled,
-    ship_authorized: publicState.ship_authorized,
-    merge_ready: publicState.merge_ready,
-    sync_allowed: publicState.sync_allowed,
+    ship_held: publicState?.ship_held,
+    shipping_disabled: publicState?.shipping_disabled,
+    ship_authorized: changeReceiptResult ? parsedChangeReceipt?.shipping_authorization.authorized : publicState?.ship_authorized,
+    merge_ready: publicState?.merge_ready,
+    sync_allowed: publicState?.sync_allowed,
     proof_decision: firstStringValue(result.proof_decision, stopCondition.proof_decision, resultRaw.proof_decision),
-    merge_recommendation: changeReceiptResult && resultStatus
-      ? stringValue(result.verdict)
+    merge_recommendation: changeReceiptResult
+      ? parsedChangeReceipt?.recommendation.label
       : mergeRecommendation,
     checkpoint_summary: checkpointSummary,
     public_state: publicState,
@@ -493,7 +515,97 @@ function checkpointSummaryLine(summary: RiddleProofPrCommentCheckpointSummary) {
   ].filter(Boolean).join("; ");
 }
 
+function markdownTableValue(value: unknown) {
+  return String(value ?? "")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, " ");
+}
+
+function observationArtifactTarget(artifact: RiddleProofObservationArtifact | undefined) {
+  return artifact?.url || artifact?.path;
+}
+
+function canonicalScreenshotCell(artifact: RiddleProofObservationArtifact | undefined, fallback: string) {
+  const target = observationArtifactTarget(artifact);
+  if (!artifact || !target) return fallback;
+  if (artifact.url) return `![${artifact.name.replace(/\]/g, "\\]")}](${artifact.url})`;
+  return markdownTableValue(artifact.path || artifact.name);
+}
+
+function shortRevision(value: string | undefined) {
+  return value ? value.slice(0, 12) : "not recorded";
+}
+
+export function buildRiddleProofHandoffPrCommentMarkdown(
+  handoff: RiddleProofHandoffReceipt,
+  input: Omit<RiddleProofPrCommentInput, "result"> = {},
+) {
+  const receipt = parseRiddleProofHandoffReceipt(handoff);
+  const change = receipt.change;
+  const beforeStatus = change.before.profile_summary?.status || "not recorded";
+  const afterStatus = change.after.profile_summary?.status || "not recorded";
+  const beforeBaseline = change.groups.before.ok ? "matched baseline" : "baseline mismatch";
+  const lines = [
+    RIDDLE_PROOF_PR_COMMENT_MARKER,
+    `## ${input.title?.trim() || "Riddle Change Proof"}`,
+    "",
+    `**Result:** ${receipt.recommendation.label}`,
+    `**Evidence verdict:** \`${receipt.verdict}\``,
+    `**Shipping authorization:** ${receipt.shipping_authorization.status}`,
+    `**Contract:** ${change.contract_name}`,
+  ];
+  if (input.goal?.trim()) lines.push(`**Goal:** ${input.goal.trim()}`);
+  if (input.successCriteria?.trim()) lines.push(`**Success criteria:** ${input.successCriteria.trim()}`);
+  lines.push("", change.summary, "", "### Canonical Before / After", "");
+  lines.push("| Before | After |");
+  lines.push("| --- | --- |");
+  lines.push(`| ${beforeBaseline}: \`${markdownTableValue(beforeStatus)}\` | \`${markdownTableValue(afterStatus)}\` |`);
+  lines.push(`| ${canonicalScreenshotCell(receipt.canonical_pair.before, "No canonical before screenshot")} | ${canonicalScreenshotCell(receipt.canonical_pair.after, "No canonical after screenshot")} |`);
+  lines.push("", "### Source Binding", "");
+  lines.push("| Side | Target | Git revision | Binding | Preview | Digest |");
+  lines.push("| --- | --- | --- | --- | --- | --- |");
+  for (const side of ["before", "after"] as const) {
+    const observation = change[side];
+    const binding = change.source_bindings[side];
+    lines.push(`| ${side} | ${markdownTableValue(observation.target.url)} | \`${shortRevision(binding.observed_git_revision || observation.source.git_revision)}\` | ${binding.status} | ${markdownTableValue(binding.preview_id || observation.target.preview?.preview_id || "not required")} | \`${markdownTableValue(binding.content_digest || observation.target.preview?.content_digest || "not required")}\` |`);
+  }
+  lines.push("", "### Declared Delta", "");
+  lines.push("| Measurement | Status | Before | After |");
+  lines.push("| --- | --- | --- | --- |");
+  for (const delta of change.deltas) {
+    lines.push(`| ${markdownTableValue(delta.label)} | ${delta.status} | ${markdownTableValue(delta.before_observed)} | ${markdownTableValue(delta.after_observed)} |`);
+  }
+  if (change.proves.length) {
+    lines.push("", "### What This Proves", "");
+    for (const claim of change.proves) lines.push(`- ${claim}`);
+  }
+  if (change.does_not_prove.length) {
+    lines.push("", "### Limits", "");
+    for (const claim of change.does_not_prove) lines.push(`- ${claim}`);
+  }
+  const linkedArtifacts = [
+    ...change.before.artifacts.map((artifact) => ({ side: "before", artifact })),
+    ...change.after.artifacts.map((artifact) => ({ side: "after", artifact })),
+  ].filter(({ artifact }) => Boolean(artifact.url));
+  if (linkedArtifacts.length) {
+    lines.push("", "### Artifacts", "");
+    for (const { side, artifact } of linkedArtifacts.slice(0, 24)) {
+      lines.push(`- ${side}: ${markdownLink(artifact.name, artifact.url || "")}`);
+    }
+  }
+  lines.push("", input.source?.trim() ? `_Source: ${input.source.trim()}_` : "_Rendered from the Handoff receipt without recomputing its verdict._");
+  return `${lines.join("\n").trim()}\n`;
+}
+
 export function buildRiddleProofPrCommentMarkdown(input: RiddleProofPrCommentInput) {
+  const result = asRecord(input.result);
+  if (isHandoffReceiptResult(result)) {
+    return buildRiddleProofHandoffPrCommentMarkdown(parseRiddleProofHandoffReceipt(result), input);
+  }
+  if (isChangeReceiptResult(result)) {
+    const handoff = createRiddleProofHandoffReceipt(parseRiddleProofChangeReceipt(result));
+    return buildRiddleProofHandoffPrCommentMarkdown(handoff, input);
+  }
   const summary = summarizeRiddleProofPrComment(input);
   const title = input.title?.trim() || "Riddle Proof Evidence";
   const lines = [

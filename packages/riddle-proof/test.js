@@ -28,6 +28,12 @@ import {
   assessRiddleProofProfileEvidence,
   assessRiddleProofChange,
   createRiddleProofChangeReceipt,
+  createRiddleProofHandoffReceipt,
+  createRiddleProofObservationReceipt,
+  parseRiddlePreviewReceipt,
+  parseRiddleProofChangeReceipt,
+  parseRiddleProofHandoffReceipt,
+  parseRiddleProofObservationReceipt,
   riddleProofChangeReceiptHtml,
   riddleProofChangeReceiptMarkdown,
   buildRiddleProofProfileScript,
@@ -111,6 +117,8 @@ assert.equal(typeof cjs.assessRiddleProofChange, "function");
 assert.equal(typeof cjsChangeProof.assessRiddleProofChange, "function");
 assert.equal(typeof cjs.createRiddleProofChangeReceipt, "function");
 assert.equal(typeof cjsChangeProof.createRiddleProofChangeReceipt, "function");
+assert.equal(typeof cjsChangeProof.createRiddleProofHandoffReceipt, "function");
+assert.equal(typeof cjs.createRiddleProofObservationReceipt, "function");
 assert.equal(typeof cjsChangeProof.riddleProofChangeReceiptMarkdown, "function");
 assert.equal(typeof cjsChangeProof.riddleProofChangeReceiptHtml, "function");
 assert.equal(typeof cjs.assessRiddleProofProfileArtifactCompleteness, "function");
@@ -283,11 +291,92 @@ const passingChangeReceipt = createRiddleProofChangeReceipt({
   after_source: "https://example.test/after",
   profile_name: "Hero art profile",
 });
-assert.equal(passingChangeReceipt.version, "riddle-proof.change-receipt.v1");
+assert.equal(passingChangeReceipt.version, "riddle-proof.change-receipt.v2");
 assert.equal(passingChangeReceipt.verdict, "mergeable");
+assert.equal(passingChangeReceipt.recommendation.merge_recommended, true);
+assert.equal(passingChangeReceipt.shipping_authorization.authorized, false);
+assert.equal(passingChangeReceipt.before.profile_summary.status, "product_regression");
 assert.deepEqual(passingChangeReceipt.proves, ["before evidence shows hero art missing", "after evidence shows hero art visible"]);
 assert.match(riddleProofChangeReceiptMarkdown(passingChangeReceipt), /What This Proves/);
 assert.match(riddleProofChangeReceiptHtml(passingChangeReceipt), /<!doctype html>/);
+const passingHandoff = createRiddleProofHandoffReceipt(passingChangeReceipt, { created_at: "2026-07-03T00:01:00.000Z" });
+assert.deepEqual(parseRiddleProofHandoffReceipt(passingHandoff), passingHandoff);
+const passingHandoffMarkdown = buildRiddleProofPrCommentMarkdown({ result: passingHandoff, title: "Change proof" });
+assert.equal(passingHandoff.verdict, "mergeable");
+assert.match(passingHandoffMarkdown, /matched baseline/);
+assert.match(passingHandoffMarkdown, /Shipping authorization:\*\* not_granted/);
+assert.doesNotMatch(passingHandoffMarkdown, /merge_ready=/);
+assert.throws(
+  () => parseRiddleProofChangeReceipt({
+    ...passingChangeReceipt,
+    verdict: "not_mergeable",
+    recommendation: { ...passingChangeReceipt.recommendation, verdict: "not_mergeable", merge_recommended: false },
+  }),
+  /verdict must match its evaluated status/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...passingHandoff,
+    recommendation: { ...passingHandoff.recommendation, merge_recommended: false },
+  }),
+  /preserve the Change receipt verdict and recommendation/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...passingHandoff,
+    canonical_pair: {
+      ...passingHandoff.canonical_pair,
+      after: { ...passingHandoff.canonical_pair.after, name: "unrelated-frame.png" },
+    },
+  }),
+  /canonical pair must project the Change receipt observations/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...passingHandoff,
+    shipping_authorization: { status: "not_granted", authorized: true, source: "none" },
+  }),
+  /status and authorized flag must agree/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...passingHandoff,
+    shipping_authorization: { status: "pending", authorized: false, source: "none" },
+  }),
+  /authorization status is invalid/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...passingHandoff,
+    shipping_authorization: { status: "granted", authorized: true, source: "unknown" },
+  }),
+  /authorization source is invalid/,
+);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({ ...passingHandoff, created_at: "not-a-timestamp" }),
+  /created_at must be a valid timestamp/,
+);
+assert.throws(
+  () => parseRiddleProofChangeReceipt({
+    ...passingChangeReceipt,
+    status: "unknown",
+    verdict: "not_mergeable",
+    recommendation: {
+      merge_recommended: false,
+      verdict: "not_mergeable",
+      label: "Merge not recommended",
+      reason: "The declared change delta did not pass.",
+    },
+  }),
+  /Unsupported Change receipt status unknown/,
+);
+assert.throws(
+  () => parseRiddleProofChangeReceipt({
+    ...passingChangeReceipt,
+    before: { ...passingChangeReceipt.before, comparison_role: "after" },
+  }),
+  /must preserve their before and after comparison roles/,
+);
 
 const passingChangeFromSubpath = assessRiddleProofChangeSubpath(changeContract, {
   before_result: profileResultFixture({
@@ -337,6 +426,167 @@ const statusTransitionChange = assessRiddleProofChange({
   after_result: profileResultFixture({ status: "passed" }),
 });
 assert.equal(statusTransitionChange.status, "passed");
+
+const boundBeforeObservation = createRiddleProofObservationReceipt({
+  comparison_role: "before",
+  executor: { kind: "riddle_hosted", runner: "riddle", job_id: "job_before" },
+  target: { kind: "url", url: "https://example.test/before" },
+  profile_result: profileResultFixture({
+    status: "product_regression",
+    checks: [{ type: "selector_visible", label: "hero-art-visible", status: "failed", evidence: { selector: ".hero-art" } }],
+  }),
+});
+const boundAfterObservation = createRiddleProofObservationReceipt({
+  comparison_role: "after",
+  executor: { kind: "riddle_hosted", runner: "riddle", job_id: "job_after" },
+  target: {
+    kind: "preview",
+    url: "https://preview.example.test/s/pv_bound/feature",
+    preview: {
+      version: "riddle.preview-receipt.v1",
+      preview_id: "pv_bound",
+      url: "https://preview.example.test/s/pv_bound/",
+      expires_at: "2099-01-01T00:00:00.000Z",
+      content_digest: "sha256:bound-content",
+      source: { git_revision: "abc123", repository: "example/repo", dirty: false },
+      published_at: "2026-07-03T00:00:00.000Z",
+    },
+  },
+  source: { git_revision: "abc123", repository: "example/repo", dirty: false },
+  profile_result: profileResultFixture(),
+});
+assert.deepEqual(parseRiddleProofObservationReceipt(boundAfterObservation), boundAfterObservation);
+assert.equal(parseRiddleProofObservationReceipt({
+  ...boundAfterObservation,
+  executor: { kind: "browser_api", job_id: "job_browser_api" },
+}).executor.kind, "browser_api");
+assert.throws(
+  () => parseRiddleProofObservationReceipt({
+    ...boundAfterObservation,
+    executor: { kind: "direct" },
+  }),
+  /Unsupported observation executor kind direct/,
+);
+assert.throws(
+  () => parseRiddleProofObservationReceipt({
+    ...boundAfterObservation,
+    canonical_screenshot: { name: "invented.png", role: "canonical_screenshot", path: "invented.png" },
+  }),
+  /must reference an artifact in the receipt/,
+);
+assert.throws(
+  () => parseRiddlePreviewReceipt({
+    ...boundAfterObservation.target.preview,
+    content_digest: "not-a-digest",
+  }),
+  /must be a sha256 digest/,
+);
+const boundChangeContract = {
+  ...changeContract,
+  source_binding: {
+    after: { preview_receipt_required: true },
+  },
+};
+const boundChange = assessRiddleProofChange(boundChangeContract, {
+  before_observation: boundBeforeObservation,
+  after_observation: boundAfterObservation,
+  expected_source_revisions: { after: "abc123" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(boundChange.status, "passed");
+assert.equal(boundChange.source_bindings.after.status, "matched");
+assert.equal(boundChange.source_bindings.after.content_digest, "sha256:bound-content");
+
+const mismatchedBoundChange = assessRiddleProofChange(boundChangeContract, {
+  before_observation: boundBeforeObservation,
+  after_observation: boundAfterObservation,
+  expected_source_revisions: { after: "def456" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(mismatchedBoundChange.status, "proof_insufficient");
+assert.equal(mismatchedBoundChange.source_bindings.after.status, "mismatched");
+
+const wrongTargetBoundChange = assessRiddleProofChange(boundChangeContract, {
+  before_observation: boundBeforeObservation,
+  after_observation: {
+    ...boundAfterObservation,
+    target: {
+      ...boundAfterObservation.target,
+      url: "https://preview.example.test/s/pv_unrelated/feature",
+    },
+  },
+  expected_source_revisions: { after: "abc123" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(wrongTargetBoundChange.status, "proof_insufficient");
+assert.equal(wrongTargetBoundChange.source_bindings.after.status, "mismatched");
+assert.match(wrongTargetBoundChange.source_bindings.after.message, /target is not contained by Preview/);
+
+const missingPreviewBoundChange = assessRiddleProofChange(boundChangeContract, {
+  before_observation: boundBeforeObservation,
+  after_observation: createRiddleProofObservationReceipt({
+    comparison_role: "after",
+    executor: { kind: "local_playwright", runner: "local-playwright" },
+    target: { kind: "url", url: "http://127.0.0.1:4173/feature" },
+    source: { git_revision: "abc123", dirty: false },
+    profile_result: profileResultFixture(),
+  }),
+  expected_source_revisions: { after: "abc123" },
+});
+assert.equal(missingPreviewBoundChange.status, "proof_insufficient");
+assert.equal(missingPreviewBoundChange.source_bindings.after.status, "missing");
+
+const expiredBoundObservation = createRiddleProofObservationReceipt({
+  ...boundAfterObservation,
+  target: {
+    ...boundAfterObservation.target,
+    preview: {
+      ...boundAfterObservation.target.preview,
+      expires_at: "2026-07-03T00:30:00.000Z",
+    },
+  },
+});
+const expiredBoundChange = assessRiddleProofChange(boundChangeContract, {
+  before_observation: boundBeforeObservation,
+  after_observation: expiredBoundObservation,
+  expected_source_revisions: { after: "abc123" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(expiredBoundChange.status, "proof_insufficient");
+assert.equal(expiredBoundChange.source_bindings.after.status, "stale");
+
+const parsedLegacyReceipt = parseRiddleProofChangeReceipt({
+  version: "riddle-proof.change-receipt.v1",
+  contract_name: "Legacy hero change",
+  status: "passed",
+  verdict: "mergeable",
+  summary: "Legacy change passed.",
+  before: {
+    side: "before",
+    source: "https://example.test/before",
+    profile_name: "Hero art profile",
+    status: "product_regression",
+    summary: "Hero missing.",
+    checks: { total: 1, passed: 0, failed: 1, skipped: 0, needs_human_review: 0 },
+    screenshots: [{ side: "before", name: "before.png", kind: "image", url: "https://cdn.example.test/before.png" }],
+    artifacts: [{ side: "before", name: "before.png", kind: "image", url: "https://cdn.example.test/before.png" }],
+  },
+  after: {
+    side: "after",
+    source: "https://example.test/after",
+    profile_name: "Hero art profile",
+    status: "passed",
+    summary: "Hero visible.",
+    checks: { total: 1, passed: 1, failed: 0, skipped: 0, needs_human_review: 0 },
+    screenshots: [{ side: "after", name: "after.png", kind: "image", url: "https://cdn.example.test/after.png" }],
+    artifacts: [{ side: "after", name: "after.png", kind: "image", url: "https://cdn.example.test/after.png" }],
+  },
+  deltas: [{ type: "check_status_transition", label: "hero", status: "passed", before_observed: "failed", after_observed: "passed" }],
+  proves: ["hero became visible"],
+  does_not_prove: [],
+});
+assert.equal(parsedLegacyReceipt.version, "riddle-proof.change-receipt.v2");
+assert.equal(parsedLegacyReceipt.before.canonical_screenshot.url, "https://cdn.example.test/before.png");
 
 const changeProofCliDir = mkdtempSync(path.join(os.tmpdir(), "riddle-proof-change-cli-"));
 const changeProofProfilePath = path.join(changeProofCliDir, "profile.json");
@@ -396,15 +646,49 @@ assert.equal(parsedChangeProofCli.output_files.change_proof_result, "change-proo
 assert.equal(parsedChangeProofCli.output_files.change_proof_receipt, "change-proof-receipt.json");
 assert.equal(parsedChangeProofCli.output_files.change_proof_receipt_markdown, "change-proof-receipt.md");
 assert.equal(parsedChangeProofCli.output_files.change_proof_receipt_html, "change-proof-receipt.html");
+assert.equal(parsedChangeProofCli.output_files.handoff_receipt, "handoff-receipt.json");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "change-proof-result.json"), "utf8")).status, "passed");
 const parsedChangeProofReceipt = JSON.parse(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.json"), "utf8"));
 assert.equal(parsedChangeProofReceipt.verdict, "mergeable");
-assert.equal(parsedChangeProofReceipt.after.screenshots[0].url, "https://cdn.example.test/after-hero.png");
+assert.equal(parsedChangeProofReceipt.before.target.url, "https://example.test/feature");
+assert.equal(parsedChangeProofReceipt.before.publication.path, changeProofBeforePath);
+assert.equal(parsedChangeProofReceipt.after.publication.path, changeProofAfterPath);
+assert.equal(parsedChangeProofReceipt.after.canonical_screenshot.url, "https://cdn.example.test/after-hero.png");
+assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "handoff-receipt.json"), "utf8")).verdict, "mergeable");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "before", "profile-result.json"), "utf8")).status, "product_regression");
 assert.equal(JSON.parse(readFileSync(path.join(changeProofOutputDir, "after", "profile-result.json"), "utf8")).status, "passed");
 assert.match(readFileSync(path.join(changeProofOutputDir, "summary.md"), "utf8"), /Hero art appears after change/);
 assert.match(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.md"), "utf8"), /What This Does Not Prove/);
 assert.match(readFileSync(path.join(changeProofOutputDir, "change-proof-receipt.html"), "utf8"), /after-hero\.png/);
+const boundChangeProofContractPath = path.join(changeProofCliDir, "bound-change-contract.json");
+const boundBeforeObservationPath = path.join(changeProofCliDir, "before-observation.json");
+const boundAfterObservationPath = path.join(changeProofCliDir, "after-observation.json");
+const boundChangeProofOutputDir = path.join(changeProofCliDir, "bound-output");
+writeFileSync(boundChangeProofContractPath, JSON.stringify(boundChangeContract, null, 2));
+writeFileSync(boundBeforeObservationPath, JSON.stringify(boundBeforeObservation, null, 2));
+writeFileSync(boundAfterObservationPath, JSON.stringify(boundAfterObservation, null, 2));
+const boundChangeProofCli = await runCli([
+  "run-change-proof",
+  "--profile",
+  changeProofProfilePath,
+  "--change-contract",
+  boundChangeProofContractPath,
+  "--before-observation",
+  boundBeforeObservationPath,
+  "--after-observation",
+  boundAfterObservationPath,
+  "--after-source-revision",
+  "abc123",
+  "--output",
+  boundChangeProofOutputDir,
+  "--result-format",
+  "compact-json",
+]);
+assert.equal(JSON.parse(boundChangeProofCli.stdout).status, "passed");
+assert.equal(
+  JSON.parse(readFileSync(path.join(boundChangeProofOutputDir, "change-proof-result.json"), "utf8")).source_bindings.after.status,
+  "matched",
+);
 const changeProofPrSummary = summarizeRiddleProofPrComment({ result: parsedChangeProofReceipt });
 assert.equal(changeProofPrSummary.ok, true);
 assert.equal(changeProofPrSummary.result_status, "passed");
@@ -1132,6 +1416,15 @@ const riddleClient = createRiddleApiClient({
         preview_url: "https://preview.riddledc.com/s/ps_test/",
         file_count: 1,
         total_bytes: 52,
+        receipt: {
+          version: "riddle.preview-receipt.v1",
+          preview_id: "ps_test",
+          url: "https://preview.riddledc.com/s/ps_test/",
+          expires_at: "2099-01-01T00:00:00.000Z",
+          content_digest: "sha256:unit-preview",
+          source: {},
+          published_at: "2026-07-03T00:00:00.000Z",
+        },
       }), { status: 200 });
     }
     if (String(url) === "https://api.test/v1/server-preview") {
@@ -1174,6 +1467,7 @@ assert.equal(riddleClientCalls.find((call) => call.url === "https://api.test/v1/
 assert.equal(deployedPreview.preview_url, "https://preview.riddledc.com/s/ps_test/");
 assert.equal(deployedPreview.file_count, 1);
 assert.equal(deployedPreview.framework, "static");
+assert.equal(deployedPreview.receipt?.content_digest, "sha256:unit-preview");
 assert.deepEqual(
   riddlePreviewProgress
     .filter((snapshot) => snapshot.id === "ps_test" || snapshot.stage === "validating" || snapshot.stage === "creating")
@@ -1361,6 +1655,36 @@ assert.match(delayedPollResult.poll.message, /not submitted/);
 assert.equal(delayedPollCount, 2);
 assert.equal(delayedProgress.length, 2);
 assert.equal(delayedProgress[0].running_without_submission, true);
+
+const activeExecutionClient = createRiddleApiClient({
+  apiKey: "test-riddle-key",
+  apiBaseUrl: "https://api.active-execution.test",
+  fetchImpl: async (url) => {
+    if (String(url) === "https://api.active-execution.test/v1/jobs/job_active") {
+      return new Response(JSON.stringify({
+        job_id: "job_active",
+        status: "running",
+        phase: "browser_started",
+        created_at: "2026-05-19T16:20:00.000Z",
+        submitted_at: null,
+        execution: {
+          enqueued_at: "2026-05-19T16:20:02.000Z",
+          claimed_at: "2026-05-19T16:20:09.000Z",
+          browser_started_at: "2026-05-19T16:20:11.000Z",
+        },
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ error: "unexpected URL" }), { status: 404 });
+  },
+});
+const activeExecutionResult = await activeExecutionClient.pollJob("job_active", {
+  wait: false,
+  attempts: 1,
+});
+assert.equal(activeExecutionResult.poll.active_execution, true);
+assert.equal(activeExecutionResult.poll.phase, "browser_started");
+assert.equal(activeExecutionResult.poll.queue_elapsed_ms, 7_000);
+assert.equal(activeExecutionResult.poll.execution.claimed_at, "2026-05-19T16:20:09.000Z");
 
 const originalDateNowForPreSubmit = Date.now;
 let preSubmitPollCount = 0;
@@ -5447,6 +5771,7 @@ const cliRunProfileServer = createServer((request, response) => {
       sendJson({
         job_id: "job_cli_profile_progress",
         status: "running",
+        phase: "queued",
         created_at: "2026-05-13T23:20:00.000Z",
         submitted_at: null,
         completed_at: null,
@@ -5456,6 +5781,7 @@ const cliRunProfileServer = createServer((request, response) => {
     sendJson({
       job_id: "job_cli_profile_progress",
       status: "completed",
+      phase: "complete",
       created_at: "2026-05-13T23:20:00.000Z",
       submitted_at: "2026-05-13T23:21:00.000Z",
       completed_at: "2026-05-13T23:21:20.000Z",
@@ -6058,8 +6384,8 @@ try {
   assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
   assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
   assert.equal(cliRunProfileRequests[0].body.strict, false);
-  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running attempt=1\/4/);
-  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed attempt=2\/4/);
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running phase=queued attempt=1\/4/);
+  assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed phase=complete attempt=2\/4/);
   const baseUrlAliasRequestStart = cliRunProfileRequests.length;
   const baseUrlAliasOutputDir = path.join(riddlePreviewDir, "cli-profile-base-url-alias-output");
   const cliProfileBaseUrlAliasResult = await runCli([

@@ -3783,9 +3783,19 @@ inductive DeltaStatus where
   | missing
   deriving DecidableEq, Repr, BEq
 
+inductive SourceBindingStatus where
+  | notRequired
+  | matched
+  | missing
+  | mismatched
+  | stale
+  deriving DecidableEq, Repr, BEq
+
 structure ChangeProofInput where
   beforeVerdict : Verdict
   afterVerdict : Verdict
+  beforeSourceBinding : SourceBindingStatus
+  afterSourceBinding : SourceBindingStatus
   deltaStatuses : List DeltaStatus
   deriving Repr
 
@@ -3819,6 +3829,26 @@ def changeDeltaEvidenceMissing (input : ChangeProofInput) : Bool :=
 def changeDeltaFailed (input : ChangeProofInput) : Bool :=
   hasDeltaStatus DeltaStatus.failed input.deltaStatuses
 
+def sourceBindingUsable (status : SourceBindingStatus) : Bool :=
+  status == SourceBindingStatus.notRequired
+    || status == SourceBindingStatus.matched
+
+@[simp] theorem missing_source_binding_is_unusable :
+    sourceBindingUsable SourceBindingStatus.missing = false := by
+  native_decide
+
+@[simp] theorem mismatched_source_binding_is_unusable :
+    sourceBindingUsable SourceBindingStatus.mismatched = false := by
+  native_decide
+
+@[simp] theorem stale_source_binding_is_unusable :
+    sourceBindingUsable SourceBindingStatus.stale = false := by
+  native_decide
+
+def changeSourceBindingMissing (input : ChangeProofInput) : Bool :=
+  sourceBindingUsable input.beforeSourceBinding = false
+    || sourceBindingUsable input.afterSourceBinding = false
+
 def changeVerdict (input : ChangeProofInput) : Verdict :=
   if changeBlocked input = true then
     Verdict.environmentBlocked
@@ -3826,6 +3856,8 @@ def changeVerdict (input : ChangeProofInput) : Verdict :=
     Verdict.proofInsufficient
   else if changeNeedsHumanReview input = true then
     Verdict.needsHumanReview
+  else if changeSourceBindingMissing input = true then
+    Verdict.proofInsufficient
   else if beforeGroupUsable input.beforeVerdict = false then
     Verdict.proofInsufficient
   else if afterGroupUsable input.afterVerdict = false then
@@ -3855,6 +3887,7 @@ theorem change_delta_evidence_missing_is_insufficient
     (hBlocked : changeBlocked input ≠ true)
     (hGroupMissing : changeGroupEvidenceMissing input ≠ true)
     (hReview : changeNeedsHumanReview input ≠ true)
+    (hBinding : changeSourceBindingMissing input ≠ true)
     (hBefore : beforeGroupUsable input.beforeVerdict ≠ false)
     (hAfter : afterGroupUsable input.afterVerdict ≠ false)
     (hDeltaMissing : changeDeltaEvidenceMissing input = true) :
@@ -3864,6 +3897,7 @@ theorem change_delta_evidence_missing_is_insufficient
     hBlocked,
     hGroupMissing,
     hReview,
+    hBinding,
     hBefore,
     hAfter,
     hDeltaMissing
@@ -3874,6 +3908,7 @@ theorem change_delta_failed_is_regression
     (hBlocked : changeBlocked input ≠ true)
     (hGroupMissing : changeGroupEvidenceMissing input ≠ true)
     (hReview : changeNeedsHumanReview input ≠ true)
+    (hBinding : changeSourceBindingMissing input ≠ true)
     (hBefore : beforeGroupUsable input.beforeVerdict ≠ false)
     (hAfter : afterGroupUsable input.afterVerdict ≠ false)
     (hDeltaMissing : changeDeltaEvidenceMissing input ≠ true)
@@ -3884,31 +3919,56 @@ theorem change_delta_failed_is_regression
     hBlocked,
     hGroupMissing,
     hReview,
+    hBinding,
     hBefore,
     hAfter,
     hDeltaMissing,
     hDeltaFailed
   ]
 
+theorem change_source_binding_invalid_is_insufficient
+    (input : ChangeProofInput)
+    (hBlocked : changeBlocked input ≠ true)
+    (hGroupMissing : changeGroupEvidenceMissing input ≠ true)
+    (hReview : changeNeedsHumanReview input ≠ true)
+    (hBinding : changeSourceBindingMissing input = true) :
+    changeVerdict input = Verdict.proofInsufficient := by
+  simp [changeVerdict, hBlocked, hGroupMissing, hReview, hBinding]
+
 def changeExamplePasses : ChangeProofInput where
   beforeVerdict := Verdict.productRegression
   afterVerdict := Verdict.passed
+  beforeSourceBinding := SourceBindingStatus.notRequired
+  afterSourceBinding := SourceBindingStatus.matched
   deltaStatuses := [DeltaStatus.passed]
 
 def changeExampleMissingBefore : ChangeProofInput where
   beforeVerdict := Verdict.proofInsufficient
   afterVerdict := Verdict.passed
+  beforeSourceBinding := SourceBindingStatus.notRequired
+  afterSourceBinding := SourceBindingStatus.matched
   deltaStatuses := [DeltaStatus.passed]
 
 def changeExampleMissingDelta : ChangeProofInput where
   beforeVerdict := Verdict.productRegression
   afterVerdict := Verdict.passed
+  beforeSourceBinding := SourceBindingStatus.notRequired
+  afterSourceBinding := SourceBindingStatus.matched
   deltaStatuses := []
 
 def changeExampleFailedDelta : ChangeProofInput where
   beforeVerdict := Verdict.productRegression
   afterVerdict := Verdict.passed
+  beforeSourceBinding := SourceBindingStatus.notRequired
+  afterSourceBinding := SourceBindingStatus.matched
   deltaStatuses := [DeltaStatus.failed]
+
+def changeExampleMismatchedSource : ChangeProofInput where
+  beforeVerdict := Verdict.productRegression
+  afterVerdict := Verdict.passed
+  beforeSourceBinding := SourceBindingStatus.notRequired
+  afterSourceBinding := SourceBindingStatus.mismatched
+  deltaStatuses := [DeltaStatus.passed]
 
 theorem change_example_passes :
     changeVerdict changeExamplePasses = Verdict.passed := by
@@ -3924,6 +3984,167 @@ theorem change_example_missing_delta_is_insufficient :
 
 theorem change_example_failed_delta_is_regression :
     changeVerdict changeExampleFailedDelta = Verdict.productRegression := by
+  native_decide
+
+theorem change_example_mismatched_source_is_insufficient :
+    changeVerdict changeExampleMismatchedSource = Verdict.proofInsufficient := by
+  native_decide
+
+/-!
+Layer 7: Preview source binding and handoff projection.
+
+This layer models only receipt semantics. It does not claim that Git, a CDN,
+or a browser told the truth; it proves how recorded evidence must collapse.
+-/
+
+structure PreviewBindingEvidence where
+  required : Bool
+  receiptPresent : Bool
+  digestPresent : Bool
+  targetMatchesReceipt : Bool
+  revisionPresent : Bool
+  revisionMatches : Bool
+  cleanStatePresent : Bool
+  sourceClean : Bool
+  unexpired : Bool
+  deriving Repr
+
+def previewBindingStatus (input : PreviewBindingEvidence) : SourceBindingStatus :=
+  if input.required = false then
+    SourceBindingStatus.notRequired
+  else if input.receiptPresent = false
+      || input.digestPresent = false
+      || input.revisionPresent = false
+      || input.cleanStatePresent = false then
+    SourceBindingStatus.missing
+  else if input.targetMatchesReceipt = false
+      || input.revisionMatches = false
+      || input.sourceClean = false then
+    SourceBindingStatus.mismatched
+  else if input.unexpired = false then
+    SourceBindingStatus.stale
+  else
+    SourceBindingStatus.matched
+
+theorem required_preview_missing_receipt_is_unusable
+    (input : PreviewBindingEvidence)
+    (hRequired : input.required = true)
+    (hReceipt : input.receiptPresent = false) :
+    sourceBindingUsable (previewBindingStatus input) = false := by
+  simp [previewBindingStatus, hRequired, hReceipt]
+
+theorem required_preview_mismatched_revision_is_unusable
+    (input : PreviewBindingEvidence)
+    (hRequired : input.required = true)
+    (hReceipt : input.receiptPresent = true)
+    (hDigest : input.digestPresent = true)
+    (hTarget : input.targetMatchesReceipt = true)
+    (hRevision : input.revisionPresent = true)
+    (hCleanState : input.cleanStatePresent = true)
+    (hMismatch : input.revisionMatches = false) :
+    sourceBindingUsable (previewBindingStatus input) = false := by
+  simp [
+    previewBindingStatus,
+    hRequired,
+    hReceipt,
+    hDigest,
+    hTarget,
+    hRevision,
+    hCleanState,
+    hMismatch
+  ]
+
+theorem required_preview_wrong_target_is_unusable
+    (input : PreviewBindingEvidence)
+    (hRequired : input.required = true)
+    (hReceipt : input.receiptPresent = true)
+    (hDigest : input.digestPresent = true)
+    (hRevision : input.revisionPresent = true)
+    (hCleanState : input.cleanStatePresent = true)
+    (hTarget : input.targetMatchesReceipt = false) :
+    sourceBindingUsable (previewBindingStatus input) = false := by
+  simp [
+    previewBindingStatus,
+    hRequired,
+    hReceipt,
+    hDigest,
+    hRevision,
+    hCleanState,
+    hTarget
+  ]
+
+theorem required_preview_expired_is_unusable
+    (input : PreviewBindingEvidence)
+    (hRequired : input.required = true)
+    (hReceipt : input.receiptPresent = true)
+    (hDigest : input.digestPresent = true)
+    (hTarget : input.targetMatchesReceipt = true)
+    (hRevision : input.revisionPresent = true)
+    (hRevisionMatches : input.revisionMatches = true)
+    (hCleanState : input.cleanStatePresent = true)
+    (hClean : input.sourceClean = true)
+    (hExpired : input.unexpired = false) :
+    sourceBindingUsable (previewBindingStatus input) = false := by
+  simp [
+    previewBindingStatus,
+    hRequired,
+    hReceipt,
+    hDigest,
+    hTarget,
+    hRevision,
+    hRevisionMatches,
+    hCleanState,
+    hClean,
+    hExpired
+  ]
+
+inductive ChangeRecommendation where
+  | mergeRecommended
+  | mergeNotRecommended
+  deriving DecidableEq, Repr, BEq
+
+def recommendationForVerdict (verdict : Verdict) : ChangeRecommendation :=
+  if verdict == Verdict.passed then
+    ChangeRecommendation.mergeRecommended
+  else
+    ChangeRecommendation.mergeNotRecommended
+
+structure HandoffReceiptModel where
+  changeVerdict : Verdict
+  handoffVerdict : Verdict
+  recommendation : ChangeRecommendation
+  canonicalPairMatchesChange : Bool
+  shippingAuthorized : Bool
+  deriving Repr
+
+def handoffReceiptConforms (receipt : HandoffReceiptModel) : Bool :=
+  decide (
+    receipt.handoffVerdict = receipt.changeVerdict
+      ∧ receipt.recommendation = recommendationForVerdict receipt.changeVerdict
+      ∧ receipt.canonicalPairMatchesChange = true)
+
+theorem conforming_handoff_preserves_change_verdict
+    (receipt : HandoffReceiptModel)
+    (hConforms : handoffReceiptConforms receipt = true) :
+    receipt.handoffVerdict = receipt.changeVerdict := by
+  exact (of_decide_eq_true hConforms).1
+
+theorem conforming_handoff_preserves_canonical_pair
+    (receipt : HandoffReceiptModel)
+    (hConforms : handoffReceiptConforms receipt = true) :
+    receipt.canonicalPairMatchesChange = true := by
+  exact (of_decide_eq_true hConforms).2.2
+
+def mergeRecommendedWithoutAuthorization : HandoffReceiptModel where
+  changeVerdict := Verdict.passed
+  handoffVerdict := Verdict.passed
+  recommendation := ChangeRecommendation.mergeRecommended
+  canonicalPairMatchesChange := true
+  shippingAuthorized := false
+
+theorem merge_recommendation_does_not_grant_shipping_authorization :
+    handoffReceiptConforms mergeRecommendedWithoutAuthorization = true
+      ∧ mergeRecommendedWithoutAuthorization.shippingAuthorized = false := by
   native_decide
 
 end RiddleProofKernel

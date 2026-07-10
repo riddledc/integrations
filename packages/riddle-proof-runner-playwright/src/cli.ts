@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 import { runProfileLocal, type RunProfileLocalOptions } from "./runProfileLocal";
+import { normalizeRiddleProofProfile, profileStatusExitCode } from "@riddledc/riddle-proof";
 
 const USAGE = `riddle-proof-playwright run-profile --profile <path|json|-> [options]
 
@@ -14,6 +15,7 @@ Options:
   --output-dir <dir>         alias for --output.
   --browser <name>           chromium|firefox|webkit (default: chromium).
   --headful                  run browser with UI.
+  --always-zero              collect evidence without a failing process exit.
   --help                     show usage.
 `;
 
@@ -26,6 +28,7 @@ type ParsedArgs = {
   viewportNames: string[];
   timeout?: number;
   headful: boolean;
+  alwaysZero: boolean;
   browser?: "chromium" | "firefox" | "webkit";
 };
 
@@ -52,6 +55,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     outputDir: "artifacts/riddle-proof-runner-playwright",
     viewportNames: [],
     headful: false,
+    alwaysZero: false,
   };
 
   for (let index = 0; index < raw.length; index += 1) {
@@ -116,6 +120,10 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.headful = true;
       continue;
     }
+    if (arg === "--always-zero") {
+      parsed.alwaysZero = true;
+      continue;
+    }
     throw new Error(`Unknown argument ${arg}.`);
   }
 
@@ -142,6 +150,10 @@ async function main() {
   };
   const result = await runProfileLocal(input);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (!args.alwaysZero) {
+    const profile = normalizeRiddleProofProfile(args.profile, { url: args.url, route: args.route });
+    process.exitCode = profileStatusExitCode(profile, result.result.status);
+  }
 }
 
 main().catch((error) => {

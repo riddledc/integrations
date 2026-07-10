@@ -538,6 +538,8 @@ export interface RiddleProofProfileResult {
   route: RiddleProofProfileRouteEvidence;
   artifacts: {
     screenshots: string[];
+    canonical_screenshots?: string[];
+    setup_screenshots?: string[];
     console?: string;
     proof_json?: string;
     dom_summary?: string;
@@ -554,6 +556,7 @@ export interface RiddleProofProfileResult {
     job_id?: string;
     job_count?: number;
     status?: string | null;
+    phase?: string | null;
     terminal?: boolean;
     created_at?: string | null;
     submitted_at?: string | null;
@@ -567,10 +570,12 @@ export interface RiddleProofProfileResult {
     retry_count?: number;
     stale_job_ids?: string[];
     artifact_recovery?: boolean;
+    execution?: Record<string, JsonValue>;
     split_jobs?: Array<{
       viewport: string;
       job_id?: string;
       status?: string | null;
+      phase?: string | null;
       terminal?: boolean;
       queue_elapsed_ms?: number | null;
       pre_submission_elapsed_ms?: number;
@@ -581,6 +586,7 @@ export interface RiddleProofProfileResult {
       retry_count?: number;
       stale_job_ids?: string[];
       artifact_recovery?: boolean;
+      execution?: Record<string, JsonValue>;
     }>;
   };
   environment_blocker?: Record<string, JsonValue>;
@@ -595,6 +601,7 @@ export interface RiddleProofProfileArtifactRef {
   kind?: string;
   content_type?: string;
   source?: string;
+  role?: "canonical_screenshot" | "setup_screenshot" | "data" | "diagnostic" | "artifact";
 }
 
 export interface NormalizeRiddleProofProfileOptions {
@@ -1382,6 +1389,16 @@ function profileScreenshotLabels(viewports: RiddleProofProfileViewportEvidence[]
     labels.push(...profileSetupScreenshotLabels(viewport.setup_action_results || []));
   }
   return labels;
+}
+
+function profileFinalScreenshotLabels(viewports: RiddleProofProfileViewportEvidence[] | undefined): string[] {
+  return (viewports || [])
+    .map((viewport) => viewport.screenshot_label)
+    .filter((label): label is string => typeof label === "string" && Boolean(label.trim()));
+}
+
+function profileAllSetupScreenshotLabels(viewports: RiddleProofProfileViewportEvidence[] | undefined): string[] {
+  return (viewports || []).flatMap((viewport) => profileSetupScreenshotLabels(viewport.setup_action_results || []));
 }
 
 function profileSetupSummary(
@@ -4926,6 +4943,8 @@ export function assessRiddleProofProfileEvidence(
   const status = profileStatusFromEvidence(profile, evidence, checks);
   const firstViewport = evidence?.viewports?.[0];
   const screenshots = profileScreenshotLabels(evidence?.viewports);
+  const canonicalScreenshots = profileFinalScreenshotLabels(evidence?.viewports);
+  const setupScreenshots = profileAllSetupScreenshotLabels(evidence?.viewports);
   const result: RiddleProofProfileResult = {
     version: RIDDLE_PROOF_PROFILE_RESULT_VERSION,
     profile_name: profile.name,
@@ -4935,6 +4954,8 @@ export function assessRiddleProofProfileEvidence(
     route: routeForViewport(firstViewport, evidence?.target_url),
     artifacts: {
       screenshots,
+      canonical_screenshots: canonicalScreenshots,
+      setup_screenshots: setupScreenshots,
       console: "console.json",
       proof_json: "proof.json",
       dom_summary: "dom-summary.json",
@@ -6291,6 +6312,12 @@ function profileScreenshotLabels(viewports) {
   }
   return labels;
 }
+function profileFinalScreenshotLabels(viewports) {
+  return (viewports || []).map((viewport) => viewport && viewport.screenshot_label).filter(Boolean);
+}
+function profileAllSetupScreenshotLabels(viewports) {
+  return (viewports || []).flatMap((viewport) => profileSetupScreenshotLabels(viewport && viewport.setup_action_results || []));
+}
 function profileSetupSummary(viewports, actionCount, expectedActionCountsByViewport, finalScreenshotFullPage) {
   const normalizedFinalScreenshotFullPage = finalScreenshotFullPage === undefined
     ? undefined
@@ -7159,6 +7186,8 @@ function assessProfile(profile, evidence) {
   else if (checks.some((check) => check.status === "needs_human_review")) status = "needs_human_review";
   else if (checks.some((check) => check.status === "failed")) status = "product_regression";
   const screenshotLabels = profileScreenshotLabels(viewports);
+  const canonicalScreenshotLabels = profileFinalScreenshotLabels(viewports);
+  const setupScreenshotLabels = profileAllSetupScreenshotLabels(viewports);
   const route = viewports[0] && viewports[0].route ? viewports[0].route : { requested: evidence.target_url, observed: "", matched: false, error: "missing viewport evidence" };
   const passedChecks = checks.filter((check) => check.status === "passed").length;
   const failedChecks = checks.filter((check) => check.status === "failed").length;
@@ -7175,7 +7204,14 @@ function assessProfile(profile, evidence) {
     status,
     baseline_policy: profile.baseline_policy || "invariant_only",
     route,
-    artifacts: { screenshots: screenshotLabels, console: "console.json", proof_json: "proof.json", dom_summary: "dom-summary.json" },
+    artifacts: {
+      screenshots: screenshotLabels,
+      canonical_screenshots: canonicalScreenshotLabels,
+      setup_screenshots: setupScreenshotLabels,
+      console: "console.json",
+      proof_json: "proof.json",
+      dom_summary: "dom-summary.json"
+    },
     checks,
     summary,
     captured_at: evidence.captured_at,

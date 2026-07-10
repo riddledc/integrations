@@ -70,6 +70,9 @@
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node test.js"
   },
+  "dependencies": {
+    "@riddledc/riddle-proof": "workspace:^"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsup": "^8.0.1",

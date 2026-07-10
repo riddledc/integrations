@@ -50,12 +50,42 @@ import { runRiddleProof } from "@riddledc/riddle-proof/runner";
 import { createCaptureDiagnostic } from "@riddledc/riddle-proof/diagnostics";
 import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
 import { assessRiddleProofChange } from "@riddledc/riddle-proof/change-proof";
+import { createRiddleProofObservationReceipt } from "@riddledc/riddle-proof/receipts";
 ```
 
 The root export provides generic contracts and helpers. Integration-specific
 adapters are exposed through subpaths such as
 `@riddledc/riddle-proof/openclaw`, so wrappers can reuse the mapping logic
 without depending on another plugin runtime.
+
+### Compositional Receipts
+
+Riddle records four different facts instead of flattening every run into one
+surface label:
+
+- `riddle.preview-receipt.v1` identifies immutable deployed content by Preview
+  ID, URL, expiration, content digest, and source Git identity.
+- `riddle-proof.observation-receipt.v1` records an executor, target, comparison
+  role, artifacts, optional profile result, publication, and execution telemetry.
+- `riddle-proof.change-receipt.v2` composes before and after Observation
+  receipts and evaluates only the declared delta and source-binding contract.
+- `riddle-proof.handoff-receipt.v1` projects the Change verdict,
+  recommendation, and canonical screenshot pair for GitHub or another consumer.
+
+Executor (`local_playwright`, `riddle_hosted`, or direct collection), target
+(`url` or `preview`), proof contract, comparison role, publication, and source
+identity are independent dimensions. A merge recommendation is evidence-based
+advice; it does not grant shipping authorization.
+
+Persist a deploy result and its immutable receipt for later Change Proof input:
+
+```sh
+riddle-proof-loop riddle-preview-deploy build pr-123 --framework spa \
+  --output artifacts/riddle-proof/pr-123-preview
+```
+
+When the hosted service returns a receipt, this writes both
+`preview-deploy-result.json` and `preview-receipt.json`.
 
 ### Change Proof Contracts
 
@@ -86,6 +116,27 @@ group may be `passed` or `product_regression`, while the after group must be
 `proof_insufficient`, and a missing or failed required delta cannot become a
 passing change proof.
 
+For a Preview-backed after state, require the immutable receipt and expected
+revision in the change contract/input. Missing, dirty, digest-free, mismatched,
+or expired required Preview evidence collapses to `proof_insufficient`:
+
+```ts
+const result = assessRiddleProofChange({
+  name: "Hero art appears after change",
+  source_binding: { after: { preview_receipt_required: true } },
+  deltas: [{
+    type: "check_status_transition",
+    check_label: "hero-art-visible",
+    before_status: "failed",
+    after_status: "passed",
+  }],
+}, {
+  before_observation: beforeObservation,
+  after_observation: afterObservation,
+  expected_source_revisions: { after: pullRequestHeadSha },
+});
+```
+
 The CLI can collect the two sides against hosted Riddle targets and write one
 change receipt:
 
@@ -95,6 +146,8 @@ riddle-proof-loop run-change-proof \
   --change-contract .riddle-proof/change-contracts/hero-art-change.json \
   --before-url https://example.com \
   --after-url https://preview.example.com \
+  --after-preview-receipt artifacts/preview/preview-receipt.json \
+  --after-source-revision "$PR_HEAD_SHA" \
   --output artifacts/riddle-proof/hero-art-change
 ```
 
@@ -109,11 +162,18 @@ riddle-proof-loop run-change-proof \
   --result-format compact-json
 ```
 
+Prefer `--before-observation` and `--after-observation` when source identity,
+Preview binding, executor, publication, or hosted telemetry matters. Use
+`--before-source-revision` and `--after-source-revision` to bind the comparison
+to the expected commits.
+
 When `--output` / `--output-dir` is set, the command writes
 `change-proof-result.json`, `change-proof-receipt.json`,
-`change-proof-receipt.md`, `change-proof-receipt.html`, `summary.md`, and
+`change-proof-receipt.md`, `change-proof-receipt.html`,
+`handoff-receipt.json`, `handoff-receipt.md`, `summary.md`, and
 normalized copies of the `before/profile-result.json` and
-`after/profile-result.json` inputs. The receipt files are the human-facing
+`after/profile-result.json` inputs plus each side's `observation-receipt.json`.
+The receipt files are the human-facing
 handoff: they show the before/after evidence pair, delta verdicts, screenshot
 links when hosted artifacts are available, explicit proof claims from
 `metadata.required_receipts`, and limits from `metadata.does_not_prove`.
@@ -1249,7 +1309,9 @@ human progress lines to stderr while waiting. The JSON result includes
 `poll.timed_out`, `poll.elapsed_ms`, `poll.queue_elapsed_ms`,
 `poll.pre_submission_elapsed_ms`, and `poll.running_without_submission` so
 delayed dispatch is distinguishable from a terminal proof failure.
-`queue_elapsed_ms` reflects Riddle's `created_at` to `submitted_at` timestamps;
+The progress snapshot also records the hosted `phase` and execution timestamps.
+`queue_elapsed_ms` ends when a worker claims the job; active browser execution
+is reported separately instead of being described as queue waiting.
 `pre_submission_elapsed_ms` preserves how long the CLI actually observed the
 job before `submitted_at` appeared. If `--wait` exhausts its attempts before a
 terminal job status, the command exits non-zero and the result explains the

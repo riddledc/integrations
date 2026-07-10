@@ -12,6 +12,9 @@ pnpm add -D playwright
 ```
 
 `playwright` is a peer dependency and must be installed in your environment.
+Install its bundled browser with `npx playwright install chromium`. If that
+executable is absent and `PLAYWRIGHT_BROWSERS_PATH` was not explicitly set, the
+Chromium runner can use an installed system Chrome instead.
 
 ## CLI
 
@@ -26,6 +29,12 @@ riddle-proof-playwright run-profile \
 ```
 
 Use `--help` for full flag details.
+
+The CLI exits according to the profile's `failure_policy`; a regression,
+blocked environment, or insufficient required evidence therefore produces a
+nonzero process exit when the policy says it should. Use `--always-zero` only
+for an explicit collector workflow that must persist evidence without gating
+the calling process.
 
 ## Node API
 
@@ -62,10 +71,18 @@ Artifacts are written to the output directory:
 - `dom-summary.json`
 - `summary.md`
 - `artifact-manifest.json`
+- `observation-receipt.json`
 - optional `screenshots/*.png`
+
+The Observation receipt records the local executor and source Git identity,
+uses the final viewport frame as its canonical screenshot, distinguishes setup
+screenshots from final evidence, and points at the actual artifact paths in the
+manifest.
 
 ## Outputs
 
 - `result`: normalized `RiddleProofProfileResult`
 - `outputDir`: resolved output directory used for artifact writes
 - `manifestPath`: absolute path to `artifact-manifest.json`
+- `observation`: parsed `riddle-proof.observation-receipt.v1`
+- `observationPath`: absolute path to `observation-receipt.json`
