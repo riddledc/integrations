@@ -30,6 +30,23 @@ riddle-proof-playwright run-profile \
 
 Use `--help` for full flag details.
 
+When the URL is a Riddle Preview, attach its immutable receipt so the local
+executor preserves the Preview target and source binding instead of recording
+an unbound generic URL:
+
+```bash
+riddle-proof-playwright run-profile \
+  --profile ./mobile-layout-smoke.json \
+  --url https://preview.riddledc.com/s/pv_example/ \
+  --preview-receipt ./artifacts/preview/preview-receipt.json \
+  --source-revision "$PR_HEAD_SHA" \
+  --output ./artifacts/riddle-proof-preview
+```
+
+`--source-revision`, `--source-repository`, and `--source-dirty` override
+individual source fields; unspecified fields continue to come from the Preview
+receipt.
+
 The CLI exits according to the profile's `failure_policy`; a regression,
 blocked environment, or insufficient required evidence therefore produces a
 nonzero process exit when the policy says it should. Use `--always-zero` only
@@ -58,6 +75,7 @@ const result = await runProfileLocal({
   },
   outputDir: "./artifacts/riddle-proof",
   url: "https://example.com",
+  // previewReceipt: parsedPreviewReceipt,
 });
 
 console.log(result.result.status);

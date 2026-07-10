@@ -18,6 +18,7 @@ import {
   resolveRiddleProofProfileTimeoutSec,
   detectRiddlePreviewSource,
   type RiddleProofObservationReceipt,
+  type RiddlePreviewReceipt,
   type RiddleProofSourceIdentity,
   type RiddleProofProfile,
   type RiddleProofProfileResult,
@@ -36,6 +37,7 @@ export type RunProfileLocalOptions = {
   timeout?: number;
   headful?: boolean;
   browser?: "chromium" | "firefox" | "webkit";
+  previewReceipt?: RiddlePreviewReceipt;
   source?: RiddleProofSourceIdentity;
   sourceDirectory?: string;
 };
@@ -198,6 +200,7 @@ function writeOutputFiles(
   result: RiddleProofProfileResult,
   outputDir: string,
   source: RiddleProofSourceIdentity,
+  previewReceipt: RiddlePreviewReceipt | undefined,
   store: ReturnType<typeof createRiddleProofArtifactStore>,
 ) {
   const safeResult = {
@@ -249,7 +252,9 @@ function writeOutputFiles(
   const observation = createRiddleProofObservationReceipt({
     comparison_role: "standalone",
     executor: { kind: "local_playwright", runner: LOCAL_RUNNER },
-    target: { kind: "url", url: summarizeProfileRoute(normalizedProfile) },
+    target: previewReceipt
+      ? { kind: "preview", url: summarizeProfileRoute(normalizedProfile), preview: previewReceipt }
+      : { kind: "url", url: summarizeProfileRoute(normalizedProfile) },
     source,
     profile_result: safeResult,
     artifacts: store.listArtifacts().map((artifact) => ({
@@ -293,7 +298,9 @@ export async function runProfileLocal(
   const timeoutMs = resolveTimeoutMs(profile, { timeout: options.timeout });
   const outputDir = path.resolve(options.outputDir);
   const store = createRiddleProofArtifactStore(outputDir);
-  const source = options.source || detectRiddlePreviewSource(options.sourceDirectory || process.cwd());
+  const source = options.source
+    || options.previewReceipt?.source
+    || detectRiddlePreviewSource(options.sourceDirectory || process.cwd());
   let session: Session | undefined;
 
   const script = buildRiddleProofProfileScript(profile);
@@ -351,7 +358,7 @@ export async function runProfileLocal(
       },
     }, store.listArtifacts());
 
-    const persisted = writeOutputFiles(profile, withArtifacts, outputDir, source, store);
+    const persisted = writeOutputFiles(profile, withArtifacts, outputDir, source, options.previewReceipt, store);
     return {
       result: mergeArtifactPaths(profile, persisted.result, persisted.artifacts),
       outputDir,
@@ -368,7 +375,14 @@ export async function runProfileLocal(
       error: `${normalizedError} (${durationMs}ms)`,
       artifacts: collectRiddleProfileArtifactRefs(store.listArtifacts()),
     });
-    const persisted = writeOutputFiles(profile, mergeArtifactPaths(profile, fallback, store.listArtifacts()), outputDir, source, store);
+    const persisted = writeOutputFiles(
+      profile,
+      mergeArtifactPaths(profile, fallback, store.listArtifacts()),
+      outputDir,
+      source,
+      options.previewReceipt,
+      store,
+    );
     return {
       result: mergeArtifactPaths(profile, persisted.result, persisted.artifacts),
       outputDir,
