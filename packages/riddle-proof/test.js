@@ -6414,6 +6414,10 @@ try {
   assert.equal(cliRunProfileRequests.length, baseUrlAliasRequestStart + 1);
   assert.equal(cliRunProfileRequests[baseUrlAliasRequestStart].body.url, "https://preview.example.test/s/ps_alias/profile");
   assert.equal(JSON.parse(readFileSync(path.join(profileOutputDir, "profile-result.json"), "utf8")).status, "passed");
+  const profileObservation = JSON.parse(
+    readFileSync(path.join(profileOutputDir, "observation-receipt.json"), "utf8"),
+  );
+  assert.equal(profileObservation.target.url, "https://example.com/profile");
   const profileSummaryMarkdown = readFileSync(path.join(profileOutputDir, "summary.md"), "utf8");
   assert.match(profileSummaryMarkdown, /^Result: passed$/m);
   assert.match(profileSummaryMarkdown, /What was checked: 16 checks across 1 viewport \(desktop\) on `https:\/\/example\.com\/profile`; 16 passed\./);
