@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.4.5
+
+### Patch Changes
+
+- 38064a1: Allow local Playwright runs to attach immutable Preview receipts and explicit source identity overrides to their Observation receipts.
+
 ## 0.4.4
 
 ### Patch Changes
