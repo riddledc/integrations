@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-riddle-client",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Hosted Riddle API client and job polling helpers for Proof workflows.",
   "license": "MIT",
   "author": "RiddleDC",
