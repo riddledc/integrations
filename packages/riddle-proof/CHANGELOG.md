@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.79
+
+### Patch Changes
+
+- 76e5eac: Resolve hosted Observation targets to absolute URLs by combining the observed route with the requested target origin.
+
 ## 0.8.78
 
 ### Patch Changes
