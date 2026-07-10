@@ -9,12 +9,16 @@ import { createRiddleProofArtifactStore, type LocalArtifactInfo } from "./artifa
 import {
   buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
+  createRiddleProofObservationReceipt,
   createRiddleProofProfileEnvironmentBlockedResult,
   createRiddleProofProfileInsufficientResult,
   extractRiddleProofProfileResult,
   normalizeRiddleProofProfile,
   resolveRiddleProofProfileTargetUrl,
   resolveRiddleProofProfileTimeoutSec,
+  detectRiddlePreviewSource,
+  type RiddleProofObservationReceipt,
+  type RiddleProofSourceIdentity,
   type RiddleProofProfile,
   type RiddleProofProfileResult,
   type RiddleProofProfileRunner,
@@ -32,12 +36,16 @@ export type RunProfileLocalOptions = {
   timeout?: number;
   headful?: boolean;
   browser?: "chromium" | "firefox" | "webkit";
+  source?: RiddleProofSourceIdentity;
+  sourceDirectory?: string;
 };
 
 export type RunProfileLocalResult = {
   result: RiddleProofProfileResult;
   outputDir: string;
   manifestPath: string;
+  observationPath: string;
+  observation: RiddleProofObservationReceipt;
 };
 
 type Session = Awaited<ReturnType<typeof createPlaywrightBrowserSession>>;
@@ -189,9 +197,9 @@ function writeOutputFiles(
   normalizedProfile: RiddleProofProfile,
   result: RiddleProofProfileResult,
   outputDir: string,
+  source: RiddleProofSourceIdentity,
+  store: ReturnType<typeof createRiddleProofArtifactStore>,
 ) {
-  const store = createRiddleProofArtifactStore(outputDir);
-  const artifacts = store.listArtifacts();
   const safeResult = {
     ...result,
     artifacts: {
@@ -220,8 +228,7 @@ function writeOutputFiles(
 
   store.writeJson("proof.json", safeResult);
   store.writeJson("profile-result.json", safeResult);
-
-  const artifactsAfterWrite = store.listArtifacts();
+  const artifactsBeforeSummary = store.listArtifacts();
   store.writeText("summary.md", makeResultSummaryMarkdown(
     normalizedProfile,
     safeResult,
@@ -229,21 +236,44 @@ function writeOutputFiles(
       profileName: normalizedProfile.name,
       runner: LOCAL_RUNNER,
       capturedAt: safeResult.captured_at,
-      artifacts: artifactsAfterWrite,
+      artifacts: artifactsBeforeSummary,
     })),
   ));
-
+  const manifestInput = () => store.listArtifacts().filter((artifact) => artifact.path !== "artifact-manifest.json");
+  store.writeJson("artifact-manifest.json", buildLocalRiddleProofArtifactManifest({
+    profileName: normalizedProfile.name,
+    runner: LOCAL_RUNNER,
+    capturedAt: safeResult.captured_at,
+    artifacts: manifestInput(),
+  }));
+  const observation = createRiddleProofObservationReceipt({
+    comparison_role: "standalone",
+    executor: { kind: "local_playwright", runner: LOCAL_RUNNER },
+    target: { kind: "url", url: summarizeProfileRoute(normalizedProfile) },
+    source,
+    profile_result: safeResult,
+    artifacts: store.listArtifacts().map((artifact) => ({
+      name: artifact.name,
+      path: artifact.path,
+      kind: artifact.kind === "screenshot" ? "image" : artifact.kind,
+      role: artifact.kind === "screenshot" ? "diagnostic" : "data",
+    })),
+    publication: { kind: "local", path: outputDir },
+  });
+  store.writeJson("observation-receipt.json", observation);
   const manifest = buildLocalRiddleProofArtifactManifest({
     profileName: normalizedProfile.name,
     runner: LOCAL_RUNNER,
     capturedAt: safeResult.captured_at,
-    artifacts: artifactsAfterWrite,
+    artifacts: manifestInput(),
   });
   store.writeJson("artifact-manifest.json", manifest);
   return {
     result: safeResult,
     manifestPath: path.join(outputDir, "artifact-manifest.json"),
-    artifacts: artifactsAfterWrite,
+    observationPath: path.join(outputDir, "observation-receipt.json"),
+    observation,
+    artifacts: store.listArtifacts(),
   };
 }
 
@@ -263,6 +293,7 @@ export async function runProfileLocal(
   const timeoutMs = resolveTimeoutMs(profile, { timeout: options.timeout });
   const outputDir = path.resolve(options.outputDir);
   const store = createRiddleProofArtifactStore(outputDir);
+  const source = options.source || detectRiddlePreviewSource(options.sourceDirectory || process.cwd());
   let session: Session | undefined;
 
   const script = buildRiddleProofProfileScript(profile);
@@ -320,11 +351,13 @@ export async function runProfileLocal(
       },
     }, store.listArtifacts());
 
-    const persisted = writeOutputFiles(profile, withArtifacts, outputDir);
+    const persisted = writeOutputFiles(profile, withArtifacts, outputDir, source, store);
     return {
       result: mergeArtifactPaths(profile, persisted.result, persisted.artifacts),
       outputDir,
       manifestPath: persisted.manifestPath,
+      observationPath: persisted.observationPath,
+      observation: persisted.observation,
     };
   } catch (error) {
     const durationMs = Date.now() - scriptStart;
@@ -335,11 +368,13 @@ export async function runProfileLocal(
       error: `${normalizedError} (${durationMs}ms)`,
       artifacts: collectRiddleProfileArtifactRefs(store.listArtifacts()),
     });
-    const persisted = writeOutputFiles(profile, mergeArtifactPaths(profile, fallback, store.listArtifacts()), outputDir);
+    const persisted = writeOutputFiles(profile, mergeArtifactPaths(profile, fallback, store.listArtifacts()), outputDir, source, store);
     return {
       result: mergeArtifactPaths(profile, persisted.result, persisted.artifacts),
       outputDir,
       manifestPath: persisted.manifestPath,
+      observationPath: persisted.observationPath,
+      observation: persisted.observation,
     };
   } finally {
     if (session?.context) await session.context.close().catch(() => {});

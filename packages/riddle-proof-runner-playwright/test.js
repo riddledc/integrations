@@ -50,6 +50,7 @@ try {
   assert.equal(output.result.profile_name, "local-runner-smoke");
   assert.equal(path.resolve(output.outputDir), path.resolve(outputDir));
   assert.equal(output.result.artifacts.proof_json, "proof.json");
+  assert.ok(output.result.artifacts.riddle_artifacts?.some((artifact) => artifact.kind === "screenshot"));
   const requiredFiles = [
     path.join(outputDir, "profile-result.json"),
     path.join(outputDir, "proof.json"),
@@ -57,14 +58,22 @@ try {
     path.join(outputDir, "dom-summary.json"),
     path.join(outputDir, "summary.md"),
     path.join(outputDir, "artifact-manifest.json"),
+    path.join(outputDir, "observation-receipt.json"),
   ];
   for (const file of requiredFiles) {
     assert.equal(existsSync(file), true, `Expected artifact exists: ${file}`);
   }
   const parsedManifest = JSON.parse(readFileSync(path.join(outputDir, "artifact-manifest.json"), "utf8"));
   assert.equal(parsedManifest.version, "riddle-proof-local-runner-manifest.v1");
+  assert.ok(parsedManifest.artifacts.some((artifact) => artifact.kind === "screenshot"));
+  assert.ok(parsedManifest.artifacts.some((artifact) => artifact.path === "observation-receipt.json"));
   const parsedResult = JSON.parse(readFileSync(path.join(outputDir, "profile-result.json"), "utf8"));
   assert.equal(parsedResult.version, "riddle-proof.profile-result.v1");
+  assert.equal(output.observation.version, "riddle-proof.observation-receipt.v1");
+  assert.equal(output.observation.executor.kind, "local_playwright");
+  assert.equal(output.observation.canonical_screenshot?.role, "canonical_screenshot");
+  assert.match(output.observation.canonical_screenshot?.path || "", /^screenshots\//);
+  assert.ok(output.observation.artifacts.some((artifact) => artifact.path === "artifact-manifest.json"));
 
   const helpResult = spawnSync(process.execPath, ["./bin/riddle-proof-playwright", "--help"], {
     encoding: "utf8",
@@ -113,6 +122,7 @@ try {
     JSON.stringify({
       ...profile,
       name: "local-runner-missing-browser-blocked",
+      failure_policy: { environment_blocked: "fail" },
     }),
     "utf8",
   );
@@ -134,7 +144,7 @@ try {
     timeout: 10_000,
   });
   assert.equal(missingBrowserResult.signal, null, missingBrowserResult.stderr || missingBrowserResult.stdout);
-  assert.equal(missingBrowserResult.status, 0, missingBrowserResult.stderr || missingBrowserResult.stdout);
+  assert.equal(missingBrowserResult.status, 1, missingBrowserResult.stderr || missingBrowserResult.stdout);
   assert.equal(missingBrowserResult.stderr, "");
   const parsedMissingBrowserResult = JSON.parse(missingBrowserResult.stdout);
   assert.equal(parsedMissingBrowserResult.result.status, "environment_blocked");
@@ -145,6 +155,27 @@ try {
     JSON.parse(readFileSync(path.join(missingBrowserOutputDir, "profile-result.json"), "utf8")).status,
     "environment_blocked",
   );
+
+  const collectorResult = spawnSync(process.execPath, [
+    "./bin/riddle-proof-playwright",
+    "run-profile",
+    "--profile",
+    missingBrowserProfilePath,
+    "--url",
+    `file://${targetPath}`,
+    "--output",
+    path.join(workspace, "missing-browser-collector-artifacts"),
+    "--always-zero",
+  ], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PLAYWRIGHT_BROWSERS_PATH: missingBrowserPath,
+    },
+    timeout: 10_000,
+  });
+  assert.equal(collectorResult.status, 0, collectorResult.stderr || collectorResult.stdout);
+  assert.equal(JSON.parse(collectorResult.stdout).result.status, "environment_blocked");
 } finally {
   rmSync(workspace, { recursive: true, force: true });
 }

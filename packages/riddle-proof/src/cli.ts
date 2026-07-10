@@ -63,12 +63,23 @@ import { suggestRiddleProofProfileChecks } from "./profile-suggestions";
 import {
   assessRiddleProofChange,
   createRiddleProofChangeReceipt,
+  createRiddleProofHandoffReceipt,
   riddleProofChangeReceiptHtml,
   riddleProofChangeReceiptMarkdown,
   type RiddleProofChangeContract,
   type RiddleProofChangeResult,
   type RiddleProofChangeReceipt,
+  type RiddleProofHandoffReceipt,
 } from "./change-proof";
+import {
+  createRiddleProofObservationReceipt,
+  parseRiddlePreviewReceipt,
+  parseRiddleProofObservationReceipt,
+  type RiddleProofExecutionTelemetry,
+  type RiddleProofObservationReceipt,
+  type RiddlePreviewReceipt,
+  type RiddleProofSourceIdentity,
+} from "./receipts";
 
 type CliOptions = Record<string, string | boolean>;
 type RiddleApiClient = ReturnType<typeof createRiddleApiClient>;
@@ -84,8 +95,14 @@ const KNOWN_CLI_OPTIONS = new Set([
   "balancePreflight",
   "baseUrl",
   "afterResult",
+  "afterObservation",
+  "afterPreviewReceipt",
+  "afterSourceRevision",
   "afterUrl",
   "beforeResult",
+  "beforeObservation",
+  "beforePreviewReceipt",
+  "beforeSourceRevision",
   "beforeUrl",
   "candidateJson",
   "candidatesJson",
@@ -139,6 +156,7 @@ const KNOWN_CLI_OPTIONS = new Set([
   "pack",
   "packFile",
   "profile",
+  "previewReceipt",
   "proofDir",
   "pr",
   "progressEveryMs",
@@ -162,6 +180,9 @@ const KNOWN_CLI_OPTIONS = new Set([
   "scriptFile",
   "selectors",
   "sourceKind",
+  "sourceDirty",
+  "sourceRepository",
+  "sourceRevision",
   "splitViewports",
   "stateDir",
   "statePath",
@@ -194,16 +215,16 @@ function usage() {
     "  riddle-proof-loop respond --state-path <path> --response-json <file|json|->",
     "  riddle-proof-loop respond --state-path <path> --decision <decision> --summary <text> [--payload-json <file|json|->]",
     "  riddle-proof-loop status --state-path <path>",
-    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--base-url <base-url>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
+    "  riddle-proof-loop run-profile --profile <file|json|-> --url <base-url> [--preview-receipt <file|json>] [--source-revision <sha>] [--runner riddle] [--viewport-name <name[,name...]>] [--strict true|false; default false] [--split-viewports true|false; default false] [--balance-preflight true|false; default true] [--poll-attempts n] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json] [--quiet]",
     "  riddle-proof-loop run-profile aggregate --profile <file|json|-> --url <base-url> [--base-url <base-url>] --input-dir <dir>|--inputs <path[,path...]> [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop run-profile recover --profile <file|json|-> --url <base-url> [--base-url <base-url>] --job <job-id> [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
-    "  riddle-proof-loop run-change-proof --profile <file|json|-> --change-contract <file|json|-> (--before-url <url> --after-url <url> | --before-result <file> --after-result <file>) [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
+    "  riddle-proof-loop run-change-proof --profile <file|json|-> --change-contract <file|json|-> (--before-url <url> --after-url <url> | --before-result <file> --after-result <file> | --before-observation <file> --after-observation <file>) [--before-preview-receipt <file|json>] [--after-preview-receipt <file|json>] [--before-source-revision <sha>] [--after-source-revision <sha>] [--viewport-name <name[,name...]>] [--output <dir>|--output-dir <dir>] [--result-format json|compact-json|summary|none; default json]",
     "  riddle-proof-loop profile-suggest --route /path|--url <url> [--changed-files a,b] [--selectors .a,.b] [--changed-text-json <file|json|->] [--format json|profile]",
     "  riddle-proof-loop regression-pack run [--pack oc-flow-regression|--pack-file <file>] [--local-core true|false; default true] [--hosted-riddle true|false; default false] [--format json|markdown|compact-json; default json] [--output <dir>|--output-dir <dir>]",
     "  riddle-proof-loop pr-comment --proof-dir <dir>|--run-response <file> [--result-json <file>] --pr <number|url> [--repo owner/name] [--dry-run] [--body-file <file>] [--comment-mode update|append]",
     "  riddle-proof-loop profile-body-assertions --artifact <file|url|-> --candidates-json <file|json|-> [--required-json <file|json|->] [--format json|body-contains]",
     "  riddle-proof-loop profile-http-status-preflight --profile <file|json|-> --url <base-url> [--format json|summary]",
-    "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static] [--quiet]",
+    "  riddle-proof-loop riddle-preview-deploy <build-dir> <label> [--framework spa|static] [--output <dir>] [--quiet]",
     "  riddle-proof-loop riddle-server-preview <directory> --script-file <file> [--path /route] [--wait-for-selector selector]",
     "  riddle-proof-loop riddle-run-script --url <url> --script-file <file> [--viewport 1280x720] [--strict true|false]",
     "  riddle-proof-loop riddle-poll <job-id> [--wait] [--attempts n] [--quiet]",
@@ -390,6 +411,7 @@ function compactRunProfileResult(result: RiddleProofProfileResult, options: CliO
     output_dir: outputDir,
     output_files: outputDir ? {
       profile_result: "profile-result.json",
+      observation_receipt: "observation-receipt.json",
       summary: "summary.md",
       proof_json: result.evidence ? "proof.json" : undefined,
       console: result.evidence?.console ? "console.json" : undefined,
@@ -1086,8 +1108,10 @@ function formatByteCount(bytes: number | null | undefined) {
 
 function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
   const submittedAt = snapshot.submitted_at || "not-submitted";
-  const queuePart = snapshot.running_without_submission
-    ? ` waiting_for_worker_submit=${formatPollDuration(snapshot.pre_submission_elapsed_ms)} worker_wake=possible${snapshot.queue_elapsed_ms !== null ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""}`
+  const queuePart = snapshot.active_execution
+    ? `${snapshot.queue_elapsed_ms !== null ? ` queue=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""} active_execution=${formatPollDuration(snapshot.elapsed_ms)}`
+    : snapshot.running_without_submission
+      ? ` waiting_for_worker_claim=${formatPollDuration(snapshot.pre_submission_elapsed_ms)} worker_wake=possible${snapshot.queue_elapsed_ms !== null ? ` queued_for=${formatPollDuration(snapshot.queue_elapsed_ms)}` : ""}`
     : snapshot.queue_elapsed_ms !== null
       ? ` queue=${formatPollDuration(snapshot.queue_elapsed_ms)}`
       : "";
@@ -1096,6 +1120,7 @@ function riddlePollProgressLine(snapshot: RiddlePollProgressSnapshot) {
     "[riddle-poll]",
     snapshot.job_id,
     `status=${snapshot.status || "unknown"}`,
+    `phase=${snapshot.phase || "unknown"}`,
     `attempt=${snapshot.attempt}/${snapshot.attempts}`,
     `elapsed=${formatPollDuration(snapshot.elapsed_ms)}`,
     `submitted_at=${submittedAt}${queuePart}${terminalPart}`,
@@ -4798,10 +4823,71 @@ function profileHttpStatusSummaryMarkdown(result: RiddleProofProfileResult): str
   return lines;
 }
 
-function writeProfileOutput(outputDir: string | undefined, result: RiddleProofProfileResult) {
+interface WriteProfileOutputOptions {
+  observation?: RiddleProofObservationReceipt;
+  previewReceipt?: RiddlePreviewReceipt;
+  source?: RiddleProofSourceIdentity;
+  comparisonRole?: "before" | "after" | "standalone";
+}
+
+function profileResultTargetUrl(result: RiddleProofProfileResult) {
+  const legacyRoute = result.route as unknown as { url?: string };
+  return result.route.observed || result.route.requested || legacyRoute.url || result.evidence?.target_url || "unknown";
+}
+
+function profileObservationForOutput(
+  result: RiddleProofProfileResult,
+  outputDir: string,
+  options: WriteProfileOutputOptions,
+) {
+  if (options.observation) return options.observation;
+  const preview = options.previewReceipt;
+  const targetUrl = profileResultTargetUrl(result);
+  return createRiddleProofObservationReceipt({
+    comparison_role: options.comparisonRole || "standalone",
+    executor: result.runner === "local-playwright"
+      ? { kind: "local_playwright", runner: result.runner }
+      : {
+        kind: "riddle_hosted",
+        runner: result.runner,
+        job_id: result.riddle?.job_id,
+        worker_id: typeof result.riddle?.execution?.worker_id === "string" ? result.riddle.execution.worker_id : undefined,
+      },
+    target: preview
+      ? { kind: "preview", url: targetUrl, preview }
+      : { kind: "url", url: targetUrl },
+    source: options.source || preview?.source,
+    profile_result: result,
+    publication: { kind: "local", path: outputDir },
+    execution: result.riddle?.execution as unknown as RiddleProofExecutionTelemetry | undefined,
+  });
+}
+
+function profileOutputOptionsForCli(options: CliOptions): WriteProfileOutputOptions {
+  const previewInput = optionString(options, "previewReceipt");
+  const previewReceipt = previewInput
+    ? parseRiddlePreviewReceipt(readJsonValue(previewInput, "--preview-receipt"))
+    : undefined;
+  const sourceDirty = optionBoolean(options, "sourceDirty");
+  const source: RiddleProofSourceIdentity = {
+    ...(previewReceipt?.source || {}),
+    ...(optionString(options, "sourceRevision") ? { git_revision: optionString(options, "sourceRevision") } : {}),
+    ...(optionString(options, "sourceRepository") ? { repository: optionString(options, "sourceRepository") } : {}),
+    ...(typeof sourceDirty === "boolean" ? { dirty: sourceDirty } : {}),
+  };
+  return { previewReceipt, source };
+}
+
+function writeProfileOutput(
+  outputDir: string | undefined,
+  result: RiddleProofProfileResult,
+  options: WriteProfileOutputOptions = {},
+) {
   if (!outputDir) return;
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(path.join(outputDir, "profile-result.json"), `${JSON.stringify(result, null, 2)}\n`);
+  const observation = profileObservationForOutput(result, outputDir, options);
+  writeFileSync(path.join(outputDir, "observation-receipt.json"), `${JSON.stringify(observation, null, 2)}\n`);
   writeFileSync(path.join(outputDir, "summary.md"), profileResultMarkdown(result));
   if (result.evidence) writeFileSync(path.join(outputDir, "proof.json"), `${JSON.stringify(result, null, 2)}\n`);
   if (result.evidence?.console) writeFileSync(path.join(outputDir, "console.json"), `${JSON.stringify(result.evidence.console, null, 2)}\n`);
@@ -4815,6 +4901,9 @@ interface RunChangeProofCliResult {
   afterResult: RiddleProofProfileResult;
   result: RiddleProofChangeResult;
   receipt: RiddleProofChangeReceipt;
+  handoff: RiddleProofHandoffReceipt;
+  beforeObservation: RiddleProofObservationReceipt;
+  afterObservation: RiddleProofObservationReceipt;
   beforeSource: string;
   afterSource: string;
 }
@@ -4853,6 +4942,18 @@ function profileOptionsForChangeProofSide(options: CliOptions, url: string, outp
   return next;
 }
 
+function observationForChangeSide(
+  observation: RiddleProofObservationReceipt,
+  side: "before" | "after",
+) {
+  if (observation.comparison_role !== "standalone" && observation.comparison_role !== side) {
+    throw new Error(`${side} observation has incompatible comparison_role ${observation.comparison_role}.`);
+  }
+  return observation.comparison_role === side
+    ? observation
+    : { ...observation, comparison_role: side };
+}
+
 function compactChangeProofResult(run: RunChangeProofCliResult, options: CliOptions) {
   const outputDir = profileOutputDirOption(options);
   return {
@@ -4888,9 +4989,13 @@ function compactChangeProofResult(run: RunChangeProofCliResult, options: CliOpti
       change_proof_receipt: "change-proof-receipt.json",
       change_proof_receipt_markdown: "change-proof-receipt.md",
       change_proof_receipt_html: "change-proof-receipt.html",
+      handoff_receipt: "handoff-receipt.json",
+      handoff_receipt_markdown: "handoff-receipt.md",
       summary: "summary.md",
       before_profile_result: "before/profile-result.json",
       after_profile_result: "after/profile-result.json",
+      before_observation_receipt: "before/observation-receipt.json",
+      after_observation_receipt: "after/observation-receipt.json",
     } : undefined,
   };
 }
@@ -4906,9 +5011,11 @@ function writeChangeProofOutput(outputDir: string | undefined, run: RunChangePro
   writeFileSync(path.join(outputDir, "change-proof-receipt.json"), `${JSON.stringify(run.receipt, null, 2)}\n`);
   writeFileSync(path.join(outputDir, "change-proof-receipt.md"), riddleProofChangeReceiptMarkdown(run.receipt));
   writeFileSync(path.join(outputDir, "change-proof-receipt.html"), riddleProofChangeReceiptHtml(run.receipt));
+  writeFileSync(path.join(outputDir, "handoff-receipt.json"), `${JSON.stringify(run.handoff, null, 2)}\n`);
+  writeFileSync(path.join(outputDir, "handoff-receipt.md"), buildRiddleProofPrCommentMarkdown({ result: run.handoff }));
   writeFileSync(path.join(outputDir, "summary.md"), changeProofResultMarkdown(run));
-  writeProfileOutput(changeProofSideOutputDir(outputDir, "before"), run.beforeResult);
-  writeProfileOutput(changeProofSideOutputDir(outputDir, "after"), run.afterResult);
+  writeProfileOutput(changeProofSideOutputDir(outputDir, "before"), run.beforeResult, { observation: run.beforeObservation });
+  writeProfileOutput(changeProofSideOutputDir(outputDir, "after"), run.afterResult, { observation: run.afterObservation });
 }
 
 function writeRunChangeProofResult(run: RunChangeProofCliResult, options: CliOptions) {
@@ -5043,6 +5150,7 @@ function withRiddleMetadata(
       ...(result.riddle || {}),
       job_id: input.job_id || result.riddle?.job_id,
       status: input.status ?? result.riddle?.status,
+      phase: poll?.phase ?? result.riddle?.phase,
       terminal: input.terminal ?? result.riddle?.terminal,
       created_at: poll?.created_at ?? result.riddle?.created_at,
       submitted_at: poll?.submitted_at ?? result.riddle?.submitted_at,
@@ -5056,6 +5164,7 @@ function withRiddleMetadata(
       retry_count: input.retryCount ?? result.riddle?.retry_count,
       stale_job_ids: staleJobIds?.length ? staleJobIds : result.riddle?.stale_job_ids,
       artifact_recovery: input.artifactRecovery ?? result.riddle?.artifact_recovery,
+      execution: (poll?.execution as unknown as Record<string, JsonValue> | undefined) ?? result.riddle?.execution,
     },
     artifacts: {
       ...result.artifacts,
@@ -5141,6 +5250,7 @@ function riddleMetadataFromPoll(
   return {
     job_id: jobId,
     status: poll.status,
+    phase: poll.poll?.phase,
     terminal: poll.terminal,
     created_at: poll.poll?.created_at,
     submitted_at: poll.poll?.submitted_at,
@@ -5151,6 +5261,7 @@ function riddleMetadataFromPoll(
     attempt: poll.poll?.attempt,
     attempts: poll.poll?.attempts,
     timed_out: poll.poll?.timed_out,
+    execution: poll.poll?.execution as unknown as Record<string, JsonValue> | undefined,
   };
 }
 
@@ -5819,7 +5930,7 @@ async function runSplitViewportProfileForCli(
     const childProfile = profileForSplitViewport(profile, viewport);
     const childOutputDir = outputDir ? splitViewportOutputDir(outputDir, viewport.name, seenOutputNames) : undefined;
     const result = await runSingleRiddleProfileForCli(childProfile, options, { ...input, outputDir: childOutputDir });
-    if (childOutputDir) writeProfileOutput(childOutputDir, result);
+    if (childOutputDir) writeProfileOutput(childOutputDir, result, profileOutputOptionsForCli(options));
     childRuns.push({ viewport, profile: childProfile, result });
   }
 
@@ -5961,18 +6072,38 @@ async function runChangeProofForCli(rawProfile: Record<string, unknown>, options
   const contract = readChangeContractForCli(options);
   const beforeResultPath = optionString(options, "beforeResult");
   const afterResultPath = optionString(options, "afterResult");
+  const beforeObservationPath = optionString(options, "beforeObservation");
+  const afterObservationPath = optionString(options, "afterObservation");
   const beforeUrl = optionString(options, "beforeUrl");
   const afterUrl = optionString(options, "afterUrl");
+  const beforePreviewInput = optionString(options, "beforePreviewReceipt");
+  const afterPreviewInput = optionString(options, "afterPreviewReceipt");
+  const beforePreview = beforePreviewInput
+    ? parseRiddlePreviewReceipt(readJsonValue(beforePreviewInput, "--before-preview-receipt"))
+    : undefined;
+  const afterPreview = afterPreviewInput
+    ? parseRiddlePreviewReceipt(readJsonValue(afterPreviewInput, "--after-preview-receipt"))
+    : undefined;
   const hasResultInputs = Boolean(beforeResultPath || afterResultPath);
+  const hasObservationInputs = Boolean(beforeObservationPath || afterObservationPath);
   const hasUrlInputs = Boolean(beforeUrl || afterUrl);
-  if (hasResultInputs && hasUrlInputs) {
-    throw new Error("run-change-proof accepts either --before-result/--after-result or --before-url/--after-url, not both.");
+  if ([hasResultInputs, hasObservationInputs, hasUrlInputs].filter(Boolean).length > 1) {
+    throw new Error("run-change-proof accepts one before/after input pair: result, observation, or URL.");
   }
   if (hasResultInputs && (!beforeResultPath || !afterResultPath)) {
     throw new Error("run-change-proof requires both --before-result and --after-result.");
   }
-  if (!hasResultInputs && (!beforeUrl || !afterUrl)) {
-    throw new Error("run-change-proof requires both --before-url and --after-url unless saved results are provided.");
+  if (hasObservationInputs && (!beforeObservationPath || !afterObservationPath)) {
+    throw new Error("run-change-proof requires both --before-observation and --after-observation.");
+  }
+  if (hasUrlInputs && (!beforeUrl || !afterUrl)) {
+    throw new Error("run-change-proof requires both --before-url and --after-url.");
+  }
+  if (!hasResultInputs && !hasObservationInputs && !hasUrlInputs) {
+    throw new Error("run-change-proof requires a before/after result, observation, or URL pair.");
+  }
+  if ((beforePreview || afterPreview) && !hasUrlInputs) {
+    throw new Error("--before-preview-receipt and --after-preview-receipt require the URL input mode.");
   }
 
   const outputDir = profileOutputDirOption(options);
@@ -5981,16 +6112,54 @@ async function runChangeProofForCli(rawProfile: Record<string, unknown>, options
   let afterResult: RiddleProofProfileResult;
   let beforeSource: string;
   let afterSource: string;
+  let beforeObservation: RiddleProofObservationReceipt;
+  let afterObservation: RiddleProofObservationReceipt;
 
-  if (hasResultInputs) {
+  if (hasObservationInputs) {
+    if (!beforeObservationPath || !afterObservationPath) {
+      throw new Error("run-change-proof requires both --before-observation and --after-observation.");
+    }
+    profile = profileWithSelectedViewportNamesForCli(normalizeProfileRecordForCli(rawProfile, options), options);
+    beforeObservation = observationForChangeSide(
+      parseRiddleProofObservationReceipt(readJsonValue(beforeObservationPath, "--before-observation")),
+      "before",
+    );
+    afterObservation = observationForChangeSide(
+      parseRiddleProofObservationReceipt(readJsonValue(afterObservationPath, "--after-observation")),
+      "after",
+    );
+    if (!beforeObservation.proof?.result || !afterObservation.proof?.result) {
+      throw new Error("Change Proof observations must include their profile results.");
+    }
+    beforeResult = beforeObservation.proof.result;
+    afterResult = afterObservation.proof.result;
+    beforeSource = beforeObservation.target.url;
+    afterSource = afterObservation.target.url;
+  } else if (hasResultInputs) {
     if (!beforeResultPath || !afterResultPath) {
       throw new Error("run-change-proof requires both --before-result and --after-result.");
     }
     profile = profileWithSelectedViewportNamesForCli(normalizeProfileRecordForCli(rawProfile, options), options);
     beforeResult = readProfileResultForCli(beforeResultPath, "--before-result");
     afterResult = readProfileResultForCli(afterResultPath, "--after-result");
-    beforeSource = beforeResultPath;
-    afterSource = afterResultPath;
+    beforeSource = profileResultTargetUrl(beforeResult);
+    afterSource = profileResultTargetUrl(afterResult);
+    beforeObservation = createRiddleProofObservationReceipt({
+      comparison_role: "before",
+      executor: { kind: beforeResult.runner === "local-playwright" ? "local_playwright" : "riddle_hosted", runner: beforeResult.runner, job_id: beforeResult.riddle?.job_id },
+      target: { kind: "url", url: beforeSource },
+      profile_result: beforeResult,
+      execution: beforeResult.riddle?.execution as unknown as RiddleProofExecutionTelemetry | undefined,
+      publication: { kind: "local", path: beforeResultPath },
+    });
+    afterObservation = createRiddleProofObservationReceipt({
+      comparison_role: "after",
+      executor: { kind: afterResult.runner === "local-playwright" ? "local_playwright" : "riddle_hosted", runner: afterResult.runner, job_id: afterResult.riddle?.job_id },
+      target: { kind: "url", url: afterSource },
+      profile_result: afterResult,
+      execution: afterResult.riddle?.execution as unknown as RiddleProofExecutionTelemetry | undefined,
+      publication: { kind: "local", path: afterResultPath },
+    });
   } else {
     if (!beforeUrl || !afterUrl) {
       throw new Error("run-change-proof requires both --before-url and --after-url unless saved results are provided.");
@@ -6004,22 +6173,59 @@ async function runChangeProofForCli(rawProfile: Record<string, unknown>, options
     afterResult = await runProfileForCli(afterProfile, afterOptions);
     beforeSource = beforeUrl;
     afterSource = afterUrl;
+    beforeObservation = createRiddleProofObservationReceipt({
+      comparison_role: "before",
+      executor: { kind: "riddle_hosted", runner: beforeResult.runner, job_id: beforeResult.riddle?.job_id },
+      target: beforePreview
+        ? { kind: "preview", url: beforeSource, preview: beforePreview }
+        : { kind: "url", url: beforeSource },
+      source: beforePreview?.source,
+      profile_result: beforeResult,
+      execution: beforeResult.riddle?.execution as unknown as RiddleProofExecutionTelemetry | undefined,
+    });
+    afterObservation = createRiddleProofObservationReceipt({
+      comparison_role: "after",
+      executor: { kind: "riddle_hosted", runner: afterResult.runner, job_id: afterResult.riddle?.job_id },
+      target: afterPreview
+        ? { kind: "preview", url: afterSource, preview: afterPreview }
+        : { kind: "url", url: afterSource },
+      source: afterPreview?.source,
+      profile_result: afterResult,
+      execution: afterResult.riddle?.execution as unknown as RiddleProofExecutionTelemetry | undefined,
+    });
   }
 
   const result = assessRiddleProofChange(contract, {
     before_result: beforeResult,
     after_result: afterResult,
+    before_observation: beforeObservation,
+    after_observation: afterObservation,
+    expected_source_revisions: {
+      before: optionString(options, "beforeSourceRevision"),
+      after: optionString(options, "afterSourceRevision"),
+    },
   });
   const receipt = createRiddleProofChangeReceipt({
     contract,
     result,
-    before_result: beforeResult,
-    after_result: afterResult,
-    before_source: beforeSource,
-    after_source: afterSource,
+    before_observation: beforeObservation,
+    after_observation: afterObservation,
     profile_name: profile.name,
   });
-  return { profile, contract, beforeResult, afterResult, result, receipt, beforeSource, afterSource };
+  const handoff = createRiddleProofHandoffReceipt(receipt);
+  return {
+    profile,
+    contract,
+    beforeResult,
+    afterResult,
+    result,
+    receipt,
+    handoff,
+    beforeObservation,
+    afterObservation,
+    beforeSource,
+    afterSource,
+  };
 }
 
 function requestForRun(options: CliOptions): RiddleProofRunParams {
@@ -6084,7 +6290,7 @@ async function main() {
       : positional[1] === "aggregate"
         ? await aggregateProfileResultsForCli(profile, options)
       : await runProfileForCli(profile, options);
-    writeProfileOutput(profileOutputDirOption(options), result);
+    writeProfileOutput(profileOutputDirOption(options), result, profileOutputOptionsForCli(options));
     const diagnosticLine = profileCliDiagnosticLine(result);
     if (diagnosticLine && optionBoolean(options, "quiet") !== true) {
       process.stderr.write(`${diagnosticLine}\n`);
@@ -6119,6 +6325,7 @@ async function main() {
     const resultJsonPaths = explicitResultJsonPath
       ? [explicitResultJsonPath]
       : [
+          defaultProofDirJsonPath(proofDir, "handoff-receipt.json"),
           defaultProofDirJsonPath(proofDir, "result.json"),
           defaultProofDirJsonPath(proofDir, "change-proof-receipt.json"),
           defaultProofDirJsonPath(proofDir, "change-proof-result.json"),
@@ -6239,6 +6446,14 @@ async function main() {
       };
     }
     const result = await createRiddleApiClient(clientConfig).deployPreview(buildDir, label, previewFrameworkOption(options));
+    const outputDir = profileOutputDirOption(options);
+    if (outputDir) {
+      mkdirSync(outputDir, { recursive: true });
+      writeFileSync(path.join(outputDir, "preview-deploy-result.json"), `${JSON.stringify(result, null, 2)}\n`);
+      if (result.receipt) {
+        writeFileSync(path.join(outputDir, "preview-receipt.json"), `${JSON.stringify(result.receipt, null, 2)}\n`);
+      }
+    }
     for (const warning of result.warnings ?? []) {
       process.stderr.write(`Warning: ${warning}\n`);
     }

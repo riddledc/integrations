@@ -13,7 +13,8 @@ This document maps package ownership for the open-framework model.
 - `packages/riddle-proof-runner-playwright`
   - Local/runtime-agnostic Playwright execution implementation of the open contracts.
 - `packages/riddle-proof-riddle-client`
-  - Hosted Riddle API client/adapter surface (if this layer is split out from core).
+  - Compatibility facade over the canonical hosted client in
+    `@riddledc/riddle-proof/riddle-client`.
 - `packages/openclaw-riddle-proof`, `packages/openclaw-riddledc`
   - OpenClaw adapters that consume `@riddledc/riddle-proof`.
 - `packages/riddle-mcp`
@@ -21,7 +22,10 @@ This document maps package ownership for the open-framework model.
 
 ## Private infrastructure (not framework)
 
-- Control plane services, worker fleet deployment, billing/fraud/rate enforcement, and secret broker.
+- Control plane services, Preview publisher, Browser API, worker fleet
+  deployment, execution telemetry persistence, scale-to-zero policy,
+  billing/fraud/rate enforcement, and secret broker. These are deployed from
+  the separate `lease-and-runners` repository.
 - Internal service wiring for host-only observability and account management.
 
 ## Boundary invariants
@@ -29,9 +33,11 @@ This document maps package ownership for the open-framework model.
 1. Framework packages should be usable for self-hosted/local CI proof without requiring any private endpoints or private secrets.
 2. Hosted client packages may require private credentials; they should consume framework contracts, not replace them.
 3. Any contract changes to `@riddledc/riddle-proof` should preserve compatibility with adapters that execute profiles in hosted and local paths.
+4. `lease-and-runners` produces hosted receipt and telemetry fields, while the
+   public package parses and evaluates them. Shared fixture assertions must
+   protect that producer/consumer boundary.
 
 ## PR hygiene
 
 - New hosted capabilities should first be represented as contracts or adapters in public packages.
 - Production deployment details, private API endpoints, and cloud-specific controls remain outside the public package boundary.
-

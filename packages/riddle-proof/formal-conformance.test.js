@@ -43,6 +43,15 @@ import {
   createCheckpointResponseTemplate,
   isDuplicateCheckpointResponse,
 } from "./dist/checkpoint.js";
+import {
+  assessRiddleProofChange,
+  createRiddleProofChangeReceipt,
+  createRiddleProofHandoffReceipt,
+  parseRiddleProofHandoffReceipt,
+} from "./dist/change-proof.js";
+import {
+  createRiddleProofObservationReceipt,
+} from "./dist/receipts.js";
 
 const packageRoot = fileURLToPath(new URL(".", import.meta.url));
 const shipPyPath = path.join(packageRoot, "runtime", "lib", "ship.py");
@@ -1352,6 +1361,96 @@ const publicConsumerDefaultSurface = summarizeRiddleProofPublicConsumerSurface({
 assert.equal(publicConsumerDefaultSurface.kind, "run_result");
 assert.equal(publicConsumerDefaultSurface.handoff.merge_recommendation, undefined);
 
+const sourceBoundBeforeObservation = createRiddleProofObservationReceipt({
+  comparison_role: "before",
+  executor: { kind: "local_playwright", runner: "local-playwright" },
+  target: { kind: "url", url: "https://example.com/formal-conformance" },
+  source: { git_revision: "before123", dirty: false },
+  profile_result: completeProfileResult,
+});
+const sourceBoundAfterObservation = createRiddleProofObservationReceipt({
+  comparison_role: "after",
+  executor: { kind: "riddle_hosted", runner: "riddle", job_id: "job_formal_after" },
+  target: {
+    kind: "preview",
+    url: "https://preview.example.com/s/pv_formal/formal-conformance",
+    preview: {
+      version: "riddle.preview-receipt.v1",
+      preview_id: "pv_formal",
+      url: "https://preview.example.com/s/pv_formal/",
+      expires_at: "2099-01-01T00:00:00.000Z",
+      content_digest: "sha256:formal-content",
+      source: { git_revision: "after456", dirty: false },
+      published_at: "2026-07-03T00:00:00.000Z",
+    },
+  },
+  source: { git_revision: "after456", dirty: false },
+  profile_result: completeProfileResult,
+});
+const sourceBoundChangeContract = {
+  name: "Formal source-bound change",
+  source_binding: { after: { preview_receipt_required: true } },
+  deltas: [{
+    type: "profile_status_transition",
+    label: "profile remains conforming",
+    before_status: "passed",
+    after_status: "passed",
+  }],
+};
+const sourceBoundChange = assessRiddleProofChange(sourceBoundChangeContract, {
+  before_observation: sourceBoundBeforeObservation,
+  after_observation: sourceBoundAfterObservation,
+  expected_source_revisions: { after: "after456" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(sourceBoundChange.status, "passed");
+assert.equal(sourceBoundChange.source_bindings.after.status, "matched");
+const wrongTargetSourceBoundChange = assessRiddleProofChange(sourceBoundChangeContract, {
+  before_observation: sourceBoundBeforeObservation,
+  after_observation: {
+    ...sourceBoundAfterObservation,
+    target: {
+      ...sourceBoundAfterObservation.target,
+      url: "https://preview.example.com/s/pv_other/formal-conformance",
+    },
+  },
+  expected_source_revisions: { after: "after456" },
+  evaluated_at: "2026-07-03T01:00:00.000Z",
+});
+assert.equal(wrongTargetSourceBoundChange.status, "proof_insufficient");
+assert.equal(wrongTargetSourceBoundChange.source_bindings.after.status, "mismatched");
+for (const [expectedRevision, expectedStatus] of [
+  ["wrong-revision", "mismatched"],
+  [undefined, "matched"],
+]) {
+  const assessed = assessRiddleProofChange(sourceBoundChangeContract, {
+    before_observation: sourceBoundBeforeObservation,
+    after_observation: sourceBoundAfterObservation,
+    expected_source_revisions: { after: expectedRevision },
+    evaluated_at: "2026-07-03T01:00:00.000Z",
+  });
+  assert.equal(assessed.source_bindings.after.status, expectedStatus);
+  assert.equal(assessed.status, expectedStatus === "matched" ? "passed" : "proof_insufficient");
+}
+const sourceBoundChangeReceipt = createRiddleProofChangeReceipt({
+  contract: sourceBoundChangeContract,
+  result: sourceBoundChange,
+  before_observation: sourceBoundBeforeObservation,
+  after_observation: sourceBoundAfterObservation,
+});
+const sourceBoundHandoff = createRiddleProofHandoffReceipt(sourceBoundChangeReceipt, {
+  created_at: "2026-07-03T01:00:01.000Z",
+});
+assert.equal(parseRiddleProofHandoffReceipt(sourceBoundHandoff).verdict, "mergeable");
+assert.equal(sourceBoundHandoff.shipping_authorization.authorized, false);
+assert.throws(
+  () => parseRiddleProofHandoffReceipt({
+    ...sourceBoundHandoff,
+    recommendation: { ...sourceBoundHandoff.recommendation, merge_recommended: false },
+  }),
+  /preserve the Change receipt verdict and recommendation/,
+);
+
 console.log(JSON.stringify({
   ok: true,
   suite: "riddle-proof.formal-conformance",
@@ -1380,5 +1479,8 @@ console.log(JSON.stringify({
     publicStateConsumerConformance: true,
     publicStateRunSurfaceConformance: true,
     publicStateHostedAgentSummaryConformance: true,
+    previewSourceBindingConformance: true,
+    changeHandoffProjectionConformance: true,
+    recommendationAuthorizationSeparation: true,
   },
 }));

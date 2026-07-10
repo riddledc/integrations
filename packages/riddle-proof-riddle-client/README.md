@@ -1,9 +1,11 @@
 # @riddledc/riddle-proof-riddle-client
 
-Hosted Riddle API client and hosted job helper surface.
+Compatibility package for the hosted Riddle API client and job helpers.
 
-Use this package when you want explicit control of Riddle API primitives,
-rather than the full `@riddledc/riddle-proof` framework bundle.
+The canonical implementation now lives at
+`@riddledc/riddle-proof/riddle-client`. This package re-exports that exact
+implementation so existing consumers keep working without maintaining a
+parallel request, polling, Preview, or source-detection stack.
 
 The package intentionally hosts:
 
@@ -12,22 +14,27 @@ The package intentionally hosts:
 - Poll helpers (`pollRiddleJob`, `isTerminalRiddleJobStatus`)
 - Preview creation helpers (`runRiddleServerPreview`, `runRiddleScript`, `deployRiddleStaticPreview`)
 
-For backward compatibility, `@riddledc/riddle-proof` still exports the same
-client surface at `@riddledc/riddle-proof/riddle-client`.
+New consumers should install `@riddledc/riddle-proof` and import the canonical
+subpath. Existing consumers can remain on this package and migrate without a
+behavior change.
 
 ## Usage
 
 ```bash
-npm install @riddledc/riddle-proof-riddle-client
+npm install @riddledc/riddle-proof
 ```
 
 ```ts
-import { createRiddleApiClient } from "@riddledc/riddle-proof-riddle-client";
+import { createRiddleApiClient } from "@riddledc/riddle-proof/riddle-client";
 
 const client = createRiddleApiClient({ apiKey: process.env.RIDDLE_API_KEY });
 const balance = await client.getBalance();
 console.log("Available seconds:", balance.available_seconds);
 ```
+
+Preview deploys return `receipt` when the hosted Preview service supports
+`riddle.preview-receipt.v1`. The client detects the repository, Git revision,
+and clean/dirty state by default, or accepts an explicit `source` override.
 
 ## Subpaths
 
@@ -38,4 +45,3 @@ console.log("Available seconds:", balance.available_seconds);
 - `./serverPreview`
 - `./polling`
 - `./artifacts`
-

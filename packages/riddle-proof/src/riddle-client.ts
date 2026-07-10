@@ -2,6 +2,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  parseRiddlePreviewReceipt,
+  type RiddlePreviewReceipt,
+  type RiddleProofExecutionTelemetry,
+  type RiddleProofSourceIdentity,
+} from "./receipts";
 
 export const DEFAULT_RIDDLE_API_BASE_URL = "https://api.riddledc.com";
 export const DEFAULT_RIDDLE_API_KEY_FILE = "/tmp/riddle-api-key";
@@ -39,6 +45,7 @@ export interface RiddleBalanceResult {
 export interface RiddlePollProgressSnapshot {
   job_id: string;
   status: string | null;
+  phase: string | null;
   terminal: boolean;
   attempt: number;
   attempts: number;
@@ -49,6 +56,8 @@ export interface RiddlePollProgressSnapshot {
   queue_elapsed_ms: number | null;
   pre_submission_elapsed_ms: number;
   running_without_submission: boolean;
+  active_execution: boolean;
+  execution?: RiddleProofExecutionTelemetry;
 }
 
 export interface RiddlePollSummary extends RiddlePollProgressSnapshot {
@@ -110,10 +119,15 @@ export interface RiddlePreviewDeployResult {
   file_count?: number;
   total_bytes?: number;
   expires_at?: string;
+  receipt?: RiddlePreviewReceipt;
   publish_recovered?: boolean;
   publish_error?: string;
   warnings?: string[];
   raw?: Record<string, unknown>;
+}
+
+export interface RiddlePreviewDeployOptions {
+  source?: RiddleProofSourceIdentity;
 }
 
 export interface RiddleRunScriptInput {
@@ -255,6 +269,9 @@ function previewDeployResultFromRecord(input: {
   warnings?: string[];
 }): RiddlePreviewDeployResult {
   const { record, id, label, framework, expiresAt, publishRecovered, publishError } = input;
+  const receipt = record.receipt && typeof record.receipt === "object"
+    ? parseRiddlePreviewReceipt(record.receipt)
+    : undefined;
   return {
     ok: true,
     id: String(record.id || record.preview_id || id),
@@ -263,11 +280,32 @@ function previewDeployResultFromRecord(input: {
     preview_url: String(record.preview_url || ""),
     file_count: typeof record.file_count === "number" ? record.file_count : undefined,
     total_bytes: typeof record.total_bytes === "number" ? record.total_bytes : undefined,
-    expires_at: expiresAt,
+    expires_at: receipt?.expires_at || expiresAt,
+    receipt,
     publish_recovered: publishRecovered || undefined,
     publish_error: publishError,
     warnings: input.warnings?.length ? input.warnings : undefined,
     raw: record,
+  };
+}
+
+function gitOutput(directory: string, args: string[]) {
+  try {
+    return execFileSync("git", ["-C", directory, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+}
+
+export function detectRiddlePreviewSource(directory: string): RiddleProofSourceIdentity {
+  const gitRevision = gitOutput(directory, ["rev-parse", "HEAD"]);
+  if (!gitRevision) return {};
+  const repository = gitOutput(directory, ["config", "--get", "remote.origin.url"]);
+  const status = gitOutput(directory, ["status", "--porcelain", "--untracked-files=normal"]);
+  return {
+    git_revision: gitRevision,
+    repository: repository || undefined,
+    dirty: Boolean(status),
   };
 }
 
@@ -383,12 +421,14 @@ export async function deployRiddlePreview(
   directory: string,
   label: string,
   framework: RiddlePreviewFramework = "static",
+  options: RiddlePreviewDeployOptions = {},
 ): Promise<RiddlePreviewDeployResult> {
   if (!directory?.trim()) throw new Error("directory is required");
   if (!label?.trim()) throw new Error("label is required");
   if (framework !== "spa" && framework !== "static") throw new Error("framework must be spa or static");
   const startedAt = Date.now();
   const warnings = collectRiddlePreviewDeployWarnings(directory, framework);
+  const source = options.source || detectRiddlePreviewSource(directory);
   const emitProgress = previewProgressEmitter(config, { label, framework, directory, startedAt, warnings });
   await emitProgress({ stage: "validating", message: "checking preview input directory" });
   const localSummary = summarizePreviewDirectory(directory);
@@ -401,7 +441,7 @@ export async function deployRiddlePreview(
 
   const created = await riddleRequestJson<Record<string, unknown>>(config, "/v1/preview", {
     method: "POST",
-    body: JSON.stringify({ framework, label }),
+    body: JSON.stringify({ framework, label, source }),
   });
   const id = String(created.id || "");
   const uploadUrl = String(created.upload_url || "");
@@ -563,8 +603,9 @@ export async function deployRiddleStaticPreview(
   config: RiddleClientConfig,
   directory: string,
   label: string,
+  options: RiddlePreviewDeployOptions = {},
 ): Promise<RiddlePreviewDeployResult> {
-  return deployRiddlePreview(config, directory, label, "static");
+  return deployRiddlePreview(config, directory, label, "static", options);
 }
 
 function createTarball(directory: string, label: string, exclude: string[] = []) {
@@ -715,21 +756,33 @@ function buildPollSnapshot(
   input: { attempt: number; attempts: number; startedAt: number; observedAt: number; preSubmissionElapsedMs?: number },
 ): RiddlePollProgressSnapshot {
   const status = job?.status ? String(job.status) : null;
+  const phase = job?.phase ? String(job.phase) : null;
   const terminal = isTerminalRiddleJobStatus(status);
   const createdAt = stringField(job, "created_at");
   const submittedAt = stringField(job, "submitted_at");
   const completedAt = stringField(job, "completed_at");
   const createdMs = parseTimestampMs(createdAt);
   const submittedMs = parseTimestampMs(submittedAt);
+  const rawExecution = job?.execution && typeof job.execution === "object" && !Array.isArray(job.execution)
+    ? job.execution as Record<string, unknown>
+    : null;
+  const enqueuedAt = rawExecution ? stringField(rawExecution, "enqueued_at") : null;
+  const enqueuedMs = parseTimestampMs(enqueuedAt);
+  const queueStartedMs = enqueuedMs ?? createdMs;
+  const claimedAt = rawExecution ? stringField(rawExecution, "claimed_at") : null;
+  const claimedMs = parseTimestampMs(claimedAt);
   let queueElapsedMs: number | null = null;
-  if (createdMs !== null && submittedMs !== null) {
-    queueElapsedMs = Math.max(0, submittedMs - createdMs);
-  } else if (createdMs !== null && !submittedAt && !terminal) {
-    queueElapsedMs = Math.max(0, input.observedAt - createdMs);
+  if (queueStartedMs !== null && claimedMs !== null) {
+    queueElapsedMs = Math.max(0, claimedMs - queueStartedMs);
+  } else if (queueStartedMs !== null && submittedMs !== null) {
+    queueElapsedMs = Math.max(0, submittedMs - queueStartedMs);
+  } else if (queueStartedMs !== null && !submittedAt && !terminal) {
+    queueElapsedMs = Math.max(0, input.observedAt - queueStartedMs);
   }
   return {
     job_id: jobId,
     status,
+    phase,
     terminal,
     attempt: input.attempt,
     attempts: input.attempts,
@@ -740,6 +793,8 @@ function buildPollSnapshot(
     queue_elapsed_ms: queueElapsedMs,
     pre_submission_elapsed_ms: Math.max(0, Math.floor(input.preSubmissionElapsedMs ?? 0)),
     running_without_submission: Boolean(status && !terminal && !submittedAt),
+    active_execution: Boolean(status === "running" && phase && phase !== "queued"),
+    execution: rawExecution ? rawExecution as unknown as RiddleProofExecutionTelemetry : undefined,
   };
 }
 
@@ -755,7 +810,7 @@ function pollMessage(snapshot: RiddlePollProgressSnapshot, timedOut: boolean) {
   const preSubmit = snapshot.pre_submission_elapsed_ms > 0
     ? ` pre_submission_elapsed_ms=${snapshot.pre_submission_elapsed_ms}`
     : "";
-  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} submitted_at=${submitted}.${wakeHint}${queue}${preSubmit}`;
+  return `Riddle job ${snapshot.job_id} did not reach a terminal status after ${snapshot.attempt} poll attempts; status=${snapshot.status || "unknown"} phase=${snapshot.phase || "unknown"} submitted_at=${submitted}.${wakeHint}${queue}${preSubmit}`;
 }
 
 export async function pollRiddleJob(
@@ -795,6 +850,7 @@ export async function pollRiddleJob(
     };
     const progressKey = [
       lastSnapshot.status || "unknown",
+      lastSnapshot.phase || "unknown",
       lastSnapshot.terminal ? "terminal" : "nonterminal",
       lastSnapshot.submitted_at ? "submitted" : "unsubmitted",
     ].join(":");
@@ -874,10 +930,10 @@ export function createRiddleApiClient(config: RiddleClientConfig = {}) {
       riddleRequestJson<T>(config, pathname, init),
     getBalance: () =>
       getRiddleBalance(config),
-    deployPreview: (directory: string, label: string, framework: RiddlePreviewFramework = "static") =>
-      deployRiddlePreview(config, directory, label, framework),
-    deployStaticPreview: (directory: string, label: string) =>
-      deployRiddleStaticPreview(config, directory, label),
+    deployPreview: (directory: string, label: string, framework: RiddlePreviewFramework = "static", options?: RiddlePreviewDeployOptions) =>
+      deployRiddlePreview(config, directory, label, framework, options),
+    deployStaticPreview: (directory: string, label: string, options?: RiddlePreviewDeployOptions) =>
+      deployRiddleStaticPreview(config, directory, label, options),
     runScript: (input: RiddleRunScriptInput) =>
       runRiddleScript(config, input),
     runServerPreview: (input: RiddleServerPreviewInput) =>
