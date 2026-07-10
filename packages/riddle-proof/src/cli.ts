@@ -4832,7 +4832,23 @@ interface WriteProfileOutputOptions {
 
 function profileResultTargetUrl(result: RiddleProofProfileResult) {
   const legacyRoute = result.route as unknown as { url?: string };
-  return result.route.observed || result.route.requested || legacyRoute.url || result.evidence?.target_url || "unknown";
+  const observed = result.route.observed;
+  const requested = result.route.requested || legacyRoute.url || result.evidence?.target_url;
+  if (observed) {
+    try {
+      return new URL(observed, requested).href;
+    } catch {
+      // Fall through to the absolute request target or the raw observed route.
+    }
+  }
+  if (requested) {
+    try {
+      return new URL(requested).href;
+    } catch {
+      return requested;
+    }
+  }
+  return observed || "unknown";
 }
 
 function profileObservationForOutput(
