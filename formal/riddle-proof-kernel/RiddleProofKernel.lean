@@ -15,6 +15,7 @@ inductive CheckStatus where
   | passed
   | failed
   | skipped
+  | proofInsufficient
   | needsHumanReview
   deriving DecidableEq, Repr, BEq
 
@@ -59,6 +60,9 @@ def missingRequiredArtifact (input : VerdictInput) : Bool :=
 def hasHumanReviewCheck (input : VerdictInput) : Bool :=
   hasCheck CheckStatus.needsHumanReview input.checkStatuses
 
+def hasInsufficientCheck (input : VerdictInput) : Bool :=
+  hasCheck CheckStatus.proofInsufficient input.checkStatuses
+
 def hasFailedCheck (input : VerdictInput) : Bool :=
   hasCheck CheckStatus.failed input.checkStatuses
 
@@ -77,6 +81,8 @@ def currentProfileStatusFromEvidence (input : VerdictInput) : Verdict :=
   else if input.hasNavigationError = true then
     Verdict.environmentBlocked
   else if missingExpectedViewports input = true then
+    Verdict.proofInsufficient
+  else if hasInsufficientCheck input = true then
     Verdict.proofInsufficient
   else if hasHumanReviewCheck input = true then
     Verdict.needsHumanReview
@@ -108,6 +114,8 @@ def verdict (input : VerdictInput) : Verdict :=
   else if missingExpectedViewports input = true then
     Verdict.proofInsufficient
   else if missingRequiredArtifact input = true then
+    Verdict.proofInsufficient
+  else if hasInsufficientCheck input = true then
     Verdict.proofInsufficient
   else if hasHumanReviewCheck input = true then
     Verdict.needsHumanReview
@@ -218,6 +226,48 @@ theorem missing_required_artifact_never_passes
     verdict input ≠ Verdict.passed := by
   simp [verdict, hEvidence, hViewports, hChecks, hNavigation, hExpected, hArtifact]
 
+theorem insufficient_check_yields_insufficient
+    (input : VerdictInput)
+    (hEvidence : input.evidencePresent ≠ false)
+    (hViewports : input.observedViewportCount ≠ 0)
+    (hChecks : input.checkStatuses ≠ [])
+    (hNavigation : input.hasNavigationError ≠ true)
+    (hExpected : missingExpectedViewports input ≠ true)
+    (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input = true) :
+    verdict input = Verdict.proofInsufficient := by
+  simp [
+    verdict,
+    hEvidence,
+    hViewports,
+    hChecks,
+    hNavigation,
+    hExpected,
+    hArtifact,
+    hInsufficient
+  ]
+
+theorem insufficient_check_never_passes
+    (input : VerdictInput)
+    (hEvidence : input.evidencePresent ≠ false)
+    (hViewports : input.observedViewportCount ≠ 0)
+    (hChecks : input.checkStatuses ≠ [])
+    (hNavigation : input.hasNavigationError ≠ true)
+    (hExpected : missingExpectedViewports input ≠ true)
+    (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input = true) :
+    verdict input ≠ Verdict.passed := by
+  simp [
+    verdict,
+    hEvidence,
+    hViewports,
+    hChecks,
+    hNavigation,
+    hExpected,
+    hArtifact,
+    hInsufficient
+  ]
+
 theorem human_review_check_yields_review
     (input : VerdictInput)
     (hEvidence : input.evidencePresent ≠ false)
@@ -226,9 +276,10 @@ theorem human_review_check_yields_review
     (hNavigation : input.hasNavigationError ≠ true)
     (hExpected : missingExpectedViewports input ≠ true)
     (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input ≠ true)
     (hReview : hasHumanReviewCheck input = true) :
     verdict input = Verdict.needsHumanReview := by
-  simp [verdict, hEvidence, hViewports, hChecks, hNavigation, hExpected, hArtifact, hReview]
+  simp [verdict, hEvidence, hViewports, hChecks, hNavigation, hExpected, hArtifact, hInsufficient, hReview]
 
 theorem human_review_check_never_passes
     (input : VerdictInput)
@@ -238,9 +289,10 @@ theorem human_review_check_never_passes
     (hNavigation : input.hasNavigationError ≠ true)
     (hExpected : missingExpectedViewports input ≠ true)
     (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input ≠ true)
     (hReview : hasHumanReviewCheck input = true) :
     verdict input ≠ Verdict.passed := by
-  simp [verdict, hEvidence, hViewports, hChecks, hNavigation, hExpected, hArtifact, hReview]
+  simp [verdict, hEvidence, hViewports, hChecks, hNavigation, hExpected, hArtifact, hInsufficient, hReview]
 
 theorem failed_check_yields_product_regression
     (input : VerdictInput)
@@ -250,6 +302,7 @@ theorem failed_check_yields_product_regression
     (hNavigation : input.hasNavigationError ≠ true)
     (hExpected : missingExpectedViewports input ≠ true)
     (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input ≠ true)
     (hReview : hasHumanReviewCheck input ≠ true)
     (hFailed : hasFailedCheck input = true) :
     verdict input = Verdict.productRegression := by
@@ -261,6 +314,7 @@ theorem failed_check_yields_product_regression
     hNavigation,
     hExpected,
     hArtifact,
+    hInsufficient,
     hReview,
     hFailed
   ]
@@ -273,6 +327,7 @@ theorem failed_check_never_passes
     (hNavigation : input.hasNavigationError ≠ true)
     (hExpected : missingExpectedViewports input ≠ true)
     (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input ≠ true)
     (hReview : hasHumanReviewCheck input ≠ true)
     (hFailed : hasFailedCheck input = true) :
     verdict input ≠ Verdict.passed := by
@@ -284,6 +339,7 @@ theorem failed_check_never_passes
     hNavigation,
     hExpected,
     hArtifact,
+    hInsufficient,
     hReview,
     hFailed
   ]
@@ -296,6 +352,7 @@ theorem clean_complete_evidence_passes
     (hNavigation : input.hasNavigationError ≠ true)
     (hExpected : missingExpectedViewports input ≠ true)
     (hArtifact : missingRequiredArtifact input ≠ true)
+    (hInsufficient : hasInsufficientCheck input ≠ true)
     (hReview : hasHumanReviewCheck input ≠ true)
     (hFailed : hasFailedCheck input ≠ true) :
     verdict input = Verdict.passed := by
@@ -307,6 +364,7 @@ theorem clean_complete_evidence_passes
     hNavigation,
     hExpected,
     hArtifact,
+    hInsufficient,
     hReview,
     hFailed
   ]
@@ -3763,7 +3821,92 @@ theorem stale_agent_summary_surface_violates_held_public_state :
   native_decide
 
 /-!
-Layer 6: before/after change proof contracts.
+Layer 6: ordered temporal trace semantics.
+
+The browser supplies a finite trace and the runtime supplies one witness index
+for each required event. This model does not prove that a sample describes the
+physical world. It proves the framework rule that missing trace fields are
+insufficient and that a passing event sequence has complete, strictly ordered
+witnesses.
+-/
+
+def strictlyIncreasing : List Nat → Bool
+  | [] => true
+  | [_] => true
+  | first :: second :: rest =>
+      decide (first < second) && strictlyIncreasing (second :: rest)
+
+structure OrderedTraceInput where
+  tracePresent : Bool
+  requiredFieldsPresent : Bool
+  expectedEventCount : Nat
+  witnessIndices : List Nat
+  deriving Repr
+
+def orderedTraceCheckStatus (input : OrderedTraceInput) : CheckStatus :=
+  if input.tracePresent = false then
+    CheckStatus.proofInsufficient
+  else if input.requiredFieldsPresent = false then
+    CheckStatus.proofInsufficient
+  else if input.witnessIndices.length ≠ input.expectedEventCount then
+    CheckStatus.failed
+  else if strictlyIncreasing input.witnessIndices = false then
+    CheckStatus.failed
+  else
+    CheckStatus.passed
+
+theorem ordered_trace_missing_is_insufficient
+    (input : OrderedTraceInput)
+    (hMissing : input.tracePresent = false) :
+    orderedTraceCheckStatus input = CheckStatus.proofInsufficient := by
+  simp [orderedTraceCheckStatus, hMissing]
+
+theorem ordered_trace_missing_fields_is_insufficient
+    (input : OrderedTraceInput)
+    (hTrace : input.tracePresent ≠ false)
+    (hFields : input.requiredFieldsPresent = false) :
+    orderedTraceCheckStatus input = CheckStatus.proofInsufficient := by
+  simp [orderedTraceCheckStatus, hTrace, hFields]
+
+theorem ordered_trace_pass_has_complete_strict_witnesses
+    (input : OrderedTraceInput)
+    (hPassed : orderedTraceCheckStatus input = CheckStatus.passed) :
+    input.tracePresent ≠ false
+      ∧ input.requiredFieldsPresent ≠ false
+      ∧ input.witnessIndices.length = input.expectedEventCount
+      ∧ strictlyIncreasing input.witnessIndices ≠ false := by
+  by_cases hTrace : input.tracePresent = false
+  · simp [orderedTraceCheckStatus, hTrace] at hPassed
+  by_cases hFields : input.requiredFieldsPresent = false
+  · simp [orderedTraceCheckStatus, hTrace, hFields] at hPassed
+  by_cases hCount : input.witnessIndices.length = input.expectedEventCount
+  · by_cases hStrict : strictlyIncreasing input.witnessIndices = false
+    · simp [orderedTraceCheckStatus, hTrace, hFields, hCount, hStrict] at hPassed
+    · exact ⟨hTrace, hFields, hCount, hStrict⟩
+  · simp [orderedTraceCheckStatus, hTrace, hFields, hCount] at hPassed
+
+theorem ordered_trace_same_sample_cannot_witness_two_events
+    (index : Nat) :
+    orderedTraceCheckStatus {
+      tracePresent := true
+      requiredFieldsPresent := true
+      expectedEventCount := 2
+      witnessIndices := [index, index]
+    } = CheckStatus.failed := by
+  simp [orderedTraceCheckStatus, strictlyIncreasing]
+
+def exampleWeightShiftTrace : OrderedTraceInput where
+  tracePresent := true
+  requiredFieldsPresent := true
+  expectedEventCount := 5
+  witnessIndices := [0, 1, 2, 3, 5]
+
+theorem example_weight_shift_trace_passes :
+    orderedTraceCheckStatus exampleWeightShiftTrace = CheckStatus.passed := by
+  native_decide
+
+/-!
+Layer 7: before/after change proof contracts.
 
 This models the "two grouped contracts" shape:
 
@@ -3782,6 +3925,35 @@ inductive DeltaStatus where
   | failed
   | missing
   deriving DecidableEq, Repr, BEq
+
+def checkStatusTransitionDelta
+    (beforeObserved afterObserved : Option CheckStatus)
+    (beforeExpected afterExpected : CheckStatus) : DeltaStatus :=
+  match beforeObserved, afterObserved with
+  | some beforeStatus, some afterStatus =>
+      if beforeStatus = beforeExpected ∧ afterStatus = afterExpected then
+        DeltaStatus.passed
+      else
+        DeltaStatus.failed
+  | _, _ => DeltaStatus.missing
+
+theorem failed_to_passed_check_transition_passes :
+    checkStatusTransitionDelta
+      (some CheckStatus.failed)
+      (some CheckStatus.passed)
+      CheckStatus.failed
+      CheckStatus.passed = DeltaStatus.passed := by
+  native_decide
+
+theorem missing_check_transition_is_missing
+    (afterObserved : Option CheckStatus)
+    (beforeExpected afterExpected : CheckStatus) :
+    checkStatusTransitionDelta
+      none
+      afterObserved
+      beforeExpected
+      afterExpected = DeltaStatus.missing := by
+  cases afterObserved <;> rfl
 
 inductive SourceBindingStatus where
   | notRequired

@@ -499,6 +499,7 @@ The package includes generic starter profiles:
 - `examples/profiles/handled-recovery-action-malformed-success.json` for action recovery profiles where the request succeeds at HTTP level but returns an unusable body.
 - `examples/profiles/terminal-result-partial-evidence.json` for API-console terminal error or timeout receipts that preserve partial screenshot, console, and HAR evidence.
 - `examples/profiles/gameplay-window-call-until.json` for gameplay profiles that wait on a runtime state contract instead of a fixed sleep.
+- `examples/profiles/ordered-trace.json` for interaction profiles that require named runtime events to occur in strict temporal order.
 - `examples/profiles/spa-route-exit-state-hygiene.json` for SPA routes that must clean up short-lived proof helpers, receipts, timers, input state, or touch state after visible UI navigation exits the route.
 
 Copy one of those shapes into a repository profile directory and replace the
@@ -807,6 +808,44 @@ preferred shape for long canvas gameplay loops. Setup receipt sampling favors
 both first and last per-viewport receipts before filling remaining space, so
 late lifecycle phases such as terminal or restart remain visible in compact
 summaries.
+
+Use `ordered_trace` when one point-in-time assertion cannot establish the
+behavior, such as input -> response -> motion -> release -> idle. A labeled
+`window_eval`, `window_call`, or `window_call_until` setup action must return a
+JSON object containing the trace. The check declares predicates for each named
+event and records the earliest strictly increasing witness indices plus compact
+observed values:
+
+```json
+{
+  "type": "ordered_trace",
+  "label": "input to release",
+  "setup_action_label": "capture interaction trace",
+  "trace_path": "trace",
+  "events": [
+    {
+      "label": "input",
+      "predicates": [{ "path": "target", "op": "abs_gte", "value": 0.8 }]
+    },
+    {
+      "label": "response",
+      "predicates": [{ "path": "applied", "op": "abs_gte", "value": 0.1 }]
+    },
+    {
+      "label": "released",
+      "predicates": [{ "path": "active", "op": "equals", "value": false }]
+    }
+  ]
+}
+```
+
+Supported predicate operators are `exists`, `equals`, `not_equals`, `truthy`,
+`falsy`, `gt`, `gte`, `lt`, `lte`, `abs_gt`, `abs_gte`, `abs_lt`, and
+`abs_lte`. Missing or empty traces and fields that never appear are
+`proof_insufficient`; a complete trace that does not contain the sequence is a
+`failed` product check. One sample cannot witness two successive events. This
+keeps missing instrumentation distinct from a measured regression and lets an
+ordinary Change Proof `check_status_transition` require `failed -> passed`.
 
 `target.timeout_sec` is optional. Use it for known-heavy profile targets so the
 profile carries its own hosted Riddle worker budget; an explicit CLI `--timeout`

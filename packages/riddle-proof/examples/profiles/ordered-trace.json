@@ -1,0 +1,58 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "ordered-interaction-trace",
+  "target": {
+    "route": "/",
+    "viewports": [
+      { "name": "tablet", "width": 768, "height": 1024 }
+    ],
+    "setup_actions": [
+      {
+        "type": "window_eval",
+        "label": "capture interaction trace",
+        "script": "return { trace: Array.isArray(window.__RIDDLE_PROOF_TRACE__) ? window.__RIDDLE_PROOF_TRACE__ : [] };"
+      }
+    ]
+  },
+  "checks": [
+    { "type": "route_loaded", "expected_path": "/" },
+    {
+      "type": "ordered_trace",
+      "label": "input to release",
+      "setup_action_label": "capture interaction trace",
+      "trace_path": "trace",
+      "events": [
+        {
+          "label": "input",
+          "predicates": [
+            { "path": "active", "op": "equals", "value": true },
+            { "path": "target", "op": "abs_gte", "value": 0.8 }
+          ]
+        },
+        {
+          "label": "response",
+          "predicates": [
+            { "path": "applied", "op": "abs_gte", "value": 0.1 }
+          ]
+        },
+        {
+          "label": "release",
+          "predicates": [
+            { "path": "active", "op": "equals", "value": false },
+            { "path": "applied", "op": "abs_gte", "value": 0.05 }
+          ]
+        },
+        {
+          "label": "idle",
+          "predicates": [
+            { "path": "active", "op": "equals", "value": false },
+            { "path": "applied", "op": "equals", "value": 0 }
+          ]
+        }
+      ]
+    },
+    { "type": "no_fatal_console_errors" }
+  ],
+  "artifacts": ["screenshot", "console", "dom_summary", "proof_json"],
+  "baseline_policy": "invariant_only"
+}

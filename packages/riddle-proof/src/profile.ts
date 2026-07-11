@@ -29,6 +29,7 @@ export const RIDDLE_PROOF_PROFILE_CHECK_TYPES = [
   "selector_text_visible",
   "selector_text_absent",
   "selector_text_order",
+  "ordered_trace",
   "observe_within",
   "frame_text_visible",
   "frame_url_equals",
@@ -150,6 +151,56 @@ export type RiddleProofProfileJsonValueType =
   | "number"
   | "object"
   | "string";
+
+export const RIDDLE_PROOF_ORDERED_TRACE_OPERATORS = [
+  "exists",
+  "equals",
+  "not_equals",
+  "truthy",
+  "falsy",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "abs_gt",
+  "abs_gte",
+  "abs_lt",
+  "abs_lte",
+] as const;
+
+export type RiddleProofOrderedTraceOperator = typeof RIDDLE_PROOF_ORDERED_TRACE_OPERATORS[number];
+
+export interface RiddleProofOrderedTracePredicate {
+  path: string;
+  op: RiddleProofOrderedTraceOperator;
+  value?: JsonValue;
+}
+
+export interface RiddleProofOrderedTraceEvent {
+  label: string;
+  predicates: RiddleProofOrderedTracePredicate[];
+}
+
+export interface RiddleProofOrderedTraceWitness {
+  label: string;
+  index: number;
+  observations: Array<{
+    path: string;
+    op: RiddleProofOrderedTraceOperator;
+    expected?: JsonValue;
+    observed: JsonValue;
+  }>;
+}
+
+export interface RiddleProofOrderedTraceAssessment {
+  version: "riddle-proof.ordered-trace-assessment.v1";
+  status: "passed" | "failed" | "proof_insufficient";
+  trace_length: number;
+  witnesses: RiddleProofOrderedTraceWitness[];
+  missing_event?: string;
+  missing_paths?: string[];
+  reason?: string;
+}
 
 export interface RiddleProofProfileHttpStatusBodyJsonAssertion {
   label?: string;
@@ -401,6 +452,9 @@ export interface RiddleProofProfileCheck {
   body_not_patterns?: string[];
   body_json_assertions?: RiddleProofProfileHttpStatusBodyJsonAssertion[];
   expected_texts?: string[];
+  setup_action_label?: string;
+  trace_path?: string;
+  events?: RiddleProofOrderedTraceEvent[];
   link_selector?: string;
   source_selector?: string;
   route_path_prefix?: string;
@@ -524,7 +578,7 @@ export interface RiddleProofProfileEvidence {
 export interface RiddleProofProfileCheckResult {
   type: RiddleProofProfileCheckType | (string & {});
   label?: string;
-  status: "passed" | "failed" | "skipped" | "needs_human_review";
+  status: "passed" | "failed" | "skipped" | "proof_insufficient" | "needs_human_review";
   evidence: Record<string, JsonValue>;
   message?: string;
 }
@@ -915,6 +969,206 @@ function resolveJsonPath(root: unknown, path: string): { exists: boolean; value?
   return { exists: true, value: current };
 }
 
+export function assessRiddleProofOrderedTrace(
+  trace: unknown,
+  events: RiddleProofOrderedTraceEvent[],
+): RiddleProofOrderedTraceAssessment {
+  const insufficient = (
+    reason: string,
+    traceLength = Array.isArray(trace) ? trace.length : 0,
+    witnesses: RiddleProofOrderedTraceWitness[] = [],
+    missingEvent?: string,
+    missingPaths?: string[],
+  ): RiddleProofOrderedTraceAssessment => ({
+    version: "riddle-proof.ordered-trace-assessment.v1",
+    status: "proof_insufficient",
+    trace_length: traceLength,
+    witnesses,
+    missing_event: missingEvent,
+    missing_paths: missingPaths,
+    reason,
+  });
+  const parsePath = (path: string): Array<string | number> => {
+    const segments: Array<string | number> = [];
+    let token = "";
+    const pushToken = () => {
+      const value = token.trim();
+      if (value) segments.push(value);
+      token = "";
+    };
+    for (let index = 0; index < path.length; index += 1) {
+      const char = path[index];
+      if (char === ".") {
+        pushToken();
+        continue;
+      }
+      if (char !== "[") {
+        token += char;
+        continue;
+      }
+      pushToken();
+      const closeIndex = path.indexOf("]", index + 1);
+      if (closeIndex === -1) throw new Error(`unterminated bracket at ${index}`);
+      const bracket = path.slice(index + 1, closeIndex).trim();
+      if (!bracket) throw new Error(`empty bracket at ${index}`);
+      if (/^\d+$/.test(bracket)) {
+        segments.push(Number(bracket));
+      } else {
+        segments.push(bracket.replace(/^['"]|['"]$/g, ""));
+      }
+      index = closeIndex;
+    }
+    pushToken();
+    return segments;
+  };
+  const resolve = (root: unknown, path: string): { exists: boolean; value?: unknown } => {
+    let segments: Array<string | number>;
+    try {
+      segments = parsePath(path);
+    } catch {
+      return { exists: false };
+    }
+    let current = root;
+    for (const segment of segments) {
+      if (Array.isArray(current)) {
+        const index = typeof segment === "number" ? segment : /^\d+$/.test(segment) ? Number(segment) : -1;
+        if (index < 0 || index >= current.length) return { exists: false };
+        current = current[index];
+        continue;
+      }
+      if (typeof segment !== "string" || current === null || typeof current !== "object") return { exists: false };
+      if (!Object.hasOwn(current, segment)) return { exists: false };
+      current = (current as Record<string, unknown>)[segment];
+    }
+    return { exists: true, value: current };
+  };
+  const valuesEqual = (left: unknown, right: unknown): boolean => {
+    if (Object.is(left, right)) return true;
+    if (Array.isArray(left) || Array.isArray(right)) {
+      return Array.isArray(left)
+        && Array.isArray(right)
+        && left.length === right.length
+        && left.every((value, index) => valuesEqual(value, right[index]));
+    }
+    if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false;
+    const leftRecord = left as Record<string, unknown>;
+    const rightRecord = right as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord).sort();
+    const rightKeys = Object.keys(rightRecord).sort();
+    return leftKeys.length === rightKeys.length
+      && leftKeys.every((key, index) => key === rightKeys[index] && valuesEqual(leftRecord[key], rightRecord[key]));
+  };
+  const numericOperator = (op: RiddleProofOrderedTraceOperator) => [
+    "gt", "gte", "lt", "lte", "abs_gt", "abs_gte", "abs_lt", "abs_lte",
+  ].includes(op);
+  const matches = (value: unknown, predicate: RiddleProofOrderedTracePredicate): boolean => {
+    if (predicate.op === "exists") return true;
+    if (predicate.op === "equals") return valuesEqual(value, predicate.value);
+    if (predicate.op === "not_equals") return !valuesEqual(value, predicate.value);
+    if (predicate.op === "truthy") return Boolean(value);
+    if (predicate.op === "falsy") return !value;
+    const observed = typeof value === "number" ? value : Number.NaN;
+    const expected = typeof predicate.value === "number" ? predicate.value : Number.NaN;
+    if (!Number.isFinite(observed) || !Number.isFinite(expected)) return false;
+    const candidate = predicate.op.startsWith("abs_") ? Math.abs(observed) : observed;
+    if (predicate.op === "gt" || predicate.op === "abs_gt") return candidate > expected;
+    if (predicate.op === "gte" || predicate.op === "abs_gte") return candidate >= expected;
+    if (predicate.op === "lt" || predicate.op === "abs_lt") return candidate < expected;
+    return candidate <= expected;
+  };
+
+  if (!Array.isArray(trace) || trace.length === 0) return insufficient("trace_missing_or_empty");
+  if (!Array.isArray(events) || events.length === 0) return insufficient("events_missing", trace.length);
+
+  for (const event of events) {
+    const missingPaths = event.predicates
+      .filter((predicate) => !trace.some((sample) => {
+        const resolved = resolve(sample, predicate.path);
+        return resolved.exists && (!numericOperator(predicate.op) || (typeof resolved.value === "number" && Number.isFinite(resolved.value)));
+      }))
+      .map((predicate) => predicate.path);
+    if (missingPaths.length) {
+      return insufficient("required_trace_field_missing", trace.length, [], event.label, Array.from(new Set(missingPaths)));
+    }
+  }
+
+  const witnesses: RiddleProofOrderedTraceWitness[] = [];
+  let cursor = 0;
+  for (const event of events) {
+    let witnessIndex = -1;
+    for (let index = cursor; index < trace.length; index += 1) {
+      if (event.predicates.every((predicate) => {
+        const resolved = resolve(trace[index], predicate.path);
+        return resolved.exists && matches(resolved.value, predicate);
+      })) {
+        witnessIndex = index;
+        break;
+      }
+    }
+    if (witnessIndex < 0) {
+      return {
+        version: "riddle-proof.ordered-trace-assessment.v1",
+        status: "failed",
+        trace_length: trace.length,
+        witnesses,
+        missing_event: event.label,
+        reason: "ordered_event_not_observed",
+      };
+    }
+    witnesses.push({
+      label: event.label,
+      index: witnessIndex,
+      observations: event.predicates.map((predicate) => {
+        const observed = resolve(trace[witnessIndex], predicate.path).value as JsonValue;
+        return {
+          path: predicate.path,
+          op: predicate.op,
+          expected: predicate.value,
+          observed,
+        };
+      }),
+    });
+    cursor = witnessIndex + 1;
+  }
+
+  return {
+    version: "riddle-proof.ordered-trace-assessment.v1",
+    status: "passed",
+    trace_length: trace.length,
+    witnesses,
+  };
+}
+
+export function assessRiddleProofOrderedTraceSetupResults(
+  results: unknown,
+  setupActionLabel: string,
+  tracePath: string,
+  events: RiddleProofOrderedTraceEvent[],
+): RiddleProofOrderedTraceAssessment {
+  const insufficient = (reason: string): RiddleProofOrderedTraceAssessment => ({
+    version: "riddle-proof.ordered-trace-assessment.v1",
+    status: "proof_insufficient",
+    trace_length: 0,
+    witnesses: [],
+    reason,
+  });
+  if (!Array.isArray(results)) return insufficient("setup_results_missing");
+  const source = results.find((item) => item && typeof item === "object" && !Array.isArray(item)
+    && (item as Record<string, unknown>).label === setupActionLabel) as Record<string, unknown> | undefined;
+  if (!source) return insufficient("setup_action_result_missing");
+  if (!Object.hasOwn(source, "returned")) return insufficient("setup_action_return_missing");
+
+  const segments = tracePath.split(".").map((segment) => segment.trim()).filter(Boolean);
+  let trace: unknown = source.returned;
+  for (const segment of segments) {
+    if (trace === null || typeof trace !== "object" || Array.isArray(trace) || !Object.hasOwn(trace, segment)) {
+      return insufficient("trace_path_missing");
+    }
+    trace = (trace as Record<string, unknown>)[segment];
+  }
+  return assessRiddleProofOrderedTrace(trace, events);
+}
+
 function evaluateHttpStatusBodyJsonAssertion(
   root: unknown,
   assertion: RiddleProofProfileHttpStatusBodyJsonAssertion,
@@ -1044,6 +1298,7 @@ function profileSetupWindowCallReceipts(results: Array<Record<string, JsonValue>
     .map((result) => {
       const receipt: Record<string, JsonValue> = {
         ordinal: result.ordinal ?? null,
+        label: result.label ?? null,
         ok: result.ok !== false,
         path: result.path ?? null,
         return_captured: result.return_captured ?? null,
@@ -1065,6 +1320,7 @@ function profileSetupWindowEvalReceipts(results: Array<Record<string, JsonValue>
     .map((result) => {
       const receipt: Record<string, JsonValue> = {
         ordinal: result.ordinal ?? null,
+        label: result.label ?? null,
         ok: result.ok !== false,
         script_length: result.script_length ?? null,
         return_captured: result.return_captured ?? null,
@@ -2673,6 +2929,52 @@ function dialogCountFieldForCheckType(type: string): "dialog_count" | "dialog_ac
   return "dialog_count";
 }
 
+function normalizeOrderedTraceEvents(value: unknown, label: string): RiddleProofOrderedTraceEvent[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.length) throw new Error(`${label} must be a non-empty array.`);
+  const seenLabels = new Set<string>();
+  return value.map((item, eventIndex) => {
+    const eventLabel = `${label}[${eventIndex}]`;
+    if (!isRecord(item)) throw new Error(`${eventLabel} must be an object.`);
+    const name = stringFromOwn(item, "label", "name", "event");
+    if (!name) throw new Error(`${eventLabel}.label is required.`);
+    if (seenLabels.has(name)) throw new Error(`${eventLabel}.label must be unique.`);
+    seenLabels.add(name);
+    const predicatesInput = item.predicates ?? item.all ?? item.where;
+    if (!Array.isArray(predicatesInput) || !predicatesInput.length) {
+      throw new Error(`${eventLabel}.predicates must be a non-empty array.`);
+    }
+    const predicates = predicatesInput.map((predicateInput, predicateIndex): RiddleProofOrderedTracePredicate => {
+      const predicateLabel = `${eventLabel}.predicates[${predicateIndex}]`;
+      if (!isRecord(predicateInput)) throw new Error(`${predicateLabel} must be an object.`);
+      const path = stringFromOwn(predicateInput, "path", "field", "key");
+      if (!path) throw new Error(`${predicateLabel}.path is required.`);
+      const op = stringFromOwn(predicateInput, "op", "operator") as RiddleProofOrderedTraceOperator | undefined;
+      if (!op || !(RIDDLE_PROOF_ORDERED_TRACE_OPERATORS as readonly string[]).includes(op)) {
+        throw new Error(`${predicateLabel}.op must be one of ${RIDDLE_PROOF_ORDERED_TRACE_OPERATORS.join(", ")}.`);
+      }
+      const requiresValue = !["exists", "truthy", "falsy"].includes(op);
+      const hasValue = hasOwn(predicateInput, "value") || hasOwn(predicateInput, "expected");
+      if (requiresValue && !hasValue) throw new Error(`${predicateLabel}.value is required for ${op}.`);
+      const value = hasOwn(predicateInput, "value") ? predicateInput.value : predicateInput.expected;
+      if (["gt", "gte", "lt", "lte", "abs_gt", "abs_gte", "abs_lt", "abs_lte"].includes(op)) {
+        if (typeof value !== "number" || !Number.isFinite(value)) {
+          throw new Error(`${predicateLabel}.value must be a finite number for ${op}.`);
+        }
+        if (op.startsWith("abs_") && value < 0) {
+          throw new Error(`${predicateLabel}.value must be non-negative for ${op}.`);
+        }
+      }
+      return {
+        path,
+        op,
+        value: requiresValue ? toJsonValue(value) : undefined,
+      };
+    });
+    return { label: name, predicates };
+  });
+}
+
 function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck {
   if (!isRecord(input)) throw new Error(`checks[${index}] must be an object.`);
   const type = stringValue(input.type);
@@ -2748,6 +3050,17 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
   if (type === "selector_text_order") {
     if (!stringValue(input.selector)) throw new Error(`checks[${index}] selector_text_order requires selector.`);
     if (!expectedTexts?.length) throw new Error(`checks[${index}] selector_text_order requires expected_texts.`);
+  }
+  const setupActionLabel = stringFromOwn(input, "setup_action_label", "setupActionLabel", "source_action_label", "sourceActionLabel");
+  const tracePath = stringFromOwn(input, "trace_path", "tracePath", "path");
+  const orderedTraceEvents = normalizeOrderedTraceEvents(
+    input.events ?? input.sequence ?? input.ordered_events ?? input.orderedEvents,
+    `checks[${index}].events`,
+  );
+  if (type === "ordered_trace") {
+    if (!setupActionLabel) throw new Error(`checks[${index}] ordered_trace requires setup_action_label.`);
+    if (!tracePath) throw new Error(`checks[${index}] ordered_trace requires trace_path.`);
+    if (!orderedTraceEvents?.length) throw new Error(`checks[${index}] ordered_trace requires events.`);
   }
   const expectedRoutes = normalizeRouteInventoryRoutes(input.expected_routes ?? input.expectedRoutes, index);
   if (type === "route_inventory" && !expectedRoutes?.length) {
@@ -2869,6 +3182,9 @@ function normalizeCheck(input: unknown, index: number): RiddleProofProfileCheck 
     body_not_patterns: bodyNotPatterns,
     body_json_assertions: bodyJsonAssertions,
     expected_texts: expectedTexts,
+    setup_action_label: type === "ordered_trace" ? setupActionLabel : undefined,
+    trace_path: type === "ordered_trace" ? tracePath : undefined,
+    events: type === "ordered_trace" ? orderedTraceEvents : undefined,
     link_selector: stringValue(input.link_selector) || stringValue(input.linkSelector),
     source_selector: stringValue(input.source_selector) || stringValue(input.sourceSelector),
     route_path_prefix: stringValue(input.route_path_prefix) || stringValue(input.routePathPrefix),
@@ -2940,6 +3256,20 @@ export function normalizeRiddleProofProfile(
   const targetUrl = stringValue(options.url) || stringValue(targetInput.url);
   const route = stringValue(options.route) || stringValue(targetInput.route);
   if (!targetUrl && !route) throw new Error("profile.target requires url or route, or pass --url.");
+  const setupActions = normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions);
+  for (const [index, check] of checks.entries()) {
+    if (check.type !== "ordered_trace") continue;
+    const matches = (setupActions || []).filter((action) => action.label === check.setup_action_label);
+    if (matches.length !== 1) {
+      throw new Error(`checks[${index}] ordered_trace setup_action_label must match exactly one target.setup_actions label.`);
+    }
+    if (!["window_eval", "window_call", "window_call_until"].includes(matches[0].type)) {
+      throw new Error(`checks[${index}] ordered_trace source action must capture a window_eval, window_call, or window_call_until return.`);
+    }
+    if (matches[0].capture_return === false) {
+      throw new Error(`checks[${index}] ordered_trace source action must not set capture_return to false.`);
+    }
+  }
   return {
     version: RIDDLE_PROOF_PROFILE_VERSION,
     name: normalizeName(input.name, "riddle-proof-profile"),
@@ -2955,7 +3285,7 @@ export function normalizeRiddleProofProfile(
       wait_for_selector: stringValue(targetInput.wait_for_selector) || stringValue(targetInput.waitForSelector),
       wait_ms: numberValue(targetInput.wait_ms) ?? numberValue(targetInput.waitMs),
       screenshot_full_page: normalizeTargetScreenshotFullPage(targetInput),
-      setup_actions: normalizeSetupActions(targetInput.setup_actions ?? targetInput.setupActions),
+      setup_actions: setupActions,
       network_mocks: normalizeNetworkMocks(targetInput.network_mocks ?? targetInput.networkMocks),
     },
     checks,
@@ -4164,6 +4494,37 @@ function assessCheckFromEvidence(
     };
   }
 
+  if (check.type === "ordered_trace") {
+    const assessments = viewports.map((viewport) => ({
+      viewport: viewport.name,
+      assessment: assessRiddleProofOrderedTraceSetupResults(
+        viewport.setup_action_results,
+        check.setup_action_label || "",
+        check.trace_path || "",
+        check.events || [],
+      ),
+    }));
+    const insufficient = assessments.filter((item) => item.assessment.status === "proof_insufficient");
+    const failed = assessments.filter((item) => item.assessment.status === "failed");
+    const status = insufficient.length ? "proof_insufficient" : failed.length ? "failed" : "passed";
+    return {
+      type: check.type,
+      label: checkLabel(check),
+      status,
+      evidence: {
+        setup_action_label: check.setup_action_label || "",
+        trace_path: check.trace_path || "",
+        events: toJsonValue((check.events || []).map((event) => event.label)),
+        viewports: toJsonValue(assessments),
+      },
+      message: insufficient.length
+        ? `Ordered trace evidence was insufficient in ${insufficient.length} viewport(s).`
+        : failed.length
+          ? `Ordered trace did not contain the required event sequence in ${failed.length} viewport(s).`
+          : undefined,
+    };
+  }
+
   if (check.type === "observe_within") {
     const key = observeWithinKey(check);
     const timeoutMs = observeWithinTimeoutMs(check);
@@ -4742,6 +5103,7 @@ function profileStatusFromEvidence(
   if (!viewports.length || !checks.length) return "proof_insufficient";
   if (viewports.some((viewport) => viewport.navigation_error)) return "environment_blocked";
   if (expectedViewportCount && viewports.length < expectedViewportCount) return "proof_insufficient";
+  if (checks.some((check) => check.status === "proof_insufficient")) return "proof_insufficient";
   if (checks.some((check) => check.status === "needs_human_review")) return "needs_human_review";
   if (checks.some((check) => check.status === "failed")) return "product_regression";
   return "passed";
@@ -5161,8 +5523,14 @@ export function createRiddleProofProfileInsufficientResult(input: {
   };
 }
 
-function runtimeScriptAssessmentSource() {
+function runtimeScriptAssessmentSource(includeOrderedTrace = false) {
+  const orderedTraceSource = includeOrderedTrace
+    ? String.raw`
+const assessRiddleProofOrderedTrace = ${assessRiddleProofOrderedTrace.toString()};
+const assessRiddleProofOrderedTraceSetupResults = ${assessRiddleProofOrderedTraceSetupResults.toString()};`
+    : "";
   return String.raw`
+${orderedTraceSource}
 function normalizeRoutePath(path) {
   const value = path || "/";
   if (value === "/") return "/";
@@ -5992,6 +6360,7 @@ function profileSetupWindowCallReceipts(results) {
     .map((result) => {
       const receipt = {
         ordinal: result.ordinal ?? null,
+        label: result.label ?? null,
         ok: result.ok !== false,
         path: result.path ?? null,
         return_captured: result.return_captured ?? null,
@@ -6012,6 +6381,7 @@ function profileSetupWindowEvalReceipts(results) {
     .map((result) => {
       const receipt = {
         ordinal: result.ordinal ?? null,
+        label: result.label ?? null,
         ok: result.ok !== false,
         script_length: result.script_length ?? null,
         return_captured: result.return_captured ?? null,
@@ -6827,6 +7197,36 @@ function assessProfile(profile, evidence) {
       });
       continue;
     }
+    if (check.type === "ordered_trace") {
+      const assessments = checkViewports.map((viewport) => ({
+        viewport: viewport.name,
+        assessment: assessRiddleProofOrderedTraceSetupResults(
+          viewport.setup_action_results,
+          check.setup_action_label || "",
+          check.trace_path || "",
+          check.events || [],
+        ),
+      }));
+      const insufficient = assessments.filter((item) => item.assessment.status === "proof_insufficient");
+      const failed = assessments.filter((item) => item.assessment.status === "failed");
+      checks.push({
+        type: check.type,
+        label: check.label || check.type,
+        status: insufficient.length ? "proof_insufficient" : failed.length ? "failed" : "passed",
+        evidence: {
+          setup_action_label: check.setup_action_label || "",
+          trace_path: check.trace_path || "",
+          events: (check.events || []).map((event) => event.label),
+          viewports: assessments,
+        },
+        message: insufficient.length
+          ? "Ordered trace evidence was insufficient in " + insufficient.length + " viewport(s)."
+          : failed.length
+            ? "Ordered trace did not contain the required event sequence in " + failed.length + " viewport(s)."
+            : undefined,
+      });
+      continue;
+    }
     if (check.type === "observe_within") {
       const key = observeWithinKey(check);
       const timeoutMs = observeWithinTimeoutMs(check);
@@ -7183,6 +7583,7 @@ function assessProfile(profile, evidence) {
   if (!viewports.length || !checks.length) status = "proof_insufficient";
   else if (viewports.some((viewport) => viewport.navigation_error)) status = "environment_blocked";
   else if (expectedViewportCount && viewports.length < expectedViewportCount) status = "proof_insufficient";
+  else if (checks.some((check) => check.status === "proof_insufficient")) status = "proof_insufficient";
   else if (checks.some((check) => check.status === "needs_human_review")) status = "needs_human_review";
   else if (checks.some((check) => check.status === "failed")) status = "product_regression";
   const screenshotLabels = profileScreenshotLabels(viewports);
@@ -8115,7 +8516,7 @@ let activeViewportName = null;
 async function executeSetupAction(action, ordinal, viewport) {
   const type = setupActionType(action);
   const frameSelector = setupFrameSelector(action);
-  const base = { ok: false, action: type || "unknown", ordinal, selector: action.selector || null, frame_selector: frameSelector || null, optional: action.optional === true };
+  const base = { ok: false, action: type || "unknown", ordinal, label: action.label || null, selector: action.selector || null, frame_selector: frameSelector || null, optional: action.optional === true };
   const timeout = setupNumber(action.timeout_ms, 5000);
   try {
     if (type === "wait") {
@@ -10767,7 +11168,7 @@ async function captureViewport(viewport) {
     wait_error: waitError,
   };
 }
-${runtimeScriptAssessmentSource()}
+${runtimeScriptAssessmentSource(profile.checks.some((check) => check.type === "ordered_trace"))}
 const viewports = [];
 function buildProfileEvidence(currentViewports) {
   const expectedViewportCount = (profile.target.viewports || []).length;
