@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.80
+
+### Patch Changes
+
+- 1be12c7: Add a generic ordered-trace profile check with compact temporal witnesses, explicit insufficient-evidence semantics for missing trace fields, Change Proof status-transition support, and matching Lean kernel guarantees.
+
 ## 0.8.79
 
 ### Patch Changes
