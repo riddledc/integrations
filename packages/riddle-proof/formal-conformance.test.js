@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  assessRiddleProofOrderedTrace,
   assessRiddleProofProfileEvidence,
   normalizeRiddleProofProfile,
 } from "./dist/profile.js";
@@ -195,6 +196,31 @@ assert.match(
   /Missing required profile artifact\(s\): screenshot:formal-conformance-desktop/,
 );
 assert.deepEqual(knownEmptyArtifactResult.artifacts.riddle_artifacts, []);
+
+const formalOrderedTraceEvents = [
+  { label: "input", predicates: [{ path: "target", op: "abs_gte", value: 0.8 }] },
+  { label: "lean", predicates: [{ path: "applied", op: "abs_gte", value: 0.1 }] },
+  { label: "trajectory", predicates: [{ path: "lateralDelta", op: "abs_gte", value: 0.15 }] },
+  { label: "release", predicates: [{ path: "released", op: "equals", value: true }] },
+  { label: "centered", predicates: [{ path: "applied", op: "equals", value: 0 }] },
+];
+const formalOrderedTrace = assessRiddleProofOrderedTrace([
+  { target: 1, applied: 0, lateralDelta: 0, released: false },
+  { target: 1, applied: 0.2, lateralDelta: 0.02, released: false },
+  { target: 1, applied: 0.8, lateralDelta: 0.3, released: false },
+  { target: 0, applied: 0.7, lateralDelta: 0.31, released: true },
+  { target: 0, applied: 0, lateralDelta: 0.2, released: true },
+], formalOrderedTraceEvents);
+assert.equal(formalOrderedTrace.status, "passed");
+assert.deepEqual(formalOrderedTrace.witnesses.map((witness) => witness.index), [0, 1, 2, 3, 4]);
+assert.equal(
+  assessRiddleProofOrderedTrace([], formalOrderedTraceEvents).status,
+  "proof_insufficient",
+);
+assert.equal(
+  assessRiddleProofOrderedTrace([{ target: 1, applied: 0.2 }], formalOrderedTraceEvents).status,
+  "proof_insufficient",
+);
 
 const baseShipState = {
   reference: "before",
@@ -1368,6 +1394,72 @@ const sourceBoundBeforeObservation = createRiddleProofObservationReceipt({
   source: { git_revision: "before123", dirty: false },
   profile_result: completeProfileResult,
 });
+const temporalBeforeResult = {
+  ...completeProfileResult,
+  status: "product_regression",
+  checks: [{
+    type: "ordered_trace",
+    label: "input to release",
+    status: "failed",
+    evidence: { missing_event: "release" },
+  }],
+};
+const temporalAfterResult = {
+  ...completeProfileResult,
+  status: "passed",
+  checks: [{
+    type: "ordered_trace",
+    label: "input to release",
+    status: "passed",
+    evidence: { witness_indices: [0, 1, 2, 3, 5] },
+  }],
+};
+const temporalBeforeObservation = createRiddleProofObservationReceipt({
+  comparison_role: "before",
+  executor: { kind: "local_playwright", runner: "local-playwright" },
+  target: { kind: "url", url: "https://example.com/games/luge-run" },
+  source: { git_revision: "before-temporal", dirty: false },
+  profile_result: temporalBeforeResult,
+});
+const temporalAfterObservation = createRiddleProofObservationReceipt({
+  comparison_role: "after",
+  executor: { kind: "riddle_hosted", runner: "riddle", job_id: "job_temporal_after" },
+  target: { kind: "url", url: "https://preview.example.com/games/luge-run" },
+  source: { git_revision: "after-temporal", dirty: false },
+  profile_result: temporalAfterResult,
+});
+const temporalChangeContract = {
+  name: "Formal ordered trace transition",
+  before: { required_status: "product_regression" },
+  after: { required_status: "passed" },
+  deltas: [{
+    type: "check_status_transition",
+    label: "weight shift becomes temporal",
+    check_label: "input to release",
+    before_status: "failed",
+    after_status: "passed",
+  }],
+};
+const temporalChange = assessRiddleProofChange(temporalChangeContract, {
+  before_observation: temporalBeforeObservation,
+  after_observation: temporalAfterObservation,
+  evaluated_at: "2026-07-11T00:00:00.000Z",
+});
+assert.equal(temporalChange.status, "passed");
+assert.equal(temporalChange.deltas[0].status, "passed");
+const temporalChangeMissingBeforeCheck = assessRiddleProofChange(temporalChangeContract, {
+  before_observation: createRiddleProofObservationReceipt({
+    comparison_role: "before",
+    executor: { kind: "local_playwright", runner: "local-playwright" },
+    target: { kind: "url", url: "https://example.com/games/luge-run" },
+    source: { git_revision: "before-temporal", dirty: false },
+    profile_result: { ...temporalBeforeResult, checks: [] },
+  }),
+  after_observation: temporalAfterObservation,
+  evaluated_at: "2026-07-11T00:00:00.000Z",
+});
+assert.equal(temporalChangeMissingBeforeCheck.status, "proof_insufficient");
+assert.equal(temporalChangeMissingBeforeCheck.deltas[0].status, "proof_insufficient");
 const sourceBoundAfterObservation = createRiddleProofObservationReceipt({
   comparison_role: "after",
   executor: { kind: "riddle_hosted", runner: "riddle", job_id: "job_formal_after" },
@@ -1479,6 +1571,8 @@ console.log(JSON.stringify({
     publicStateConsumerConformance: true,
     publicStateRunSurfaceConformance: true,
     publicStateHostedAgentSummaryConformance: true,
+    orderedTraceConformance: true,
+    orderedTraceChangeTransitionConformance: true,
     previewSourceBindingConformance: true,
     changeHandoffProjectionConformance: true,
     recommendationAuthorizationSeparation: true,

@@ -24,6 +24,7 @@ The contract-level verdict proves:
 - navigation errors dominate as `environmentBlocked`
 - missing expected viewport coverage is `proofInsufficient`
 - missing required artifacts is `proofInsufficient`
+- a required check with missing evidence is `proofInsufficient`
 - human-review checks outrank failed checks
 - failed checks become `productRegression`
 - only clean, complete evidence can become `passed`
@@ -99,9 +100,23 @@ It models these obligations:
 The theorem `reported_whole_flow_passed_implies_ship_gate_ok` proves that the
 reported verdict cannot be `passed` unless the whole ship gate is true.
 
-## Layer 6: Before/After Change Proofs
+## Layer 6: Ordered Temporal Traces
 
-The Layer 6 model covers the first-class change-proof contract shape:
+The Layer 6 model covers profile checks that need a sequence rather than one
+snapshot. It treats browser samples as opaque and models only the evaluator's
+finite witness contract:
+
+- missing traces or required fields are `proofInsufficient`
+- every declared event has one witness
+- successive witnesses have strictly increasing sample indices
+- one sample cannot satisfy two successive events
+
+The theorem `ordered_trace_pass_has_complete_strict_witnesses` pins the pass
+shape used by `assessRiddleProofOrderedTrace` in `profile.ts`.
+
+## Layer 7: Before/After Change Proofs
+
+The Layer 7 model covers the first-class change-proof contract shape:
 
 - a before profile verdict
 - an after profile verdict

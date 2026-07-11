@@ -14,6 +14,8 @@ import {
   applyPrLifecycleState,
   appendCaptureDiagnostic,
   assessBasicGameplayEvidence,
+  assessRiddleProofOrderedTrace,
+  assessRiddleProofOrderedTraceSetupResults,
   assessRiddleProofProfileArtifactCompleteness,
   attachBasicGameplayArtifactScreenshotHashes,
   BASIC_GAMEPLAY_ACTION_TYPES,
@@ -134,6 +136,8 @@ assert.equal(typeof cjsProfile.preflightRiddleProofProfileRunnerArtifacts, "func
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileTimeoutSec, "function");
 assert.equal(typeof cjsProfile.resolveRiddleProofProfileRouteUrl, "function");
 assert.equal(typeof cjsProfile.buildRiddleProofProfileScript, "function");
+assert.equal(typeof cjsProfile.assessRiddleProofOrderedTrace, "function");
+assert.equal(typeof cjsProfile.assessRiddleProofOrderedTraceSetupResults, "function");
 assert.equal(typeof cjsProfileSuggestions.suggestRiddleProofProfileChecks, "function");
 assert.equal(typeof assessRiddleProofChangeSubpath, "function");
 assert.equal(typeof cjs.runRiddleProof, "function");
@@ -8986,6 +8990,150 @@ try {
   await once(cliRunProfileServer, "close");
 }
 
+const weightShiftEvents = [
+  {
+    label: "input",
+    predicates: [
+      { path: "active", op: "equals", value: true },
+      { path: "target", op: "abs_gte", value: 0.8 },
+    ],
+  },
+  {
+    label: "lean",
+    predicates: [
+      { path: "active", op: "equals", value: true },
+      { path: "applied", op: "abs_gte", value: 0.1 },
+    ],
+  },
+  {
+    label: "trajectory",
+    predicates: [{ path: "lateralVelocityDeltaMps", op: "abs_gte", value: 0.15 }],
+  },
+  {
+    label: "release",
+    predicates: [
+      { path: "active", op: "equals", value: false },
+      { path: "phase", op: "equals", value: "released" },
+      { path: "applied", op: "abs_gte", value: 0.05 },
+    ],
+  },
+  {
+    label: "centered",
+    predicates: [
+      { path: "active", op: "equals", value: false },
+      { path: "applied", op: "equals", value: 0 },
+    ],
+  },
+];
+const passingWeightShiftTrace = [
+  { active: true, target: 1, applied: 0, phase: "shifting", lateralVelocityDeltaMps: 0 },
+  { active: true, target: 1, applied: 0.22, phase: "shifting", lateralVelocityDeltaMps: 0.04 },
+  { active: true, target: 1, applied: 0.76, phase: "holding", lateralVelocityDeltaMps: 0.31 },
+  { active: false, target: 0, applied: 0.72, phase: "released", lateralVelocityDeltaMps: 0.34 },
+  { active: false, target: 0, applied: 0.3, phase: "recentering", lateralVelocityDeltaMps: 0.29 },
+  { active: false, target: 0, applied: 0, phase: "idle", lateralVelocityDeltaMps: 0.18 },
+];
+const orderedTracePass = assessRiddleProofOrderedTrace(passingWeightShiftTrace, weightShiftEvents);
+assert.equal(orderedTracePass.status, "passed");
+assert.deepEqual(orderedTracePass.witnesses.map((witness) => witness.index), [0, 1, 2, 3, 5]);
+assert.ok(orderedTracePass.witnesses.every((witness, index, witnesses) => index === 0 || witness.index > witnesses[index - 1].index));
+
+const sameSampleCannotSatisfyTwoEvents = assessRiddleProofOrderedTrace([
+  { active: true, target: 1, applied: 0.8 },
+], weightShiftEvents.slice(0, 2));
+assert.equal(sameSampleCannotSatisfyTwoEvents.status, "failed");
+assert.equal(sameSampleCannotSatisfyTwoEvents.missing_event, "lean");
+
+const missingTrajectoryField = assessRiddleProofOrderedTrace(
+  passingWeightShiftTrace.map(({ lateralVelocityDeltaMps: _omitted, ...sample }) => sample),
+  weightShiftEvents,
+);
+assert.equal(missingTrajectoryField.status, "proof_insufficient");
+assert.equal(missingTrajectoryField.reason, "required_trace_field_missing");
+assert.deepEqual(missingTrajectoryField.missing_paths, ["lateralVelocityDeltaMps"]);
+
+const setupTracePass = assessRiddleProofOrderedTraceSetupResults([
+  { action: "window_eval", label: "capture weight shift", ok: true, returned: { trace: passingWeightShiftTrace } },
+], "capture weight shift", "trace", weightShiftEvents);
+assert.equal(setupTracePass.status, "passed");
+assert.equal(
+  assessRiddleProofOrderedTraceSetupResults([], "capture weight shift", "trace", weightShiftEvents).status,
+  "proof_insufficient",
+);
+
+const orderedTraceProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "ordered-weight-shift",
+  target: {
+    route: "/games/luge-run",
+    viewports: [{ name: "tablet", width: 768, height: 1024 }],
+    setup_actions: [{
+      type: "window_eval",
+      label: "capture weight shift",
+      script: "return { trace: window.__TRACE__ };",
+    }],
+  },
+  checks: [{
+    type: "ordered_trace",
+    label: "input to release",
+    setup_action_label: "capture weight shift",
+    trace_path: "trace",
+    events: weightShiftEvents,
+  }],
+  artifacts: [],
+}, { url: "https://example.com" });
+const orderedTraceEvidence = (setupActionResults) => ({
+  version: "riddle-proof.profile-evidence.v1",
+  profile_name: orderedTraceProfile.name,
+  target_url: "https://example.com/games/luge-run",
+  baseline_policy: "invariant_only",
+  captured_at: "2026-07-11T00:00:00.000Z",
+  viewports: [{
+    name: "tablet",
+    width: 768,
+    height: 1024,
+    route: {
+      requested: "https://example.com/games/luge-run",
+      observed: "https://example.com/games/luge-run",
+      expected_path: "/games/luge-run",
+      matched: true,
+      http_status: 200,
+    },
+    setup_action_results: setupActionResults,
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+});
+const orderedTraceProfilePass = assessRiddleProofProfileEvidence(
+  orderedTraceProfile,
+  orderedTraceEvidence([{ action: "window_eval", label: "capture weight shift", ok: true, returned: { trace: passingWeightShiftTrace } }]),
+);
+assert.equal(orderedTraceProfilePass.status, "passed");
+assert.equal(orderedTraceProfilePass.checks.find((check) => check.type === "ordered_trace").status, "passed");
+const orderedTraceProfileMissing = assessRiddleProofProfileEvidence(
+  orderedTraceProfile,
+  orderedTraceEvidence([{ action: "window_eval", label: "capture weight shift", ok: true, returned: {} }]),
+);
+assert.equal(orderedTraceProfileMissing.status, "proof_insufficient");
+assert.equal(orderedTraceProfileMissing.checks.find((check) => check.type === "ordered_trace").status, "proof_insufficient");
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+assert.doesNotThrow(() => new AsyncFunction("page", "require", buildRiddleProofProfileScript(orderedTraceProfile)));
+assert.throws(() => normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "missing-ordered-trace-source",
+  target: {
+    route: "/games/luge-run",
+    viewports: [{ name: "tablet", width: 768, height: 1024 }],
+    setup_actions: [],
+  },
+  checks: [{
+    type: "ordered_trace",
+    setup_action_label: "capture weight shift",
+    trace_path: "trace",
+    events: weightShiftEvents,
+  }],
+}, { url: "https://example.com" }), /must match exactly one target\.setup_actions label/);
+
 const profile = normalizeRiddleProofProfile({
   version: "riddle-proof.profile.v1",
   name: "pricing-page-basic",
@@ -9023,6 +9171,7 @@ assert.equal(profile.target.screenshot_full_page, false);
 assert.deepEqual(profile.checks.find((check) => check.text === "Desktop-only copy").viewports, ["desktop"]);
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_visible"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("selector_text_absent"));
+assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("ordered_trace"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("observe_within"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("no_console_warnings"));
 assert.ok(RIDDLE_PROOF_PROFILE_CHECK_TYPES.includes("dialog_count_equals"));
