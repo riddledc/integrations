@@ -1,4 +1,4 @@
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 type ArtifactKind = "json" | "text" | "binary" | "screenshot";
@@ -14,6 +14,38 @@ type SaveJsonInput = unknown;
 type BinaryBlob = string | Buffer | Uint8Array;
 
 const ARTIFACT_SCREENSHOT_DIR = "screenshots";
+const LOCAL_MANIFEST_VERSION = "riddle-proof-local-runner-manifest.v1";
+const RESERVED_OUTPUT_PATHS = [
+  ARTIFACT_SCREENSHOT_DIR,
+  "artifact-manifest.json",
+  "console.json",
+  "dom-summary.json",
+  "observation-receipt.json",
+  "profile-result.json",
+  "proof.json",
+  "summary.md",
+];
+
+function isOwnedArtifactRoot(rootDir: string) {
+  const manifestPath = path.join(rootDir, "artifact-manifest.json");
+  if (!existsSync(manifestPath)) return false;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    return manifest?.version === LOCAL_MANIFEST_VERSION;
+  } catch {
+    return false;
+  }
+}
+
+function resetArtifactRoot(rootDir: string) {
+  if (isOwnedArtifactRoot(rootDir)) {
+    rmSync(rootDir, { recursive: true, force: true });
+    return;
+  }
+  for (const relativePath of RESERVED_OUTPUT_PATHS) {
+    rmSync(path.join(rootDir, relativePath), { recursive: true, force: true });
+  }
+}
 
 function safeArtifactName(input: string) {
   const trimmed = String(input || "").trim().replace(/^\.\.?(\/|\\)/g, "").trim();
@@ -43,6 +75,7 @@ export class LocalArtifactStore {
   constructor(rootDir: string) {
     this.rootDir = path.resolve(rootDir);
     this.screenshotDir = path.join(this.rootDir, ARTIFACT_SCREENSHOT_DIR);
+    resetArtifactRoot(this.rootDir);
     mkdirSync(this.rootDir, { recursive: true });
     mkdirSync(this.screenshotDir, { recursive: true });
   }
