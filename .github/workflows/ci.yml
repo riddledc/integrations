@@ -55,7 +55,7 @@ jobs:
           fi
 
           git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > /tmp/changed-files
-          if grep -E '^(formal/riddle-proof-kernel/|packages/riddle-proof/src/(profile|proof-run-core|proof-run-engine|semantic-certificate|cli)\.ts|packages/riddle-proof/runtime/lib/(recon|verify|ship|author|implement|setup)\.py|packages/riddle-proof/(formal-conformance|semantic-certificate|test|proof-run|trust-boundary|regression-packs)\.test\.js)' /tmp/changed-files >/dev/null; then
+          if grep -E '^(formal/riddle-proof-kernel/|packages/riddle-proof-core/src/(grounded-evidence|checked-meaning|semantic-certificate)\.ts|packages/riddle-proof/src/(profile|proof-run-core|proof-run-engine|semantic-certificate|grounded-evidence|checked-meaning|cli)\.ts|packages/riddle-proof/runtime/lib/(recon|verify|ship|author|implement|setup)\.py|packages/riddle-proof/(formal-conformance|semantic-certificate|grounded-evidence|grounded-semantic-closure|checked-meaning-compatibility|test|proof-run|trust-boundary|regression-packs)\.test\.js)' /tmp/changed-files >/dev/null; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

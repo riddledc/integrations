@@ -16,6 +16,8 @@ export * from "./profile";
 export * from "./profile-suggestions";
 export * from "./receipts";
 export * from "./semantic-certificate";
+export * from "./grounded-evidence";
+export * from "./checked-meaning";
 export * from "./change-proof";
 export * from "./riddle-client";
 export * from "./pr-comment";

@@ -4,13 +4,16 @@ type PlaywrightModule = {
       newContext: (options: Record<string, unknown>) => Promise<{
         newPage: () => Promise<{
           goto: (url: string, options?: Record<string, unknown>) => Promise<unknown>;
+          evaluate: <T>(expression: (() => T) | string) => Promise<T>;
           screenshot: (options?: Record<string, unknown>) => Promise<Buffer>;
           setDefaultTimeout: (ms: number) => void;
           setDefaultNavigationTimeout: (ms: number) => void;
+          url: () => string;
           close: () => Promise<void>;
         }>;
         close: () => Promise<void>;
       }>;
+      version: () => string;
       close: () => Promise<void>;
     }>;
   };

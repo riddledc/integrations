@@ -11,7 +11,9 @@
     "clean": "pnpm -r clean",
     "formal:build": "cd formal/riddle-proof-kernel && lake build",
     "lint": "pnpm -r lint",
-    "test": "node scripts/check-openclaw-plugin-versions.mjs && pnpm -r test",
+    "test": "node scripts/check-openclaw-plugin-versions.mjs && pnpm -r test && pnpm --filter @riddledc/riddle-proof-local test:grounded && pnpm --filter @riddledc/riddle-proof-local test:meaning && node scripts/check-package-capabilities.mjs && node scripts/check-package-install-boundaries.mjs",
+    "test:capabilities": "node scripts/check-package-capabilities.mjs",
+    "test:install-boundaries": "node scripts/check-package-install-boundaries.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm -r --if-present sync:openclaw-plugin-version && pnpm install --lockfile-only",
     "release": "changeset publish --access public"

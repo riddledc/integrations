@@ -203,6 +203,199 @@ truth. Contract/rule IDs remain declared data, so consumers that care which
 models were used should apply their own allowlist or authenticated issuer
 policy in addition to anchoring the expected root ID.
 
+### Experimental Grounded Evidence
+
+The grounded-evidence layer extends Semantic certificates with a replayable
+path back to the exact captured bytes:
+
+1. `createRiddleProofSignedCaptureBundle` canonicalizes an artifact manifest,
+   binds it to a complete Semantic scope, a 32-byte challenge nonce, capture
+   time, collector, sensor, and verifier identity, and signs the protected
+   header plus statement with Ed25519.
+2. `verifyRiddleProofSignedCaptureBundle` independently checks the policy,
+   freshness window, trusted public-key fingerprint, signature, manifest, and
+   every inline artifact's length and SHA-256 digest. The callback registry path
+   runs a verifier twice on fresh byte copies and accepts only one identical
+   canonical JSON observation; the callback-free declarative path runs the
+   package's fixed, data-only JSON interpreter.
+3. `createRiddleProofGroundedSemanticCertificate` applies the registered
+   contract to that verifier-derived observation. It emits a content-addressed
+   grounded receipt and a contract-derived Semantic certificate whose evidence
+   begins with that exact receipt and then names every captured artifact.
+4. Atomic grounded closures can be composed. Validation or matching structurally
+   validates the complete Semantic closure, requires exactly one grounding for
+   every contract leaf and none for composition nodes, then replays every leaf
+   against independently supplied signer, verifier, contract, nonce, scope, and
+   time policy. Shared leaves are deduplicated, and a composition certificate
+   cannot predate any direct premise.
+
+The public surface is available from both the package root and
+`@riddledc/riddle-proof/grounded-evidence`. This example issues one grounded
+leaf, wraps it as a closure, and replays the complete handoff. The omitted
+values (`scope`, key material, artifacts, and identity objects) come from the
+collector and trust setup. In particular, policy and replay expectations must
+be independently configured rather than copied out of an untrusted bundle:
+
+```ts
+import {
+  type RiddleProofGroundedCaptureVerificationPolicy,
+  type RiddleProofGroundedReplayConfiguration,
+  createRiddleProofGroundedDeclarativeJsonContract,
+  createRiddleProofGroundedDeclarativeJsonVerifier,
+  createRiddleProofGroundedSemanticAtomicCertificateClosure,
+  createRiddleProofGroundedSemanticCertificate,
+  createRiddleProofSignedCaptureBundle,
+  matchRiddleProofGroundedSemanticCertificateClosure,
+} from "@riddledc/riddle-proof/grounded-evidence";
+
+const declarativeVerifier = createRiddleProofGroundedDeclarativeJsonVerifier({
+  verifier_id: "riddle-proof.profile-evidence-json",
+  verifier_version: "1",
+  program: {
+    artifact: {
+      artifact_id: "profile-evidence.json",
+      role: "profile_evidence",
+      media_type: "application/json",
+    },
+    pointer: "", // RFC 6901: select the parsed document root
+  },
+});
+if (!declarativeVerifier.ok) throw new Error(declarativeVerifier.error.message);
+
+const declarativeContract = createRiddleProofGroundedDeclarativeJsonContract({
+  contract_id: "riddle-proof.profile-passed",
+  contract_version: "1",
+  label: "The captured profile passed",
+  claim: passedProfileClaim,
+  program: {
+    all: [
+      { op: "type_is", source: "observation", pointer: "", type: "object" },
+      { op: "equals", source: "observation", pointer: "/status", value: "passed" },
+      { op: "equals", source: "scope", pointer: "/revision", value: scope.revision },
+    ],
+  },
+});
+if (!declarativeContract.ok) throw new Error(declarativeContract.error.message);
+
+const createdBundle = createRiddleProofSignedCaptureBundle({
+  scope,
+  nonce, // canonical base64url encoding of an independently issued 32-byte value
+  captured_at: "2026-07-19T14:30:00.000Z",
+  collector,
+  sensor,
+  verifier: declarativeVerifier.verifier_ref,
+  artifacts,
+  signing_key: {
+    key_id: "local-playwright-key",
+    private_key_pkcs8_base64: privateKeyPkcs8Base64,
+  },
+});
+if (!createdBundle.ok) throw new Error(createdBundle.error.message);
+
+const policy: RiddleProofGroundedCaptureVerificationPolicy = {
+  expected_scope: scope,
+  expected_nonce: nonce,
+  expected_collector: collector,
+  expected_sensor: sensor,
+  expected_verifier: declarativeVerifier.verifier_ref,
+  expected_signer: {
+    key_id: "local-playwright-key",
+    public_key_spki_sha256: trustedPublicKeySpkiSha256,
+  },
+  verification_time: "2026-07-19T14:30:01.000Z",
+  max_capture_age_ms: 60_000,
+  max_future_skew_ms: 1_000,
+  required_artifact_roles: ["profile_evidence"],
+};
+
+const configuration: RiddleProofGroundedReplayConfiguration = {
+  policy,
+  trusted_signers: [{
+    key_id: "local-playwright-key",
+    public_key_spki_base64: trustedPublicKeySpkiBase64,
+  }],
+  verifier_registry: [declarativeVerifier.registration],
+  contract_registry: [declarativeContract.registration],
+  expected_contract: declarativeContract.contract_ref,
+};
+
+const issued = createRiddleProofGroundedSemanticCertificate({
+  bundle: createdBundle.bundle,
+  ...configuration,
+  // Grounded leaf chronology is the independent verification time, not caller drift.
+  issued_at: policy.verification_time,
+});
+if (!issued.ok) throw new Error(issued.error.message);
+
+const atomic = createRiddleProofGroundedSemanticAtomicCertificateClosure({
+  certificate: issued.certificate,
+  grounding: issued.grounding,
+  configuration,
+});
+if (!atomic.ok) throw new Error(atomic.error.message);
+
+const checked = matchRiddleProofGroundedSemanticCertificateClosure({
+  grounded_closure: JSON.parse(JSON.stringify(atomic.grounded_closure)),
+  replay_contexts: [{
+    certificate_id: issued.certificate.certificate_id,
+    ...configuration,
+  }],
+  expected_root_certificate_id: trustedHandoffCertificateId,
+  expected_scope: scope,
+  expected_claim: passedProfileClaim,
+  expected_assurance: "runtime_contract_accepted",
+});
+if (!checked.ok) throw new Error(checked.error.message);
+```
+
+Use `composeRiddleProofGroundedSemanticCertificateClosures` for higher claims.
+It takes a normal Semantic `rule`, one grounded closure per premise,
+`replay_contexts` for every distinct leaf, and an `issued_at` no earlier than
+the latest input root. `validateRiddleProofGroundedSemanticCertificateClosure`
+performs the same full leaf replay without applying trusted root expectations;
+`matchRiddleProofGroundedSemanticCertificateClosure` adds those expectations.
+
+The declarative builders above are the narrower primary path. They canonicalize
+the data-only program, domain-separate and SHA-256 hash the complete definition,
+set `trust_basis.kind` to `builtin_declarative_json`, and return a registration
+with no callback. During every issuance and replay, Riddle Proof recomputes that
+digest and uses only its fixed v0 interpreter. The verifier selects one exact
+`application/json` artifact by ID, role, and media type, parses strict UTF-8 JSON,
+and projects an RFC 6901 JSON Pointer. The contract supports a bounded `all`
+list of `exists`, exact `equals`, and `type_is` assertions over the observation
+or the five-field scope.
+
+The custom callback trust boundary remains deliberately visible. A verifier or
+contract reference with `trust_basis: { kind: "external_registry" }` means an
+independent registry selected that callback and vouches for its
+`implementation_digest`. Riddle Proof does not derive callback identity from
+`Function#toString` or prove that arbitrary JavaScript bytes correspond to the
+declared digest. Registry callbacks are invoked from snapshots without a
+receiver and with cloned inputs, but the registry remains part of the trusted
+computing base.
+
+Parsing is fail-closed for extra/hidden/accessor fields, sparse structural
+arrays, noncanonical base64, noncanonical timestamps, and noncanonical DER.
+The exported limits bound a capture to 64 artifacts, 16 MiB per artifact,
+64 MiB total decoded artifact bytes, and a 1 MiB canonical observation. A
+grounded closure additionally has 256 MiB aggregate replay-work and 64 MiB
+canonical metadata limits, plus aggregate replay-configuration, registry, and
+trusted-key limits. Declarative definitions are limited to 64 KiB, 64 contract
+assertions, and bounded JSON Pointer sizes and depth. These limits are
+denial-of-service boundaries; they do not make the evidence empirically true.
+
+The remaining outside-world boundary is also explicit. The signature proves
+that the trusted key signed this exact capture statement, and replay proves that
+the registered verifier and contract deterministically produce this exact leaf
+from the included bytes. It does not prove that the key was well kept, the
+collector's clock or nonce source was honest, the browser rendered the claimed
+URL faithfully, the sensor was well calibrated, or the included screenshot
+matches photons a human would have seen. The Playwright runner reduces that gap
+by signing the exact files it persisted and recording browser provenance, but
+its signer, browser process, machine, and capture policy still require trust.
+Lean proves the framework invariants that connect these stages; it does not
+turn those empirical assumptions into theorems.
+
 Persist a deploy result and its immutable receipt for later Change Proof input:
 
 ```sh

@@ -1,15 +1,59 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as clientEntry from "./dist/client.js";
 import {
+  RiddleApiError,
+  RIDDLE_BALANCE_ENDPOINT_PATH,
   createRiddleApiClient,
   deployRiddlePreview,
   detectRiddlePreviewSource,
+  getRiddleJobArtifacts,
   isTerminalRiddleJobStatus,
   parseRiddleViewport,
   resolveRiddleApiKeySource,
 } from "./dist/index.js";
+
+const require = createRequire(import.meta.url);
+const clientEntryCjs = require("@riddledc/riddle-proof-riddle-client/client");
+const indexEntryCjs = require("@riddledc/riddle-proof-riddle-client");
+
+if (RiddleApiError !== clientEntry.RiddleApiError) {
+  throw new Error("ESM hosted-client entrypoints must share one RiddleApiError identity.");
+}
+if (indexEntryCjs.RiddleApiError !== clientEntryCjs.RiddleApiError) {
+  throw new Error("CJS hosted-client entrypoints must share one RiddleApiError identity.");
+}
+if (RIDDLE_BALANCE_ENDPOINT_PATH !== "/v1/balance") {
+  throw new Error("Hosted client must own the balance endpoint path.");
+}
+if (getRiddleJobArtifacts !== clientEntry.getRiddleJobArtifacts
+  || indexEntryCjs.getRiddleJobArtifacts !== clientEntryCjs.getRiddleJobArtifacts) {
+  throw new Error("Hosted-client entrypoints must share the job-artifacts helper identity.");
+}
+
+const packageManifest = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+if (packageManifest.dependencies?.["@riddledc/riddle-proof"] !== undefined) {
+  throw new Error("Hosted client must not depend on the compatibility facade.");
+}
+if (packageManifest.dependencies?.["@riddledc/riddle-proof-core"] !== "workspace:^") {
+  throw new Error("Hosted client must depend directly on the deterministic core.");
+}
+const clientSource = readFileSync(new URL("./src/client.ts", import.meta.url), "utf8");
+if (clientSource.includes('from "@riddledc/riddle-proof"')) {
+  throw new Error("Hosted implementation must not re-export from the compatibility facade.");
+}
+if (!clientSource.includes("https://api.riddledc.com")) {
+  throw new Error("Hosted package must positively own the default Riddle API endpoint.");
+}
+const capabilities = JSON.parse(readFileSync(new URL("./capabilities.json", import.meta.url), "utf8"));
+for (const capability of ["network", "filesystem", "browser", "subprocess", "hosted_riddle"]) {
+  if (capabilities.capabilities?.[capability] !== true) {
+    throw new Error(`Hosted package must explicitly declare ${capability}.`);
+  }
+}
 
 const keyDir = mkdtempSync(join(tmpdir(), "riddle-proof-riddle-client-"));
 const keyFile = join(keyDir, "key.txt");
@@ -29,6 +73,23 @@ if (resolved.source !== "option" || resolved.file) {
 }
 
 const _client = createRiddleApiClient({ apiKeyFile: keyFile });
+
+let observedArtifactsUrl;
+const artifactPayload = await getRiddleJobArtifacts({
+  apiKey: "test-key",
+  apiBaseUrl: "https://api.example.test",
+  fetchImpl: async (url) => {
+    observedArtifactsUrl = String(url);
+    return new Response(JSON.stringify({ artifacts: ["fixture"] }), { status: 200 });
+  },
+}, "job_fixture");
+if (observedArtifactsUrl !== "https://api.example.test/v1/jobs/job_fixture/artifacts"
+  || artifactPayload.artifacts?.[0] !== "fixture") {
+  throw new Error("Hosted job-artifacts helper must own endpoint construction and response parsing.");
+}
+if (typeof _client.getJobArtifacts !== "function") {
+  throw new Error("Hosted API client must expose getJobArtifacts for compatibility facades.");
+}
 
 const previewRepo = mkdtempSync(join(tmpdir(), "riddle-preview-source-"));
 execFileSync("git", ["init", "-q", previewRepo]);

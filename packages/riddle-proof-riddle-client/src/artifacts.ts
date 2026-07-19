@@ -1,6 +1,7 @@
 export {
   RiddleApiError,
   createRiddleApiClient,
+  getRiddleJobArtifacts,
   resolveRiddleApiKey,
   resolveRiddleApiKeySource,
   riddleRequestJson,

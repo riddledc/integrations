@@ -1,0 +1,17 @@
+{
+  "version": "riddle-proof.package-capabilities.v1",
+  "package": "@riddledc/riddle-proof-riddle-client",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hosted_riddle": true,
+    "cryptography": false,
+    "ambient_clock": true
+  },
+  "notes": [
+    "This package intentionally owns Riddle-hosted endpoints, credential lookup, uploads, Preview publication, and job polling.",
+    "Its compatibility runtime also retains legacy local browser and subprocess behavior; security-sensitive local consumers should install the bounded core and a specific surface adapter instead."
+  ]
+}

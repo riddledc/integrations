@@ -1,0 +1,17 @@
+{
+  "version": "riddle-proof.package-capabilities.v1",
+  "package": "@riddledc/riddle-proof",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hosted_riddle": true,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "notes": [
+    "This pre-1.0 package is the compatibility facade and intentionally exposes the union of core, local engine, and hosted-client capabilities.",
+    "Security-sensitive local consumers should install @riddledc/riddle-proof-core and a specific adapter instead."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "version": "riddle-proof.package-capabilities.v1",
+  "package": "@riddledc/riddle-proof-runner-playwright",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "notes": [
+    "Network capability is limited by the caller-selected browser target and profile behavior; this package is not a sandbox.",
+    "Subprocess capability is used for optional local Git source provenance.",
+    "Hosted Riddle endpoints and API-key handling are physically absent from this package and its Riddle Proof dependencies."
+  ]
+}

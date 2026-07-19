@@ -1,0 +1,84 @@
+{
+  "name": "@riddledc/riddle-proof-core",
+  "version": "0.0.0",
+  "description": "Capability-bounded Riddle Proof contracts, receipts, semantic certificates, and grounded verification.",
+  "license": "MIT",
+  "author": "RiddleDC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddledc/integrations",
+    "directory": "packages/riddle-proof-core"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "import": "./dist/profile.js",
+      "require": "./dist/profile.cjs"
+    },
+    "./receipts": {
+      "types": "./dist/receipts.d.ts",
+      "import": "./dist/receipts.js",
+      "require": "./dist/receipts.cjs"
+    },
+    "./semantic-certificate": {
+      "types": "./dist/semantic-certificate.d.ts",
+      "import": "./dist/semantic-certificate.js",
+      "require": "./dist/semantic-certificate.cjs"
+    },
+    "./grounded-evidence": {
+      "types": "./dist/grounded-evidence.d.ts",
+      "import": "./dist/grounded-evidence.js",
+      "require": "./dist/grounded-evidence.cjs"
+    },
+    "./checked-meaning": {
+      "types": "./dist/checked-meaning.d.ts",
+      "import": "./dist/checked-meaning.js",
+      "require": "./dist/checked-meaning.cjs"
+    },
+    "./json": {
+      "types": "./dist/json.d.ts",
+      "import": "./dist/json.js",
+      "require": "./dist/json.cjs"
+    },
+    "./capabilities": "./capabilities.json"
+  },
+  "files": [
+    "dist",
+    "capabilities.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "riddleProofCapabilities": {
+    "network": false,
+    "filesystem": false,
+    "browser": false,
+    "subprocess": false,
+    "hostedRiddle": false,
+    "cryptography": true,
+    "ambientClock": true
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/profile.ts src/receipts.ts src/semantic-certificate.ts src/grounded-evidence.ts src/checked-meaning.ts src/json.ts --format cjs,esm --dts --out-dir dist --clean",
+    "clean": "rm -rf dist",
+    "lint": "echo 'lint: (not configured)'",
+    "test": "npm run build && node test.js && node checked-meaning.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.1",
+    "typescript": "^5.4.5"
+  }
+}
