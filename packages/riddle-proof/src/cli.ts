@@ -19,6 +19,7 @@ import {
   createRiddleApiClient,
   isTerminalRiddleJobStatus,
   parseRiddleViewport,
+  RIDDLE_BALANCE_ENDPOINT_PATH,
   RIDDLE_UNSUBMITTED_WAKE_HINT,
   type RiddlePollJobResult,
   type RiddlePollJobOptions,
@@ -680,7 +681,7 @@ async function hostedRiddleSuiteEnvironmentBlocker(
       error: message,
       environment_blocker: {
         source: "riddle_api",
-        endpoint: "/v1/balance",
+        endpoint: RIDDLE_BALANCE_ENDPOINT_PATH,
         reason: "balance_preflight_failed",
         balance_preflight: true,
         job_count: cases.length,
@@ -701,7 +702,7 @@ async function hostedRiddleSuiteEnvironmentBlocker(
     error: `Riddle hosted regression balance preflight failed: ${availableSeconds}s available for ${cases.length} serial hosted job(s), minimum ${requiredSeconds}s required.`,
     environment_blocker: {
       source: "riddle_api",
-      endpoint: "/v1/balance",
+      endpoint: RIDDLE_BALANCE_ENDPOINT_PATH,
       reason: "insufficient_balance",
       error: "Insufficient available balance",
       balance_preflight: true,
@@ -5211,7 +5212,7 @@ async function recoverProfileResultFromRiddleArtifacts(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     let artifactPayload: Record<string, unknown>;
     try {
-      artifactPayload = await input.client.requestJson<Record<string, unknown>>(`/v1/jobs/${input.jobId}/artifacts`);
+      artifactPayload = await input.client.getJobArtifacts(input.jobId);
     } catch {
       artifactPayload = {};
     }
@@ -5762,7 +5763,7 @@ async function preflightRiddleProfileBalanceForCli(
       error,
       environmentBlocker: {
         source: "riddle_api",
-        endpoint: "/v1/balance",
+        endpoint: RIDDLE_BALANCE_ENDPOINT_PATH,
         reason: "balance_preflight_failed",
         balance_preflight: true,
         ...riddleApiErrorBlockerMetadata(error),
@@ -5786,7 +5787,7 @@ async function preflightRiddleProfileBalanceForCli(
     error: `Riddle balance preflight failed: ${availableSeconds}s available for ${jobCount} intended hosted job(s), minimum ${requiredSeconds}s required.`,
     environmentBlocker: {
       source: "riddle_api",
-      endpoint: "/v1/balance",
+      endpoint: RIDDLE_BALANCE_ENDPOINT_PATH,
       reason: "insufficient_balance",
       error: "Insufficient available balance",
       balance_preflight: true,
@@ -6018,7 +6019,7 @@ async function recoverProfileForCli(profile: RiddleProofProfile, options: CliOpt
   const client = createRiddleApiClient(riddleClientConfig(options));
   let artifactPayload: Record<string, unknown>;
   try {
-    artifactPayload = await client.requestJson<Record<string, unknown>>(`/v1/jobs/${jobId}/artifacts`);
+    artifactPayload = await client.getJobArtifacts(jobId);
   } catch (error) {
     return createRiddleProofProfileEnvironmentBlockedResult({
       profile,

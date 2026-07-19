@@ -10,14 +10,14 @@
     "directory": "packages/riddle-proof-riddle-client"
   },
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/client.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "require": "./dist/client.cjs"
     },
     "./client": {
       "types": "./dist/client.d.ts",
@@ -27,42 +27,59 @@
     "./balance": {
       "types": "./dist/balance.d.ts",
       "import": "./dist/balance.js",
-      "require": "./dist/balance.cjs"
+      "require": "./dist/client.cjs"
     },
     "./preview": {
       "types": "./dist/preview.d.ts",
       "import": "./dist/preview.js",
-      "require": "./dist/preview.cjs"
+      "require": "./dist/client.cjs"
     },
     "./runScript": {
       "types": "./dist/runScript.d.ts",
       "import": "./dist/runScript.js",
-      "require": "./dist/runScript.cjs"
+      "require": "./dist/client.cjs"
     },
     "./serverPreview": {
       "types": "./dist/serverPreview.d.ts",
       "import": "./dist/serverPreview.js",
-      "require": "./dist/serverPreview.cjs"
+      "require": "./dist/client.cjs"
     },
     "./polling": {
       "types": "./dist/polling.d.ts",
       "import": "./dist/polling.js",
-      "require": "./dist/polling.cjs"
+      "require": "./dist/client.cjs"
     },
     "./artifacts": {
       "types": "./dist/artifacts.d.ts",
       "import": "./dist/artifacts.js",
-      "require": "./dist/artifacts.cjs"
-    }
+      "require": "./dist/client.cjs"
+    },
+    "./runtime/riddle-core-call": {
+      "import": "./runtime/riddle_core_call.mjs"
+    },
+    "./capabilities": "./capabilities.json"
   },
   "files": [
     "dist",
+    "runtime",
+    "capabilities.json",
     "LICENSE",
     "README.md"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./runtime/riddle_core_call.mjs"
+  ],
   "engines": {
     "node": ">=18"
+  },
+  "riddleProofCapabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hostedRiddle": true,
+    "cryptography": false,
+    "ambientClock": true
   },
   "scripts": {
     "build": "tsup src/index.ts src/client.ts src/balance.ts src/preview.ts src/runScript.ts src/serverPreview.ts src/polling.ts src/artifacts.ts --format cjs,esm --dts --out-dir dist --clean",
@@ -71,7 +88,7 @@
     "test": "npm run build && node test.js"
   },
   "dependencies": {
-    "@riddledc/riddle-proof": "workspace:^"
+    "@riddledc/riddle-proof-core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

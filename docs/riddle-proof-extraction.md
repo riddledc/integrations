@@ -1,5 +1,9 @@
 # Riddle Proof Extraction Plan
 
+> Historical note: this document describes the orchestration-harness
+> extraction. For the current security and npm trust boundary, including the
+> core/hosted inversion, see `docs/architecture/package-boundaries.md`.
+
 Riddle Proof is the reusable proof workflow behind evidence-backed agent changes.
 The public package set now owns the OpenClaw proof wrapper, checkpoint engine,
 and bundled runtime assets that were first proven in a private OpenClaw

@@ -1,0 +1,17 @@
+{
+  "version": "riddle-proof.package-capabilities.v1",
+  "package": "@riddledc/riddle-proof-core",
+  "capabilities": {
+    "network": false,
+    "filesystem": false,
+    "browser": false,
+    "subprocess": false,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "notes": [
+    "Creation helpers that omit an explicit issued_at retain the legacy ambient-clock default during the pre-1.0 compatibility period.",
+    "Verification, parsing, hashing, and composition are deterministic for explicit inputs."
+  ]
+}

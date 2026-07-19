@@ -18,10 +18,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    }
+    },
+    "./capabilities": "./capabilities.json"
   },
   "files": [
     "dist",
+    "capabilities.json",
     "README.md",
     "LICENSE",
     "bin"
@@ -30,6 +32,15 @@
     "riddle-proof-playwright": "./bin/riddle-proof-playwright"
   },
   "sideEffects": false,
+  "riddleProofCapabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hostedRiddle": false,
+    "cryptography": true,
+    "ambientClock": true
+  },
   "engines": {
     "node": ">=18"
   },
@@ -42,7 +53,7 @@
     }
   },
   "dependencies": {
-    "@riddledc/riddle-proof": "workspace:^"
+    "@riddledc/riddle-proof-core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -1,0 +1,19 @@
+{
+  "version": "riddle-proof.package-capabilities.v1",
+  "package": "@riddledc/riddle-proof-local",
+  "capabilities": {
+    "network": false,
+    "filesystem": true,
+    "browser": false,
+    "subprocess": false,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "notes": [
+    "Filesystem reads are limited to explicitly selected regular files; filesystem writes are limited to explicit receipt or grounding destinations.",
+    "Selected source documents are opened read-only and are never mutated.",
+    "The ambient clock is used only when capturedAt is omitted; explicit capturedAt input makes snapshot creation reproducible.",
+    "The default artifact policy is digest_only; minimal and full require explicit selection."
+  ]
+}

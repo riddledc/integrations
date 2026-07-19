@@ -7,7 +7,7 @@ import {
   profileStatusExitCode,
   type RiddlePreviewReceipt,
   type RiddleProofSourceIdentity,
-} from "@riddledc/riddle-proof";
+} from "@riddledc/riddle-proof-core";
 
 const USAGE = `riddle-proof-playwright run-profile --profile <path|json|-> [options]
 

@@ -1,13 +1,19 @@
 import path from "node:path";
 
 import { closePlaywrightSession, createPlaywrightBrowserSession, loadPlaywright } from "./browser";
+import { detectLocalRiddleProofSource } from "./localProvenance";
+import { buildRiddleProofProfileScript } from "./profileScript";
+import {
+  createLocalRiddleProofGroundedCapture,
+  type RiddleProofLocalGroundedCaptureBundle,
+  type RiddleProofLocalGroundedCaptureOptions,
+} from "./groundedCapture";
 import {
   buildLocalRiddleProofArtifactManifest,
   summarizeArtifactManifest,
 } from "./artifacts/artifactManifest";
 import { createRiddleProofArtifactStore, type LocalArtifactInfo } from "./artifacts/localArtifactStore";
 import {
-  buildRiddleProofProfileScript,
   collectRiddleProfileArtifactRefs,
   createRiddleProofObservationReceipt,
   createRiddleProofProfileEnvironmentBlockedResult,
@@ -16,7 +22,6 @@ import {
   normalizeRiddleProofProfile,
   resolveRiddleProofProfileTargetUrl,
   resolveRiddleProofProfileTimeoutSec,
-  detectRiddlePreviewSource,
   type RiddleProofObservationReceipt,
   type RiddlePreviewReceipt,
   type RiddleProofSourceIdentity,
@@ -24,7 +29,7 @@ import {
   type RiddleProofProfileResult,
   type RiddleProofProfileRunner,
   type RiddleProofProfileViewport,
-} from "@riddledc/riddle-proof";
+} from "@riddledc/riddle-proof-core";
 
 const LOCAL_RUNNER: RiddleProofProfileRunner = "local-playwright";
 
@@ -40,6 +45,7 @@ export type RunProfileLocalOptions = {
   previewReceipt?: RiddlePreviewReceipt;
   source?: RiddleProofSourceIdentity;
   sourceDirectory?: string;
+  groundedCapture?: RiddleProofLocalGroundedCaptureOptions;
 };
 
 export type RunProfileLocalResult = {
@@ -48,6 +54,14 @@ export type RunProfileLocalResult = {
   manifestPath: string;
   observationPath: string;
   observation: RiddleProofObservationReceipt;
+  groundedCapturePath?: string;
+  groundedCaptureBundle?: RiddleProofLocalGroundedCaptureBundle;
+  groundedCaptureError?: RiddleProofLocalGroundedCaptureError;
+};
+
+export type RiddleProofLocalGroundedCaptureError = {
+  code: "grounded_capture_unavailable";
+  message: string;
 };
 
 type Session = Awaited<ReturnType<typeof createPlaywrightBrowserSession>>;
@@ -195,6 +209,62 @@ function ensureFile(name: string, value: unknown, store: ReturnType<typeof creat
   store.writeJson(name, value);
 }
 
+function writeGroundedCaptureInputs(
+  profile: RiddleProofProfile,
+  result: RiddleProofProfileResult,
+  store: ReturnType<typeof createRiddleProofArtifactStore>,
+) {
+  store.writeJson("normalized-profile.json", profile);
+  store.writeJson("profile-evidence.json", result.evidence ?? null);
+}
+
+async function browserCaptureIdentity(session: Session, browserName: "chromium" | "firefox" | "webkit") {
+  const browserVersion = (() => {
+    try {
+      return session.browser.version() || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+  const userAgent = await session.page.evaluate(() => navigator.userAgent || "unknown").catch(() => "unknown");
+  const observedUrl = (() => {
+    try {
+      return session.page.url() || "unknown";
+    } catch {
+      return "unknown";
+    }
+  })();
+  return { browserName, browserVersion, userAgent, observedUrl };
+}
+
+function writeGroundedCaptureBundle(input: {
+  options: RiddleProofLocalGroundedCaptureOptions;
+  outputDir: string;
+  profile: RiddleProofProfile;
+  result: RiddleProofProfileResult;
+  source: RiddleProofSourceIdentity;
+  store: ReturnType<typeof createRiddleProofArtifactStore>;
+  identity: Awaited<ReturnType<typeof browserCaptureIdentity>>;
+}) {
+  const bundle = createLocalRiddleProofGroundedCapture({
+    options: input.options,
+    outputDir: input.outputDir,
+    capturedAt: input.result.captured_at,
+    browserName: input.identity.browserName,
+    browserVersion: input.identity.browserVersion,
+    userAgent: input.identity.userAgent,
+    requestedUrl: summarizeProfileRoute(input.profile),
+    observedUrl: input.identity.observedUrl,
+    source: input.source,
+    artifacts: input.store.listArtifacts(),
+  });
+  input.store.writeJson("grounded-capture-bundle.json", bundle);
+  return {
+    groundedCapturePath: path.join(input.outputDir, "grounded-capture-bundle.json"),
+    groundedCaptureBundle: bundle,
+  };
+}
+
 function writeOutputFiles(
   normalizedProfile: RiddleProofProfile,
   result: RiddleProofProfileResult,
@@ -300,7 +370,7 @@ export async function runProfileLocal(
   const store = createRiddleProofArtifactStore(outputDir);
   const source = options.source
     || options.previewReceipt?.source
-    || detectRiddlePreviewSource(options.sourceDirectory || process.cwd());
+    || detectLocalRiddleProofSource(options.sourceDirectory || process.cwd());
   let session: Session | undefined;
 
   const script = buildRiddleProofProfileScript(profile);
@@ -360,13 +430,28 @@ export async function runProfileLocal(
       },
     }, store.listArtifacts());
 
+    if (options.groundedCapture) {
+      writeGroundedCaptureInputs(profile, withArtifacts, store);
+    }
     const persisted = writeOutputFiles(profile, withArtifacts, outputDir, source, options.previewReceipt, store);
+    const groundedCapture = options.groundedCapture
+      ? writeGroundedCaptureBundle({
+          options: options.groundedCapture,
+          outputDir,
+          profile,
+          result: persisted.result,
+          source,
+          store,
+          identity: await browserCaptureIdentity(session, options.browser || "chromium"),
+        })
+      : {};
     return {
       result: mergeArtifactPaths(profile, persisted.result, persisted.artifacts),
       outputDir,
       manifestPath: persisted.manifestPath,
       observationPath: persisted.observationPath,
       observation: persisted.observation,
+      ...groundedCapture,
     };
   } catch (error) {
     const durationMs = Date.now() - scriptStart;
@@ -391,6 +476,14 @@ export async function runProfileLocal(
       manifestPath: persisted.manifestPath,
       observationPath: persisted.observationPath,
       observation: persisted.observation,
+      ...(options.groundedCapture
+        ? {
+            groundedCaptureError: {
+              code: "grounded_capture_unavailable" as const,
+              message: `No signed browser capture was created: ${normalizedError}`,
+            },
+          }
+        : {}),
     };
   } finally {
     if (session?.context) await session.context.close().catch(() => {});

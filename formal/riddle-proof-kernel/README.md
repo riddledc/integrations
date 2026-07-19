@@ -205,6 +205,203 @@ strings: it proves the finite closure structure and preservation properties,
 not SHA-256 collision resistance, JavaScript predicate or rule truth,
 signatures, issuer identity, or the outside-world truth of referenced evidence.
 
+## Experimental Grounded Evidence Kernel
+
+`RiddleProofKernel/GroundedEvidence.lean` models the stronger handoff from
+materialized artifact bytes through signed capture validation, a
+verifier-derived observation, contract issuance, replay, and a complete
+grounded Semantic closure. There is no caller-supplied observation in the
+issuance model: the receipt observation is exactly the registered verifier's
+output for the validated capture, and the contract must accept that same value.
+
+The capture-validation theorems establish that a successful validation has:
+
+- an exact one-to-one, ordered manifest/payload match
+- the declared byte length and digest for every materialized artifact
+- the exact supported capture-statement version and independently expected
+  Semantic scope and challenge nonce
+- a signed decoded-nonce-length field of 32; canonical base64url decoding of
+  the actual nonce string remains runtime-validated
+- capture time inside the allowed age and future-skew window
+- an allowlisted sensor and signer plus an accepted capture signature
+
+The central issuance and replay results include
+`issued_observation_is_exact_verifier_output`,
+`grounded_issuance_contract_accepts_derived_observation`,
+`grounded_issuance_certificate_uses_exact_receipt_evidence`,
+`replay_true_implies_exact_derived_observation_and_receipt`, and
+`replay_true_implies_contract_meaning`. Together they prevent the certificate
+claim, receipt observation, artifact evidence, or replay result from drifting
+away from the validated capture and registered contract inside the model.
+
+The runtime's callback-free path is represented by
+`DeclarativeVerifierProgram`, `declarativeVerifierDescriptor`, and
+`declarativeObservationVerifier`. The verifier descriptor contains the named
+fixed interpreter and the digest recomputed from that fixed engine plus its
+complete data-only ID/version/program definition; its
+derivation is definitionally `interpretVerifier program capture.artifacts`, not
+a supplied callback. The theorems
+`declarative_verifier_descriptor_binds_complete_definition_digest`,
+`declarative_issuance_uses_only_fixed_interpreter_observation` and
+`mismatched_expected_verifier_definition_digest_rejects_declarative_issuance`
+connect this path to issuance and reject a policy that names a different
+complete verifier-definition digest.
+`DeclarativeContractDefinition`, `declarativeGroundingContract`, and
+`interpretDeclarativeContract` analogously model the callback-free all-of
+contract. Its fixed engine plus complete ID/version/label/claim/program
+definition determines the implementation digest recorded beside the engine-only
+trust basis in the receipt. The Lean
+interpreter rejects zero or more than 64 assertions, matching the runtime's
+outer assertion-count bound; executable cases pin both boundaries. Theorems
+`declarative_contract_descriptor_binds_complete_definition_digest`,
+`declarative_contract_issuance_uses_only_fixed_interpreter_decision`,
+`declarative_contract_issuance_receipt_binds_exact_descriptor`, and
+`declarative_contract_replay_uses_only_fixed_interpreter_decision` connect that
+fixed decision and exact descriptor to issuance and replay. Independently
+supplied `ContractRef` checks are part of both issuance and replay;
+`mismatched_expected_contract_implementation_digest_rejects_issuance`,
+`mismatched_expected_contract_trust_basis_rejects_issuance`, and their replay
+counterparts reject contract substitution before a receipt can validate. The
+executable model intentionally abstracts the runtime's strict UTF-8 JSON parse,
+duplicate-selector rejection, RFC 6901 projection, JSON typing, individual
+`exists`/`equals`/`type_is` semantics, and SHA-256 computation; runtime tests
+cover those concrete operations.
+
+A `GroundedClosure` adds one replayable grounding sidecar for each
+contract-derived Semantic leaf and certificate chronology for every body. Its
+well-formedness theorems establish that every reachable contract leaf has one
+matching, replay-accepted sidecar, no sidecar is attached to a composition
+node, no extra or duplicate sidecar is hidden in the packet, and the embedded
+Semantic closure remains well formed. The chronology results
+`well_formed_certificate_issued_at_matches_canonical_body`,
+`well_formed_implies_direct_premise_chronology_monotone`,
+`dependency_path_chronology_monotone`, and
+`well_formed_composite_does_not_predate_reachable_contract_leaf` show that a
+composite cannot be issued before a direct or transitively reachable leaf.
+Every modeled time must first be recovered from that certificate's exact
+canonical body by the supplied `IssuedAtFromCanonicalBody` projection; fidelity
+of this projection to the runtime canonical-body parser is an explicit
+assumption.
+`compose_grounded_some_is_well_formed` and
+`compose_grounded_some_preserves_grounded_reachable_leaves` carry those
+properties through composition while shared-leaf sidecars are stably
+deduplicated.
+
+Executable `native_decide` cases cover a valid signed capture, successful
+grounded issuance and replay, atomic and shared-leaf composition, and reject
+an unsupported capture-statement version, changed artifact bytes, a wrong
+nonce, stale time, a bad signature, an
+untrusted verifier implementation, a rejecting contract, a missing leaf
+sidecar, a sidecar on a composition node, an altered receipt, a fabricated
+body-time projection, a body-authenticated backdated composite, and replay
+rejection.
+
+This layer makes the runtime trust boundary smaller and more inspectable; it
+does not erase it. Digest, signature, receipt-addressing, verifier, and replay
+functions and the canonical-body issued-at projection are parameters in Lean.
+The model proves exact agreement and
+preservation relative to those functions, not SHA-256 collision resistance,
+Ed25519 correctness, key custody, clock or nonce truth, browser fidelity, or
+sensor/verifier calibration. In the current callback registry runtime path,
+`trust_basis: { kind: "external_registry" }` explicitly assigns callback-code
+identity to an independently trusted registry; that association is not a Lean
+theorem. The built-in declarative path removes that callback association by
+fixing the interpreter and hashing the complete data-only definition, but Lean
+still treats the digest function and the interpreter's calibration to the
+outside world as assumptions.
+
+## Experimental Checked Meaning Kernel
+
+`RiddleProofKernel/MeaningKernel.lean` models the next semantic layer above a
+grounded closure: small, fixed rules that turn grounded claim meanings into a
+higher claim meaning without treating a rule name as a proof.
+
+The Lean v0 model is deliberately a smaller binary, materialized-step
+abstraction. Its fixed engine identifier is the runtime identifier
+`riddle-proof.checked-meaning-rule.v0`. A `RuleDefinition` contains that engine,
+the rule ID/version, exact left and right claim keys, an exact conclusion key,
+and opaque canonical parameters. A `ContentAddressedRule` carries the complete
+modeled definition and its abstract digest. The executable checker recomputes
+that digest, requires exact membership in a fixed registry, prohibits two
+definitions from sharing an ID/version in that registry, and checks scope and
+premise/conclusion wiring at every node. Larger formal ideas are represented as
+a pyramid of these small steps.
+
+The runtime counterpart is
+`@riddledc/riddle-proof-core/checked-meaning`. Its wire model is intentionally
+richer and is not definitionally the Lean structure. Runtime rules are N-ary,
+data-only templates over exact claim IDs/versions and parameter patterns. The
+complete runtime-definition digest also covers the label, ordered premise
+patterns, conclusion template and parameter projections, all-of and parameter
+equality constraints, ordered chronology, and optional maximum age. A separate
+domain-separated materialized-rule digest binds the exact Semantic rule
+produced for one application. Validation requires an independently supplied
+exact trusted rule reference, its matching complete registration, and exactly
+one matching rule sidecar for every composition certificate and none for a
+grounded leaf. The Lean model captures the smaller binary composition
+invariant; it does not prove that the TypeScript parser, N-ary materializer, or
+its two digest encodings implement the Lean data type.
+
+Each Lean `GroundedLeaf` identifies its grounding certificate and sidecar and
+has a finite validity interval. `disposition` first checks structure, then
+classifies a future leaf as `unresolved`, an expired leaf as `stale`, and a
+current tree as `checked`. Structural failure takes precedence over expiry, so
+malformed material cannot be relabeled as merely stale. In particular, an
+unknown rule or invented conclusion is unresolved rather than evidence that
+the proposed meaning is false.
+
+Runtime `assessRiddleProofCheckedMeaningClosure` specializes that interval idea
+at consumption time. It replays the closure, recovers the signed capture time
+for every grounded leaf, and applies caller-supplied
+`max_grounded_age_ms` and `max_future_skew_ms` bounds against an explicit
+`consumption_time` before returning `checked`, `stale`, or `unresolved`. Those
+capture-time inequalities instantiate the Lean notion that every leaf must be
+inside its permitted interval: an over-age capture is stale, while a capture
+or root certificate beyond permitted future skew is unresolved. Lean has no
+wire-level root timestamp and does not parse the runtime closure or prove the
+capture-time extraction, millisecond arithmetic, or status mapping; those
+remain runtime conformance obligations.
+
+The structural checker does not by itself grant semantic assurance. A
+`ClaimInterpretation` assigns an actual proposition to each scoped claim, and
+`RuleSound` states that the interpreted left and right premises imply the
+interpreted conclusion. The central theorem,
+`checked_tree_with_grounded_leaves_and_sound_reachable_rules_establishes_root_meaning`,
+proves the root's interpreted meaning only when:
+
+- the complete tree passes the structural, registry, digest, scope, and
+  freshness checker
+- every reachable grounded leaf has its interpreted meaning
+- every rule reachable from the root is sound under the same interpretation
+
+`checked_tree_with_sound_registry_establishes_root_meaning` is the registry
+corollary: exact checked membership lets a proof of registry soundness discharge
+the reachable-rule obligation. Executable fixtures build a bounded save
+round-trip meaning from four grounded facts through three rules, and reject an
+invented conclusion, an unknown shortcut rule, an expired leaf as stale, a
+not-yet-current leaf as unresolved, and a changed definition retaining its old
+digest. A mixed malformed-and-expired fixture is unresolved, demonstrating
+that structural resolution precedes freshness classification. A second substitution
+fixture recomputes the changed definition's digest but retains its ID/version;
+exact registry membership still rejects it. The positive fixture gives the
+higher claims real conjunction semantics rather than making structural
+acceptance synonymous with truth.
+
+The runtime assurance is therefore named `checked_allowlisted_rule`, not
+`proved_rule` or `true_meaning`. It establishes that the exact trusted,
+registered, fixed-interpreter rule accepted the exact grounded premises and
+materialized the exact conclusion. It does not provide the Lean `RuleSound`
+premise. Legal, domain, or other semantic soundness must still be justified by
+the trusted rule publisher and, where formal assurance is claimed, represented
+by a Lean soundness proof under the chosen `ClaimInterpretation`.
+
+Lean also treats definition hashing, canonical encoding, registry
+distribution, signed-time extraction, and the truth supplied for grounded
+leaves as boundary assumptions. Runtime tests cover the concrete parser,
+materializer, replay, sidecar, chronology, freshness-assessment, and hostile
+input behavior; they are conformance evidence, not a proof that the runtime
+wire format is definitionally equal to this smaller model.
+
 ## Layer 3.1: Interaction Proof Evidence
 
 The Layer 3.1 model covers the author-to-verify contract for route-changing

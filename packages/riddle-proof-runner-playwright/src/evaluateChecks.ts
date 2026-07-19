@@ -2,7 +2,7 @@ import {
   assessRiddleProofProfileEvidence,
   type RiddleProofProfile,
   type RiddleProofProfileEvidence,
-} from "@riddledc/riddle-proof";
+} from "@riddledc/riddle-proof-core";
 
 export type LocalRunnerCheckResult = {
   status: "passed" | "failed" | "proof_insufficient" | "environment_blocked";

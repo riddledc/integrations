@@ -1,4 +1,4 @@
-import type { RiddleProofProfileSetupAction } from "@riddledc/riddle-proof";
+import type { RiddleProofProfileSetupAction } from "@riddledc/riddle-proof-core";
 
 type SetupActionResult = {
   action: string;

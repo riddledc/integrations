@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -10,6 +11,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  createRiddleProofGroundedDeclarativeJsonVerifier,
+  verifyRiddleProofSignedCaptureBundle,
+} from "@riddledc/riddle-proof-core";
 import { runProfileLocal } from "./dist/index.js";
 import { launchPlaywrightBrowser } from "./dist/browser.js";
 
@@ -145,6 +150,165 @@ try {
   assert.equal(output.observation.canonical_screenshot?.role, "canonical_screenshot");
   assert.match(output.observation.canonical_screenshot?.path || "", /^screenshots\//);
   assert.ok(output.observation.artifacts.some((artifact) => artifact.path === "artifact-manifest.json"));
+
+  const groundedOutputDir = path.join(workspace, "grounded-artifacts");
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const privateKeyBytes = privateKey.export({ format: "der", type: "pkcs8" });
+  const publicKeyBytes = publicKey.export({ format: "der", type: "spki" });
+  const publicKeyFingerprint = `sha256:${createHash("sha256").update(publicKeyBytes).digest("hex")}`;
+  const groundedScope = {
+    repository: "https://github.com/riddledc/integrations.git",
+    revision: "runner-grounding-test",
+    environment: "local-playwright-test",
+    target: `file://${targetPath}`,
+    proof_attempt: "grounded-runner-smoke",
+  };
+  const groundedNonce = Buffer.alloc(32, 19).toString("base64url");
+  const groundedCollector = {
+    collector_id: "@riddledc/riddle-proof-runner-playwright",
+    collector_version: "0.4.6",
+    implementation_digest: `sha256:${"1".repeat(64)}`,
+  };
+  const groundedVerifierDefinition = createRiddleProofGroundedDeclarativeJsonVerifier({
+    verifier_id: "riddle-proof.browser-profile-evidence",
+    verifier_version: "1",
+    program: {
+      artifact: {
+        artifact_id: "profile-evidence.json",
+        role: "browser_observation",
+        media_type: "application/json",
+      },
+      pointer: "",
+    },
+  });
+  assert.equal(
+    groundedVerifierDefinition.ok,
+    true,
+    groundedVerifierDefinition.ok ? undefined : groundedVerifierDefinition.error.message,
+  );
+  const groundedVerifierRef = groundedVerifierDefinition.verifier_ref;
+  const groundedCaptureOptions = {
+    scope: groundedScope,
+    nonce: groundedNonce,
+    collector: groundedCollector,
+    verifier: groundedVerifierRef,
+    signingKey: {
+      key_id: "runner-grounding-test-key",
+      private_key_pkcs8_base64: privateKeyBytes.toString("base64"),
+    },
+  };
+  const groundedOutput = await runProfileLocal({
+    profile,
+    outputDir: groundedOutputDir,
+    url: groundedScope.target,
+    groundedCapture: groundedCaptureOptions,
+  });
+  assert.equal(
+    groundedOutput.groundedCapturePath,
+    path.join(groundedOutputDir, "grounded-capture-bundle.json"),
+  );
+  assert.equal(existsSync(groundedOutput.groundedCapturePath), true);
+  const groundedBundle = groundedOutput.groundedCaptureBundle;
+  assert.ok(groundedBundle);
+  assert.deepEqual(
+    JSON.parse(readFileSync(groundedOutput.groundedCapturePath, "utf8")),
+    groundedBundle,
+  );
+  assert.equal(groundedBundle.statement.sensor.kind, "browser");
+  assert.equal(groundedBundle.statement.sensor.name, "chromium");
+  assert.notEqual(groundedBundle.statement.sensor.version, "unknown");
+  assert.match(groundedBundle.statement.sensor.metadata.user_agent, /Chrome|Chromium/u);
+  assert.equal(
+    groundedBundle.statement.sensor.metadata.capture_policy.artifact_bytes,
+    "exact_persisted_bytes",
+  );
+
+  const groundedArtifactIds = groundedBundle.statement.artifacts.map((artifact) => artifact.artifact_id);
+  assert.ok(groundedArtifactIds.includes("normalized-profile.json"));
+  assert.ok(groundedArtifactIds.includes("profile-evidence.json"));
+  assert.ok(groundedArtifactIds.some((artifactId) => artifactId.startsWith("screenshots/")));
+  assert.equal(groundedArtifactIds.includes("artifact-manifest.json"), false);
+  assert.equal(groundedArtifactIds.includes("observation-receipt.json"), false);
+  assert.equal(groundedArtifactIds.includes("grounded-capture-bundle.json"), false);
+  for (const artifact of groundedBundle.statement.artifacts) {
+    const persistedBytes = readFileSync(path.join(groundedOutputDir, artifact.artifact_id));
+    assert.equal(artifact.byte_length, persistedBytes.byteLength);
+    assert.equal(
+      artifact.artifact_digest,
+      `sha256:${createHash("sha256").update(persistedBytes).digest("hex")}`,
+      `signed digest binds exact persisted bytes for ${artifact.artifact_id}`,
+    );
+  }
+
+  assert.equal("verify" in groundedVerifierDefinition.registration, false);
+  const groundedPolicy = {
+    expected_scope: groundedScope,
+    expected_nonce: groundedNonce,
+    expected_collector: groundedCollector,
+    expected_sensor: groundedBundle.statement.sensor,
+    expected_verifier: groundedVerifierRef,
+    expected_signer: {
+      key_id: "runner-grounding-test-key",
+      public_key_spki_sha256: publicKeyFingerprint,
+    },
+    verification_time: groundedBundle.statement.captured_at,
+    max_capture_age_ms: 60_000,
+    max_future_skew_ms: 1_000,
+    required_artifact_roles: ["profile_contract", "browser_observation", "screenshot"],
+  };
+  const groundedVerificationInput = {
+    bundle: groundedBundle,
+    policy: groundedPolicy,
+    trusted_signers: [{
+      key_id: "runner-grounding-test-key",
+      public_key_spki_base64: publicKeyBytes.toString("base64"),
+    }],
+    verifier_registry: [groundedVerifierDefinition.registration],
+  };
+  const groundedVerification = verifyRiddleProofSignedCaptureBundle(groundedVerificationInput);
+  assert.equal(
+    groundedVerification.ok,
+    true,
+    groundedVerification.ok ? undefined : groundedVerification.error.message,
+  );
+
+  const changedArtifactBundle = structuredClone(groundedBundle);
+  const evidenceIndex = changedArtifactBundle.inline_artifacts.findIndex(
+    (artifact) => artifact.artifact_id === "profile-evidence.json",
+  );
+  assert.notEqual(evidenceIndex, -1);
+  changedArtifactBundle.inline_artifacts[evidenceIndex].bytes_base64 = Buffer.from(
+    JSON.stringify({ tampered: true }),
+  ).toString("base64");
+  const changedArtifactVerification = verifyRiddleProofSignedCaptureBundle({
+    ...groundedVerificationInput,
+    bundle: changedArtifactBundle,
+  });
+  assert.equal(changedArtifactVerification.ok, false);
+  assert.equal(changedArtifactVerification.error.code, "invalid_bundle");
+
+  const unavailableGroundedOutputDir = path.join(workspace, "grounded-unavailable-artifacts");
+  const unavailableGroundedOutput = await runProfileLocal({
+    profile,
+    outputDir: unavailableGroundedOutputDir,
+    url: groundedScope.target,
+    groundedCapture: {
+      ...groundedCaptureOptions,
+      signingKey: {
+        key_id: "runner-grounding-test-key",
+        private_key_pkcs8_base64: Buffer.from("not-an-ed25519-private-key").toString("base64"),
+      },
+    },
+  });
+  assert.equal(unavailableGroundedOutput.result.status, "environment_blocked");
+  assert.equal(unavailableGroundedOutput.groundedCapturePath, undefined);
+  assert.equal(unavailableGroundedOutput.groundedCaptureBundle, undefined);
+  assert.equal(unavailableGroundedOutput.groundedCaptureError?.code, "grounded_capture_unavailable");
+  assert.match(unavailableGroundedOutput.groundedCaptureError?.message || "", /No signed browser capture was created/u);
+  assert.equal(
+    existsSync(path.join(unavailableGroundedOutputDir, "grounded-capture-bundle.json")),
+    false,
+  );
 
   const helpResult = spawnSync(process.execPath, ["./bin/riddle-proof-playwright", "--help"], {
     encoding: "utf8",
