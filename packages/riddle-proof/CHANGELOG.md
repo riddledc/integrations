@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.8.84
+
+### Patch Changes
+
+- a52248d: Add complete transitive Semantic-certificate closures with exact body and link
+  validation, composable closure construction, trusted-root matching, and strict
+  own-property and dense-array parsing for untrusted Semantic inputs.
+
 ## 0.8.83
 
 ### Patch Changes
