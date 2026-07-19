@@ -4,6 +4,11 @@ import type { JsonValue } from "./types";
 export const RIDDLE_PROOF_SEMANTIC_CERTIFICATE_VERSION =
   "riddle-proof.semantic-certificate.v0" as const;
 
+export const RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION =
+  "riddle-proof.semantic-certificate-closure.v0" as const;
+
+export const RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_MAX_CERTIFICATES = 4096;
+
 export interface RiddleProofSemanticScope {
   repository: string;
   revision: string;
@@ -168,6 +173,137 @@ export type RiddleProofSemanticCompositionResult =
   | { ok: true; certificate: RiddleProofSemanticCertificate }
   | { ok: false; error: RiddleProofSemanticCompositionError };
 
+export interface RiddleProofSemanticCertificateClosure {
+  version: typeof RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION;
+  root_certificate_id: string;
+  certificates: [
+    RiddleProofSemanticCertificate,
+    ...RiddleProofSemanticCertificate[],
+  ];
+}
+
+export type RiddleProofSemanticPremiseSnapshotField =
+  | "derivation_kind"
+  | "assurance"
+  | "scope"
+  | "claim"
+  | "evidence";
+
+export interface RiddleProofSemanticCertificateClosureInvalid {
+  code: "invalid_closure";
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureCertificateInvalid {
+  code: "invalid_closure_certificate";
+  input_index: number;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureDuplicateId {
+  code: "duplicate_certificate_id";
+  certificate_id: string;
+  first_index: number;
+  duplicate_index: number;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureRootMissing {
+  code: "root_certificate_missing";
+  root_certificate_id: string;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureDanglingPremise {
+  code: "dangling_premise";
+  parent_certificate_id: string;
+  premise_index: number;
+  premise_certificate_id: string;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosurePremiseMismatch {
+  code: "premise_snapshot_mismatch";
+  parent_certificate_id: string;
+  premise_index: number;
+  premise_certificate_id: string;
+  field: RiddleProofSemanticPremiseSnapshotField;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureCycle {
+  code: "certificate_cycle";
+  certificate_ids: string[];
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureUnreachable {
+  code: "unreachable_certificates";
+  certificate_ids: string[];
+  message: string;
+}
+
+export type RiddleProofSemanticCertificateClosureValidationError =
+  | RiddleProofSemanticCertificateClosureInvalid
+  | RiddleProofSemanticCertificateClosureCertificateInvalid
+  | RiddleProofSemanticCertificateClosureDuplicateId
+  | RiddleProofSemanticCertificateClosureRootMissing
+  | RiddleProofSemanticCertificateClosureDanglingPremise
+  | RiddleProofSemanticCertificateClosurePremiseMismatch
+  | RiddleProofSemanticCertificateClosureCycle
+  | RiddleProofSemanticCertificateClosureUnreachable;
+
+export type RiddleProofSemanticCertificateClosureValidationResult =
+  | {
+      ok: true;
+      closure: RiddleProofSemanticCertificateClosure;
+      root_certificate: RiddleProofSemanticCertificate;
+    }
+  | { ok: false; error: RiddleProofSemanticCertificateClosureValidationError };
+
+export interface CreateRiddleProofSemanticAtomicCertificateClosureInput {
+  certificate: unknown;
+}
+
+export interface ComposeRiddleProofSemanticCertificateClosuresInput {
+  rule: RiddleProofSemanticRule;
+  closures: [unknown, ...unknown[]];
+  issued_at?: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureInputInvalid {
+  code: "input_closure_invalid";
+  input_index: number;
+  cause: RiddleProofSemanticCertificateClosureValidationError;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureIdCollision {
+  code: "certificate_id_collision";
+  certificate_id: string;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClosureConstructionFailed {
+  code: "closure_construction_failed";
+  cause: RiddleProofSemanticCertificateClosureValidationError;
+  message: string;
+}
+
+export type RiddleProofSemanticCertificateClosureCompositionError =
+  | RiddleProofSemanticCompositionError
+  | RiddleProofSemanticCertificateClosureInputInvalid
+  | RiddleProofSemanticCertificateClosureIdCollision
+  | RiddleProofSemanticCertificateClosureConstructionFailed;
+
+export type RiddleProofSemanticCertificateClosureCompositionResult =
+  | {
+      ok: true;
+      certificate: RiddleProofSemanticCertificate;
+      closure: RiddleProofSemanticCertificateClosure;
+    }
+  | { ok: false; error: RiddleProofSemanticCertificateClosureCompositionError };
+
 export interface MatchRiddleProofSemanticCertificateInput {
   certificate: unknown;
   expected_certificate_id: string;
@@ -221,6 +357,26 @@ export type RiddleProofSemanticCertificateMatchResult =
   | { ok: true; certificate: RiddleProofSemanticCertificate }
   | { ok: false; error: RiddleProofSemanticCertificateMatchError };
 
+export interface MatchRiddleProofSemanticCertificateClosureInput {
+  closure: unknown;
+  expected_root_certificate_id: string;
+  expected_scope: RiddleProofSemanticScope;
+  expected_claim: RiddleProofSemanticClaimExpectation;
+  expected_assurance: RiddleProofSemanticAssurance;
+}
+
+export type RiddleProofSemanticCertificateClosureMatchError =
+  | RiddleProofSemanticCertificateClosureValidationError
+  | RiddleProofSemanticCertificateMatchError;
+
+export type RiddleProofSemanticCertificateClosureMatchResult =
+  | {
+      ok: true;
+      closure: RiddleProofSemanticCertificateClosure;
+      root_certificate: RiddleProofSemanticCertificate;
+    }
+  | { ok: false; error: RiddleProofSemanticCertificateClosureMatchError };
+
 type RiddleProofSemanticCertificateBody = Omit<
   RiddleProofSemanticCertificate,
   "certificate_id"
@@ -260,7 +416,9 @@ const CERTIFICATE_FIELDS = new Set([
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function safeErrorMessage(error: unknown): string {
@@ -282,11 +440,115 @@ function assertOnlyKeys(
   context: string,
 ): void {
   const allowedSet = new Set(allowed);
-  for (const key of Object.keys(record)) {
+  for (const key of Reflect.ownKeys(record)) {
+    if (typeof key !== "string") {
+      throw new Error(`${context} contains an unsupported symbol field.`);
+    }
     if (!allowedSet.has(key)) {
       throw new Error(`${context} contains unsupported field ${key}.`);
     }
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    if (
+      !descriptor
+      || descriptor.enumerable !== true
+      || descriptor.get !== undefined
+      || descriptor.set !== undefined
+    ) {
+      throw new Error(`${context}.${key} must be an enumerable data field.`);
+    }
   }
+}
+
+function readDenseDataArray(
+  value: unknown,
+  context: string,
+  maximumLength?: number,
+): unknown[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    throw new Error(`${context} must be a plain array.`);
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (
+    !lengthDescriptor
+    || typeof lengthDescriptor.value !== "number"
+    || !Number.isSafeInteger(lengthDescriptor.value)
+    || lengthDescriptor.value < 0
+  ) {
+    throw new Error(`${context}.length must be an own data field.`);
+  }
+  const length = lengthDescriptor.value;
+  if (maximumLength !== undefined && length > maximumLength) {
+    throw new Error(`${context} exceeds ${maximumLength} entries.`);
+  }
+  const indexedElements: Array<[number, unknown]> = [];
+  let elementCount = 0;
+  for (const key of Reflect.ownKeys(value)) {
+    if (key === "length") continue;
+    if (typeof key !== "string") {
+      throw new Error(`${context} contains an unsupported symbol field.`);
+    }
+    const index = Number(key);
+    if (
+      !Number.isInteger(index)
+      || index < 0
+      || index >= length
+      || index >= 2 ** 32 - 1
+      || String(index) !== key
+    ) {
+      throw new Error(`${context} contains unsupported array field ${key}.`);
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      !descriptor
+      || descriptor.enumerable !== true
+      || descriptor.get !== undefined
+      || descriptor.set !== undefined
+    ) {
+      throw new Error(`${context}[${key}] must be an enumerable data field.`);
+    }
+    indexedElements.push([index, descriptor.value]);
+    elementCount += 1;
+  }
+  if (elementCount !== length) {
+    throw new Error(`${context} must not contain sparse or inherited entries.`);
+  }
+  indexedElements.sort(([left], [right]) => left - right);
+  return indexedElements.map(([, entry]) => entry);
+}
+
+function requiredField(
+  record: Record<string, unknown>,
+  key: string,
+  context: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor) {
+    throw new Error(`${context}.${key} is required.`);
+  }
+  if (
+    descriptor.enumerable !== true
+    || descriptor.get !== undefined
+    || descriptor.set !== undefined
+  ) {
+    throw new Error(`${context}.${key} must be an enumerable data field.`);
+  }
+  return descriptor.value;
+}
+
+function optionalField(
+  record: Record<string, unknown>,
+  key: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  if (!descriptor) return undefined;
+  if (
+    descriptor.enumerable !== true
+    || descriptor.get !== undefined
+    || descriptor.set !== undefined
+  ) {
+    throw new Error(`${key} must be an enumerable data field.`);
+  }
+  return descriptor.value;
 }
 
 function requiredString(
@@ -294,7 +556,7 @@ function requiredString(
   key: string,
   context: string,
 ): string {
-  const value = record[key];
+  const value = requiredField(record, key, context);
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${context}.${key} must be a non-empty string.`);
   }
@@ -306,30 +568,57 @@ function optionalString(
   key: string,
   context: string,
 ): string | undefined {
-  if (record[key] === undefined) return undefined;
+  if (optionalField(record, key) === undefined) return undefined;
   return requiredString(record, key, context);
 }
 
-function isJsonValue(value: unknown, ancestors = new Set<object>()): value is JsonValue {
+function cloneJsonValue(
+  value: unknown,
+  context: string,
+  ancestors = new Set<object>(),
+): JsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") {
-    return true;
+    return value;
   }
-  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error(`${context} must contain only finite numbers.`);
+    return value;
+  }
   if (Array.isArray(value)) {
-    if (ancestors.has(value)) return false;
+    const elements = readDenseDataArray(value, context);
+    if (ancestors.has(value)) throw new Error(`${context} must not be cyclic.`);
     ancestors.add(value);
-    const valid = value.every((entry) => isJsonValue(entry, ancestors));
+    const cloned = elements.map((entry, index) =>
+      cloneJsonValue(entry, `${context}[${index}]`, ancestors));
     ancestors.delete(value);
-    return valid;
+    return cloned;
   }
-  if (!isRecord(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-  if (ancestors.has(value)) return false;
+  if (!isRecord(value)) throw new Error(`${context} must contain only JSON values.`);
+  if (ancestors.has(value)) throw new Error(`${context} must not be cyclic.`);
   ancestors.add(value);
-  const valid = Object.values(value).every((entry) => isJsonValue(entry, ancestors));
+  const cloned: Record<string, JsonValue> = {};
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") {
+      throw new Error(`${context} contains an unsupported symbol field.`);
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      !descriptor
+      || descriptor.enumerable !== true
+      || descriptor.get !== undefined
+      || descriptor.set !== undefined
+    ) {
+      throw new Error(`${context}.${key} must be an enumerable data field.`);
+    }
+    Object.defineProperty(cloned, key, {
+      value: cloneJsonValue(descriptor.value, `${context}.${key}`, ancestors),
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
   ancestors.delete(value);
-  return valid;
+  return cloned;
 }
 
 function parseJsonObject(
@@ -337,11 +626,11 @@ function parseJsonObject(
   context: string,
 ): Record<string, JsonValue> | undefined {
   if (value === undefined) return undefined;
-  if (!isRecord(value) || !isJsonValue(value)) {
+  if (!isRecord(value)) {
     throw new Error(`${context} must be a JSON object.`);
   }
-  const cloned = JSON.parse(JSON.stringify(value)) as unknown;
-  if (!isRecord(cloned) || !isJsonValue(cloned)) {
+  const cloned = cloneJsonValue(value, context);
+  if (!isRecord(cloned)) {
     throw new Error(`${context} must remain a JSON object when serialized.`);
   }
   return cloned;
@@ -373,7 +662,7 @@ function parseClaimRef(
 ): RiddleProofSemanticClaimRef {
   if (!isRecord(value)) throw new Error(`${context} must be an object.`);
   assertOnlyKeys(value, ["claim_id", "claim_version", "parameters", ...allowedExtras], context);
-  const parameters = parseJsonObject(value.parameters, `${context}.parameters`);
+  const parameters = parseJsonObject(optionalField(value, "parameters"), `${context}.parameters`);
   return {
     claim_id: requiredString(value, "claim_id", context),
     claim_version: requiredString(value, "claim_version", context),
@@ -412,10 +701,11 @@ function parseEvidenceRef(value: unknown, context: string): RiddleProofSemanticE
 }
 
 function parseEvidenceBundle(value: unknown, context: string): RiddleProofSemanticEvidenceBundle {
-  if (!Array.isArray(value) || value.length === 0) {
+  const entries = readDenseDataArray(value, context);
+  if (entries.length === 0) {
     throw new Error(`${context} must contain at least one evidence reference.`);
   }
-  return value.map((entry, index) =>
+  return entries.map((entry, index) =>
     parseEvidenceRef(entry, `${context}[${index}]`)) as RiddleProofSemanticEvidenceBundle;
 }
 
@@ -439,12 +729,12 @@ function parseContract(
     ["contract_id", "contract_version", "label", "claim", ...(allowRuntimePredicate ? ["accepts"] : [])],
     context,
   );
-  if (allowRuntimePredicate && typeof value.accepts !== "function") {
+  if (allowRuntimePredicate && typeof requiredField(value, "accepts", context) !== "function") {
     throw new Error(`${context}.accepts must be a function.`);
   }
   return {
     ...parseContractRef(value, context),
-    claim: parseClaim(value.claim, `${context}.claim`),
+    claim: parseClaim(requiredField(value, "claim", context), `${context}.claim`),
   };
 }
 
@@ -455,20 +745,22 @@ function parseRule(
 ): RiddleProofSemanticRule {
   if (!isRecord(value)) throw new Error(`${context} must be an object.`);
   assertOnlyKeys(value, ["rule_id", "rule_version", "label", "premises", "conclusion"], context);
-  if (!Array.isArray(value.premises) || value.premises.length === 0) {
+  const premises = requiredField(value, "premises", context);
+  const premiseValues = readDenseDataArray(premises, `${context}.premises`);
+  if (premiseValues.length === 0) {
     throw new Error(`${context}.premises must contain at least one claim reference.`);
   }
   return {
     rule_id: requiredString(value, "rule_id", context),
     rule_version: requiredString(value, "rule_version", context),
     label: requiredString(value, "label", context),
-    premises: value.premises.map((premise, index) =>
+    premises: premiseValues.map((premise, index) =>
       parseClaimRef(
         premise,
         `${context}.premises[${index}]`,
         allowFullPremises ? ["label"] : [],
       )) as RiddleProofSemanticRule["premises"],
-    conclusion: parseClaim(value.conclusion, `${context}.conclusion`),
+    conclusion: parseClaim(requiredField(value, "conclusion", context), `${context}.conclusion`),
   };
 }
 
@@ -490,9 +782,9 @@ function parsePremise(value: unknown, context: string): RiddleProofSemanticPremi
     certificate_id: requiredString(value, "certificate_id", context),
     derivation_kind: derivationKind as RiddleProofSemanticPremise["derivation_kind"],
     assurance: assurance as RiddleProofSemanticPremise["assurance"],
-    scope: parseScope(value.scope, `${context}.scope`),
-    claim: parseClaim(value.claim, `${context}.claim`),
-    evidence: parseEvidenceBundle(value.evidence, `${context}.evidence`),
+    scope: parseScope(requiredField(value, "scope", context), `${context}.scope`),
+    claim: parseClaim(requiredField(value, "claim", context), `${context}.claim`),
+    evidence: parseEvidenceBundle(requiredField(value, "evidence", context), `${context}.evidence`),
   };
 }
 
@@ -542,28 +834,30 @@ function parseDerivation(value: unknown, context: string): RiddleProofSemanticDe
   const kind = requiredString(value, "kind", context);
   if (kind === "contract") {
     assertOnlyKeys(value, ["kind", "assurance", "contract"], context);
-    if (value.assurance !== "runtime_contract_accepted") {
+    if (requiredField(value, "assurance", context) !== "runtime_contract_accepted") {
       throw new Error(`${context}.assurance must be runtime_contract_accepted.`);
     }
     return {
       kind,
       assurance: "runtime_contract_accepted",
-      contract: parseContract(value.contract, `${context}.contract`),
+      contract: parseContract(requiredField(value, "contract", context), `${context}.contract`),
     };
   }
   if (kind === "composition") {
     assertOnlyKeys(value, ["kind", "assurance", "rule", "premises"], context);
-    if (value.assurance !== "declared_runtime_rule") {
+    if (requiredField(value, "assurance", context) !== "declared_runtime_rule") {
       throw new Error(`${context}.assurance must be declared_runtime_rule.`);
     }
-    if (!Array.isArray(value.premises) || value.premises.length === 0) {
+    const premises = requiredField(value, "premises", context);
+    const premiseValues = readDenseDataArray(premises, `${context}.premises`);
+    if (premiseValues.length === 0) {
       throw new Error(`${context}.premises must contain at least one certificate premise.`);
     }
     return {
       kind,
       assurance: "declared_runtime_rule",
-      rule: parseRule(value.rule, `${context}.rule`),
-      premises: value.premises.map((premise, index) =>
+      rule: parseRule(requiredField(value, "rule", context), `${context}.rule`),
+      premises: premiseValues.map((premise, index) =>
         parsePremise(premise, `${context}.premises[${index}]`)) as RiddleProofSemanticCompositionDerivation["premises"],
     };
   }
@@ -586,9 +880,25 @@ export function createRiddleProofSemanticCertificate<Observation>(
     ["scope", "evidence", "observation", "contract", "issued_at"],
     "semantic certificate input",
   );
-  const scope = parseScope(input.scope, "semantic certificate scope");
-  const evidence = parseEvidenceBundle(input.evidence, "semantic certificate evidence");
-  const contract = parseContract(input.contract, "semantic certificate contract", true);
+  const scope = parseScope(requiredField(input, "scope", "semantic certificate input"), "semantic certificate scope");
+  const evidence = parseEvidenceBundle(
+    requiredField(input, "evidence", "semantic certificate input"),
+    "semantic certificate evidence",
+  );
+  const runtimeContract = requiredField(
+    input,
+    "contract",
+    "semantic certificate input",
+  ) as RiddleProofSemanticRuntimeContract<Observation>;
+  const contract = parseContract(runtimeContract, "semantic certificate contract", true);
+  const accepts = requiredField(
+    runtimeContract as unknown as Record<string, unknown>,
+    "accepts",
+    "semantic certificate contract",
+  );
+  if (typeof accepts !== "function") {
+    throw new Error("semantic certificate contract.accepts must be a function.");
+  }
   const contractRef: RiddleProofSemanticContractRef = {
     contract_id: contract.contract_id,
     contract_version: contract.contract_version,
@@ -597,14 +907,17 @@ export function createRiddleProofSemanticCertificate<Observation>(
   const claim = contract.claim;
   let accepted: boolean;
   try {
-    accepted = input.contract.accepts({ ...scope }, input.observation) === true;
+    accepted = accepts(
+      { ...scope },
+      requiredField(input, "observation", "semantic certificate input") as Observation,
+    ) === true;
   } catch (error) {
     return {
       ok: false,
       error: {
         code: "contract_error",
         contract: contractRef,
-        message: `Semantic contract evaluation failed: ${error instanceof Error ? error.message : String(error)}.`,
+        message: `Semantic contract evaluation failed: ${safeErrorMessage(error)}.`,
       },
     };
   }
@@ -624,7 +937,10 @@ export function createRiddleProofSemanticCertificate<Observation>(
     claim,
     evidence,
     derivation: { kind: "contract", assurance: "runtime_contract_accepted", contract },
-    issued_at: parseIssuedAt(input.issued_at || new Date().toISOString(), "semantic certificate issued_at"),
+    issued_at: parseIssuedAt(
+      optionalField(input, "issued_at") || new Date().toISOString(),
+      "semantic certificate issued_at",
+    ),
   };
   return { ok: true, certificate: withCertificateId(body) };
 }
@@ -633,24 +949,27 @@ export function parseRiddleProofSemanticCertificate(
   value: unknown,
 ): RiddleProofSemanticCertificate {
   if (!isRecord(value)) throw new Error("Semantic certificate must be an object.");
-  if (value.version !== RIDDLE_PROOF_SEMANTIC_CERTIFICATE_VERSION) {
-    throw new Error(`Unsupported Semantic certificate version ${String(value.version || "missing")}.`);
+  const version = optionalField(value, "version");
+  if (version !== RIDDLE_PROOF_SEMANTIC_CERTIFICATE_VERSION) {
+    throw new Error(`Unsupported Semantic certificate version ${String(version || "missing")}.`);
   }
   for (const field of AUTHORITY_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(value, field)) {
       throw new Error(`Semantic certificate must not contain authority field ${field}.`);
     }
   }
-  for (const field of Object.keys(value)) {
-    if (!CERTIFICATE_FIELDS.has(field)) {
-      throw new Error(`Semantic certificate contains unsupported field ${field}.`);
-    }
-  }
+  assertOnlyKeys(value, [...CERTIFICATE_FIELDS], "Semantic certificate");
 
-  const scope = parseScope(value.scope, "semantic certificate scope");
-  const claim = parseClaim(value.claim, "semantic certificate claim");
-  const evidence = parseEvidenceBundle(value.evidence, "semantic certificate evidence");
-  const derivation = parseDerivation(value.derivation, "semantic certificate derivation");
+  const scope = parseScope(requiredField(value, "scope", "semantic certificate"), "semantic certificate scope");
+  const claim = parseClaim(requiredField(value, "claim", "semantic certificate"), "semantic certificate claim");
+  const evidence = parseEvidenceBundle(
+    requiredField(value, "evidence", "semantic certificate"),
+    "semantic certificate evidence",
+  );
+  const derivation = parseDerivation(
+    requiredField(value, "derivation", "semantic certificate"),
+    "semantic certificate derivation",
+  );
   if (derivation.kind === "contract" && !sameClaimRef(claim, derivation.contract.claim)) {
     throw new Error("Semantic contract-derived claim must match its contract claim.");
   }
@@ -682,7 +1001,10 @@ export function parseRiddleProofSemanticCertificate(
     claim,
     evidence,
     derivation,
-    issued_at: parseIssuedAt(value.issued_at, "semantic certificate issued_at"),
+    issued_at: parseIssuedAt(
+      requiredField(value, "issued_at", "semantic certificate"),
+      "semantic certificate issued_at",
+    ),
   };
   const observedId = requiredString(value, "certificate_id", "semantic certificate");
   const expectedId = certificateId(body);
@@ -695,7 +1017,7 @@ export function parseRiddleProofSemanticCertificate(
 export function matchRiddleProofSemanticCertificate(
   input: MatchRiddleProofSemanticCertificateInput,
 ): RiddleProofSemanticCertificateMatchResult {
-  if (!isRecord(input)) throw new Error("Semantic certificate match input must be an object.");
+  if (!isRecord(input)) throw new Error("Semantic certificate match input must be a plain object.");
   assertOnlyKeys(
     input,
     [
@@ -718,11 +1040,11 @@ export function matchRiddleProofSemanticCertificate(
     );
   }
   const expectedScope = parseScope(
-    input.expected_scope,
+    requiredField(input, "expected_scope", "semantic certificate match input"),
     "semantic certificate match expected_scope",
   );
   const expectedClaim = parseClaimRef(
-    input.expected_claim,
+    requiredField(input, "expected_claim", "semantic certificate match input"),
     "semantic certificate match expected_claim",
     ["label"],
   );
@@ -742,7 +1064,9 @@ export function matchRiddleProofSemanticCertificate(
 
   let certificate: RiddleProofSemanticCertificate;
   try {
-    certificate = parseRiddleProofSemanticCertificate(input.certificate);
+    certificate = parseRiddleProofSemanticCertificate(
+      requiredField(input, "certificate", "semantic certificate match input"),
+    );
   } catch (error) {
     return {
       ok: false,
@@ -842,11 +1166,20 @@ export function composeRiddleProofSemanticCertificates(
     ["rule", "certificates", "issued_at"],
     "semantic composition input",
   );
-  const rule = parseRule(input.rule, "semantic composition rule", true);
-  if (!Array.isArray(input.certificates) || input.certificates.length === 0) {
+  const rule = parseRule(
+    requiredField(input, "rule", "semantic composition input"),
+    "semantic composition rule",
+    true,
+  );
+  const inputCertificates = requiredField(input, "certificates", "semantic composition input");
+  const certificateValues = readDenseDataArray(
+    inputCertificates,
+    "semantic composition input.certificates",
+  );
+  if (certificateValues.length === 0) {
     throw new Error("Semantic composition requires at least one certificate.");
   }
-  const certificates = input.certificates.map((certificate) =>
+  const certificates = certificateValues.map((certificate) =>
     parseRiddleProofSemanticCertificate(certificate));
   if (certificates.length !== rule.premises.length) {
     return {
@@ -906,7 +1239,422 @@ export function composeRiddleProofSemanticCertificates(
       rule,
       premises: certificates.map(premiseFromCertificate) as RiddleProofSemanticCompositionDerivation["premises"],
     },
-    issued_at: parseIssuedAt(input.issued_at || new Date().toISOString(), "semantic certificate issued_at"),
+    issued_at: parseIssuedAt(
+      optionalField(input, "issued_at") || new Date().toISOString(),
+      "semantic certificate issued_at",
+    ),
   };
   return { ok: true, certificate: withCertificateId(body) };
+}
+
+function invalidClosure(
+  message: string,
+): RiddleProofSemanticCertificateClosureValidationResult {
+  return { ok: false, error: { code: "invalid_closure", message } };
+}
+
+function firstPremiseSnapshotMismatch(
+  snapshot: RiddleProofSemanticPremise,
+  certificate: RiddleProofSemanticCertificate,
+): RiddleProofSemanticPremiseSnapshotField | undefined {
+  const observed = premiseFromCertificate(certificate);
+  if (snapshot.derivation_kind !== observed.derivation_kind) return "derivation_kind";
+  if (snapshot.assurance !== observed.assurance) return "assurance";
+  if (stableJson(snapshot.scope) !== stableJson(observed.scope)) return "scope";
+  if (stableJson(snapshot.claim) !== stableJson(observed.claim)) return "claim";
+  if (stableJson(snapshot.evidence) !== stableJson(observed.evidence)) return "evidence";
+  return undefined;
+}
+
+function validateSemanticCertificateClosureInternal(
+  value: unknown,
+): RiddleProofSemanticCertificateClosureValidationResult {
+  if (!isRecord(value)) {
+    return invalidClosure("Semantic certificate closure must be a plain object.");
+  }
+  assertOnlyKeys(
+    value,
+    ["version", "root_certificate_id", "certificates"],
+    "Semantic certificate closure",
+  );
+  if (
+    requiredField(value, "version", "Semantic certificate closure")
+    !== RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION
+  ) {
+    return invalidClosure("Unsupported Semantic certificate closure version.");
+  }
+  const rootCertificateId = requiredString(
+    value,
+    "root_certificate_id",
+    "Semantic certificate closure",
+  );
+  if (!/^rpsc_[0-9a-f]{64}$/u.test(rootCertificateId)) {
+    return invalidClosure(
+      "Semantic certificate closure.root_certificate_id must be a full rpsc content ID.",
+    );
+  }
+  const inputCertificates = requiredField(
+    value,
+    "certificates",
+    "Semantic certificate closure",
+  );
+  const certificateValues = readDenseDataArray(
+    inputCertificates,
+    "Semantic certificate closure.certificates",
+    RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_MAX_CERTIFICATES,
+  );
+  if (certificateValues.length === 0) {
+    return invalidClosure("Semantic certificate closure must contain at least one certificate.");
+  }
+
+  const certificates: RiddleProofSemanticCertificate[] = [];
+  for (let index = 0; index < certificateValues.length; index += 1) {
+    try {
+      certificates.push(parseRiddleProofSemanticCertificate(certificateValues[index]));
+    } catch (error) {
+      return {
+        ok: false,
+        error: {
+          code: "invalid_closure_certificate",
+          input_index: index,
+          message: `Semantic certificate closure certificate ${index} did not parse: ${safeErrorMessage(error)}`,
+        },
+      };
+    }
+  }
+
+  const certificatesById = new Map<string, RiddleProofSemanticCertificate>();
+  const firstIndexById = new Map<string, number>();
+  for (let index = 0; index < certificates.length; index += 1) {
+    const certificate = certificates[index];
+    const firstIndex = firstIndexById.get(certificate.certificate_id);
+    if (firstIndex !== undefined) {
+      return {
+        ok: false,
+        error: {
+          code: "duplicate_certificate_id",
+          certificate_id: certificate.certificate_id,
+          first_index: firstIndex,
+          duplicate_index: index,
+          message: `Semantic certificate closure repeats certificate ${certificate.certificate_id}.`,
+        },
+      };
+    }
+    firstIndexById.set(certificate.certificate_id, index);
+    certificatesById.set(certificate.certificate_id, certificate);
+  }
+
+  const rootCertificate = certificatesById.get(rootCertificateId);
+  if (!rootCertificate) {
+    return {
+      ok: false,
+      error: {
+        code: "root_certificate_missing",
+        root_certificate_id: rootCertificateId,
+        message: "Semantic certificate closure does not contain its declared root certificate.",
+      },
+    };
+  }
+
+  type TraversalFrame = {
+    certificate: RiddleProofSemanticCertificate;
+    next_premise_index: number;
+  };
+  const states = new Map<string, "visiting" | "visited">();
+  const stack: TraversalFrame[] = [{ certificate: rootCertificate, next_premise_index: 0 }];
+  const dependencyFirst: RiddleProofSemanticCertificate[] = [];
+  states.set(rootCertificateId, "visiting");
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1];
+    const premises = frame.certificate.derivation.kind === "composition"
+      ? frame.certificate.derivation.premises
+      : [];
+    if (frame.next_premise_index < premises.length) {
+      const premiseIndex = frame.next_premise_index;
+      frame.next_premise_index += 1;
+      const snapshot = premises[premiseIndex];
+      const child = certificatesById.get(snapshot.certificate_id);
+      if (!child) {
+        return {
+          ok: false,
+          error: {
+            code: "dangling_premise",
+            parent_certificate_id: frame.certificate.certificate_id,
+            premise_index: premiseIndex,
+            premise_certificate_id: snapshot.certificate_id,
+            message: `Semantic certificate ${frame.certificate.certificate_id} premise ${premiseIndex} has no full certificate body.`,
+          },
+        };
+      }
+      const mismatch = firstPremiseSnapshotMismatch(snapshot, child);
+      if (mismatch) {
+        return {
+          ok: false,
+          error: {
+            code: "premise_snapshot_mismatch",
+            parent_certificate_id: frame.certificate.certificate_id,
+            premise_index: premiseIndex,
+            premise_certificate_id: snapshot.certificate_id,
+            field: mismatch,
+            message: `Semantic certificate ${frame.certificate.certificate_id} premise ${premiseIndex} has a different ${mismatch} than its full certificate body.`,
+          },
+        };
+      }
+      const childState = states.get(child.certificate_id);
+      if (childState === "visiting") {
+        const cycleStart = stack.findIndex(
+          (candidate) => candidate.certificate.certificate_id === child.certificate_id,
+        );
+        const certificateIds = stack
+          .slice(Math.max(0, cycleStart))
+          .map((candidate) => candidate.certificate.certificate_id);
+        certificateIds.push(child.certificate_id);
+        return {
+          ok: false,
+          error: {
+            code: "certificate_cycle",
+            certificate_ids: certificateIds,
+            message: "Semantic certificate closure contains a certificate cycle.",
+          },
+        };
+      }
+      if (childState !== "visited") {
+        states.set(child.certificate_id, "visiting");
+        stack.push({ certificate: child, next_premise_index: 0 });
+      }
+      continue;
+    }
+    stack.pop();
+    states.set(frame.certificate.certificate_id, "visited");
+    dependencyFirst.push(frame.certificate);
+  }
+
+  if (dependencyFirst.length !== certificates.length) {
+    const reachable = new Set(dependencyFirst.map((certificate) => certificate.certificate_id));
+    const unreachable = certificates
+      .filter((certificate) => !reachable.has(certificate.certificate_id))
+      .map((certificate) => certificate.certificate_id)
+      .sort();
+    return {
+      ok: false,
+      error: {
+        code: "unreachable_certificates",
+        certificate_ids: unreachable,
+        message: "Semantic certificate closure contains certificates unreachable from its root.",
+      },
+    };
+  }
+
+  const closure: RiddleProofSemanticCertificateClosure = {
+    version: RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION,
+    root_certificate_id: rootCertificateId,
+    certificates: dependencyFirst as RiddleProofSemanticCertificateClosure["certificates"],
+  };
+  return { ok: true, closure, root_certificate: rootCertificate };
+}
+
+export function validateRiddleProofSemanticCertificateClosure(
+  value: unknown,
+): RiddleProofSemanticCertificateClosureValidationResult {
+  try {
+    return validateSemanticCertificateClosureInternal(value);
+  } catch (error) {
+    return invalidClosure(
+      `Semantic certificate closure did not parse: ${safeErrorMessage(error)}`,
+    );
+  }
+}
+
+export function createRiddleProofSemanticAtomicCertificateClosure(
+  input: CreateRiddleProofSemanticAtomicCertificateClosureInput,
+): RiddleProofSemanticCertificateClosureValidationResult {
+  if (!isRecord(input)) throw new Error("Semantic certificate closure input must be a plain object.");
+  assertOnlyKeys(input, ["certificate"], "Semantic certificate closure input");
+  const certificate = requiredField(input, "certificate", "Semantic certificate closure input");
+  let parsedCertificate: RiddleProofSemanticCertificate;
+  try {
+    parsedCertificate = parseRiddleProofSemanticCertificate(certificate);
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid_closure_certificate",
+        input_index: 0,
+        message: `Semantic certificate closure certificate 0 did not parse: ${safeErrorMessage(error)}`,
+      },
+    };
+  }
+  if (parsedCertificate.derivation.kind !== "contract") {
+    return invalidClosure(
+      "An atomic Semantic certificate closure requires a contract-derived certificate.",
+    );
+  }
+  return validateRiddleProofSemanticCertificateClosure({
+    version: RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION,
+    root_certificate_id: parsedCertificate.certificate_id,
+    certificates: [certificate],
+  });
+}
+
+export function composeRiddleProofSemanticCertificateClosures(
+  input: ComposeRiddleProofSemanticCertificateClosuresInput,
+): RiddleProofSemanticCertificateClosureCompositionResult {
+  if (!isRecord(input)) throw new Error("Semantic closure composition input must be a plain object.");
+  assertOnlyKeys(
+    input,
+    ["rule", "closures", "issued_at"],
+    "Semantic closure composition input",
+  );
+  const inputClosures = requiredField(
+    input,
+    "closures",
+    "Semantic closure composition input",
+  );
+  const closureValues = readDenseDataArray(
+    inputClosures,
+    "Semantic closure composition input.closures",
+  );
+  if (closureValues.length === 0) {
+    throw new Error("Semantic closure composition requires at least one closure.");
+  }
+  const validatedClosures: RiddleProofSemanticCertificateClosureValidationResult[] = [];
+  for (let index = 0; index < closureValues.length; index += 1) {
+    const result = validateRiddleProofSemanticCertificateClosure(closureValues[index]);
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: {
+          code: "input_closure_invalid",
+          input_index: index,
+          cause: result.error,
+          message: `Semantic input closure ${index} is invalid: ${result.error.message}`,
+        },
+      };
+    }
+    validatedClosures.push(result);
+  }
+
+  const roots = validatedClosures.map((result) => {
+    if (!result.ok) throw new Error("Validated Semantic closure unexpectedly became invalid.");
+    return result.root_certificate;
+  }) as [RiddleProofSemanticCertificate, ...RiddleProofSemanticCertificate[]];
+  const composition = composeRiddleProofSemanticCertificates({
+    rule: requiredField(input, "rule", "Semantic closure composition input") as RiddleProofSemanticRule,
+    certificates: roots,
+    issued_at: optionalField(input, "issued_at") as string | undefined,
+  });
+  if (!composition.ok) return composition;
+
+  const merged: RiddleProofSemanticCertificate[] = [];
+  const byId = new Map<string, RiddleProofSemanticCertificate>();
+  for (const result of validatedClosures) {
+    if (!result.ok) continue;
+    for (const certificate of result.closure.certificates) {
+      const existing = byId.get(certificate.certificate_id);
+      if (existing) {
+        if (stableJson(existing) !== stableJson(certificate)) {
+          return {
+            ok: false,
+            error: {
+              code: "certificate_id_collision",
+              certificate_id: certificate.certificate_id,
+              message: `Semantic closures contain unequal bodies for ${certificate.certificate_id}.`,
+            },
+          };
+        }
+        continue;
+      }
+      byId.set(certificate.certificate_id, certificate);
+      merged.push(certificate);
+    }
+  }
+  if (byId.has(composition.certificate.certificate_id)) {
+    return {
+      ok: false,
+      error: {
+        code: "certificate_id_collision",
+        certificate_id: composition.certificate.certificate_id,
+        message: "Semantic composition produced a root ID already present in its premise closures.",
+      },
+    };
+  }
+  merged.push(composition.certificate);
+
+  const validation = validateRiddleProofSemanticCertificateClosure({
+    version: RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_VERSION,
+    root_certificate_id: composition.certificate.certificate_id,
+    certificates: merged,
+  });
+  if (!validation.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "closure_construction_failed",
+        cause: validation.error,
+        message: `Semantic closure construction failed: ${validation.error.message}`,
+      },
+    };
+  }
+  return {
+    ok: true,
+    certificate: composition.certificate,
+    closure: validation.closure,
+  };
+}
+
+export function matchRiddleProofSemanticCertificateClosure(
+  input: MatchRiddleProofSemanticCertificateClosureInput,
+): RiddleProofSemanticCertificateClosureMatchResult {
+  if (!isRecord(input)) throw new Error("Semantic certificate closure match input must be a plain object.");
+  assertOnlyKeys(
+    input,
+    [
+      "closure",
+      "expected_root_certificate_id",
+      "expected_scope",
+      "expected_claim",
+      "expected_assurance",
+    ],
+    "Semantic certificate closure match input",
+  );
+  const validation = validateRiddleProofSemanticCertificateClosure(
+    requiredField(input, "closure", "Semantic certificate closure match input"),
+  );
+  if (!validation.ok) return validation;
+  const expectedRootCertificateId = requiredString(
+    input,
+    "expected_root_certificate_id",
+    "Semantic certificate closure match input",
+  );
+  if (!/^rpsc_[0-9a-f]{64}$/u.test(expectedRootCertificateId)) {
+    throw new Error(
+      "Semantic certificate closure match input.expected_root_certificate_id must be a full rpsc content ID.",
+    );
+  }
+  const rootMatch = matchRiddleProofSemanticCertificate({
+    certificate: validation.root_certificate,
+    expected_certificate_id: expectedRootCertificateId,
+    expected_scope: requiredField(
+      input,
+      "expected_scope",
+      "Semantic certificate closure match input",
+    ) as RiddleProofSemanticScope,
+    expected_claim: requiredField(
+      input,
+      "expected_claim",
+      "Semantic certificate closure match input",
+    ) as RiddleProofSemanticClaimExpectation,
+    expected_assurance: requiredField(
+      input,
+      "expected_assurance",
+      "Semantic certificate closure match input",
+    ) as RiddleProofSemanticAssurance,
+  });
+  if (!rootMatch.ok) return rootMatch;
+  return {
+    ok: true,
+    closure: validation.closure,
+    root_certificate: rootMatch.certificate,
+  };
 }

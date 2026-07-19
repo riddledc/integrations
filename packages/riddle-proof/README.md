@@ -92,8 +92,9 @@ produces no certificate:
 ```ts
 import {
   createRiddleProofSemanticCertificate,
-  composeRiddleProofSemanticCertificates,
-  matchRiddleProofSemanticCertificate,
+  createRiddleProofSemanticAtomicCertificateClosure,
+  composeRiddleProofSemanticCertificateClosures,
+  matchRiddleProofSemanticCertificateClosure,
 } from "@riddledc/riddle-proof/semantic-certificate";
 
 const quiet = createRiddleProofSemanticCertificate({
@@ -120,7 +121,16 @@ const quiet = createRiddleProofSemanticCertificate({
 
 if (!quiet.ok) throw new Error(quiet.error.message);
 
-const behavior = composeRiddleProofSemanticCertificates({
+const quietClosure = createRiddleProofSemanticAtomicCertificateClosure({
+  certificate: quiet.certificate,
+});
+const laterClosure = createRiddleProofSemanticAtomicCertificateClosure({
+  certificate: later.certificate,
+});
+if (!quietClosure.ok) throw new Error(quietClosure.error.message);
+if (!laterClosure.ok) throw new Error(laterClosure.error.message);
+
+const behavior = composeRiddleProofSemanticCertificateClosures({
   rule: {
     rule_id: "tidepool.quiet-then-collision",
     rule_version: "1",
@@ -128,39 +138,46 @@ const behavior = composeRiddleProofSemanticCertificates({
     premises: [quiet.certificate.claim, later.certificate.claim],
     conclusion: observedWaveCollisionBehaviorClaim,
   },
-  certificates: [quiet.certificate, later.certificate],
+  closures: [quietClosure.closure, laterClosure.closure],
 });
+
+if (!behavior.ok) throw new Error(behavior.error.message);
 ```
 
-A later agent can consume one exact certificate without reopening its receipt
-files. The expected content ID must arrive through the consumer's trusted
-handoff or configuration; copying it from the same untrusted certificate would
-not add trust:
+`riddle-proof.semantic-certificate-closure.v0` carries the root and every
+transitively referenced full certificate body. Closure composition validates
+each input, deduplicates shared descendants, creates the higher root, and then
+validates the complete result. Arbitrary transport order is accepted, but a
+successful validator returns one deterministic dependency-first, root-last
+order. A closure is bounded by the exported
+`RIDDLE_PROOF_SEMANTIC_CERTIFICATE_CLOSURE_MAX_CERTIFICATES` value (currently
+4,096 bodies). Missing bodies, duplicate IDs, snapshot/body disagreements,
+cycles, and unreachable extras fail closed.
+
+A later agent can validate the complete derivation without reopening receipt
+files. It still needs the expected root ID, scope, claim, and assurance from an
+independent trusted handoff or configuration; copying expectations from the
+same untrusted closure would not add trust:
 
 ```ts
-const match = matchRiddleProofSemanticCertificate({
-  certificate: JSON.parse(serializedCertificate),
-  expected_certificate_id: trustedHandoffCertificateId,
+const match = matchRiddleProofSemanticCertificateClosure({
+  closure: JSON.parse(serializedClosure),
+  expected_root_certificate_id: trustedHandoffCertificateId,
   expected_scope: scope,
   expected_claim: observedWaveCollisionBehaviorClaim,
   expected_assurance: "declared_runtime_rule",
 });
 
 if (!match.ok) throw new Error(match.error.message);
-// match.certificate is the exact scoped certificate this consumer requested.
+// match.closure contains every validated body; match.root_certificate is exact.
 ```
 
-Matching first reparses the envelope and its content ID, then compares the
-trusted expected ID, all five scope fields, claim ID/version/parameters, and
-top-level assurance. It does no filesystem or network I/O, and a successful
-match does not authenticate the issuer or the referenced evidence.
-
-This is an exact root-certificate handoff, not independent proof-tree
-reconstruction. A composite certificate retains compact immediate-premise
-snapshots, not the full transitive certificate bodies. A consumer that does not
-already trust the expected root ID needs a complete certificate closure plus a
-contract/rule identity policy before it can independently inspect the whole
-derivation.
+Closure matching reparses and re-hashes every body, resolves every immediate
+premise snapshot to its exact full body, rejects bodies not reachable from the
+declared root, and only then compares the trusted root ID, all five scope
+fields, claim ID/version/parameters, and assurance. The original
+`matchRiddleProofSemanticCertificate` remains available for intentionally
+bounded, root-only handoffs.
 
 Composition requires the declared premise claims and exact scope equality. It
 copies compact premise snapshots into the derivation and sets the higher
@@ -170,13 +187,21 @@ declared runtime rule. The parser rechecks those relationships and the
 content-addressed certificate ID. The serialized v0 objects use exact keys and
 reject any `status`, verdict, merge, sync, ready-to-ship, shipping-authority,
 or free-form metadata field: semantic composition is deliberately separate
-from release policy.
+from release policy. Direct JavaScript inputs are treated as JSON data: object
+fields must be own enumerable data properties and structural arrays must be
+dense. Accessors, `toJSON` hooks, inherited fields, symbols, and hidden fields
+are rejected instead of being executed or silently discarded.
 
-The boundary remains explicit. Derivations say `runtime_contract_accepted` or
-`declared_runtime_rule`; JavaScript predicates and named rules are inspectable
-runtime models, not Lean proof terms. Certificate hashes are content identities,
-not signatures, and receipt IDs and digests do not authenticate browser, Git,
-CDN, screenshot, or outside-world truth.
+The boundary remains explicit. Complete closure validation establishes
+structural and semantic linkage, not the truth of the leaves. Derivations say
+`runtime_contract_accepted` or `declared_runtime_rule`; JavaScript predicates
+and named rules are inspectable runtime models, not Lean proof terms.
+Certificate hashes are content identities, not signatures. Validation performs
+no filesystem or network I/O, does not authenticate an issuer, and does not
+authenticate or recompute browser, Git, CDN, screenshot, receipt, or artifact
+truth. Contract/rule IDs remain declared data, so consumers that care which
+models were used should apply their own allowlist or authenticated issuer
+policy in addition to anchoring the expected root ID.
 
 Persist a deploy result and its immutable receipt for later Change Proof input:
 

@@ -1,5 +1,6 @@
 import Std
 import RiddleProofKernel.SemanticComposition
+import RiddleProofKernel.SemanticClosure
 
 namespace RiddleProofKernel
 
