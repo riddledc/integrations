@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-local",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Network-free, read-only local document snapshot capture for Riddle Proof.",
   "license": "MIT",
   "author": "RiddleDC",

@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-runner-playwright",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Local Playwright runner for Riddle Proof profiles.",
   "license": "MIT",
   "author": "RiddleDC",

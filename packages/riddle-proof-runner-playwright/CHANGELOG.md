@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.4.7
+
+### Patch Changes
+
+- a252146: Add optional Ed25519 grounded capture output that signs the exact persisted Playwright evidence bytes and records browser provenance.
+- Updated dependencies [a252146]
+  - @riddledc/riddle-proof-core@0.1.0
+
 ## 0.4.6
 
 ### Patch Changes

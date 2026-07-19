@@ -1,5 +1,24 @@
 # @riddledc/riddle-proof
 
+## 0.8.85
+
+### Patch Changes
+
+- a252146: Add signed grounded capture bundles, callback-free declarative JSON verifier and contract programs, deterministic observation verification, grounded Semantic receipts and certificates, replayed closure composition, and the accompanying Lean invariant model.
+
+  Add fixed content-addressed checked-meaning rules, trusted-rule replay, exact
+  root matching, and explicit consumption-time `checked`, `stale`, or
+  `unresolved` assessment, with a deliberately bounded Lean semantic model.
+
+- a252146: Move the hosted Riddle endpoint, credential, upload, Preview, and polling
+  implementations into the dedicated hosted-client package. Keep the existing
+  facade and runtime entrypoints as compatibility re-exports with identical
+  ESM/CJS API and `RiddleApiError` identity.
+- Updated dependencies [a252146]
+- Updated dependencies [a252146]
+  - @riddledc/riddle-proof-riddle-client@0.4.3
+  - @riddledc/riddle-proof-core@0.1.0
+
 ## 0.8.84
 
 ### Patch Changes
