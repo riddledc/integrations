@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.82
+
+### Patch Changes
+
+- aa2d3ba: Add an experimental semantic-certificate runtime API for scope-bound, evidence-preserving claim composition, with explicit mismatch rejection and no shipping authority.
+
 ## 0.8.81
 
 ### Patch Changes
