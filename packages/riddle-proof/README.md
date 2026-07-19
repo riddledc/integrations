@@ -93,6 +93,7 @@ produces no certificate:
 import {
   createRiddleProofSemanticCertificate,
   composeRiddleProofSemanticCertificates,
+  matchRiddleProofSemanticCertificate,
 } from "@riddledc/riddle-proof/semantic-certificate";
 
 const quiet = createRiddleProofSemanticCertificate({
@@ -130,6 +131,36 @@ const behavior = composeRiddleProofSemanticCertificates({
   certificates: [quiet.certificate, later.certificate],
 });
 ```
+
+A later agent can consume one exact certificate without reopening its receipt
+files. The expected content ID must arrive through the consumer's trusted
+handoff or configuration; copying it from the same untrusted certificate would
+not add trust:
+
+```ts
+const match = matchRiddleProofSemanticCertificate({
+  certificate: JSON.parse(serializedCertificate),
+  expected_certificate_id: trustedHandoffCertificateId,
+  expected_scope: scope,
+  expected_claim: observedWaveCollisionBehaviorClaim,
+  expected_assurance: "declared_runtime_rule",
+});
+
+if (!match.ok) throw new Error(match.error.message);
+// match.certificate is the exact scoped certificate this consumer requested.
+```
+
+Matching first reparses the envelope and its content ID, then compares the
+trusted expected ID, all five scope fields, claim ID/version/parameters, and
+top-level assurance. It does no filesystem or network I/O, and a successful
+match does not authenticate the issuer or the referenced evidence.
+
+This is an exact root-certificate handoff, not independent proof-tree
+reconstruction. A composite certificate retains compact immediate-premise
+snapshots, not the full transitive certificate bodies. A consumer that does not
+already trust the expected root ID needs a complete certificate closure plus a
+contract/rule identity policy before it can independently inspect the whole
+derivation.
 
 Composition requires the declared premise claims and exact scope equality. It
 copies compact premise snapshots into the derivation and sets the higher

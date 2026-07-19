@@ -22,6 +22,11 @@ export interface RiddleProofSemanticClaim extends RiddleProofSemanticClaimRef {
   label: string;
 }
 
+export interface RiddleProofSemanticClaimExpectation
+  extends RiddleProofSemanticClaimRef {
+  label?: string;
+}
+
 export interface RiddleProofSemanticEvidenceRef {
   receipt_id: string;
   artifact_digest: string;
@@ -58,10 +63,14 @@ export interface RiddleProofSemanticRule {
   conclusion: RiddleProofSemanticClaim;
 }
 
+export type RiddleProofSemanticAssurance =
+  | "runtime_contract_accepted"
+  | "declared_runtime_rule";
+
 export interface RiddleProofSemanticPremise {
   certificate_id: string;
   derivation_kind: RiddleProofSemanticDerivation["kind"];
-  assurance: RiddleProofSemanticDerivation["assurance"];
+  assurance: RiddleProofSemanticAssurance;
   scope: RiddleProofSemanticScope;
   claim: RiddleProofSemanticClaim;
   evidence: RiddleProofSemanticEvidenceBundle;
@@ -159,6 +168,59 @@ export type RiddleProofSemanticCompositionResult =
   | { ok: true; certificate: RiddleProofSemanticCertificate }
   | { ok: false; error: RiddleProofSemanticCompositionError };
 
+export interface MatchRiddleProofSemanticCertificateInput {
+  certificate: unknown;
+  expected_certificate_id: string;
+  expected_scope: RiddleProofSemanticScope;
+  expected_claim: RiddleProofSemanticClaimExpectation;
+  expected_assurance: RiddleProofSemanticAssurance;
+}
+
+export interface RiddleProofSemanticCertificateInvalid {
+  code: "invalid_certificate";
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateIdMismatch {
+  code: "certificate_id_mismatch";
+  expected: string;
+  observed: string;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateMatchScopeMismatch {
+  code: "scope_mismatch";
+  field: RiddleProofSemanticScopeField;
+  expected: string;
+  observed: string;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateClaimMismatch {
+  code: "claim_mismatch";
+  expected: RiddleProofSemanticClaimRef;
+  observed: RiddleProofSemanticClaimRef;
+  message: string;
+}
+
+export interface RiddleProofSemanticCertificateAssuranceMismatch {
+  code: "assurance_mismatch";
+  expected: RiddleProofSemanticAssurance;
+  observed: RiddleProofSemanticAssurance;
+  message: string;
+}
+
+export type RiddleProofSemanticCertificateMatchError =
+  | RiddleProofSemanticCertificateInvalid
+  | RiddleProofSemanticCertificateIdMismatch
+  | RiddleProofSemanticCertificateMatchScopeMismatch
+  | RiddleProofSemanticCertificateClaimMismatch
+  | RiddleProofSemanticCertificateAssuranceMismatch;
+
+export type RiddleProofSemanticCertificateMatchResult =
+  | { ok: true; certificate: RiddleProofSemanticCertificate }
+  | { ok: false; error: RiddleProofSemanticCertificateMatchError };
+
 type RiddleProofSemanticCertificateBody = Omit<
   RiddleProofSemanticCertificate,
   "certificate_id"
@@ -199,6 +261,19 @@ const CERTIFICATE_FIELDS = new Set([
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeErrorMessage(error: unknown): string {
+  try {
+    if (error instanceof Error) return String(error.message);
+  } catch {
+    // Fall through to generic stringification.
+  }
+  try {
+    return String(error);
+  } catch {
+    return "unprintable thrown value";
+  }
 }
 
 function assertOnlyKeys(
@@ -615,6 +690,122 @@ export function parseRiddleProofSemanticCertificate(
     throw new Error("Semantic certificate_id must match its content.");
   }
   return { ...body, certificate_id: observedId };
+}
+
+export function matchRiddleProofSemanticCertificate(
+  input: MatchRiddleProofSemanticCertificateInput,
+): RiddleProofSemanticCertificateMatchResult {
+  if (!isRecord(input)) throw new Error("Semantic certificate match input must be an object.");
+  assertOnlyKeys(
+    input,
+    [
+      "certificate",
+      "expected_certificate_id",
+      "expected_scope",
+      "expected_claim",
+      "expected_assurance",
+    ],
+    "semantic certificate match input",
+  );
+  const expectedCertificateId = requiredString(
+    input,
+    "expected_certificate_id",
+    "semantic certificate match input",
+  );
+  if (!/^rpsc_[0-9a-f]{64}$/u.test(expectedCertificateId)) {
+    throw new Error(
+      "Semantic certificate match input.expected_certificate_id must be a full rpsc content ID.",
+    );
+  }
+  const expectedScope = parseScope(
+    input.expected_scope,
+    "semantic certificate match expected_scope",
+  );
+  const expectedClaim = parseClaimRef(
+    input.expected_claim,
+    "semantic certificate match expected_claim",
+    ["label"],
+  );
+  const expectedAssurance = requiredString(
+    input,
+    "expected_assurance",
+    "semantic certificate match input",
+  );
+  if (
+    expectedAssurance !== "runtime_contract_accepted"
+    && expectedAssurance !== "declared_runtime_rule"
+  ) {
+    throw new Error(
+      "Semantic certificate match input.expected_assurance must be runtime_contract_accepted or declared_runtime_rule.",
+    );
+  }
+
+  let certificate: RiddleProofSemanticCertificate;
+  try {
+    certificate = parseRiddleProofSemanticCertificate(input.certificate);
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        code: "invalid_certificate",
+        message: `Semantic certificate did not parse: ${safeErrorMessage(error)}`,
+      },
+    };
+  }
+
+  if (certificate.certificate_id !== expectedCertificateId) {
+    return {
+      ok: false,
+      error: {
+        code: "certificate_id_mismatch",
+        expected: expectedCertificateId,
+        observed: certificate.certificate_id,
+        message: "Semantic certificate does not match the trusted expected content ID.",
+      },
+    };
+  }
+
+  const scopeMismatch = firstScopeMismatch(expectedScope, certificate.scope);
+  if (scopeMismatch) {
+    return {
+      ok: false,
+      error: {
+        code: "scope_mismatch",
+        ...scopeMismatch,
+        message: `Semantic certificate has a different ${scopeMismatch.field} than the consumer expected.`,
+      },
+    };
+  }
+
+  if (!sameClaimRef(expectedClaim, certificate.claim)) {
+    return {
+      ok: false,
+      error: {
+        code: "claim_mismatch",
+        expected: expectedClaim,
+        observed: parseClaimRef(
+          certificate.claim,
+          "semantic certificate match observed claim",
+          ["label"],
+        ),
+        message: "Semantic certificate does not state the claim the consumer expected.",
+      },
+    };
+  }
+
+  if (certificate.derivation.assurance !== expectedAssurance) {
+    return {
+      ok: false,
+      error: {
+        code: "assurance_mismatch",
+        expected: expectedAssurance,
+        observed: certificate.derivation.assurance,
+        message: "Semantic certificate does not have the assurance the consumer expected.",
+      },
+    };
+  }
+
+  return { ok: true, certificate };
 }
 
 function firstScopeMismatch(
