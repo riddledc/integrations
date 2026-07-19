@@ -180,6 +180,31 @@ term: receipt IDs and artifact digests remain opaque references, and neither
 Lean nor the runtime certificate authenticates browser, Git, CDN, screenshot,
 or outside-world truth.
 
+`RiddleProofKernel/SemanticClosure.lean` models the complete transitive handoff
+used by `riddle-proof.semantic-certificate-closure.v0`. A valid normalized
+closure has unique certificate IDs, an exact root in the final position, and a
+dependency-first list in which every premise snapshot resolves to an exact
+earlier full body. Every listed body must be reachable from the root and must
+share the root scope. The resulting theorems expose:
+
+- a strict-prefix/topological witness for every dependency, ruling out cycles
+- exact premise-body and premise-evidence agreement with no dangling links
+- reachability of every included body, ruling out unrelated extras
+- the exact root ID and common root scope
+- a smart constructor whose successful result carries all of those invariants
+- closure composition that requires every nonempty input root in premise order,
+  can return only a newly validated closure, and stably deduplicates a shared
+  descendant
+
+Executable `native_decide` examples cover valid atomic and shared-descendant
+closures plus missing, duplicate, forward, unrelated, and mismatched-snapshot
+failures. The runtime first parses and verifies canonical SHA-256 certificate
+IDs, then normalizes arbitrary input order into the dependency-first form that
+Lean models. Lean deliberately treats IDs and canonical parameters as abstract
+strings: it proves the finite closure structure and preservation properties,
+not SHA-256 collision resistance, JavaScript predicate or rule truth,
+signatures, issuer identity, or the outside-world truth of referenced evidence.
+
 ## Layer 3.1: Interaction Proof Evidence
 
 The Layer 3.1 model covers the author-to-verify contract for route-changing
