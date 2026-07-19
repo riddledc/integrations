@@ -51,6 +51,7 @@ import { createCaptureDiagnostic } from "@riddledc/riddle-proof/diagnostics";
 import { toRiddleProofRunParams } from "@riddledc/riddle-proof/openclaw";
 import { assessRiddleProofChange } from "@riddledc/riddle-proof/change-proof";
 import { createRiddleProofObservationReceipt } from "@riddledc/riddle-proof/receipts";
+import { composeRiddleProofSemanticCertificates } from "@riddledc/riddle-proof/semantic-certificate";
 ```
 
 The root export provides generic contracts and helpers. Integration-specific
@@ -76,6 +77,75 @@ Executor (`local_playwright`, `riddle_hosted`, or direct collection), target
 (`url` or `preview`), proof contract, comparison role, publication, and source
 identity are independent dimensions. A merge recommendation is evidence-based
 advice; it does not grant shipping authorization.
+
+### Experimental Semantic Certificates
+
+`riddle-proof.semantic-certificate.v0` is the first runtime surface for
+compressing accepted, scoped observations into claims that another contract or
+agent can inspect and compose. Every certificate has a complete scope
+(`repository`, `revision`, `environment`, `target`, and `proof_attempt`), a
+named and versioned claim, and at least one receipt plus artifact digest.
+
+Atomic issuance evaluates an explicit runtime contract. A rejected contract
+produces no certificate:
+
+```ts
+import {
+  createRiddleProofSemanticCertificate,
+  composeRiddleProofSemanticCertificates,
+} from "@riddledc/riddle-proof/semantic-certificate";
+
+const quiet = createRiddleProofSemanticCertificate({
+  scope,
+  observation: earlyTraceSample,
+  evidence: [{
+    receipt_id: "obs_tidepool_early",
+    artifact_digest: orderedTraceDigest,
+    role: "ordered_trace_witness",
+  }],
+  contract: {
+    contract_id: "tidepool.early-quiescence",
+    contract_version: "1",
+    label: "The early trace is quiet",
+    claim: {
+      claim_id: "tidepool.early-quiescence",
+      claim_version: "1",
+      parameters: { sample_index: 1 },
+      label: "The early sample has no collision and no sound",
+    },
+    accepts: (_scope, sample) => !sample.collision && !sample.sound,
+  },
+});
+
+if (!quiet.ok) throw new Error(quiet.error.message);
+
+const behavior = composeRiddleProofSemanticCertificates({
+  rule: {
+    rule_id: "tidepool.quiet-then-collision",
+    rule_version: "1",
+    label: "Interpret the two trace facts together",
+    premises: [quiet.certificate.claim, later.certificate.claim],
+    conclusion: observedWaveCollisionBehaviorClaim,
+  },
+  certificates: [quiet.certificate, later.certificate],
+});
+```
+
+Composition requires the declared premise claims and exact scope equality. It
+copies compact premise snapshots into the derivation and sets the higher
+certificate's evidence to the ordered concatenation of premise evidence. The
+snapshots retain whether each input came from a checked runtime contract or a
+declared runtime rule. The parser rechecks those relationships and the
+content-addressed certificate ID. The serialized v0 objects use exact keys and
+reject any `status`, verdict, merge, sync, ready-to-ship, shipping-authority,
+or free-form metadata field: semantic composition is deliberately separate
+from release policy.
+
+The boundary remains explicit. Derivations say `runtime_contract_accepted` or
+`declared_runtime_rule`; JavaScript predicates and named rules are inspectable
+runtime models, not Lean proof terms. Certificate hashes are content identities,
+not signatures, and receipt IDs and digests do not authenticate browser, Git,
+CDN, screenshot, or outside-world truth.
 
 Persist a deploy result and its immutable receipt for later Change Proof input:
 
