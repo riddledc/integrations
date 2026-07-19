@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.83
+
+### Patch Changes
+
+- a8c2bbc: Add exact downstream matching for a trusted Semantic certificate content ID, scope, claim, and assurance without reopening its evidence artifacts.
+
 ## 0.8.82
 
 ### Patch Changes
