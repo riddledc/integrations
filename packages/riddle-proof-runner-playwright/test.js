@@ -41,7 +41,7 @@ const targetPath = path.join(workspace, "target.html");
 
 writeFileSync(
   targetPath,
-  "<!doctype html><html><body><div id=\"app\">Local runner smoke</div></body></html>",
+  "<!doctype html><html><body><div id=\"app\">Local runner smoke</div><script>document.body.dataset.maxTouchPoints=String(navigator.maxTouchPoints)</script></body></html>",
   "utf8",
 );
 
@@ -105,6 +105,35 @@ try {
   for (const file of requiredFiles) {
     assert.equal(existsSync(file), true, `Expected artifact exists: ${file}`);
   }
+
+  const touchOutputDir = path.join(workspace, "touch-artifacts");
+  const touchOutput = await runProfileLocal({
+    profile: {
+      ...profile,
+      name: "local-runner-touch-viewport",
+      target: {
+        ...profile.target,
+        viewports: [{
+          name: "ipad",
+          width: 820,
+          height: 1180,
+          hasTouch: true,
+          isMobile: true,
+        }],
+        setup_actions: [],
+      },
+      checks: [{
+        type: "selector_visible",
+        selector: "body[data-max-touch-points='1']",
+      }],
+    },
+    outputDir: touchOutputDir,
+    url: `file://${targetPath}`,
+  });
+  assert.equal(touchOutput.result.status, "passed");
+  assert.equal(touchOutput.result.evidence.viewports[0].width, 820);
+  assert.equal(touchOutput.result.evidence.viewports[0].height, 1180);
+
   const parsedManifest = JSON.parse(readFileSync(path.join(outputDir, "artifact-manifest.json"), "utf8"));
   assert.equal(parsedManifest.version, "riddle-proof-local-runner-manifest.v1");
   assert.ok(parsedManifest.artifacts.some((artifact) => artifact.kind === "screenshot"));

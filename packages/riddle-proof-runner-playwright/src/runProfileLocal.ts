@@ -315,6 +315,8 @@ export async function runProfileLocal(
       viewport: {
         width: outputViewport.width,
         height: outputViewport.height,
+        hasTouch: outputViewport.hasTouch,
+        isMobile: outputViewport.isMobile,
       },
       timeoutMs,
       browser: options.browser || "chromium",

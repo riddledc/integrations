@@ -306,6 +306,8 @@ export interface RiddleProofProfileViewport {
   name: string;
   width: number;
   height: number;
+  hasTouch?: boolean;
+  isMobile?: boolean;
 }
 
 export interface RiddleProofProfileSetupAction {
@@ -1853,10 +1855,14 @@ function normalizeViewport(input: unknown, index: number): RiddleProofProfileVie
   if (!width || !height || width < 100 || height < 100) {
     throw new Error(`target.viewports[${index}] requires numeric width and height >= 100.`);
   }
+  const hasTouch = booleanValue(valueFromOwn(input, "hasTouch", "has_touch"));
+  const isMobile = booleanValue(valueFromOwn(input, "isMobile", "is_mobile"));
   return {
     name: normalizeName(input.name || input.label, `viewport-${index + 1}`),
     width: Math.round(width),
     height: Math.round(height),
+    ...(hasTouch === undefined ? {} : { hasTouch }),
+    ...(isMobile === undefined ? {} : { isMobile }),
   };
 }
 
