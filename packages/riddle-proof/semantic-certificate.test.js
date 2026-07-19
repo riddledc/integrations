@@ -6,6 +6,7 @@ import {
   RIDDLE_PROOF_SEMANTIC_CERTIFICATE_VERSION,
   composeRiddleProofSemanticCertificates,
   createRiddleProofSemanticCertificate,
+  matchRiddleProofSemanticCertificate,
   parseRiddleProofSemanticCertificate,
   riddleProofSemanticScopesEqual,
 } from "./dist/semantic-certificate.js";
@@ -25,10 +26,17 @@ assert.equal(
   "root CJS export should expose the Semantic certificate API",
 );
 assert.equal(typeof cjsRootExports.composeRiddleProofSemanticCertificates, "function");
+assert.equal(typeof rootExports.matchRiddleProofSemanticCertificate, "function");
+assert.equal(typeof cjsRootExports.matchRiddleProofSemanticCertificate, "function");
 assert.equal(
   typeof cjsSubpathExports.composeRiddleProofSemanticCertificates,
   "function",
   "CJS subpath should expose the composition helper",
+);
+assert.equal(
+  typeof cjsSubpathExports.matchRiddleProofSemanticCertificate,
+  "function",
+  "CJS subpath should expose the downstream matcher",
 );
 
 const baseScope = {
@@ -226,6 +234,12 @@ const behaviorResult = composeRiddleProofSemanticCertificates({
 });
 assert.equal(behaviorResult.ok, true, behaviorResult.ok ? undefined : behaviorResult.error.message);
 const behaviorCertificate = behaviorResult.certificate;
+const trustedEarlyCertificateId =
+  "rpsc_9f8f609642efbf4eb3beb448dee583bd39adb2fbe2da3ee815bc62c02c848b19";
+const trustedBehaviorCertificateId =
+  "rpsc_69f057579f354b542a729488cce025de4f6ff306598eef8c14fd3cfd1a41da5b";
+assert.equal(earlyCertificate.certificate_id, trustedEarlyCertificateId);
+assert.equal(behaviorCertificate.certificate_id, trustedBehaviorCertificateId);
 assert.deepEqual(behaviorCertificate.evidence, [earlyEvidence, laterEvidence]);
 assert.deepEqual(
   behaviorCertificate.derivation.premises.map((premise) => premise.certificate_id),
@@ -246,6 +260,187 @@ for (const field of [
 ]) {
   assert.equal(Object.hasOwn(behaviorCertificate, field), false, `${field} must remain outside Semantic certificates`);
 }
+
+const behaviorExpectation = {
+  certificate: behaviorCertificate,
+  expected_certificate_id: trustedBehaviorCertificateId,
+  expected_scope: baseScope,
+  expected_claim: behaviorClaim,
+  expected_assurance: "declared_runtime_rule",
+};
+const exactBehaviorMatch = matchRiddleProofSemanticCertificate(behaviorExpectation);
+assert.equal(exactBehaviorMatch.ok, true);
+assert.deepEqual(exactBehaviorMatch.certificate, behaviorCertificate);
+
+const exactAtomicMatch = matchRiddleProofSemanticCertificate({
+  certificate: earlyCertificate,
+  expected_certificate_id: trustedEarlyCertificateId,
+  expected_scope: baseScope,
+  expected_claim: earlyClaim,
+  expected_assurance: "runtime_contract_accepted",
+});
+assert.equal(exactAtomicMatch.ok, true);
+assert.deepEqual(exactAtomicMatch.certificate.evidence, [earlyEvidence]);
+
+const certificateIdMismatch = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  expected_certificate_id: `rpsc_${"f".repeat(64)}`,
+});
+assert.equal(certificateIdMismatch.ok, false);
+assert.equal(certificateIdMismatch.error.code, "certificate_id_mismatch");
+assert.equal(certificateIdMismatch.error.expected, `rpsc_${"f".repeat(64)}`);
+assert.equal(certificateIdMismatch.error.observed, behaviorCertificate.certificate_id);
+
+for (const field of [
+  "repository",
+  "revision",
+  "environment",
+  "target",
+  "proof_attempt",
+]) {
+  const expectedScope = { ...baseScope, [field]: `${baseScope[field]}-other` };
+  const scopeMismatch = matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_scope: expectedScope,
+  });
+  assert.equal(scopeMismatch.ok, false);
+  assert.equal(scopeMismatch.error.code, "scope_mismatch");
+  assert.equal(scopeMismatch.error.field, field);
+  assert.equal(scopeMismatch.error.expected, expectedScope[field]);
+  assert.equal(scopeMismatch.error.observed, baseScope[field]);
+}
+
+for (const expectedClaim of [
+  { ...behaviorClaim, claim_id: "tidepool.other-behavior" },
+  { ...behaviorClaim, claim_version: "2" },
+  { ...behaviorClaim, parameters: { early_index: 2, later_index: 4 } },
+]) {
+  const claimMismatch = matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_claim: expectedClaim,
+  });
+  assert.equal(claimMismatch.ok, false);
+  assert.equal(claimMismatch.error.code, "claim_mismatch");
+}
+
+const presentationIndependentMatch = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  expected_claim: {
+    ...behaviorClaim,
+    parameters: { later_index: 4, early_index: 1 },
+    label: "Different presentation text does not change claim identity",
+  },
+});
+assert.equal(presentationIndependentMatch.ok, true);
+
+for (const [certificate, expectedClaim, expectedAssurance] of [
+  [behaviorCertificate, behaviorClaim, "runtime_contract_accepted"],
+  [earlyCertificate, earlyClaim, "declared_runtime_rule"],
+]) {
+  const assuranceMismatch = matchRiddleProofSemanticCertificate({
+    certificate,
+    expected_certificate_id: certificate.certificate_id,
+    expected_scope: baseScope,
+    expected_claim: expectedClaim,
+    expected_assurance: expectedAssurance,
+  });
+  assert.equal(assuranceMismatch.ok, false);
+  assert.equal(assuranceMismatch.error.code, "assurance_mismatch");
+  assert.equal(assuranceMismatch.error.expected, expectedAssurance);
+  assert.equal(assuranceMismatch.error.observed, certificate.derivation.assurance);
+}
+
+const idPrecedence = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  expected_certificate_id: `rpsc_${"e".repeat(64)}`,
+  expected_scope: { ...baseScope, revision: "wrong" },
+  expected_claim: earlyClaim,
+  expected_assurance: "runtime_contract_accepted",
+});
+assert.equal(idPrecedence.ok, false);
+assert.equal(idPrecedence.error.code, "certificate_id_mismatch");
+
+const scopePrecedence = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  expected_scope: { ...baseScope, revision: "wrong" },
+  expected_claim: earlyClaim,
+  expected_assurance: "runtime_contract_accepted",
+});
+assert.equal(scopePrecedence.ok, false);
+assert.equal(scopePrecedence.error.code, "scope_mismatch");
+
+const claimPrecedence = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  expected_claim: earlyClaim,
+  expected_assurance: "runtime_contract_accepted",
+});
+assert.equal(claimPrecedence.ok, false);
+assert.equal(claimPrecedence.error.code, "claim_mismatch");
+
+const invalidCertificateMatch = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  certificate: {
+    ...behaviorCertificate,
+    claim: { ...behaviorCertificate.claim, label: "tampered" },
+  },
+});
+assert.equal(invalidCertificateMatch.ok, false);
+assert.equal(invalidCertificateMatch.error.code, "invalid_certificate");
+assert.match(invalidCertificateMatch.error.message, /certificate_id must match its content/);
+
+const unprintableThrownValue = {
+  [Symbol.toPrimitive]() {
+    throw new Error("stringification must stay contained");
+  },
+};
+const hostileCertificate = new Proxy({}, {
+  get() {
+    throw unprintableThrownValue;
+  },
+});
+const hostileCertificateMatch = matchRiddleProofSemanticCertificate({
+  ...behaviorExpectation,
+  certificate: hostileCertificate,
+});
+assert.equal(hostileCertificateMatch.ok, false);
+assert.equal(hostileCertificateMatch.error.code, "invalid_certificate");
+assert.match(hostileCertificateMatch.error.message, /unprintable thrown value/);
+
+assert.throws(
+  () => matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_certificate_id: "not-a-certificate-id",
+  }),
+  /expected_certificate_id must be a full rpsc content ID/,
+);
+assert.throws(
+  () => matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_scope: { ...baseScope, revision: "" },
+  }),
+  /expected_scope\.revision must be a non-empty string/,
+);
+assert.throws(
+  () => matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_claim: { claim_id: "", claim_version: "1" },
+  }),
+  /expected_claim\.claim_id must be a non-empty string/,
+);
+assert.throws(
+  () => matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    expected_assurance: "mathematically_proved",
+  }),
+  /expected_assurance must be runtime_contract_accepted or declared_runtime_rule/,
+);
+assert.throws(
+  () => matchRiddleProofSemanticCertificate({
+    ...behaviorExpectation,
+    ready_to_ship: true,
+  }),
+  /input contains unsupported field ready_to_ship/,
+);
 
 const authorityTamper = { ...behaviorCertificate, ready_to_ship: true };
 assert.throws(
