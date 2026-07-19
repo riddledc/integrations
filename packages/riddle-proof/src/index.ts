@@ -15,6 +15,7 @@ export * from "./basic-gameplay";
 export * from "./profile";
 export * from "./profile-suggestions";
 export * from "./receipts";
+export * from "./semantic-certificate";
 export * from "./change-proof";
 export * from "./riddle-client";
 export * from "./pr-comment";

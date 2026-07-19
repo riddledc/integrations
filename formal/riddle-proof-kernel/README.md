@@ -170,10 +170,15 @@ The example proves that the higher certificate retains the lower evidence and
 that a certificate from `next-unverified-revision` cannot compose with the
 preview-revision certificate.
 
-This first slice does not add a runtime certificate format. Receipt IDs and
-artifact digests remain opaque references, and Lean does not prove browser,
-Git, CDN, screenshot, or outside-world truth. Runtime adapters and conformance
-tests remain responsible for that boundary.
+The runtime counterpart is `riddle-proof.semantic-certificate.v0`. It evaluates
+an explicit JavaScript contract for atomic issuance, requires the same five
+scope fields, rejects mismatched-scope or mismatched-premise composition, and
+preserves ordered evidence plus derivation assurance in compact premise
+snapshots. Its exact-key parser also rejects release-authority and free-form
+metadata fields. The runtime rule is still named data rather than a Lean proof
+term: receipt IDs and artifact digests remain opaque references, and neither
+Lean nor the runtime certificate authenticates browser, Git, CDN, screenshot,
+or outside-world truth.
 
 ## Layer 3.1: Interaction Proof Evidence
 
