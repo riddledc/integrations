@@ -4,7 +4,9 @@ This is a sidecar formal model for Riddle Proof framework verification. It
 does not run in the evidence collection path; it checks framework contracts
 against the Riddle Proof code and runtime tests.
 
-The model in `RiddleProofKernel.lean` is organized into named semantic layers.
+The product model in `RiddleProofKernel.lean` is organized into named semantic
+layers. Generic helper modules live under `RiddleProofKernel/` and are imported
+by the product model.
 
 `TRACEABILITY.md` maps the modeled contract obligations back to the real JSON
 surfaces, runtime tests, and source files that protect them.
@@ -131,6 +133,47 @@ The theorems `change_blocked_dominates`,
 `change_delta_evidence_missing_is_insufficient`, and
 `change_delta_failed_is_regression` pin the collapse rule used by
 `assessRiddleProofChange` in `packages/riddle-proof/src/change-proof.ts`.
+
+## Experimental Semantic Composition Core
+
+`RiddleProofKernel/SemanticComposition.lean` adds a generic, model-only algebra
+for turning accepted observations into reusable claims rather than collapsing
+everything to an untyped `passed` verdict.
+
+The core types are:
+
+- `Scope`: repository, revision, environment, target, and proof-attempt identity
+- `EvidenceRef` and `EvidenceBundle`: an opaque, nonempty audit trail
+- `Claim`: a named proposition whose meaning is indexed by `Scope`
+- `Certified`: a claim, evidence bundle, and Lean proof at one exact scope
+- `Contract`: the checked semantic bridge from supplied observation data to a
+  claim
+
+`Certified.both`, `Certified.map`, and `Certified.combine` let lower claims
+become premises for a higher claim while preserving their evidence references.
+`Certified.before` supplies the first reusable finite temporal relation.
+
+Ordinary composition requires the same `Scope` in the Lean type. Re-scoping
+requires an explicit equality proof, and runtime-style `combineChecked?` returns
+`none` when parsed scopes differ. An old proof therefore remains valid for its
+old revision but cannot silently become evidence about a new revision.
+
+The adapter at the end of `RiddleProofKernel.lean` demonstrates two steps:
+
+1. `certificateOfPassedOrderedTrace` turns the existing ordered-trace theorem
+   into a reusable certificate of its full witness facts, not merely `passed`.
+2. A finite Tidepool-style trace becomes three atomic certificates, then two
+   temporal certificates, and finally the higher claim
+   `observedWaveCollisionBehaviorClaim`.
+
+The example proves that the higher certificate retains the lower evidence and
+that a certificate from `next-unverified-revision` cannot compose with the
+preview-revision certificate.
+
+This first slice does not add a runtime certificate format. Receipt IDs and
+artifact digests remain opaque references, and Lean does not prove browser,
+Git, CDN, screenshot, or outside-world truth. Runtime adapters and conformance
+tests remain responsible for that boundary.
 
 ## Layer 3.1: Interaction Proof Evidence
 

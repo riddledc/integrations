@@ -1,4 +1,5 @@
 import Std
+import RiddleProofKernel.SemanticComposition
 
 namespace RiddleProofKernel
 
@@ -4318,5 +4319,347 @@ theorem merge_recommendation_does_not_grant_shipping_authorization :
     handoffReceiptConforms mergeRecommendedWithoutAuthorization = true
       ∧ mergeRecommendedWithoutAuthorization.shippingAuthorized = false := by
   native_decide
+
+/-!
+Experimental semantic composition adapter.
+
+The generic algebra lives in `RiddleProofKernel.SemanticComposition`. This
+section connects it to the existing ordered-trace theorem and gives one finite
+Tidepool-style example of atomic observations becoming temporal claims and then
+a higher behavior claim. It is a helper/model layer: runtime conformance remains
+responsible for the actual observation receipt and browser trace.
+-/
+
+namespace SemanticCompositionExample
+
+open SemanticComposition
+
+def completeOrderedTraceClaim (input : OrderedTraceInput) : Claim where
+  label := "ordered trace has complete strict witnesses"
+  holdsAt _ :=
+    input.tracePresent ≠ false
+      ∧ input.requiredFieldsPresent ≠ false
+      ∧ input.witnessIndices.length = input.expectedEventCount
+      ∧ strictlyIncreasing input.witnessIndices ≠ false
+
+def certificateOfPassedOrderedTrace
+    (scope : Scope)
+    (input : OrderedTraceInput)
+    (evidence : EvidenceRef)
+    (hPassed : orderedTraceCheckStatus input = CheckStatus.passed) :
+    Certified (completeOrderedTraceClaim input) scope :=
+  Certified.fromProof
+    evidence
+    (ordered_trace_pass_has_complete_strict_witnesses input hPassed)
+
+def tidepoolPreviewScope : Scope where
+  repository := "riddledc/lilarcade"
+  revision := "after-wavefront-crossing"
+  environment := "preview"
+  target := "tidepool-drift"
+  proofAttempt := "wave-collision-example"
+
+def tidepoolNextRevisionScope : Scope where
+  repository := "riddledc/lilarcade"
+  revision := "next-unverified-revision"
+  environment := "preview"
+  target := "tidepool-drift"
+  proofAttempt := "wave-collision-example"
+
+theorem tidepool_revision_scopes_differ :
+    tidepoolPreviewScope ≠ tidepoolNextRevisionScope := by
+  native_decide
+
+theorem tidepool_revision_scopes_are_incompatible :
+    Scope.compatible tidepoolPreviewScope tidepoolNextRevisionScope = false := by
+  native_decide
+
+def orderedTraceEvidence : EvidenceRef where
+  receiptId := "observation:ordered-trace"
+  artifactDigest := "sha256:ordered-trace-example"
+  role := "ordered_trace"
+
+def exampleOrderedTraceCertificate :
+    Certified
+      (completeOrderedTraceClaim exampleWeightShiftTrace)
+      tidepoolPreviewScope :=
+  certificateOfPassedOrderedTrace
+    tidepoolPreviewScope
+    exampleWeightShiftTrace
+    orderedTraceEvidence
+    example_weight_shift_trace_passes
+
+structure TidepoolSample where
+  touchRippleCount : Nat
+  touchCollisionCount : Nat
+  collisionSoundCount : Nat
+  touchWaveCollisionTriggered : Bool
+  deriving DecidableEq, Repr, BEq
+
+def touchSample : TidepoolSample where
+  touchRippleCount := 1
+  touchCollisionCount := 0
+  collisionSoundCount := 0
+  touchWaveCollisionTriggered := false
+
+def earlySample : TidepoolSample where
+  touchRippleCount := 1
+  touchCollisionCount := 0
+  collisionSoundCount := 0
+  touchWaveCollisionTriggered := false
+
+def middleSample : TidepoolSample where
+  touchRippleCount := 1
+  touchCollisionCount := 0
+  collisionSoundCount := 0
+  touchWaveCollisionTriggered := false
+
+def laterSample : TidepoolSample where
+  touchRippleCount := 1
+  touchCollisionCount := 1
+  collisionSoundCount := 1
+  touchWaveCollisionTriggered := true
+
+def tidepoolTrace : List TidepoolSample :=
+  [touchSample, earlySample, middleSample, laterSample]
+
+def touchCreatesRipple (sample : TidepoolSample) : Prop :=
+  0 < sample.touchRippleCount
+
+def earlyHasNoCollisionOrSound (sample : TidepoolSample) : Prop :=
+  0 < sample.touchRippleCount
+    ∧ sample.touchCollisionCount = 0
+    ∧ sample.collisionSoundCount = 0
+    ∧ sample.touchWaveCollisionTriggered = false
+
+def laterHasCollisionAndSound (sample : TidepoolSample) : Prop :=
+  0 < sample.touchCollisionCount
+    ∧ 0 < sample.collisionSoundCount
+    ∧ sample.touchWaveCollisionTriggered = true
+
+def rippleClaim : Claim :=
+  eventAtClaim
+    "touch creates ripple"
+    tidepoolTrace
+    touchCreatesRipple
+    0
+
+def earlyClaim : Claim :=
+  eventAtClaim
+    "early sample has no collision or sound"
+    tidepoolTrace
+    earlyHasNoCollisionOrSound
+    1
+
+def laterClaim : Claim :=
+  eventAtClaim
+    "later sample has collision and sound"
+    tidepoolTrace
+    laterHasCollisionAndSound
+    3
+
+def rippleEvidence : EvidenceRef where
+  receiptId := "observation:tidepool-ripple"
+  artifactDigest := "sha256:tidepool-trace-example"
+  role := "ripple"
+
+def earlyEvidence : EvidenceRef where
+  receiptId := "observation:tidepool-early"
+  artifactDigest := "sha256:tidepool-trace-example"
+  role := "early"
+
+def laterEvidence : EvidenceRef where
+  receiptId := "observation:tidepool-later"
+  artifactDigest := "sha256:tidepool-trace-example"
+  role := "later"
+
+def scopeEvidence : EvidenceRef where
+  receiptId := "preview:tidepool-scope"
+  artifactDigest := "sha256:tidepool-preview-example"
+  role := "source_binding"
+
+def rippleCertificate : Certified rippleClaim tidepoolPreviewScope :=
+  Contract.certify
+    (eventAtContract
+      "touch creates ripple"
+      tidepoolTrace
+      touchCreatesRipple
+      0)
+    tidepoolPreviewScope
+    tidepoolTrace
+    rippleEvidence
+    (by
+      constructor
+      · rfl
+      · exact ⟨touchSample, rfl, by simp [touchCreatesRipple, touchSample]⟩)
+
+def earlyCertificate : Certified earlyClaim tidepoolPreviewScope :=
+  Contract.certify
+    (eventAtContract
+      "early sample has no collision or sound"
+      tidepoolTrace
+      earlyHasNoCollisionOrSound
+      1)
+    tidepoolPreviewScope
+    tidepoolTrace
+    earlyEvidence
+    (by
+      constructor
+      · rfl
+      · exact
+          ⟨earlySample, rfl, by
+            simp [earlyHasNoCollisionOrSound, earlySample]⟩)
+
+def laterCertificate : Certified laterClaim tidepoolPreviewScope :=
+  Contract.certify
+    (eventAtContract
+      "later sample has collision and sound"
+      tidepoolTrace
+      laterHasCollisionAndSound
+      3)
+    tidepoolPreviewScope
+    tidepoolTrace
+    laterEvidence
+    (by
+      constructor
+      · rfl
+      · exact
+          ⟨laterSample, rfl, by
+            simp [laterHasCollisionAndSound, laterSample]⟩)
+
+def rippleBeforeEarlyClaim : Claim :=
+  beforeAtClaim
+    ("touch creates ripple" ++
+      " before " ++
+      "early sample has no collision or sound")
+    tidepoolTrace
+    touchCreatesRipple
+    earlyHasNoCollisionOrSound
+    0
+    1
+
+def earlyBeforeLaterClaim : Claim :=
+  beforeAtClaim
+    ("early sample has no collision or sound" ++
+      " before " ++
+      "later sample has collision and sound")
+    tidepoolTrace
+    earlyHasNoCollisionOrSound
+    laterHasCollisionAndSound
+    1
+    3
+
+def rippleBeforeEarlyCertificate :
+    Certified rippleBeforeEarlyClaim tidepoolPreviewScope :=
+  Certified.before rippleCertificate earlyCertificate (by decide)
+
+def earlyBeforeLaterCertificate :
+    Certified earlyBeforeLaterClaim tidepoolPreviewScope :=
+  Certified.before earlyCertificate laterCertificate (by decide)
+
+def orderedPhasesClaim : Claim :=
+  Claim.both rippleBeforeEarlyClaim earlyBeforeLaterClaim
+
+def orderedPhasesCertificate :
+    Certified orderedPhasesClaim tidepoolPreviewScope :=
+  Certified.both rippleBeforeEarlyCertificate earlyBeforeLaterCertificate
+
+structure TidepoolScopeMatches (scope : Scope) : Prop where
+  repositoryMatches : scope.repository = "riddledc/lilarcade"
+  revisionMatches : scope.revision = "after-wavefront-crossing"
+  environmentMatches : scope.environment = "preview"
+  targetMatches : scope.target = "tidepool-drift"
+
+def tidepoolScopeClaim : Claim where
+  label := "scope matches the observed Tidepool preview"
+  holdsAt := TidepoolScopeMatches
+
+def tidepoolScopeCertificate :
+    Certified tidepoolScopeClaim tidepoolPreviewScope :=
+  Certified.fromProof scopeEvidence ⟨rfl, rfl, rfl, rfl⟩
+
+structure ObservedWaveCollisionBehavior (scope : Scope) : Prop where
+  scopeMatches : TidepoolScopeMatches scope
+  rippleBeforeEarly :
+    BeforeAt
+      tidepoolTrace
+      touchCreatesRipple
+      earlyHasNoCollisionOrSound
+      0
+      1
+  earlyBeforeLater :
+    BeforeAt
+      tidepoolTrace
+      earlyHasNoCollisionOrSound
+      laterHasCollisionAndSound
+      1
+      3
+
+def observedWaveCollisionBehaviorClaim : Claim where
+  label := "observed wave collision behavior"
+  holdsAt := ObservedWaveCollisionBehavior
+
+theorem scoped_ordered_phases_establish_observed_behavior :
+    Claim.entails
+      (Claim.both tidepoolScopeClaim orderedPhasesClaim)
+      observedWaveCollisionBehaviorClaim := by
+  intro scope evidence
+  exact {
+    scopeMatches := evidence.1
+    rippleBeforeEarly := evidence.2.1
+    earlyBeforeLater := evidence.2.2
+  }
+
+def scopedOrderedPhasesCertificate :
+    Certified
+      (Claim.both tidepoolScopeClaim orderedPhasesClaim)
+      tidepoolPreviewScope :=
+  Certified.both tidepoolScopeCertificate orderedPhasesCertificate
+
+def tidepoolBehaviorCertificate :
+    Certified observedWaveCollisionBehaviorClaim tidepoolPreviewScope :=
+  Certified.map
+    scoped_ordered_phases_establish_observed_behavior
+    scopedOrderedPhasesCertificate
+
+theorem tidepool_behavior_certificate_establishes_meaning :
+    observedWaveCollisionBehaviorClaim.holdsAt tidepoolPreviewScope :=
+  tidepoolBehaviorCertificate.holds
+
+theorem tidepool_behavior_certificate_preserves_evidence :
+    tidepoolBehaviorCertificate.evidence.toList =
+      tidepoolScopeCertificate.evidence.toList ++
+        orderedPhasesCertificate.evidence.toList := by
+  simp [tidepoolBehaviorCertificate, scopedOrderedPhasesCertificate,
+    Certified.map, Certified.both]
+
+def laterCertificateAtNextRevision :
+    Certified laterClaim tidepoolNextRevisionScope :=
+  Contract.certify
+    (eventAtContract
+      "later sample has collision and sound"
+      tidepoolTrace
+      laterHasCollisionAndSound
+      3)
+    tidepoolNextRevisionScope
+    tidepoolTrace
+    laterEvidence
+    (by
+      constructor
+      · rfl
+      · exact
+          ⟨laterSample, rfl, by
+            simp [laterHasCollisionAndSound, laterSample]⟩)
+
+theorem mismatched_revision_composition_is_rejected :
+    Certified.combineChecked?
+      rippleCertificate
+      laterCertificateAtNextRevision = none := by
+  exact Certified.combine_checked_mismatch_is_none
+    rippleCertificate
+    laterCertificateAtNextRevision
+    tidepool_revision_scopes_differ
+
+end SemanticCompositionExample
 
 end RiddleProofKernel
