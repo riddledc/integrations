@@ -69,7 +69,12 @@ export async function launchPlaywrightBrowser(
 }
 
 export async function createPlaywrightBrowserSession(options: {
-  viewport?: { width: number; height: number };
+  viewport?: {
+    width: number;
+    height: number;
+    hasTouch?: boolean;
+    isMobile?: boolean;
+  };
   timeoutMs?: number;
   browser?: "chromium" | "firefox" | "webkit";
   launchArgs?: string[];
@@ -86,7 +91,11 @@ export async function createPlaywrightBrowserSession(options: {
     playwrightBrowsersPath: process.env.PLAYWRIGHT_BROWSERS_PATH,
   });
   const context = await browser.newContext({
-    viewport: options.viewport || undefined,
+    viewport: options.viewport
+      ? { width: options.viewport.width, height: options.viewport.height }
+      : undefined,
+    hasTouch: options.viewport?.hasTouch,
+    isMobile: options.viewport?.isMobile,
   });
   const page = await context.newPage();
   const timeoutMs = Number.isFinite(options.timeoutMs || 0) && (options.timeoutMs || 0) > 0

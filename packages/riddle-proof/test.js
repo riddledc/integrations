@@ -6348,7 +6348,13 @@ try {
     name: "cli-profile-progress",
     target: {
       route: "/profile",
-      viewports: [{ name: "desktop", width: 1280, height: 900 }],
+      viewports: [{
+        name: "touch-tablet",
+        width: 1280,
+        height: 900,
+        has_touch: true,
+        is_mobile: true,
+      }],
     },
     checks: [{ type: "route_loaded", expected_path: "/profile" }],
   }));
@@ -6388,6 +6394,13 @@ try {
   assert.equal(cliRunProfileRequests[0].auth, "Bearer cli-riddle-key");
   assert.equal(cliRunProfileRequests[0].body.url, "https://example.com/profile");
   assert.equal(cliRunProfileRequests[0].body.strict, false);
+  assert.deepEqual(cliRunProfileRequests[0].body.viewport, {
+    name: "touch-tablet",
+    width: 1280,
+    height: 900,
+    hasTouch: true,
+    isMobile: true,
+  });
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=running phase=queued attempt=1\/4/);
   assert.match(cliProfileResult.stderr, /\[riddle-poll\] job_cli_profile_progress status=completed phase=complete attempt=2\/4/);
   const baseUrlAliasRequestStart = cliRunProfileRequests.length;
@@ -9082,6 +9095,28 @@ const orderedTraceProfile = normalizeRiddleProofProfile({
   }],
   artifacts: [],
 }, { url: "https://example.com" });
+const touchViewportProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "touch-capable-viewport",
+  target: {
+    route: "/games/tilt",
+    viewports: [{
+      name: "ipad",
+      width: 820,
+      height: 1180,
+      has_touch: true,
+      is_mobile: true,
+    }],
+  },
+  checks: [{ type: "selector_visible", selector: "body" }],
+}, { url: "https://example.com" });
+assert.deepEqual(touchViewportProfile.target.viewports, [{
+  name: "ipad",
+  width: 820,
+  height: 1180,
+  hasTouch: true,
+  isMobile: true,
+}]);
 const orderedTraceEvidence = (setupActionResults) => ({
   version: "riddle-proof.profile-evidence.v1",
   profile_name: orderedTraceProfile.name,

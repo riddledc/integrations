@@ -309,6 +309,15 @@ or as a stronger proof base before a change loop.
 }
 ```
 
+Viewport entries may set `hasTouch` and `isMobile` when the behavior under
+test depends on a touch-capable browser context rather than dimensions alone.
+The snake-case aliases `has_touch` and `is_mobile` are accepted at profile
+input boundaries. For example:
+
+```json
+{ "name": "ipad", "width": 820, "height": 1180, "hasTouch": true, "isMobile": true }
+```
+
 For early proof authoring, `profile-suggest` can turn a route plus changed file,
 selector, and changed-text hints into a conservative draft profile:
 
