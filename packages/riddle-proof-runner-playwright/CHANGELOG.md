@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.4.6
+
+### Patch Changes
+
+- 4535ba3: Preserve touch and mobile viewport capabilities through hosted and local profile runs.
+- Updated dependencies [4535ba3]
+  - @riddledc/riddle-proof@0.8.81
+
 ## 0.4.5
 
 ### Patch Changes

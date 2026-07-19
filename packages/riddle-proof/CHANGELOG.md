@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof
 
+## 0.8.81
+
+### Patch Changes
+
+- 4535ba3: Preserve touch and mobile viewport capabilities through hosted and local profile runs.
+
 ## 0.8.80
 
 ### Patch Changes
