@@ -54,15 +54,10 @@
       "import": "./dist/evidence-trust-root.js",
       "require": "./dist/evidence-trust-root.cjs"
     },
-    "./review-protocol": {
-      "types": "./dist/review-protocol.d.ts",
-      "import": "./dist/review-protocol.js",
-      "require": "./dist/review-protocol.cjs"
-    },
-    "./human-attestation": {
-      "types": "./dist/human-attestation.d.ts",
-      "import": "./dist/human-attestation.js",
-      "require": "./dist/human-attestation.cjs"
+    "./packet": {
+      "types": "./dist/packet.d.ts",
+      "import": "./dist/packet.js",
+      "require": "./dist/packet.cjs"
     },
     "./json": {
       "types": "./dist/json.d.ts",
@@ -91,10 +86,10 @@
     "ambientClock": true
   },
   "scripts": {
-    "build": "tsup src/index.ts src/profile.ts src/receipts.ts src/semantic-certificate.ts src/grounded-evidence.ts src/checked-meaning.ts src/rule-trust-root.ts src/evidence-trust-root.ts src/review-protocol.ts src/human-attestation.ts src/json.ts --format cjs,esm --dts --out-dir dist --clean",
+    "build": "tsup src/index.ts src/profile.ts src/receipts.ts src/semantic-certificate.ts src/grounded-evidence.ts src/checked-meaning.ts src/rule-trust-root.ts src/evidence-trust-root.ts src/packet.ts src/json.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
-    "test": "npm run build && node --require ../../scripts/deny-network.cjs test.js && node --require ../../scripts/deny-network.cjs checked-meaning.test.js && node --require ../../scripts/deny-network.cjs rule-trust-root.test.js && node --require ../../scripts/deny-network.cjs evidence-trust-root.test.js && node --require ../../scripts/deny-network.cjs review-protocol.test.js && node --require ../../scripts/deny-network.cjs human-attestation.test.js"
+    "test": "npm run build && node --require ../../scripts/deny-network.cjs test.js && node --require ../../scripts/deny-network.cjs checked-meaning.test.js && node --require ../../scripts/deny-network.cjs rule-trust-root.test.js && node --require ../../scripts/deny-network.cjs evidence-trust-root.test.js && node --require ../../scripts/deny-network.cjs packet.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

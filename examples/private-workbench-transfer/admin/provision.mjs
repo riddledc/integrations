@@ -111,18 +111,17 @@ function validateSurfaces(input) {
     throw new Error("approved execution surface configuration is invalid");
   }
   const kinds = new Set([
-    "claude_enterprise_web",
-    "claude_code_enterprise",
-    "enterprise_api",
-    "company_managed_integration",
+    "local_execution",
+    "hosted_execution",
+    "client_managed_execution",
   ]);
   const seen = new Set();
   return input.surfaces.map((surface) => {
     assertRecord(surface, "approved execution surface");
     assertExactKeys(surface, [
       "surface_id", "surface_kind", "adapter_id", "destination_allowlist",
-      "allowed_model_ids", "allowed_protocol_versions", "allowed_prompt_versions",
-      "allowed_routing_decision_codes", "allowed_escalation_reason_codes",
+      "allowed_runtime_ids", "allowed_protocol_versions", "allowed_configuration_versions",
+      "allowed_route_codes", "allowed_escalation_codes",
       "allow_no_escalation", "max_attempt_count", "deterministic_components",
     ]);
     const surfaceId = assertSafeCode(surface.surface_id);
@@ -176,11 +175,11 @@ function validateSurfaces(input) {
       surface_kind: surface.surface_kind,
       adapter_id: assertSafeCode(surface.adapter_id),
       destination_allowlist: [...surface.destination_allowlist].sort(),
-      allowed_model_ids: codeArray(surface.allowed_model_ids),
+      allowed_runtime_ids: codeArray(surface.allowed_runtime_ids),
       allowed_protocol_versions: codeArray(surface.allowed_protocol_versions),
-      allowed_prompt_versions: codeArray(surface.allowed_prompt_versions),
-      allowed_routing_decision_codes: codeArray(surface.allowed_routing_decision_codes),
-      allowed_escalation_reason_codes: codeArray(surface.allowed_escalation_reason_codes, true),
+      allowed_configuration_versions: codeArray(surface.allowed_configuration_versions),
+      allowed_route_codes: codeArray(surface.allowed_route_codes),
+      allowed_escalation_codes: codeArray(surface.allowed_escalation_codes, true),
       allow_no_escalation: surface.allow_no_escalation,
       max_attempt_count: surface.max_attempt_count,
       deterministic_components: deterministicComponents,
@@ -567,15 +566,15 @@ export async function provisionFromVerifiedEvidence(input) {
     output_layout: { machine: "machine", privileged: "privileged" },
     approved_execution_surfaces: surfaces,
     approved_execution_policy: {
-      version: "riddle-proof.approved-execution-policy.v1",
+      version: "riddle-proof.execution-policy.v1",
       policy_id: selectedSurface.surface_id,
       policy_version: "1",
-      provider_adapter_id: selectedSurface.adapter_id,
-      allowed_model_ids: selectedSurface.allowed_model_ids,
+      adapter_id: selectedSurface.adapter_id,
+      allowed_runtime_ids: selectedSurface.allowed_runtime_ids,
       allowed_protocol_versions: selectedSurface.allowed_protocol_versions,
-      allowed_prompt_versions: selectedSurface.allowed_prompt_versions,
-      allowed_routing_decision_codes: selectedSurface.allowed_routing_decision_codes,
-      allowed_escalation_reason_codes: selectedSurface.allowed_escalation_reason_codes,
+      allowed_configuration_versions: selectedSurface.allowed_configuration_versions,
+      allowed_route_codes: selectedSurface.allowed_route_codes,
+      allowed_escalation_codes: selectedSurface.allowed_escalation_codes,
       allow_no_escalation: selectedSurface.allow_no_escalation,
       max_attempt_count: selectedSurface.max_attempt_count,
       deterministic_components: selectedSurface.deterministic_components,

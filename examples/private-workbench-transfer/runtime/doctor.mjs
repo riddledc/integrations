@@ -213,13 +213,12 @@ function parsePolicy(value) {
   for (const surface of value.approved_execution_surfaces) {
     if (!exactKeys(surface, [
       "surface_id", "surface_kind", "adapter_id", "destination_allowlist",
-      "allowed_model_ids", "allowed_protocol_versions", "allowed_prompt_versions",
-      "allowed_routing_decision_codes", "allowed_escalation_reason_codes",
+      "allowed_runtime_ids", "allowed_protocol_versions", "allowed_configuration_versions",
+      "allowed_route_codes", "allowed_escalation_codes",
       "allow_no_escalation", "max_attempt_count", "deterministic_components",
     ]) || !validCode(surface.surface_id) || !validCode(surface.adapter_id)
       || ![
-        "claude_enterprise_web", "claude_code_enterprise", "enterprise_api",
-        "company_managed_integration",
+        "local_execution", "hosted_execution", "client_managed_execution",
       ].includes(surface.surface_kind)
       || !Array.isArray(surface.destination_allowlist)
       || surface.destination_allowlist.some((destination) => {
@@ -230,11 +229,11 @@ function parsePolicy(value) {
         } catch {
           return true;
         }
-      }) || !validCodeArray(surface.allowed_model_ids)
+      }) || !validCodeArray(surface.allowed_runtime_ids)
       || !validCodeArray(surface.allowed_protocol_versions)
-      || !validCodeArray(surface.allowed_prompt_versions)
-      || !validCodeArray(surface.allowed_routing_decision_codes)
-      || !validCodeArray(surface.allowed_escalation_reason_codes, true)
+      || !validCodeArray(surface.allowed_configuration_versions)
+      || !validCodeArray(surface.allowed_route_codes)
+      || !validCodeArray(surface.allowed_escalation_codes, true)
       || typeof surface.allow_no_escalation !== "boolean"
       || !Number.isSafeInteger(surface.max_attempt_count)
       || surface.max_attempt_count < 1 || surface.max_attempt_count > 1024
@@ -253,15 +252,15 @@ function parsePolicy(value) {
   }
   const selected = value.approved_execution_surfaces[0];
   const expectedExecutionPolicy = {
-    version: "riddle-proof.approved-execution-policy.v1",
+    version: "riddle-proof.execution-policy.v1",
     policy_id: selected.surface_id,
     policy_version: "1",
-    provider_adapter_id: selected.adapter_id,
-    allowed_model_ids: selected.allowed_model_ids,
+    adapter_id: selected.adapter_id,
+    allowed_runtime_ids: selected.allowed_runtime_ids,
     allowed_protocol_versions: selected.allowed_protocol_versions,
-    allowed_prompt_versions: selected.allowed_prompt_versions,
-    allowed_routing_decision_codes: selected.allowed_routing_decision_codes,
-    allowed_escalation_reason_codes: selected.allowed_escalation_reason_codes,
+    allowed_configuration_versions: selected.allowed_configuration_versions,
+    allowed_route_codes: selected.allowed_route_codes,
+    allowed_escalation_codes: selected.allowed_escalation_codes,
     allow_no_escalation: selected.allow_no_escalation,
     max_attempt_count: selected.max_attempt_count,
     deterministic_components: selected.deterministic_components,
@@ -629,7 +628,7 @@ function collectProtectedAncestorChain(directory, entries, budget, seen) {
 function verifyOsBoundary(workbenchRoot) {
   try {
     const expectedTopLevel = [
-      ".gitignore", "CLAUDE.md", "README.md", "admin", "admin-state",
+      ".gitignore", "README.md", "RUNTIME_INSTRUCTIONS.md", "admin", "admin-state",
       "company-bootstrap", "node_modules", "package-lock.json", "package.json",
       "runtime", "shared", "synthetic",
     ].sort();
@@ -645,7 +644,7 @@ function verifyOsBoundary(workbenchRoot) {
     entries.push(permissionEntry(workbenchRoot, PERMISSION_ROLES.PROTECTED_DIRECTORY));
     for (const filename of [
       join(workbenchRoot, ".gitignore"),
-      join(workbenchRoot, "CLAUDE.md"),
+      join(workbenchRoot, "RUNTIME_INSTRUCTIONS.md"),
       join(workbenchRoot, "README.md"),
       join(workbenchRoot, "package.json"),
       join(workbenchRoot, "package-lock.json"),

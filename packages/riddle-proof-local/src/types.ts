@@ -15,7 +15,7 @@ export const DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES = {
 export type DocumentArtifactPolicy = "digest_only" | "minimal" | "full";
 
 export interface DocumentFileSelection {
-  /** Stable semantic role such as original, template, candidate, or rendered. */
+  /** Stable client-defined role such as source, working, or rendered. */
   role: string;
   /** Explicit local path. It is never copied into a receipt as an absolute path. */
   path: string;

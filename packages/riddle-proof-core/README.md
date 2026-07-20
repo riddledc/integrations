@@ -76,57 +76,53 @@ const result = composeRiddleProofCheckedMeaningClosures({
 The additional assurance is named `checked_allowlisted_rule`. It means that
 the exact allowlisted rule accepted the exact grounded premises and produced
 the exact conclusion. It does **not** mean that the rule is philosophically or
-legally correct, nor does it independently establish browser fidelity, sensor
+operationally correct, nor does it independently establish browser fidelity, sensor
 calibration, key custody, or outside-world truth.
 
-## Agent review protocol
+## Reusable trust and packet primitives
 
-Four pure entrypoints turn those primitives into an agent-usable review
-boundary:
+The public package supplies domain-neutral pieces that a consuming application
+can assemble into its own protocol:
 
 - `rule-trust-root` canonicalizes complete checked-meaning definitions and
   releases a registry only after its exact ID, version, and bundle digest match
   an independently supplied trust-root reference. A run may reference that
   root; it cannot choose or replace the rule bundle.
 - `evidence-trust-root` pins reusable declarative evidence templates rather
-  than matter-specific claims. The consumer materializes an exact contract
+  than run-specific claims. The consumer materializes an exact contract
   only from the verified observation, binds the sensor target to the expected
   scope, and rejects extra, missing, mistyped, or substituted parameters. The
-  same trust-root digest therefore applies across different amendments. Each
+  same trust-root digest therefore applies across different subjects. Each
   profile also pins a bounded, data-only recursive observation schema: objects
   have exactly the declared fields, arrays are fixed-length ordered tuples,
   and leaves are literals, claim-parameter values, SHA-256 digests, or bounded
-  integers. Final review replay rejects nonconforming root or nested fields,
+  integers. Final replay rejects nonconforming root or nested fields,
   extra tuple entries, and captures that do not contain exactly the one pinned
   artifact ID, role, and media type.
-- `review-protocol` binds privileged packet bytes to a content-free receipt.
-  The receipt contains classifications, opaque IDs, evidence-certificate
-  links, currentness/root IDs, and model/protocol routing codes. Its schema has
-  no excerpt, path, filename, prompt, or free-form diagnostic field. The
-  company workbench must still allocate genuinely opaque IDs and approved
-  codes rather than encoding sensitive text into identifier fields. It derives
-  replay configuration from the independently pinned evidence templates;
-  producer-supplied replay authority is not an input. Receipt issuance is
-  parsed under the same explicit clock relation, cannot predate the exact
-  checked root it records, and cannot exceed verification time plus the
-  configured future-skew allowance.
-- `human-attestation` reuses signed grounded captures for the distinct
-  `submitted_for_legal_review` and `legal_approved` attestations. Actor identity
-  and allowed kinds come from an independent key registry, not from the signed
-  body or an agent assertion.
+- `packet` binds arbitrary private packet bytes to a content-free receipt. The
+  receipt contains client-defined classification codes, opaque IDs,
+  evidence-certificate links, independently supplied trust roots, exact
+  root/currentness certificate IDs, generic execution metadata, and the digest
+  of the execution policy enforced when the receipt was created. Creation
+  rejects executions and entry issuers outside that policy. Core does not
+  define a packet-complete claim or interpret a classification; the consumer
+  owns those meanings in its pinned checked-meaning rules.
+- Packet verification is intentionally separate from checked-meaning replay.
+  After matching a separately replayed closure to the independently expected
+  root claim and rule, the consumer supplies the nonempty unique set of
+  certificate IDs resolved from that closure. Verification requires that set
+  to contain the checked root, currentness certificate, and every entry-level
+  evidence link. It also recomputes the independently supplied execution-policy
+  digest, checks the exact private-byte digest and content-free projection,
+  subject and trust roots, freshness, and issuance chronology.
+  `digestRiddleProofPrivatePacketBytes` validates the complete private-packet
+  envelope and returns its domain-separated byte digest without issuing a
+  provisional receipt.
 
-The only system conclusion is `amendment-review-packet-complete`. It is
-procedural: the packet matched its digest and projection, used the pinned rule
-and evidence roots, used an independently approved execution policy, linked
-resolvable evidence, enumerated uncertainties, replayed under the explicit
-freshness policy, and matched the reviewed snapshot at the stated currentness
-check. The verifier returns
-`legal_correctness_established: false` by design.
-
-Privileged packet bytes are provided directly to the local verifier and are
-not copied into grounded closure artifacts. Company rules, real contract
-examples, credentials, model adapters, and human-key registries must remain in
-the approved company-controlled workbench.
+Private packet bytes are provided directly to the packet verifier and are not
+returned in its result or copied into grounded closure artifacts. Consumer
+rules, private examples, credentials, adapters, and signer registries belong
+in the consumer's controlled environment rather than this package.
 
 ### Historical replay versus consumption-time freshness
 

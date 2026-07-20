@@ -40,7 +40,7 @@ async function main() {
   });
   if (!created.ok) throw new Error("rule trust root creation failed");
   const packetRule = created.bundle.rules.find((rule) => (
-    rule.rule_id === "riddle-proof.amendment-review-packet-complete.procedural"
+    rule.rule_id === "riddle-proof.workflow-packet-complete.procedural"
     && rule.rule_version === "1"
   ));
   if (!packetRule) throw new Error("packet-complete rule absent");

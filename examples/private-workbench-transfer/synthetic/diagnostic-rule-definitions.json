@@ -2,9 +2,9 @@
   "version": "riddle-proof.rule-definitions.v1",
   "rules": [
     {
-      "rule_id": "riddle-proof.diagnostic.review-packet-complete.procedural",
+      "rule_id": "riddle-proof.diagnostic.artifact-set-ready.procedural",
       "rule_version": "1",
-      "label": "Public diagnostic evidence composes only to a diagnostic conclusion",
+      "label": "Diagnostic snapshot and required-role evidence establish a ready artifact set",
       "premises": [
         {
           "claim_id": "riddle-proof.diagnostic.snapshot-captured",
@@ -21,17 +21,53 @@
             "snapshot_id": { "op": "any" },
             "manifest_digest": { "op": "any" }
           }
-        },
+        }
+      ],
+      "conclusion": {
+        "claim_id": "riddle-proof.diagnostic.artifact-set-ready",
+        "claim_version": "1",
+        "label": "The diagnostic artifact set contains every required role",
+        "parameters": {
+          "subject_id": { "op": "from_premise", "premise_index": 0, "parameter": "snapshot_id" },
+          "subject_digest": { "op": "from_premise", "premise_index": 0, "parameter": "manifest_digest" }
+        }
+      },
+      "constraints": {
+        "all_of": true,
+        "parameter_equalities": [
+          {
+            "members": [
+              { "premise_index": 0, "parameter": "snapshot_id" },
+              { "premise_index": 1, "parameter": "snapshot_id" }
+            ]
+          },
+          {
+            "members": [
+              { "premise_index": 0, "parameter": "manifest_digest" },
+              { "premise_index": 1, "parameter": "manifest_digest" }
+            ]
+          }
+        ],
+        "ordered_premise_chronology": true,
+        "max_age_ms": 60000
+      }
+    },
+    {
+      "rule_id": "riddle-proof.diagnostic.execution-current.procedural",
+      "rule_version": "1",
+      "label": "Diagnostic workflow and currentness evidence bind an execution to a current subject",
+      "premises": [
         {
-          "claim_id": "riddle-proof.diagnostic.procedure-observed",
+          "claim_id": "riddle-proof.diagnostic.workflow-observed",
           "claim_version": "1",
           "parameters": {
-            "snapshot_id": { "op": "any" },
-            "manifest_digest": { "op": "any" },
+            "subject_id": { "op": "any" },
+            "subject_digest": { "op": "any" },
             "packet_digest": { "op": "any" },
             "rule_trust_root_digest": { "op": "any" },
+            "evidence_trust_root_digest": { "op": "any" },
             "protocol_version": { "op": "any" },
-            "execution_metadata_digest": { "op": "any" },
+            "execution_digest": { "op": "any" },
             "execution_policy_digest": { "op": "any" }
           }
         },
@@ -46,17 +82,19 @@
         }
       ],
       "conclusion": {
-        "claim_id": "riddle-proof.diagnostic.review-packet-complete",
+        "claim_id": "riddle-proof.diagnostic.execution-current",
         "claim_version": "1",
-        "label": "Public diagnostic procedural checks completed",
+        "label": "The diagnostic packet execution is bound to current evidence and pinned trust inputs",
         "parameters": {
-          "snapshot_id": { "op": "from_premise", "premise_index": 2, "parameter": "snapshot_id" },
-          "manifest_digest": { "op": "from_premise", "premise_index": 2, "parameter": "manifest_digest" },
-          "packet_digest": { "op": "from_premise", "premise_index": 2, "parameter": "packet_digest" },
-          "rule_trust_root_digest": { "op": "from_premise", "premise_index": 2, "parameter": "rule_trust_root_digest" },
-          "protocol_version": { "op": "from_premise", "premise_index": 2, "parameter": "protocol_version" },
-          "execution_metadata_digest": { "op": "from_premise", "premise_index": 2, "parameter": "execution_metadata_digest" },
-          "execution_policy_digest": { "op": "from_premise", "premise_index": 2, "parameter": "execution_policy_digest" }
+          "subject_id": { "op": "from_premise", "premise_index": 0, "parameter": "subject_id" },
+          "subject_digest": { "op": "from_premise", "premise_index": 0, "parameter": "subject_digest" },
+          "packet_digest": { "op": "from_premise", "premise_index": 0, "parameter": "packet_digest" },
+          "rule_trust_root_digest": { "op": "from_premise", "premise_index": 0, "parameter": "rule_trust_root_digest" },
+          "evidence_trust_root_digest": { "op": "from_premise", "premise_index": 0, "parameter": "evidence_trust_root_digest" },
+          "protocol_version": { "op": "from_premise", "premise_index": 0, "parameter": "protocol_version" },
+          "execution_digest": { "op": "from_premise", "premise_index": 0, "parameter": "execution_digest" },
+          "execution_policy_digest": { "op": "from_premise", "premise_index": 0, "parameter": "execution_policy_digest" },
+          "checked_at": { "op": "from_premise", "premise_index": 1, "parameter": "checked_at" }
         }
       },
       "constraints": {
@@ -64,18 +102,78 @@
         "parameter_equalities": [
           {
             "members": [
-              { "premise_index": 0, "parameter": "snapshot_id" },
-              { "premise_index": 1, "parameter": "snapshot_id" },
-              { "premise_index": 2, "parameter": "snapshot_id" },
-              { "premise_index": 3, "parameter": "snapshot_id" }
+              { "premise_index": 0, "parameter": "subject_id" },
+              { "premise_index": 1, "parameter": "snapshot_id" }
             ]
           },
           {
             "members": [
-              { "premise_index": 0, "parameter": "manifest_digest" },
-              { "premise_index": 1, "parameter": "manifest_digest" },
-              { "premise_index": 2, "parameter": "manifest_digest" },
-              { "premise_index": 3, "parameter": "manifest_digest" }
+              { "premise_index": 0, "parameter": "subject_digest" },
+              { "premise_index": 1, "parameter": "manifest_digest" }
+            ]
+          }
+        ],
+        "ordered_premise_chronology": true,
+        "max_age_ms": 60000
+      }
+    },
+    {
+      "rule_id": "riddle-proof.diagnostic.workflow-packet-complete.procedural",
+      "rule_version": "1",
+      "label": "Nested diagnostic evidence composes only to a diagnostic conclusion",
+      "premises": [
+        {
+          "claim_id": "riddle-proof.diagnostic.artifact-set-ready",
+          "claim_version": "1",
+          "parameters": {
+            "subject_id": { "op": "any" },
+            "subject_digest": { "op": "any" }
+          }
+        },
+        {
+          "claim_id": "riddle-proof.diagnostic.execution-current",
+          "claim_version": "1",
+          "parameters": {
+            "subject_id": { "op": "any" },
+            "subject_digest": { "op": "any" },
+            "packet_digest": { "op": "any" },
+            "rule_trust_root_digest": { "op": "any" },
+            "evidence_trust_root_digest": { "op": "any" },
+            "protocol_version": { "op": "any" },
+            "execution_digest": { "op": "any" },
+            "execution_policy_digest": { "op": "any" },
+            "checked_at": { "op": "any" }
+          }
+        }
+      ],
+      "conclusion": {
+        "claim_id": "riddle-proof.diagnostic.workflow-packet-complete",
+        "claim_version": "1",
+        "label": "Nested public diagnostic checks completed",
+        "parameters": {
+          "subject_id": { "op": "from_premise", "premise_index": 1, "parameter": "subject_id" },
+          "subject_digest": { "op": "from_premise", "premise_index": 1, "parameter": "subject_digest" },
+          "packet_digest": { "op": "from_premise", "premise_index": 1, "parameter": "packet_digest" },
+          "rule_trust_root_digest": { "op": "from_premise", "premise_index": 1, "parameter": "rule_trust_root_digest" },
+          "evidence_trust_root_digest": { "op": "from_premise", "premise_index": 1, "parameter": "evidence_trust_root_digest" },
+          "protocol_version": { "op": "from_premise", "premise_index": 1, "parameter": "protocol_version" },
+          "execution_digest": { "op": "from_premise", "premise_index": 1, "parameter": "execution_digest" },
+          "execution_policy_digest": { "op": "from_premise", "premise_index": 1, "parameter": "execution_policy_digest" }
+        }
+      },
+      "constraints": {
+        "all_of": true,
+        "parameter_equalities": [
+          {
+            "members": [
+              { "premise_index": 0, "parameter": "subject_id" },
+              { "premise_index": 1, "parameter": "subject_id" }
+            ]
+          },
+          {
+            "members": [
+              { "premise_index": 0, "parameter": "subject_digest" },
+              { "premise_index": 1, "parameter": "subject_digest" }
             ]
           }
         ],

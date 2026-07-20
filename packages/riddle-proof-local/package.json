@@ -50,8 +50,7 @@
     "lint": "echo 'lint: (not configured)'",
     "test": "npm run build && node --require ../../scripts/deny-network.cjs test.js",
     "test:grounded": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs grounded-integration.test.js",
-    "test:meaning": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs meaning-integration.test.js",
-    "test:review": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs review-protocol-integration.test.js"
+    "test:meaning": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs meaning-integration.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

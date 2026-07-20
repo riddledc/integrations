@@ -1,4 +1,4 @@
-# Company bootstrap anchor
+# Administrative bootstrap anchor
 
 An administrator or MDM policy must complete this directory before provisioning. It is the
 independently owned pre-execution boundary. `run-doctor` validates the complete workbench
@@ -10,10 +10,10 @@ Install a dedicated copy of the reviewed canonical Node binary outside the workb
 chmod or repurpose a shared system, Homebrew, nvm, or developer Node executable:
 
 ```sh
-sudo install -d -o root -g "$RIDDLE_RUNTIME_GROUP" -m 0755 /opt/company/riddle-proof-node
+sudo install -d -o root -g "$RIDDLE_RUNTIME_GROUP" -m 0755 /opt/client/riddle-proof-node
 sudo install -o root -g "$RIDDLE_RUNTIME_GROUP" -m 0555 \
-  "$(realpath "$(command -v node)")" /opt/company/riddle-proof-node/node
-printf '%s\n' /opt/company/riddle-proof-node/node \
+  "$(realpath "$(command -v node)")" /opt/client/riddle-proof-node/node
+printf '%s\n' /opt/client/riddle-proof-node/node \
   | sudo tee "$RIDDLE_WORKBENCH/company-bootstrap/node-path" >/dev/null
 sudo chown -R root:"$RIDDLE_RUNTIME_GROUP" "$RIDDLE_WORKBENCH/company-bootstrap"
 sudo chmod 0555 "$RIDDLE_WORKBENCH/company-bootstrap" \
@@ -31,7 +31,7 @@ owned by root or a separate administrator, assigned to the approved runtime grou
 owned by the non-root runtime UID. Every canonical ancestor of both the workbench root and the
 pinned Node directory, through the filesystem root, must likewise be a real administrator-owned
 directory that the runtime identity can traverse but cannot write. Install under an
-administrator-controlled hierarchy such as `/opt/company`; never use the runtime user's home,
+administrator-controlled hierarchy such as `/opt/client`; never use the runtime user's home,
 a synchronized folder, or a writable temporary directory. There is no CLI or environment
 override.
 
@@ -46,5 +46,5 @@ openssl pkey -in /approved-admin/workbench-admin-key.pem -pubout -outform DER \
 The file contains only the independently approved signing-key identity:
 
 ```json
-{"version":"riddle-proof.private-workbench-bootstrap.v1","key_id":"company-workbench-admin-1","public_key_spki_sha256":"sha256:..."}
+{"version":"riddle-proof.private-workbench-bootstrap.v1","key_id":"client-bootstrap-admin-1","public_key_spki_sha256":"sha256:..."}
 ```

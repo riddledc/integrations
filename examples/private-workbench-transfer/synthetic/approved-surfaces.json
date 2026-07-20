@@ -2,15 +2,15 @@
   "version": "riddle-proof.approved-execution-surfaces.v1",
   "surfaces": [
     {
-      "surface_id": "company-configured-claude-surface",
-      "surface_kind": "company_managed_integration",
-      "adapter_id": "company-approved-anthropic-adapter",
+      "surface_id": "client-configured-execution-surface",
+      "surface_kind": "client_managed_execution",
+      "adapter_id": "client-approved-execution-adapter",
       "destination_allowlist": ["https://synthetic.invalid/"],
-      "allowed_model_ids": ["synthetic-no-model"],
-      "allowed_protocol_versions": ["synthetic-amendment-review-v1"],
-      "allowed_prompt_versions": ["synthetic-prompt-v1"],
-      "allowed_routing_decision_codes": ["offline_synthetic_test"],
-      "allowed_escalation_reason_codes": ["none"],
+      "allowed_runtime_ids": ["synthetic-offline-runtime"],
+      "allowed_protocol_versions": ["synthetic-artifact-workflow-v1"],
+      "allowed_configuration_versions": ["synthetic-configuration-v1"],
+      "allowed_route_codes": ["offline_synthetic_test"],
+      "allowed_escalation_codes": [],
       "allow_no_escalation": true,
       "max_attempt_count": 2,
       "deterministic_components": [

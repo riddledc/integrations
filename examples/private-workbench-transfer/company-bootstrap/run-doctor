@@ -142,14 +142,14 @@ for top_entry in "$WORKBENCH_ROOT"/* "$WORKBENCH_ROOT"/.[!.]* "$WORKBENCH_ROOT"/
   [ -e "$top_entry" ] || [ -L "$top_entry" ] || continue
   top_name=${top_entry##*/}
   case "$top_name" in
-    .gitignore|CLAUDE.md|README.md|admin|admin-state|company-bootstrap|node_modules|package-lock.json|package.json|runtime|shared|synthetic) ;;
+    .gitignore|README.md|RUNTIME_INSTRUCTIONS.md|admin|admin-state|company-bootstrap|node_modules|package-lock.json|package.json|runtime|shared|synthetic) ;;
     *) emit_failure OS_BOUNDARY_NOT_ENFORCED ;;
   esac
 done
 
 check_directory "$WORKBENCH_ROOT" 750
 check_ancestor_chain "$(/usr/bin/dirname "$WORKBENCH_ROOT")"
-for protected_file in .gitignore CLAUDE.md README.md package.json package-lock.json; do
+for protected_file in .gitignore README.md RUNTIME_INSTRUCTIONS.md package.json package-lock.json; do
   check_file "$WORKBENCH_ROOT/$protected_file" 640
 done
 for protected_directory in admin runtime shared synthetic node_modules; do

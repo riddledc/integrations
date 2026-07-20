@@ -9,13 +9,13 @@ import {
 } from "./dist/index.js";
 
 const packageRoot = dirname(fileURLToPath(import.meta.url));
-const fixtureRoot = join(packageRoot, "fixtures", "amendment");
+const fixtureRoot = join(packageRoot, "fixtures", "document-set");
 const capturedAt = "2026-07-19T20:00:00.000Z";
 const receipt = await captureDocumentSnapshot({
   files: [
-    { role: "original", path: join(fixtureRoot, "original.txt") },
+    { role: "source", path: join(fixtureRoot, "source.txt") },
     { role: "template", path: join(fixtureRoot, "template.txt") },
-    { role: "candidate", path: join(fixtureRoot, "candidate.txt") },
+    { role: "working", path: join(fixtureRoot, "working.txt") },
     { role: "rendered", path: join(fixtureRoot, "rendered.pdf") },
   ],
   capturedAt,
@@ -35,11 +35,11 @@ const privateKeyBytes = privateKey.export({ format: "der", type: "pkcs8" });
 const publicKeyBytes = publicKey.export({ format: "der", type: "spki" });
 const publicKeyFingerprint = `sha256:${createHash("sha256").update(publicKeyBytes).digest("hex")}`;
 const scope = {
-  repository: "synthetic/local-amendment",
+  repository: "synthetic/local-document-set",
   revision: receipt.snapshot.snapshot_id,
   environment: "local-read-only",
   target: "selected-document-snapshot",
-  proof_attempt: "synthetic-amendment-1",
+  proof_attempt: "synthetic-document-set-1",
 };
 const collector = {
   collector_id: "riddle-proof.local-document-snapshot",

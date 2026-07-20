@@ -18,7 +18,7 @@ import { main as cliMain } from "./dist/cli.js";
 import { readStableRegularFile, readStableRegularFileSet } from "./dist/stableRead.js";
 
 const packageRoot = dirname(fileURLToPath(import.meta.url));
-const fixtureRoot = join(packageRoot, "fixtures", "amendment");
+const fixtureRoot = join(packageRoot, "fixtures", "document-set");
 const fixtureSelection = JSON.parse(await readFile(join(fixtureRoot, "selection.json"), "utf8"));
 const files = fixtureSelection.files.map((selection) => ({
   ...selection,
@@ -30,7 +30,7 @@ const receipt = await captureDocumentSnapshot({ files, capturedAt });
 assert.equal(receipt.artifact_policy, "digest_only");
 assert.equal(receipt.snapshot.artifacts.length, 4);
 assert.deepEqual(receipt.snapshot.artifacts.map((artifact) => artifact.role), [
-  "candidate", "original", "rendered", "template",
+  "rendered", "source", "template", "working",
 ]);
 assert.equal(verifyDocumentSnapshotReceipt(receipt).ok, true);
 await assert.rejects(
@@ -39,7 +39,7 @@ await assert.rejects(
 );
 const serializedReceipt = JSON.stringify(receipt);
 assert.equal(serializedReceipt.includes(resolve(fixtureRoot)), false, "receipt must not contain absolute paths");
-for (const name of ["candidate.txt", "original.txt", "rendered.pdf", "template.txt"]) {
+for (const name of ["working.txt", "source.txt", "rendered.pdf", "template.txt"]) {
   assert.equal(serializedReceipt.includes(name), false, "digest_only receipt must not contain filenames");
 }
 for (const artifact of receipt.snapshot.artifacts) {
@@ -96,7 +96,7 @@ assert.deepEqual(currentness, {
 });
 const serializedCurrentness = JSON.stringify(currentness);
 assert.equal(serializedCurrentness.includes(resolve(fixtureRoot)), false);
-for (const name of ["candidate.txt", "original.txt", "rendered.pdf", "template.txt"]) {
+for (const name of ["working.txt", "source.txt", "rendered.pdf", "template.txt"]) {
   assert.equal(serializedCurrentness.includes(name), false, "currentness must not contain filenames");
 }
 const currentnessGrounding = createDocumentSnapshotCurrentnessGroundingRecipe(currentness);
@@ -115,11 +115,11 @@ assert.deepEqual(currentnessGrounding.contract_definition.claim.parameters, {
 assert.equal(currentnessGrounding.contract_definition.program.all.length, 12);
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "riddle-proof-local-"));
-const modifiedCandidate = join(temporaryRoot, "candidate.txt");
-await writeFile(modifiedCandidate, "FIRST AMENDMENT\n\nA deliberately different synthetic candidate.\n");
+const modifiedWorking = join(temporaryRoot, "working.txt");
+await writeFile(modifiedWorking, "WORKING DOCUMENT\n\nA deliberately different synthetic working.\n");
 const changedReceipt = await captureDocumentSnapshot({
-  files: files.map((selection) => selection.role === "candidate"
-    ? { ...selection, path: modifiedCandidate }
+  files: files.map((selection) => selection.role === "working"
+    ? { ...selection, path: modifiedWorking }
     : selection),
   capturedAt,
 });
@@ -127,13 +127,13 @@ assert.deepEqual(compareDocumentSnapshotReceipts(receipt, changedReceipt), {
   status: "changed",
   added_roles: [],
   removed_roles: [],
-  changed_roles: ["candidate"],
+  changed_roles: ["working"],
 });
 
 const changedCurrentness = await recaptureDocumentSnapshotCurrentness({
   expectedReceipt: receipt,
-  files: files.map((selection) => selection.role === "candidate"
-    ? { ...selection, path: modifiedCandidate }
+  files: files.map((selection) => selection.role === "working"
+    ? { ...selection, path: modifiedWorking }
     : selection),
   checkedAt,
 });
@@ -143,45 +143,45 @@ assert.deepEqual(changedCurrentness.comparison, {
   status: "changed",
   added_roles: [],
   removed_roles: [],
-  changed_roles: ["candidate"],
+  changed_roles: ["working"],
 });
 assert.throws(
   () => createDocumentSnapshotCurrentnessGroundingRecipe(changedCurrentness),
   /canonical current snapshot witness/u,
 );
 
-const watchedCandidate = join(temporaryRoot, "watched-candidate.txt");
-const originalCandidateBytes = await readFile(join(fixtureRoot, "candidate.txt"));
-await writeFile(watchedCandidate, originalCandidateBytes);
-const watchedFiles = files.map((selection) => selection.role === "candidate"
-  ? { ...selection, path: watchedCandidate }
+const watchedWorking = join(temporaryRoot, "watched-working.txt");
+const sourceWorkingBytes = await readFile(join(fixtureRoot, "working.txt"));
+await writeFile(watchedWorking, sourceWorkingBytes);
+const watchedFiles = files.map((selection) => selection.role === "working"
+  ? { ...selection, path: watchedWorking }
   : selection);
 const beforeMutation = await captureDocumentSnapshot({ files: watchedFiles, capturedAt });
-await writeFile(watchedCandidate, "mutated private amendment bytes");
+await writeFile(watchedWorking, "mutated private working document bytes");
 const afterMutation = await recaptureDocumentSnapshotCurrentness({
   expectedReceipt: beforeMutation,
   files: watchedFiles,
   checkedAt,
 });
 assert.equal(afterMutation.status, "changed");
-assert.deepEqual(afterMutation.comparison?.changed_roles, ["candidate"]);
+assert.deepEqual(afterMutation.comparison?.changed_roles, ["working"]);
 
-await writeFile(watchedCandidate, originalCandidateBytes);
+await writeFile(watchedWorking, sourceWorkingBytes);
 const beforeReplacement = await captureDocumentSnapshot({ files: watchedFiles, capturedAt });
-const replacementCandidate = join(temporaryRoot, "replacement-private-name.txt");
-await writeFile(replacementCandidate, "replacement private amendment bytes");
-await rename(replacementCandidate, watchedCandidate);
+const replacementWorking = join(temporaryRoot, "replacement-private-name.txt");
+await writeFile(replacementWorking, "replacement private working document bytes");
+await rename(replacementWorking, watchedWorking);
 const afterReplacement = await recaptureDocumentSnapshotCurrentness({
   expectedReceipt: beforeReplacement,
   files: watchedFiles,
   checkedAt,
 });
 assert.equal(afterReplacement.status, "changed");
-assert.deepEqual(afterReplacement.comparison?.changed_roles, ["candidate"]);
+assert.deepEqual(afterReplacement.comparison?.changed_roles, ["working"]);
 
 const selectionMismatch = await recaptureDocumentSnapshotCurrentness({
   expectedReceipt: receipt,
-  files: files.filter((selection) => selection.role !== "candidate"),
+  files: files.filter((selection) => selection.role !== "working"),
   checkedAt,
 });
 assert.deepEqual(selectionMismatch, {
@@ -193,10 +193,10 @@ assert.deepEqual(selectionMismatch, {
   error_code: DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES.roleSetMismatch,
 });
 
-const missingPrivatePath = join(temporaryRoot, "missing-private-amendment.txt");
+const missingPrivatePath = join(temporaryRoot, "missing-private-document.txt");
 const unresolvedCurrentness = await recaptureDocumentSnapshotCurrentness({
   expectedReceipt: receipt,
-  files: files.map((selection) => selection.role === "candidate"
+  files: files.map((selection) => selection.role === "working"
     ? { ...selection, path: missingPrivatePath }
     : selection),
   checkedAt,
@@ -218,11 +218,11 @@ const currentnessResults = JSON.stringify({
 });
 for (const forbidden of [
   temporaryRoot,
-  "watched-candidate.txt",
+  "watched-working.txt",
   "replacement-private-name.txt",
-  "missing-private-amendment.txt",
-  "mutated private amendment bytes",
-  "replacement private amendment bytes",
+  "missing-private-document.txt",
+  "mutated private working document bytes",
+  "replacement private working document bytes",
 ]) {
   assert.equal(currentnessResults.includes(forbidden), false, "currentness must not leak source details");
 }
@@ -242,7 +242,7 @@ for (const artifact of minimalReceipt.snapshot.artifacts) {
 }
 await assert.rejects(
   captureDocumentSnapshot({
-    files: [{ role: "candidate", path: modifiedCandidate }],
+    files: [{ role: "working", path: modifiedWorking }],
     artifactPolicy: "minimal",
     referenceRoot: fixtureRoot,
     capturedAt,
@@ -251,14 +251,14 @@ await assert.rejects(
 );
 
 const fullReceipt = await captureDocumentSnapshot({
-  files: [{ role: "candidate", path: modifiedCandidate }],
+  files: [{ role: "working", path: modifiedWorking }],
   artifactPolicy: "full",
   capturedAt,
 });
 assert.equal(verifyDocumentSnapshotReceipt(fullReceipt).ok, true);
 assert.equal(
   Buffer.from(fullReceipt.snapshot.artifacts[0].content_base64, "base64").toString("utf8"),
-  await readFile(modifiedCandidate, "utf8"),
+  await readFile(modifiedWorking, "utf8"),
 );
 const tamperedFull = structuredClone(fullReceipt);
 tamperedFull.snapshot.artifacts[0].content_base64 = Buffer.from("tampered", "utf8").toString("base64");
@@ -267,17 +267,17 @@ assert.equal(verifyDocumentSnapshotReceipt(tamperedFull).ok, false);
 await assert.rejects(
   captureDocumentSnapshot({
     files: [
-      { role: "original", path: files[0].path },
-      { role: "candidate", path: files[0].path },
+      { role: "source", path: files[0].path },
+      { role: "working", path: files[0].path },
     ],
     capturedAt,
   }),
   /same local file/u,
 );
-const linkPath = join(temporaryRoot, "candidate-link.txt");
-await symlink(modifiedCandidate, linkPath);
+const linkPath = join(temporaryRoot, "working-link.txt");
+await symlink(modifiedWorking, linkPath);
 await assert.rejects(
-  captureDocumentSnapshot({ files: [{ role: "candidate", path: linkPath }], capturedAt }),
+  captureDocumentSnapshot({ files: [{ role: "working", path: linkPath }], capturedAt }),
   /symbolic link/u,
 );
 
@@ -313,10 +313,10 @@ const cliReceiptPath = join(temporaryRoot, "receipt.json");
 const cliGroundingPath = join(temporaryRoot, "grounding.json");
 assert.equal(await cliMain([
   "snapshot",
-  "--original", join(fixtureRoot, "original.txt"),
-  "--template", join(fixtureRoot, "template.txt"),
-  "--candidate", join(fixtureRoot, "candidate.txt"),
-  "--rendered", join(fixtureRoot, "rendered.pdf"),
+  "--file", `source=${join(fixtureRoot, "source.txt")}`,
+  "--file", `template=${join(fixtureRoot, "template.txt")}`,
+  "--file", `working=${join(fixtureRoot, "working.txt")}`,
+  "--file", `rendered=${join(fixtureRoot, "rendered.pdf")}`,
   "--captured-at", capturedAt,
   "--out", cliReceiptPath,
   "--grounding-out", cliGroundingPath,
@@ -337,7 +337,7 @@ assert.equal(await cliMain([
   "compare", "--before", cliReceiptPath, "--after", changedCliReceiptPath,
 ]), 3, "CLI must report stale document bytes with a distinct exit status");
 assert.equal(await cliMain([
-  "snapshot", "--candidate", join(fixtureRoot, "candidate.txt"), "--out", cliReceiptPath,
+  "snapshot", "--file", `working=${join(fixtureRoot, "working.txt")}`, "--out", cliReceiptPath,
 ]), 1, "CLI must refuse to overwrite an existing receipt");
 
 async function listFiles(root) {

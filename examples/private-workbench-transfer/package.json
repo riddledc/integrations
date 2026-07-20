@@ -1,9 +1,9 @@
 {
-  "name": "private-riddle-proof-workbench-transfer",
+  "name": "riddle-proof-client-bootstrap",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Generic transfer scaffold for a company-controlled, offline Riddle Proof workbench.",
+  "description": "Generic synthetic bootstrap for a client-controlled, offline Riddle Proof installation.",
   "engines": {
     "node": ">=20"
   },

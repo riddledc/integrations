@@ -33,7 +33,7 @@ contract surface it protects.
 | `riddle-proof.semantic-certificate.v0` and `riddle-proof.semantic-certificate-closure.v0` / experimental semantic composition model | explicit runtime contract over a supplied observation, existing Lean contract facts, and finite model observations | higher runtime certificates, higher Lean claims, and complete agent handoffs | `packages/riddle-proof-core/src/semantic-certificate.ts`, compatibility-exported by `packages/riddle-proof/src/semantic-certificate.ts`; atomic rejection, parser tamper, exact-scope mismatch, premise mismatch, ordered evidence, assurance lineage, nested closure composition, arbitrary-order normalization, shared-DAG deduplication, dangling/duplicate/unreachable/snapshot-body rejection, strict own-property and dense-array parsing, trusted-root downstream matching, and ESM/CJS export cases in `packages/riddle-proof/semantic-certificate.test.js` | `SemanticComposition.Scope`, `EvidenceBundle`, `Claim`, `Certified`, `Contract`, `Certified.both`, `Certified.map`, `Certified.combine`, `Certified.before`, evidence-preservation lemmas, `SemanticClosure.Closure`, `DependencyFirstAux`, `well_formed_dependencies_are_acyclic_by_order`, `well_formed_implies_no_dangling_premises`, `well_formed_premise_evidence_matches_body`, `well_formed_implies_no_unreachable_certificates`, `well_formed_implies_exact_root`, `compose_checked_some_is_well_formed`, `compose_checked_some_uses_each_input_root`, `certificateOfPassedOrderedTrace`, `tidepool_behavior_certificate_establishes_meaning`, `tidepool_behavior_certificate_preserves_evidence`, `mismatched_revision_composition_is_rejected` | Runtime certificates retain exact scope, compact premise snapshots, derivation assurance, and nonempty opaque evidence. A complete closure reparses and re-hashes every body, resolves every transitive snapshot to its exact full body, rejects hidden extras, and normalizes to dependency-first/root-last order. Lean proves the normalized finite graph invariants and evidence/body preservation. The consumer's expected root ID must still come from a trusted handoff; JavaScript predicates and named rules are not Lean proof terms, hashes are not signatures, and neither layer authenticates the referenced browser evidence. |
 | `riddle-proof.grounded-capture-statement.v0`, `riddle-proof.signed-capture-bundle.v0`, `riddle-proof.grounded-verification-receipt.v0`, and `riddle-proof.grounded-semantic-certificate-closure.v0` | local Playwright capture or another trusted collector plus an Ed25519 signer | deterministic verifier and contract registries, Semantic composition, and replaying handoff consumers | `packages/riddle-proof-core/src/grounded-evidence.ts`, compatibility-exported by `packages/riddle-proof/src/grounded-evidence.ts`; exact-byte, scope/nonce/freshness, key/signature, external-registry callback and callback-free declarative JSON verifier/contract, receipt/certificate, resource-limit, parser-hostility, prototype-pollution, and tamper cases in `packages/riddle-proof/grounded-evidence.test.js`; closure replay/composition, chronology, grounding-bijection, shared-leaf, and serialized callback-free declarative nested/shared-leaf cases in `packages/riddle-proof/grounded-semantic-closure.test.js`; exact persisted-byte capture and tamper cases in `packages/riddle-proof-runner-playwright/test.js` | `GroundedEvidence.CaptureValidation`, `well_formed_implies_exact_manifest`, `well_formed_implies_every_artifact_digest_agrees`, `well_formed_implies_supported_statement_version`, `unsupported_statement_version_is_rejected`, `declarative_verifier_descriptor_binds_complete_definition_digest`, `declarative_issuance_uses_only_fixed_interpreter_observation`, `mismatched_expected_verifier_definition_digest_rejects_declarative_issuance`, `empty_declarative_contract_program_is_rejected`, `sixty_five_assertion_declarative_contract_program_is_rejected`, `declarative_contract_descriptor_binds_complete_definition_digest`, `mismatched_expected_contract_implementation_digest_rejects_issuance`, `mismatched_expected_contract_trust_basis_rejects_issuance`, `declarative_contract_issuance_uses_only_fixed_interpreter_decision`, `declarative_contract_issuance_receipt_binds_exact_descriptor`, `mismatched_expected_contract_implementation_digest_rejects_replay`, `mismatched_expected_contract_trust_basis_rejects_replay`, `declarative_contract_replay_uses_only_fixed_interpreter_decision`, `issued_observation_is_exact_verifier_output`, `grounded_issuance_contract_accepts_derived_observation`, `grounded_issuance_certificate_uses_exact_receipt_evidence`, `replay_true_implies_exact_derived_observation_and_receipt`, `well_formed_every_reachable_contract_leaf_is_grounded`, `well_formed_implies_no_composition_sidecar`, `well_formed_certificate_issued_at_matches_canonical_body`, `well_formed_implies_direct_premise_chronology_monotone`, `well_formed_composite_does_not_predate_reachable_contract_leaf`, `compose_grounded_some_is_well_formed`, and `compose_grounded_some_preserves_grounded_reachable_leaves` | Semantic obligation: a grounded leaf must be derived from the exact bytes named by a supported-version, fresh, policy-matching signed statement, use the registered verifier output and accepted contract without a caller-supplied observation, select the contract by an independently supplied exact implementation/trust reference, bind the full contract descriptor in its receipt, retain its exact receipt/artifact evidence, and replay under independent trust configuration. Every reachable contract leaf in a closure must have exactly one replayed sidecar, composition nodes must have none, shared leaves deduplicate, and each chronology time must equal the supplied runtime parser's projection from that certificate's exact canonical body before monotonicity is checked. The built-in declarative path fixes both interpreters and recomputes complete data-only definition digests instead of trusting supplied callbacks. Lean still treats cryptographic, addressing, browser, sensor, clock, canonical nonce decoding, canonical-body time-projection fidelity, digest correctness, and external-registry code fidelity as explicit assumptions rather than outside-world proofs. |
 | `riddle-proof.checked-meaning-closure.v0` and `riddle-proof.checked-meaning-rule.v0` | local core checked-meaning composer over replayable grounded closures, a complete rule registry, and an independently supplied trusted-rule list | checked-meaning replay, trusted-root matching, consumption-time assessment, and higher sense/decision consumers | `packages/riddle-proof-core/src/checked-meaning.ts`; complete-definition and materialized-rule digesting, N-ary pattern/equality/projection interpretation, exact registry/trust matching, rule-sidecar bijection, grounding replay, composition, chronology, freshness assessment, hostile-input, invented-conclusion, and trusted-root cases in `packages/riddle-proof-core/checked-meaning.test.js` | `MeaningKernel.RuleDefinition`, `ContentAddressedRule`, `FixedRuleRegistry`, `fixed_meaning_rule_engine_matches_runtime_identifier`, `fresh_at_iff_inside_interval`, `composition_boundary_valid_sound`, `checked_aux_reachable_rules_are_exactly_registered`, `checked_tree_with_grounded_leaves_and_sound_reachable_rules_establishes_root_meaning`, `checked_tree_with_sound_registry_establishes_root_meaning`, `positive_root_has_bounded_round_trip_meaning`, `invented_conclusion_is_unresolved_not_established`, `unknown_rule_is_unresolved_not_established`, `stale_grounding_is_stale_not_established`, `not_yet_current_grounding_is_unresolved_not_established`, `structural_failure_dominates_expired_grounding`, `changed_definition_with_old_digest_is_unresolved`, and `changed_definition_with_same_identity_and_new_digest_is_unresolved` | Exact boundary: Lean uses the runtime engine identifier but models a smaller binary materialized-step abstraction with an abstract digest; runtime rules are N-ary parametric templates and separately digest-bind the complete definition and exact materialized Semantic rule. Runtime `checked_allowlisted_rule` proves exact trusted rule selection and materialization, not Lean `RuleSound`. Runtime consumption-time capture-age/future-skew assessment is a concrete specialization of Lean leaf-interval freshness: expired evidence is stale, future evidence is unresolved, and structural failure is unresolved before freshness classification. This is not a Lean proof of wire parsing, signed-time extraction, root timestamp handling, or millisecond arithmetic. Unknown or mismatched material is unresolved, not false. |
-| `riddle-proof.privileged-review-packet.v1`, `riddle-proof.review-packet-receipt.v1`, `riddle-proof.snapshot-currentness-witness.v1`, `amendment-review-packet-complete/1`, and `riddle-proof.human-attestation.v1` | private local/company workbench, deterministic document sensors, approved agent surface, and separately authorized humans | deterministic packet verifier, blind handoff consumer, legal reviewer, and optional human-attestation verifier | `packages/riddle-proof-core/src/review-protocol.ts`, `evidence-trust-root.ts`, `rule-trust-root.ts`, and `human-attestation.ts`; packet projection, trust substitution, execution policy, exact root-rule, N-ary four-premise composition, multi-pointer currentness, replay/currentness/receipt chronology, tamper, and human-signature cases in `packages/riddle-proof-core/review-protocol.test.js`, `evidence-trust-root.test.js`, `rule-trust-root.test.js`, `human-attestation.test.js`, and `packages/riddle-proof-local/review-protocol-integration.test.js` | `ReviewProtocol.reviewAccepted`, `packetProjectionBound`, `EvidenceProfileTemplate.wellFormed`, `parameter_binding_holds_every_pointer_matches_exact_claim_value`, `exactReplayLeafCover`, `replayClosureBound`, `runtimePacketRuleBound`, `receiptChronologyBound`, `public_diagnostic_review_claim_ids_disjoint_from_production`, `review_accepted_implies_exact_four_premise_runtime_rule`, `review_accepted_implies_every_replay_record_is_same_root_reachable`, `review_accepted_implies_currentness_same_record_and_parsed_time`, `review_accepted_implies_receipt_chronology`, `backdated_receipt_prevents_review_acceptance`, `future_dated_receipt_prevents_review_acceptance`, `changed_runtime_root_rule_prevents_review_acceptance`, `changed_runtime_premise_claims_prevent_review_acceptance`, `unparsed_currentness_time_prevents_review_acceptance`, `humanAttestationAccepted`, `accepted_legal_approval_binds_fresh_exact_body_and_registered_human`, and signature/registry rejection lemmas | The modeled acceptance boundary begins after deterministic wire parsing but explicitly binds the privileged packet projection to the receipt, the independently pinned rule/evidence roots and exact runtime root-rule reference, an exact unique replay-record/reachable-leaf cover, canonical-body chronology, and the local E2E rule's four ordered premises: snapshot, required roles, procedure, and currentness. Currentness keeps ISO text in the claim, relates it to parsed milliseconds, and requires the designated certificate ID, exact claim, replay/materialization, and issuance chronology in one record. Receipt issuance is parsed, cannot predate the exact root it records, and cannot exceed the verification clock plus explicit future skew. The public workbench diagnostic signer is restricted at runtime by exact key identity and bundle scans; Lean separately proves its five diagnostic claim IDs are disjoint from all production review premise/conclusion IDs. Grounded age/future-skew uses the parsed `captured_at` from the canonical signed-capture statement, while certificate `issued_at` remains a separate chronology value; neither uses a producer-selected `validThrough`. Human approval requires an external verifier over the exact registered key and complete signed envelope; no producer Boolean can authenticate itself. The binary `MeaningTree` remains a structural auxiliary whose root and ordered grounded-leaf frontier are bound to the canonical runtime root; its internal binary topology remains independently structurally checked but is not extracted from the N-ary runtime body. Lean directly models this one four-premise packet rule but does not prove the general N-ary runtime interpreter, JSON/canonicalization, cryptography, clock/parser fidelity, document truth, agent analysis, legal correctness, or real-world human identity. |
+| Generic private packet, receipt, checked-closure, currentness, and replay contracts | consuming application, pinned trust bundles, and execution adapter | deterministic packet verifier and fresh handoff consumer | `packages/riddle-proof-core/src/packet.ts`, `checked-meaning.ts`, `evidence-trust-root.ts`, and `rule-trust-root.ts`; `packages/riddle-proof-core/packet.test.js`; the synthetic 4-leaf/2-intermediate/1-root blind handoff in `examples/private-workbench-transfer/runtime/synthetic-self-test.mjs` | `PrivatePacketProjection`, `PacketBytesIdentity`, `PacketReceiptProjection`, `packetProjectionBound`, `resolvedCertificateIdsBound`, `exactContractReplayCover`, `exactCompositionRuleBindingCover`, `runtimeRuleBindingsBound`, `packetAccepted`, `packet_accepted_implies_exact_runtime_rule_and_direct_premises`, `packet_accepted_implies_replay_covers_exact_contract_frontier`, `packet_accepted_binds_exact_policy_and_root_claim`, `dangling_entry_evidence_prevents_packet_acceptance`, `changed_execution_policy_digest_prevents_packet_acceptance`, `evidence_root_substitution_prevents_packet_acceptance`, `missing_replay_leaf_prevents_packet_acceptance`, `stale_receipt_prevents_packet_acceptance`, and `PositiveVector.packetAccepted_is_nonvacuous` | The private projection contains packet ID, subject identity, rule root, protocol, execution digest, and content-free entry index. Evidence root, receipt ID, media type, byte length, opaque reference, and receipt chronology are independently receipt-bound. Resolved IDs are a nonempty unique set equal to the separately checked closure, not an order-sensitive copy. Direct root premises may be composite certificates and are never equated with replayed contract leaves. Every composition node has exactly one runtime-rule binding; definition implementation digests and materialized descriptor digests remain distinct and are connected only by the supplied exact materialization decision. The root conclusion uses exactly eight standardized bindings. Runtime remains responsible for wire parsing, canonicalization, hashes, signatures, clocks, and outside-world truth. |
 | `riddle-proof.change-contract.v1` / `riddle-proof.change-result.v1` / `riddle-proof.change-receipt.v2` | change-proof authoring and before/after Observation composition | Handoff receipt, hosted proof views, agent summaries, merge recommendation surfaces | `assessRiddleProofChange`, `parseRiddleProofChangeReceipt`, and v1 migration in `packages/riddle-proof/src/change-proof.ts`; before/after and source-binding cases in `packages/riddle-proof/test.js`; `packages/riddle-proof/formal-conformance.test.js` | `ChangeProofInput`, `changeVerdict`, `change_blocked_dominates`, `change_group_evidence_missing_is_insufficient`, `change_delta_evidence_missing_is_insufficient`, `change_delta_failed_is_regression`, `change_source_binding_invalid_is_insufficient` | Semantic obligation: a composed before/after proof cannot pass unless both groups have usable evidence, each required delta passes, and required source bindings match. A failing required before check can be a matched baseline rather than a failed change. |
 | `riddle-proof.handoff-receipt.v1` | Change Proof renderer | GitHub PR comment and downstream handoff consumers | `createRiddleProofHandoffReceipt`, `parseRiddleProofHandoffReceipt`, and receipt-aware PR rendering in `packages/riddle-proof/src/change-proof.ts` and `packages/riddle-proof/src/pr-comment.ts`; tamper cases in `packages/riddle-proof/test.js` and `packages/riddle-proof/formal-conformance.test.js` | `HandoffReceiptModel`, `handoffReceiptConforms`, `conforming_handoff_preserves_change_verdict`, `conforming_handoff_preserves_canonical_pair`, `merge_recommendation_does_not_grant_shipping_authorization` | Semantic obligation: the handoff projects the Change verdict, recommendation, and canonical pair; it does not recompute them, and a merge recommendation is not shipping authorization. |
 | Local/hosted profile runner outcomes | local Playwright runner and hosted Riddle worker polling | profile evaluator, CLI summaries, PR comments, hosted proof views | hosted unsubmitted retry/recovery cases in `packages/riddle-proof/test.js`; local browser-missing environment-blocked coverage in `packages/riddle-proof-runner-playwright/test.js`; profile setup/window-eval assertion cases in `packages/riddle-proof/test.js` | `ProfileRunnerKind`, `HostedProfileOutcome`, `local_and_hosted_same_verdict_contract`, `blocked_unsubmitted_hosted_profile_never_passes`, `retry_recovery_passed_excludes_missing_required_artifact`, `TextObservation`, `exact_slot_update_can_pass_while_broad_page_absence_fails` | Semantic obligation: runner substrate does not change verdict semantics; unsubmitted hosted work is blocked, not passed; retry recovery uses final evidence; exact semantic assertions are preferred when page-wide text absence is too broad. |
@@ -51,9 +51,9 @@ contract surface it protects.
 | Published proof artifacts and public report | ship runtime, artifact publication | GitHub comments, hosted Riddle views, downstream consumers | `packages/riddle-proof/runtime/tests/ship_artifact_publication.py`; regression packs | `PublicShipReport`, `public_report_from_flow_pass_implies_ship_gate_ok`, `status_only_public_report_can_invent_pass` | Semantic obligation: a published pass report must project the same ship-gate facts as internal `reportedWholeFlowVerdict`; status-only public reports cannot independently invent success. |
 | Proof report provenance / `riddle-proof.provenance.v1` | ship runtime, checkpoint summary, evidence bundle, artifact publication, proof assessment | final `ship_report`, hosted Riddle views, downstream consumers | `proof_provenance_facts` and `build_ship_report` in `packages/riddle-proof/runtime/lib/ship.py`; `packages/riddle-proof/formal-conformance.test.js`; `packages/riddle-proof/runtime/tests/ship_artifact_publication.py` | `ProofProvenance`, `ProvenancedPublicShipReport`, `public_report_with_provenance_pass_implies_provenance_matches`, `gate_only_public_report_can_invent_mixed_provenance_pass` | Semantic obligation: public reports must expose the run/checkpoint/evidence/manifest/assessment lineage they are claiming; ship-gate facts alone cannot rule out mixed stale evidence. |
 
-### Amendment review exact-shape and canonical-root boundary
+### Generic packet exact-shape and canonical-root boundary
 
-`ReviewProtocol.ExactObservationSchema` mirrors the pinned runtime observation
+`GenericProtocol.ExactObservationSchema` mirrors the pinned runtime observation
 schema at the semantic level: exact scalar literals, exact claim-parameter
 values, lowercase full SHA-256 strings, bounded integers, exact recursively
 named object properties, and position-specific tuple arrays with exact length.
@@ -65,59 +65,91 @@ named object properties, and position-specific tuple arrays with exact length.
 parser's canonical key order, JSON-number projection, depth/resource bounds,
 and bytes-to-tree fidelity remain explicit runtime premises.
 
-The same pinned profile owns one exact `EvidenceArtifactMetadata` descriptor for
-the public review path. `ReplayCertificateRecord.exactArtifactMetadata` extracts
+The same pinned profile owns exact `EvidenceArtifactMetadata` descriptors for
+the public packet path. `ReplayCertificateRecord.exactArtifactMetadata` extracts
 the canonical statement's artifact ID, role, media type, and count together
 with `captured_at`, requires unique IDs and roles, and equates the observed list
 to the pinned list. The missing, extra, and duplicate-role lemmas reject a
 producer-selected artifact; `exact_artifact_metadata_binds_pinned_count_and_fields`
 exposes the resulting equality and count.
 
-`RuntimePacketRootProjection.canonicalBodyBound` uses a full root-body
-extractor covering certificate ID, scope, rule, issuance, ordered premise IDs
-and claims, and conclusion. `exactRuntimePremiseTreeLeaves` additionally equates
-those ordered direct premises to the ordered reachable leaf frontier of the
-checked binary tree. The runtime root projection and leaf frontier therefore
-cannot be substituted independently. This does not bind internal auxiliary-tree
-topology or intermediate rules; those are checked by `structurallyChecked` but
-are not projected from the N-ary runtime root. The root/frontier-binding and
-fabricated-projection/frontier lemmas make that exact boundary visible.
+The private-byte boundary is deliberately split three ways.
+\`PrivatePacketProjection\` models only the content-free fields parsed from the
+private packet. \`PacketBytesIdentity\` models the length and digest computed
+from the exact bytes. \`PrivatePacketReceiptRef\` and \`PacketReceiptProjection\`
+model receipt-only packet ID, media type, byte length, digest, opaque reference,
+receipt ID, independent evidence root, execution-policy digest, certificate
+IDs, and issuance time. \`receiptShapeAndIdentityBound\`,
+\`privatePacketProjectionBound\`, and \`packetBytesIdentityBound\` join those
+surfaces without pretending that receipt-only fields were parsed from private
+content. The supplied receipt-ID decision and byte digest functions remain
+explicit runtime premises.
 
-This tree relation deliberately models the current public happy path as exactly
-four grounded direct leaves. Because `exactOrderedRuntimePremiseRecords` also
-equates the four direct premises with all replay records, this formal slice is
-stricter than the general runtime, which can validate nested closures. General
-nested N-ary interpretation remains a documented limitation rather than an
-unproved claim of parity.
+\`PacketBindingParameters.asJson\` fixes the final checked-meaning claim to
+exactly these eight names: \`subject_id\`, \`subject_digest\`,
+\`packet_digest\`, \`rule_trust_root_digest\`,
+\`evidence_trust_root_digest\`, \`protocol_version\`, \`execution_digest\`,
+and \`execution_policy_digest\`. Snapshot identity and currentness leaves keep
+their grounded \`snapshot_id\` / \`manifest_digest\` vocabulary (plus
+\`checked_at\` for currentness); intermediate rules relate those claims to the
+final subject bindings. The execution-policy digest must independently match
+both the receipt and the exact final root claim.
 
-### Amendment review chronology boundary
+\`PacketAcceptanceInput.checkedClosure\` is the actual
+\`SemanticClosure.Closure\`. \`resolvedCertificateIdsBound\` requires the
+consumer-supplied IDs to be nonempty and duplicate-free and to have extensional
+membership equality with that separately checked closure. Root, currentness,
+and entry evidence IDs must all occur in that set. It does not require the
+runtime's sorted handoff order to equal dependency-first serialization order.
 
-`ReviewProtocol.runtimePacketRuleBound` directly models the local runtime's
-ordered four-premise packet rule, including exact premise-ID/record order,
-nondecreasing premise certificate issuance, a root certificate that does not
-predate any premise, the fixed `max_age_ms = 60000` bound expressed without
-natural-number subtraction, canonical-root-body issuance parsing, and the root
-future-skew check. The extraction theorems
-`review_accepted_implies_exact_ordered_runtime_record_chronology` and
-`runtime_premise_chronology_bound_extracts_fixed_rule_constraints` expose those
-facts; the out-of-order, old-premise, changed-order, invalid-chronology, and
-future-root lemmas are hostile counterexamples.
+Direct root premises and replay leaves are intentionally different relations.
+\`rootRuntimeRuleBound\` pins the root's ordered direct premise snapshots by ID
+and claim and permits those snapshots to resolve to composite nodes.
+\`exactContractReplayCover\` separately requires a one-to-one replay record for
+every contract leaf and no others. The positive conformance vector is a real
+three-rule pyramid: four replayed contract leaves form two intermediate
+composition certificates, and the root consumes those two composites.
+Currentness is a reachable replayed leaf, not a forced direct root premise.
 
-Grounded freshness is separate: `ReplayCertificateRecord.captureFresh` extracts
-the exact ISO `captured_at` text from the canonical signed-capture statement,
-parses it to milliseconds, and applies age/future-skew to that capture time.
-Certificate `issuedAt` is parsed separately and remains available for
-certificate/currentness chronology, so a newly issued certificate cannot make
-an old capture fresh. `verificationPoliciesAligned` also requires grounded and
-currentness checks to share the runtime's one verification time and one
-future-skew value. Human authorization registries require globally unique actor
-IDs, key IDs, and key fingerprints.
+Runtime rule sidecars are also closure-wide.
+\`exactCompositionRuleBindingCover\` requires exactly one binding for every
+composition node and no binding for a contract leaf.
+\`runtimeRuleBindingValid\` keeps each trusted definition reference's
+\`implementationDigest\` distinct from the digest of the actual materialized
+\`RuleDescriptor\`; the latter must equal \`materializedRuleDigest\`.
+\`RuntimeRuleMaterializes\` is an explicit supplied decision connecting the
+exact definition reference to the exact materialized descriptor. The root then
+has the additional independently expected rule, conclusion, and direct-premise
+checks. Lean does not claim to implement or prove the runtime materializer.
 
-All canonical-body/statement extraction, recursive JSON parsing, ISO parsing,
-wire parsing, digesting,
-signature verification, and cryptography remain explicit deterministic runtime
-premises. Lean proves the acceptance consequences of those supplied functions;
-it does not prove their implementation fidelity or the outside-world evidence.
+### Generic packet chronology boundary
+
+Grounded freshness remains separate:
+\`ReplayCertificateRecord.captureFresh\` extracts exact \`captured_at\` text and
+artifact metadata from the canonical signed statement, parses time, and applies
+age and future-skew limits. \`allCertificateChronologyBound\` requires the
+supplied canonical-body parser to recover a time for every certificate in the
+closure and bounds every certificate against the root. \`receiptChronologyBound\`
+requires the receipt to follow both the root and currentness certificate, stay
+within future skew, and remain within the authority's maximum receipt age.
+\`verificationPoliciesAligned\` gives grounded evidence, currentness, and
+receipt checks the same verification time and future-skew value.
+
+The hostile theorems reject a dangling entry evidence ID, a changed
+execution-policy digest, an evidence-root substitution, a missing replay leaf,
+and a stale receipt. \`PositiveVector.closure_is_three_rule_pyramid\` is
+kernel/simp checked. \`PositiveVector.packetAccepted_is_nonvacuous\` executes
+the full ground vector with \`native_decide\`; its generated evaluator axiom is
+reported separately from the general soundness and hostile-change theorems,
+which use only Lean's standard \`propext\`, \`Classical.choice\`, and
+\`Quot.sound\` axioms.
+
+Canonical JSON and certificate parsers, JSON Pointer fidelity, ISO parsing,
+SHA-256, signature verification, receipt-ID calculation, rule materialization,
+clock values, filesystem behavior, and sensor truth remain explicit
+deterministic runtime premises. Lean proves the acceptance consequences once
+those functions and decisions are supplied; it does not prove their
+implementation fidelity or an outside-world fact.
 
 ## Lean To Runtime Coverage
 

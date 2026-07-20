@@ -53,7 +53,7 @@ const scope = {
   repository: "riddledc/integrations",
   revision: "checked-meaning-runtime-test",
   environment: "local",
-  target: "document://fixture/amendment-7",
+  target: "document://fixture/item-7",
   proof_attempt: "checked-meaning-1",
 };
 

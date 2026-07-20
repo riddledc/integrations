@@ -41,6 +41,28 @@ const temporaryRoot = mkdtempSync(join(realpathSync(tmpdir()), "riddle-proof-pri
 const privilegedSentinel = "PRIVATE_OUTPUT_SENTINEL_2d98c8f84e";
 const hostedSecretSentinel = "HOSTED_SECRET_SENTINEL_019a4a";
 const syntheticPacketSentinel = "SYNTHETIC_PRIVILEGED_CLAUSE_DO_NOT_LOG_7b3619";
+const injectionEnvironmentNames = new Set([
+  "BASH_ENV",
+  "ENV",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "NODE_REPL_EXTERNAL_MODULE",
+  "NODE_EXTRA_CA_CERTS",
+  "OPENSSL_CONF",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+  "DYLD_FRAMEWORK_PATH",
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+]);
+
+function sanitizedFoundationEnvironment(environment = process.env) {
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => !injectionEnvironmentNames.has(name)),
+  );
+}
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -89,7 +111,7 @@ function runDirectDoctor(workbenchRoot, {
 }
 
 function runFoundationCheck(workbenchRoot, {
-  env = process.env, expectedCode = "FOUNDATION_READY",
+  env = sanitizedFoundationEnvironment(), expectedCode = "FOUNDATION_READY",
 } = {}) {
   const doctorUrl = pathToFileURL(join(workbenchRoot, "runtime", "doctor.mjs")).href;
   const failuresUrl = pathToFileURL(join(workbenchRoot, "shared", "failures.mjs")).href;
@@ -375,7 +397,7 @@ try {
   }], "actual npm install must contain the one exact supported .bin link");
   chmodSync(workbenchRoot, 0o750);
   for (const filename of [
-    ".gitignore", "CLAUDE.md", "README.md", "package.json", "package-lock.json",
+    ".gitignore", "RUNTIME_INSTRUCTIONS.md", "README.md", "package.json", "package-lock.json",
   ]) {
     chmodSync(join(workbenchRoot, filename), 0o640);
   }
@@ -411,7 +433,7 @@ try {
   const productionTemplates = JSON.parse(JSON.stringify(diagnosticTemplates)
     .replaceAll("riddle-proof.diagnostic.snapshot-captured", "local-document-snapshot-captured")
     .replaceAll("riddle-proof.diagnostic.required-roles-present", "local-document-required-roles-present")
-    .replaceAll("riddle-proof.diagnostic.procedure-observed", "amendment-review-procedure-observed")
+    .replaceAll("riddle-proof.diagnostic.workflow-observed", "client-workflow-observed")
     .replaceAll("riddle-proof.diagnostic.snapshot-current-at-check", "local-document-snapshot-current-at-check"));
   for (const profile of productionTemplates.profile_templates) {
     profile.profile_id = profile.profile_id.replace("riddle-proof.synthetic-", "company-test.");
@@ -596,7 +618,7 @@ try {
     workbenchRoot, PERMISSION_ROLES.PROTECTED_DIRECTORY,
   ));
   for (const filename of [
-    ".gitignore", "CLAUDE.md", "README.md", "package.json", "package-lock.json",
+    ".gitignore", "RUNTIME_INSTRUCTIONS.md", "README.md", "package.json", "package-lock.json",
   ]) {
     actualPermissionEntries.push(permissionEntryForTest(
       join(workbenchRoot, filename), PERMISSION_ROLES.PROTECTED_FILE,

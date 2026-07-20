@@ -1,9 +1,9 @@
 {
   "version": "riddle.local-fixture-selection.v1",
   "files": [
-    { "role": "original", "path": "original.txt" },
+    { "role": "source", "path": "source.txt" },
     { "role": "template", "path": "template.txt" },
-    { "role": "candidate", "path": "candidate.txt" },
+    { "role": "working", "path": "working.txt" },
     { "role": "rendered", "path": "rendered.pdf" }
   ]
 }

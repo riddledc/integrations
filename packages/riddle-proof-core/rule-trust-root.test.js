@@ -44,7 +44,7 @@ const alpha = definition("fixture.alpha", "Alpha rule");
 const zeta = definition("fixture.zeta", "Zeta rule");
 
 const created = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [zeta, alpha],
 });
@@ -55,7 +55,7 @@ assert.match(created.trust_root.bundle_digest, /^sha256:[0-9a-f]{64}$/u);
 // Input order is not a source of identity. Both the serialized bundle and its
 // digest use the canonical rule_id/rule_version ordering.
 const reversed = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [alpha, zeta],
 });
@@ -78,7 +78,7 @@ assert.deepEqual(
 );
 
 const duplicate = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [alpha, clone(alpha)],
 });
@@ -91,14 +91,14 @@ assert.equal(duplicate.error.code, "duplicate_rule");
 const changedAlpha = clone(alpha);
 changedAlpha.label = "Permissive substituted Alpha rule";
 const substituted = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [changedAlpha, zeta],
 });
 assert.equal(substituted.ok, true, substituted.ok ? undefined : substituted.error.message);
 assert.notEqual(substituted.trust_root.bundle_digest, created.trust_root.bundle_digest);
 const duplicateIdentityWithDifferentDigest = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [alpha, changedAlpha],
 });
@@ -125,7 +125,7 @@ assert.equal(identitySubstitution.ok, false);
 assert.equal(identitySubstitution.error.code, "trust_root_mismatch");
 
 const extraCreationField = createRiddleProofRuleTrustRoot({
-  trust_root_id: "fixture.amendment-rules",
+  trust_root_id: "fixture.generic-rules",
   trust_root_version: "2026-07-19",
   rule_definitions: [alpha],
   selected_by_model: true,
@@ -134,7 +134,7 @@ assert.equal(extraCreationField.ok, false);
 assert.equal(extraCreationField.error.code, "invalid_input");
 
 const incompatibleTrustRootCode = createRiddleProofRuleTrustRoot({
-  trust_root_id: "company amendment rules",
+  trust_root_id: "company generic rules",
   trust_root_version: "v 1",
   rule_definitions: [alpha],
 });

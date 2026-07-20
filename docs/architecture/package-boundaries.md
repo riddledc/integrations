@@ -9,7 +9,8 @@ ownership gate.
 
 ```text
                     @riddledc/riddle-proof-core
-       claims, receipts, grounding, checked meaning, review protocol
+     snapshots, captures, claims, grounding checks, composition,
+              proofs, trust roots, and receipts
                  cryptography; no I/O or network
                               |
         +---------------------+---------------------+
@@ -72,7 +73,8 @@ host process's capabilities. Scanner-sensitive local flows should use the
 callback-free built-in declarative JSON path, or execute external callbacks in
 a separately controlled process.
 
-Core also owns the pure profile contracts and deterministic profile evaluators.
+Core also owns the pure grounding-profile contracts and deterministic profile
+evaluators.
 The compatibility facade owns the legacy HTTP preflight and generated-browser
 script builder. The facade build keeps core external rather than rebundling a
 second copy, so its compatibility entrypoints resolve to the same installed
@@ -83,9 +85,9 @@ core implementation. No core source file imports from the facade source tree.
 The stack deliberately separates four different assertions:
 
 1. A surface adapter captured exact bytes during a stated stable interval.
-2. A signed grounded contract derived a narrowly named fact from those bytes
-   under independently supplied scope, signer, collector, sensor, freshness,
-   verifier, and contract policy.
+2. A grounding check derived a narrowly named claim from a signed capture under
+   independently supplied scope, signer, collector, sensor, freshness,
+   verifier, and grounding policy.
 3. A fixed, content-addressed, data-only rule composed grounded facts into a
    higher-level claim under an independently allowlisted rule digest.
 4. A consumer matched the exact expected root, scope, claim, and rule after
@@ -96,64 +98,75 @@ consumer time, grounded-age bound, and future-skew bound, the runtime classifies
 the replayed closure as `checked`, `stale`, or `unresolved`; it never reads the
 ambient clock for that decision.
 
-This supports compression: a consumer can retain and replay the closure instead
+This supports compression: a consumer can retain and replay the proof instead
 of manually rechecking every premise. It does not turn an accepted rule into a
 law of nature. The outside-world fidelity of a sensor, key custody, and the
-legal or organizational correctness of a rule remain explicit trust inputs.
+domain or organizational correctness of a rule remain explicit trust inputs.
 
 ## Local document boundary
 
 The first non-browser surface is intentionally small. `riddle-proof-local`
 captures files the caller names explicitly, defaults to `digest_only`, rejects
 symbolic links and unstable reads, omits absolute paths, and never mutates a
-selected source document. Its snapshot proves the bytes read, not that a file
-is the operative contract, a PDF is a faithful rendering, or a lawyer approved
-the text.
+selected source document. Its snapshot proves the bytes read, not what those
+bytes mean, whether one rendering faithfully represents another, or whether an
+event or downstream action occurred.
 
-Google Docs/Drive, DOCX rendering, and company amendment rules should be
-separate adapters or private bundles with their own capabilities and trust
-review. They are not silently folded into core or local.
+Surface adapters, rendering checks, and client rule bundles should be separate
+packages or private components with their own capabilities and trust review.
+They are not silently folded into core or local.
 
-## Agent review boundary
+## Client-instantiation boundary
 
-The public agent-review protocol separates five objects that must not be
-collapsed:
+Riddle Proof supplies machinery; a client supplies the use and meaning of that
+machinery. Public core may define generic containers and verifiers for:
 
 - an independently loaded rule trust root, identified by exact ID, version,
   and complete bundle digest;
 - an independently loaded evidence-template trust root that fixes the
   collector, signer, declarative verifier, fixed assertions, typed observation
   bindings, sensor policy, a bounded recursive exact observation schema, and
-  the single permitted artifact ID, role, and media type across matters;
-- a content-free machine receipt containing opaque IDs, digests,
-  classifications, evidence links, and model/protocol routing metadata;
-- a privileged review packet that may contain contract excerpts, analysis,
-  questions, and proposed language, and therefore remains only in an approved
-  company-controlled directory; and
-- separately signed human attestations for `submitted_for_legal_review` and,
-  when a key is independently authorized for it, `legal_approved`.
+  the permitted artifact IDs, roles, and media types;
+- a content-free machine receipt that binds opaque identifiers, a private
+  payload digest, evidence links, execution identity, and the exact digest of
+  the execution policy enforced at creation; and
+- deterministic packet verification that recomputes that policy digest and
+  resolves the root, currentness certificate, and every entry evidence link
+  through certificate IDs derived from a separately replayed and matched
+  checked-meaning closure.
 
-`amendment-review-packet-complete` is a deterministic procedural conclusion.
-It means the required steps ran, assertions were classified, evidence links
-resolved through consumer-derived replay authority, uncertainties were
-enumerated, the pinned rules and approved execution policy were used, and the
-snapshot matched at the stated currentness check. It does not assert that an
-agent's legal interpretation is correct and it cannot manufacture either human
-attestation.
+Checked-meaning replay/matching and packet verification remain separate APIs.
+The caller must establish expected meaning first; the packet verifier neither
+selects a root claim nor treats packet structure as semantic proof.
+
+Public core must not define a client's domain, workflow state names, required
+premise graph, actor roles, provider choice, or conclusion vocabulary. Those
+belong to the client-controlled rule bundle and implementation. A client may
+use a private payload for sensitive analysis or proposed content, but the
+public machinery sees only its bytes/digest and the independently expected
+semantic claims.
+
+If a client needs to represent an act performed by a particular signer, it can
+define an ordinary claim and ground it in a signed capture with the existing
+claim and evidence machinery. That meaning and its downstream effect remain
+client-defined; public core does not add a specialized category for it.
 
 The exact observation schema makes proof handoffs closed rather than
 open-ended: objects may contain only reviewed root and nested fields, arrays
 have fixed length and order, and leaves are pinned literals, claim parameters,
 SHA-256 digests, or bounded integers. Final replay rejects undeclared fields,
-extra array entries, and additional signed artifacts before accepting the
-procedural root.
+extra array entries, and additional signed artifacts before accepting a
+client-selected root.
 
-The public `examples/private-workbench-transfer` material is synthetic. The
-instantiated workbench, immutable trust root, company rules, credentials,
-human-key registry, privileged examples, and model adapters belong in a
-company-controlled environment. Google and Anthropic access, if approved, are
-separate network-capable adapters with explicit destinations; neither is part
-of core or local.
+Any public workbench-transfer material is a domain-neutral synthetic bootstrap,
+not an instantiated client. An actual workbench, immutable trust roots, domain
+rules, credentials, client signer keys, privileged examples, provider choice,
+and adapters belong in a client-controlled environment. Network-capable
+surface or model adapters remain separate components with explicit
+destinations; none is part of core or local.
+
+See [Building a private Riddle Proof client](../riddle-proof-client-instantiation.md)
+for the generic adoption and handoff sequence.
 
 ## Private infrastructure
 
