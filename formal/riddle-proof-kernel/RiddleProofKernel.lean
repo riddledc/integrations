@@ -3,6 +3,7 @@ import RiddleProofKernel.SemanticComposition
 import RiddleProofKernel.SemanticClosure
 import RiddleProofKernel.GroundedEvidence
 import RiddleProofKernel.MeaningKernel
+import RiddleProofKernel.GenericProtocol
 
 namespace RiddleProofKernel
 
@@ -1568,10 +1569,8 @@ response source maps to a trusted proof-assessment source.
 
 inductive CheckpointResponseSourceKind where
   | missing
-  | openclawMain
-  | openclawSubagent
-  | codex
-  | claudeCode
+  | supervisingAgent
+  | delegatedAgent
   | human
   | ci
   | unknown
@@ -1580,11 +1579,10 @@ inductive CheckpointResponseSourceKind where
 def proofAssessmentSourceFromCheckpointResponseKind :
     CheckpointResponseSourceKind → ProofAssessmentSource
   | CheckpointResponseSourceKind.missing => ProofAssessmentSource.supervisingAgent
-  | CheckpointResponseSourceKind.openclawMain => ProofAssessmentSource.supervisingAgent
-  | CheckpointResponseSourceKind.codex => ProofAssessmentSource.supervisingAgent
-  | CheckpointResponseSourceKind.claudeCode => ProofAssessmentSource.supervisingAgent
+  | CheckpointResponseSourceKind.supervisingAgent =>
+      ProofAssessmentSource.supervisingAgent
   | CheckpointResponseSourceKind.human => ProofAssessmentSource.supervisor
-  | CheckpointResponseSourceKind.openclawSubagent => ProofAssessmentSource.runner
+  | CheckpointResponseSourceKind.delegatedAgent => ProofAssessmentSource.runner
   | CheckpointResponseSourceKind.ci => ProofAssessmentSource.runner
   | CheckpointResponseSourceKind.unknown => ProofAssessmentSource.unknown
 
@@ -1639,7 +1637,7 @@ def exampleVerifyReadyToShipResponse : CheckpointResponse where
 #eval checkpointResponseReadyHoldWithSourceGuard
   exampleVerifyProofState
   exampleVerifyReadyToShipResponse
-  CheckpointResponseSourceKind.codex
+  CheckpointResponseSourceKind.supervisingAgent
 
 theorem ci_checkpoint_response_source_cannot_hold_ready_to_ship :
     checkpointResponseReadyHoldWithoutSourceGuard
@@ -1658,14 +1656,14 @@ theorem subagent_checkpoint_response_source_cannot_hold_ready_to_ship :
       ∧ checkpointResponseReadyHoldWithSourceGuard
         exampleVerifyProofState
         exampleVerifyReadyToShipResponse
-        CheckpointResponseSourceKind.openclawSubagent = false := by
+        CheckpointResponseSourceKind.delegatedAgent = false := by
   native_decide
 
-theorem codex_checkpoint_response_source_can_hold_ready_to_ship :
+theorem supervising_agent_checkpoint_response_source_can_hold_ready_to_ship :
     checkpointResponseReadyHoldWithSourceGuard
       exampleVerifyProofState
       exampleVerifyReadyToShipResponse
-      CheckpointResponseSourceKind.codex = true := by
+      CheckpointResponseSourceKind.supervisingAgent = true := by
   native_decide
 
 theorem human_checkpoint_response_source_can_hold_ready_to_ship :
@@ -2719,7 +2717,7 @@ Layer 8: public state summary projection.
 
 `summarizeRiddleProofPublicState` is the generic product-facing projection for
 agent wrappers, PR comments, hosted proof views, and status monitors. It is not
-OpenClaw-specific. The contract here is about safe public claims:
+provider-specific. The contract here is about safe public claims:
 
 * checkpoint, failed, and blocked handoff states dominate stale success-shaped
   status fields

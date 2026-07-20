@@ -4,10 +4,12 @@ import { canonicalJson, digestToken, sha256Bytes, sha256Canonical } from "./cano
 import {
   DEFAULT_MAX_DOCUMENT_BYTES,
   MAX_DOCUMENT_BYTES,
-  readStableRegularFile,
+  readStableRegularFileSet,
 } from "./stableRead.js";
 import {
   DOCUMENT_SNAPSHOT_CAPTURE_METHOD,
+  DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES,
+  DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
   DOCUMENT_SNAPSHOT_OBSERVATION_VERSION,
   DOCUMENT_SNAPSHOT_RECEIPT_VERSION,
   DOCUMENT_SNAPSHOT_VERSION,
@@ -15,10 +17,13 @@ import {
   type DocumentArtifactPolicy,
   type DocumentSnapshotArtifact,
   type DocumentSnapshotComparison,
+  type DocumentSnapshotCurrentness,
+  type DocumentSnapshotCurrentnessGroundingRecipe,
   type DocumentSnapshotGroundingRecipe,
   type DocumentSnapshotObservation,
   type DocumentSnapshotReceipt,
   type DocumentSnapshotVerification,
+  type RecaptureDocumentSnapshotCurrentnessInput,
 } from "./types.js";
 
 const ROLE_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/u;
@@ -113,6 +118,9 @@ export async function captureDocumentSnapshot(
   const artifactPolicy = input.artifactPolicy ?? "digest_only";
   validatePolicy(artifactPolicy);
   validateLabel(input.label);
+  if (artifactPolicy === "digest_only" && input.label !== undefined) {
+    throw new TypeError("digest_only receipts do not accept a free-form label.");
+  }
   const capturedAt = input.capturedAt ?? new Date().toISOString();
   validateCapturedAt(capturedAt);
   const maxFileBytes = input.maxFileBytes ?? DEFAULT_MAX_DOCUMENT_BYTES;
@@ -137,9 +145,15 @@ export async function captureDocumentSnapshot(
   const identities = new Set<string>();
   const artifacts: DocumentSnapshotArtifact[] = [];
   let totalBytes = 0;
-  for (const selection of [...input.files].sort((left, right) => compareText(left.role, right.role))) {
-    const sourcePath = resolve(selection.path);
-    const read = await readStableRegularFile(sourcePath, maxFileBytes);
+  const orderedSelections = [...input.files]
+    .sort((left, right) => compareText(left.role, right.role));
+  const sourcePaths = orderedSelections.map((selection) => resolve(selection.path)) as
+    [string, ...string[]];
+  const stableReads = await readStableRegularFileSet(sourcePaths, maxFileBytes);
+  for (let index = 0; index < orderedSelections.length; index += 1) {
+    const selection = orderedSelections[index];
+    const sourcePath = sourcePaths[index];
+    const read = stableReads[index];
     const identity = `${read.identity.dev}:${read.identity.ino}`;
     if (identities.has(identity)) {
       throw new Error("The same local file was selected for more than one role.");
@@ -238,6 +252,9 @@ export function verifyDocumentSnapshotReceipt(value: unknown): DocumentSnapshotV
     validateCapturedAt(value.captured_at);
     validateLabel(value.label as string | undefined);
     validatePolicy(value.artifact_policy);
+    if (value.artifact_policy === "digest_only" && value.label !== undefined) {
+      throw new Error("digest_only receipts must not contain a free-form label.");
+    }
     if (value.capture_method !== DOCUMENT_SNAPSHOT_CAPTURE_METHOD || value.source_documents_mutated !== false) {
       throw new Error("Receipt capture guarantees are unsupported.");
     }
@@ -378,6 +395,86 @@ export function compareDocumentSnapshotReceipts(
   };
 }
 
+/**
+ * Reread explicit local sources and compare their bytes with a prior snapshot.
+ *
+ * This is an observation at `checkedAt`, not a promise that the sources will
+ * remain unchanged. The witness deliberately contains no paths, filenames,
+ * source bytes, or raw filesystem errors.
+ */
+export async function recaptureDocumentSnapshotCurrentness(
+  input: RecaptureDocumentSnapshotCurrentnessInput,
+): Promise<DocumentSnapshotCurrentness> {
+  if (!input || typeof input !== "object") throw new TypeError("Currentness input must be an object.");
+  validateCapturedAt(input.checkedAt);
+  const expectedVerification = verifyDocumentSnapshotReceipt(input.expectedReceipt);
+  if (!expectedVerification.ok) {
+    throw new Error("Cannot check currentness for an invalid expected receipt.");
+  }
+
+  const expected = {
+    version: DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+    expected_snapshot_id: input.expectedReceipt.snapshot.snapshot_id,
+    expected_manifest_digest: input.expectedReceipt.snapshot.manifest_digest,
+    checked_at: input.checkedAt,
+  } as const;
+  const expectedRoles = input.expectedReceipt.snapshot.artifacts.map((artifact) => artifact.role);
+  const suppliedRoles: string[] = [];
+  let suppliedRoleSetIsValid = Array.isArray(input.files)
+    && input.files.length >= 1
+    && input.files.length <= MAX_DOCUMENT_FILES;
+  if (suppliedRoleSetIsValid) {
+    for (const selection of input.files) {
+      try {
+        if (!selection || typeof selection !== "object") throw new TypeError("Invalid selection.");
+        validateRole(selection.role);
+        suppliedRoles.push(selection.role);
+      } catch {
+        suppliedRoleSetIsValid = false;
+        break;
+      }
+    }
+  }
+  suppliedRoles.sort(compareText);
+  if (new Set(suppliedRoles).size !== suppliedRoles.length
+    || suppliedRoles.length !== expectedRoles.length
+    || suppliedRoles.some((role, index) => role !== expectedRoles[index])) {
+    suppliedRoleSetIsValid = false;
+  }
+  if (!suppliedRoleSetIsValid) {
+    return {
+      ...expected,
+      status: "unresolved",
+      error_code: DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES.roleSetMismatch,
+    };
+  }
+
+  let observedReceipt: DocumentSnapshotReceipt;
+  try {
+    observedReceipt = await captureDocumentSnapshot({
+      files: input.files,
+      artifactPolicy: "digest_only",
+      capturedAt: input.checkedAt,
+      ...(input.maxFileBytes === undefined ? {} : { maxFileBytes: input.maxFileBytes }),
+    });
+  } catch {
+    return {
+      ...expected,
+      status: "unresolved",
+      error_code: DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES.recaptureFailed,
+    };
+  }
+
+  const comparison = compareDocumentSnapshotReceipts(input.expectedReceipt, observedReceipt);
+  return {
+    ...expected,
+    status: comparison.status === "unchanged" ? "current" : "changed",
+    observed_snapshot_id: observedReceipt.snapshot.snapshot_id,
+    observed_manifest_digest: observedReceipt.snapshot.manifest_digest,
+    comparison,
+  };
+}
+
 export function createDocumentSnapshotObservation(
   receipt: DocumentSnapshotReceipt,
 ): DocumentSnapshotObservation {
@@ -432,6 +529,10 @@ export function createDocumentSnapshotGroundingRecipe(
         claim_id: "local-document-snapshot-captured",
         claim_version: "1",
         label: "Selected local document bytes were captured without source mutation",
+        parameters: {
+          snapshot_id: observation.snapshot_id,
+          manifest_digest: observation.manifest_digest,
+        },
       },
       program: {
         all: [
@@ -441,10 +542,18 @@ export function createDocumentSnapshotGroundingRecipe(
             pointer: "/version",
             value: DOCUMENT_SNAPSHOT_OBSERVATION_VERSION,
           },
-          { op: "exists", source: "observation", pointer: "/snapshot_id" },
-          { op: "type_is", source: "observation", pointer: "/snapshot_id", type: "string" },
-          { op: "exists", source: "observation", pointer: "/manifest_digest" },
-          { op: "type_is", source: "observation", pointer: "/manifest_digest", type: "string" },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/snapshot_id",
+            value: observation.snapshot_id,
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/manifest_digest",
+            value: observation.manifest_digest,
+          },
           {
             op: "equals",
             source: "observation",
@@ -459,6 +568,139 @@ export function createDocumentSnapshotGroundingRecipe(
             value: false,
           },
           { op: "type_is", source: "observation", pointer: "/artifacts", type: "array" },
+        ],
+      },
+    },
+  };
+}
+
+export function createDocumentSnapshotCurrentnessGroundingRecipe(
+  currentness: DocumentSnapshotCurrentness,
+): DocumentSnapshotCurrentnessGroundingRecipe {
+  if (!plainObject(currentness)
+    || !exactKeys(currentness, [
+      "version", "status", "expected_snapshot_id", "expected_manifest_digest", "checked_at",
+      "observed_snapshot_id", "observed_manifest_digest", "comparison",
+    ])
+    || currentness.version !== DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION
+    || currentness.status !== "current"
+    || typeof currentness.expected_snapshot_id !== "string"
+    || !SNAPSHOT_ID_PATTERN.test(currentness.expected_snapshot_id)
+    || typeof currentness.expected_manifest_digest !== "string"
+    || !SHA256_PATTERN.test(currentness.expected_manifest_digest)
+    || currentness.observed_snapshot_id !== currentness.expected_snapshot_id
+    || currentness.observed_manifest_digest !== currentness.expected_manifest_digest
+    || !plainObject(currentness.comparison)
+    || !exactKeys(currentness.comparison, [
+      "status", "added_roles", "removed_roles", "changed_roles",
+    ])
+    || currentness.comparison.status !== "unchanged"
+    || !Array.isArray(currentness.comparison.added_roles)
+    || currentness.comparison.added_roles.length !== 0
+    || !Array.isArray(currentness.comparison.removed_roles)
+    || currentness.comparison.removed_roles.length !== 0
+    || !Array.isArray(currentness.comparison.changed_roles)
+    || currentness.comparison.changed_roles.length !== 0) {
+    throw new Error("Currentness grounding requires a canonical current snapshot witness.");
+  }
+  validateCapturedAt(currentness.checked_at);
+
+  const observationJson = canonicalJson(currentness);
+  const artifact = {
+    artifact_id: "document-snapshot-currentness.json",
+    role: "document_snapshot_currentness",
+    media_type: "application/json" as const,
+    bytes_base64: Buffer.from(observationJson, "utf8").toString("base64"),
+  };
+  return {
+    observation: currentness,
+    observation_json: observationJson,
+    artifacts: [artifact],
+    verifier_definition: {
+      verifier_id: "riddle-proof.local-document-snapshot-currentness.declarative",
+      verifier_version: "1",
+      program: {
+        artifact: {
+          artifact_id: artifact.artifact_id,
+          role: artifact.role,
+          media_type: artifact.media_type,
+        },
+        pointer: "",
+      },
+    },
+    contract_definition: {
+      contract_id: "riddle-proof.local-document-snapshot-current-at-check.declarative",
+      contract_version: "1",
+      label: "Selected document bytes matched the expected snapshot at checked_at",
+      claim: {
+        claim_id: "local-document-snapshot-current-at-check",
+        claim_version: "1",
+        label: "Selected document bytes matched the expected snapshot at checked_at",
+        parameters: {
+          snapshot_id: currentness.expected_snapshot_id,
+          manifest_digest: currentness.expected_manifest_digest,
+          checked_at: currentness.checked_at,
+        },
+      },
+      program: {
+        all: [
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/version",
+            value: DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+          },
+          { op: "equals", source: "observation", pointer: "/status", value: "current" },
+          { op: "exists", source: "observation", pointer: "/checked_at" },
+          { op: "type_is", source: "observation", pointer: "/checked_at", type: "string" },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/expected_snapshot_id",
+            value: currentness.expected_snapshot_id,
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/observed_snapshot_id",
+            value: currentness.expected_snapshot_id,
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/expected_manifest_digest",
+            value: currentness.expected_manifest_digest,
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/observed_manifest_digest",
+            value: currentness.expected_manifest_digest,
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/comparison/status",
+            value: "unchanged",
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/comparison/added_roles",
+            value: [],
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/comparison/removed_roles",
+            value: [],
+          },
+          {
+            op: "equals",
+            source: "observation",
+            pointer: "/comparison/changed_roles",
+            value: [],
+          },
         ],
       },
     },

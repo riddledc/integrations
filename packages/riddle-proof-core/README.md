@@ -76,8 +76,53 @@ const result = composeRiddleProofCheckedMeaningClosures({
 The additional assurance is named `checked_allowlisted_rule`. It means that
 the exact allowlisted rule accepted the exact grounded premises and produced
 the exact conclusion. It does **not** mean that the rule is philosophically or
-legally correct, nor does it independently establish browser fidelity, sensor
+operationally correct, nor does it independently establish browser fidelity, sensor
 calibration, key custody, or outside-world truth.
+
+## Reusable trust and packet primitives
+
+The public package supplies domain-neutral pieces that a consuming application
+can assemble into its own protocol:
+
+- `rule-trust-root` canonicalizes complete checked-meaning definitions and
+  releases a registry only after its exact ID, version, and bundle digest match
+  an independently supplied trust-root reference. A run may reference that
+  root; it cannot choose or replace the rule bundle.
+- `evidence-trust-root` pins reusable declarative evidence templates rather
+  than run-specific claims. The consumer materializes an exact contract
+  only from the verified observation, binds the sensor target to the expected
+  scope, and rejects extra, missing, mistyped, or substituted parameters. The
+  same trust-root digest therefore applies across different subjects. Each
+  profile also pins a bounded, data-only recursive observation schema: objects
+  have exactly the declared fields, arrays are fixed-length ordered tuples,
+  and leaves are literals, claim-parameter values, SHA-256 digests, or bounded
+  integers. Final replay rejects nonconforming root or nested fields,
+  extra tuple entries, and captures that do not contain exactly the one pinned
+  artifact ID, role, and media type.
+- `packet` binds arbitrary private packet bytes to a content-free receipt. The
+  receipt contains client-defined classification codes, opaque IDs,
+  evidence-certificate links, independently supplied trust roots, exact
+  root/currentness certificate IDs, generic execution metadata, and the digest
+  of the execution policy enforced when the receipt was created. Creation
+  rejects executions and entry issuers outside that policy. Core does not
+  define a packet-complete claim or interpret a classification; the consumer
+  owns those meanings in its pinned checked-meaning rules.
+- Packet verification is intentionally separate from checked-meaning replay.
+  After matching a separately replayed closure to the independently expected
+  root claim and rule, the consumer supplies the nonempty unique set of
+  certificate IDs resolved from that closure. Verification requires that set
+  to contain the checked root, currentness certificate, and every entry-level
+  evidence link. It also recomputes the independently supplied execution-policy
+  digest, checks the exact private-byte digest and content-free projection,
+  subject and trust roots, freshness, and issuance chronology.
+  `digestRiddleProofPrivatePacketBytes` validates the complete private-packet
+  envelope and returns its domain-separated byte digest without issuing a
+  provisional receipt.
+
+Private packet bytes are provided directly to the packet verifier and are not
+returned in its result or copied into grounded closure artifacts. Consumer
+rules, private examples, credentials, adapters, and signer registries belong
+in the consumer's controlled environment rather than this package.
 
 ### Historical replay versus consumption-time freshness
 

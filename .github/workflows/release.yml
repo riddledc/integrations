@@ -6,15 +6,40 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
-  statuses: write
-
 jobs:
-  release:
+  formal-kernel:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Lean
+        shell: bash
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Verify formal kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE '(^|[^[:alnum:]_])(sorry|admit|axiom)([^[:alnum:]_]|$)' formal/riddle-proof-kernel --include='*.lean'; then
+            echo "Formal kernel contains a prohibited proof placeholder."
+            exit 1
+          fi
+          cd formal/riddle-proof-kernel
+          lake build
+
+  release:
+    needs: formal-kernel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+      statuses: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,11 +53,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm build
@@ -89,8 +113,10 @@ jobs:
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: npm install -g npm@11.5.2
 
+      - name: Test exact publish commit
+        if: steps.changesets.outputs.hasChangesets == 'false'
+        run: pnpm test
+
       - name: Publish to npm with provenance
         if: steps.changesets.outputs.hasChangesets == 'false'
         run: pnpm release --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.GITHUB_TOKEN }}

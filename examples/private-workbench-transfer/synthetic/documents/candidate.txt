@@ -1,0 +1,3 @@
+SYNTHETIC CANDIDATE ARTIFACT
+
+The resulting value is 101 synthetic units. Other source information is preserved.

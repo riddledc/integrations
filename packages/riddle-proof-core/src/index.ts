@@ -4,3 +4,6 @@ export * from "./receipts";
 export * from "./semantic-certificate";
 export * from "./grounded-evidence";
 export * from "./checked-meaning";
+export * from "./rule-trust-root";
+export * from "./evidence-trust-root";
+export * from "./packet";

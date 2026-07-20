@@ -1,0 +1,3 @@
+SYNTHETIC WORKFLOW CRITERIA
+
+Identify the source, proposed change, resulting value, and preserved information.

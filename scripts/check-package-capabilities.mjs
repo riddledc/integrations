@@ -238,6 +238,11 @@ assert.ok(workspaceDependencyNames("hosted").has(coreName), "hosted must depend 
 assert.ok(!workspaceDependencyNames("hosted").has(facadeName), "hosted must not depend on facade");
 assert.ok(workspaceDependencyNames("facade").has(coreName), "facade must depend on core");
 assert.ok(workspaceDependencyNames("facade").has(hostedName), "facade must depend on hosted");
+assert.match(
+  packageManifest("facade").scripts?.build || "",
+  /--external @riddledc\/riddle-proof-core(?:\s|$)/u,
+  "facade build must reference core as an external dependency instead of rebundling it",
+);
 
 const hostedMarkers = [
   ["hosted Riddle endpoint", /api\.riddledc\.com/i],
@@ -263,6 +268,22 @@ const localForbidden = [
 assert.deepEqual(scanPublishedFiles("core", coreForbidden), [], "core publish surface must be capability-clean");
 assert.deepEqual(scanPublishedFiles("local", localForbidden), [], "local publish surface must be network-clean");
 assert.deepEqual(scanPublishedFiles("playwright", hostedMarkers), [], "Playwright publish surface must omit hosted Riddle");
+assert.deepEqual(
+  scanProductionSource("core", [[
+    "compatibility-facade source import",
+    /(?:from|import\()\s*["'][^"']*(?:packages\/)?riddle-proof\/src\//u,
+  ]]),
+  [],
+  "core production source must not depend on compatibility-facade source",
+);
+const coreProfileSource = readFileSync(
+  path.join(packageDirectory("core"), "src", "profile.ts"),
+  "utf8",
+);
+assert.equal(coreProfileSource.includes("preflightRiddleProofProfileHttpStatusChecks"), false,
+  "core profile source must not own HTTP preflight");
+assert.equal(coreProfileSource.includes("buildRiddleProofProfileScript"), false,
+  "core profile source must not own generated-browser script construction");
 for (const key of ["core", "local", "playwright", "facade"]) {
   assert.deepEqual(
     scanProductionSource(key, hostedApiPathLiterals),

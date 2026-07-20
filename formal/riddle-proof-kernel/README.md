@@ -391,7 +391,7 @@ The runtime assurance is therefore named `checked_allowlisted_rule`, not
 `proved_rule` or `true_meaning`. It establishes that the exact trusted,
 registered, fixed-interpreter rule accepted the exact grounded premises and
 materialized the exact conclusion. It does not provide the Lean `RuleSound`
-premise. Legal, domain, or other semantic soundness must still be justified by
+premise. Domain or other semantic soundness must still be justified by
 the trusted rule publisher and, where formal assurance is claimed, represented
 by a Lean soundness proof under the chosen `ClaimInterpretation`.
 

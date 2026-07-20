@@ -9,7 +9,8 @@ ownership gate.
 
 ```text
                     @riddledc/riddle-proof-core
-             claims, receipts, grounding, checked meaning
+     snapshots, captures, claims, grounding checks, composition,
+              proofs, trust roots, and receipts
                  cryptography; no I/O or network
                               |
         +---------------------+---------------------+
@@ -72,14 +73,21 @@ host process's capabilities. Scanner-sensitive local flows should use the
 callback-free built-in declarative JSON path, or execute external callbacks in
 a separately controlled process.
 
+Core also owns the pure grounding-profile contracts and deterministic profile
+evaluators.
+The compatibility facade owns the legacy HTTP preflight and generated-browser
+script builder. The facade build keeps core external rather than rebundling a
+second copy, so its compatibility entrypoints resolve to the same installed
+core implementation. No core source file imports from the facade source tree.
+
 ## Evidence and meaning boundary
 
 The stack deliberately separates four different assertions:
 
 1. A surface adapter captured exact bytes during a stated stable interval.
-2. A signed grounded contract derived a narrowly named fact from those bytes
-   under independently supplied scope, signer, collector, sensor, freshness,
-   verifier, and contract policy.
+2. A grounding check derived a narrowly named claim from a signed capture under
+   independently supplied scope, signer, collector, sensor, freshness,
+   verifier, and grounding policy.
 3. A fixed, content-addressed, data-only rule composed grounded facts into a
    higher-level claim under an independently allowlisted rule digest.
 4. A consumer matched the exact expected root, scope, claim, and rule after
@@ -90,33 +98,75 @@ consumer time, grounded-age bound, and future-skew bound, the runtime classifies
 the replayed closure as `checked`, `stale`, or `unresolved`; it never reads the
 ambient clock for that decision.
 
-This supports compression: a consumer can retain and replay the closure instead
+This supports compression: a consumer can retain and replay the proof instead
 of manually rechecking every premise. It does not turn an accepted rule into a
 law of nature. The outside-world fidelity of a sensor, key custody, and the
-legal or organizational correctness of a rule remain explicit trust inputs.
+domain or organizational correctness of a rule remain explicit trust inputs.
 
 ## Local document boundary
 
 The first non-browser surface is intentionally small. `riddle-proof-local`
 captures files the caller names explicitly, defaults to `digest_only`, rejects
 symbolic links and unstable reads, omits absolute paths, and never mutates a
-selected source document. Its snapshot proves the bytes read, not that a file
-is the operative contract, a PDF is a faithful rendering, or a lawyer approved
-the text.
+selected source document. Its snapshot proves the bytes read, not what those
+bytes mean, whether one rendering faithfully represents another, or whether an
+event or downstream action occurred.
 
-Google Docs/Drive, DOCX rendering, and company amendment rules should be
-separate adapters or private bundles with their own capabilities and trust
-review. They are not silently folded into core or local.
+Surface adapters, rendering checks, and client rule bundles should be separate
+packages or private components with their own capabilities and trust review.
+They are not silently folded into core or local.
 
-## Transitional source seam
+## Client-instantiation boundary
 
-The published core tarball is self-contained and its installed dependency
-closure is clean. Inside this monorepo, `packages/riddle-proof-core/src/profile.ts`
-still selects pure profile types and evaluators from the facade's source during
-the build. That is a build-time migration seam, not a runtime dependency, but
-it means source ownership of the legacy profile module is not fully inverted
-yet. Do not describe the split as complete at source level until that module is
-physically moved or divided.
+Riddle Proof supplies machinery; a client supplies the use and meaning of that
+machinery. Public core may define generic containers and verifiers for:
+
+- an independently loaded rule trust root, identified by exact ID, version,
+  and complete bundle digest;
+- an independently loaded evidence-template trust root that fixes the
+  collector, signer, declarative verifier, fixed assertions, typed observation
+  bindings, sensor policy, a bounded recursive exact observation schema, and
+  the permitted artifact IDs, roles, and media types;
+- a content-free machine receipt that binds opaque identifiers, a private
+  payload digest, evidence links, execution identity, and the exact digest of
+  the execution policy enforced at creation; and
+- deterministic packet verification that recomputes that policy digest and
+  resolves the root, currentness certificate, and every entry evidence link
+  through certificate IDs derived from a separately replayed and matched
+  checked-meaning closure.
+
+Checked-meaning replay/matching and packet verification remain separate APIs.
+The caller must establish expected meaning first; the packet verifier neither
+selects a root claim nor treats packet structure as semantic proof.
+
+Public core must not define a client's domain, workflow state names, required
+premise graph, actor roles, provider choice, or conclusion vocabulary. Those
+belong to the client-controlled rule bundle and implementation. A client may
+use a private payload for sensitive analysis or proposed content, but the
+public machinery sees only its bytes/digest and the independently expected
+semantic claims.
+
+If a client needs to represent an act performed by a particular signer, it can
+define an ordinary claim and ground it in a signed capture with the existing
+claim and evidence machinery. That meaning and its downstream effect remain
+client-defined; public core does not add a specialized category for it.
+
+The exact observation schema makes proof handoffs closed rather than
+open-ended: objects may contain only reviewed root and nested fields, arrays
+have fixed length and order, and leaves are pinned literals, claim parameters,
+SHA-256 digests, or bounded integers. Final replay rejects undeclared fields,
+extra array entries, and additional signed artifacts before accepting a
+client-selected root.
+
+Any public workbench-transfer material is a domain-neutral synthetic bootstrap,
+not an instantiated client. An actual workbench, immutable trust roots, domain
+rules, credentials, client signer keys, privileged examples, provider choice,
+and adapters belong in a client-controlled environment. Network-capable
+surface or model adapters remain separate components with explicit
+destinations; none is part of core or local.
+
+See [Building a private Riddle Proof client](../riddle-proof-client-instantiation.md)
+for the generic adoption and handoff sequence.
 
 ## Private infrastructure
 
