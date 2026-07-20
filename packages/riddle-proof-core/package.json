@@ -1,6 +1,6 @@
 {
   "name": "@riddledc/riddle-proof-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Capability-bounded Riddle Proof contracts, receipts, semantic certificates, and grounded verification.",
   "license": "MIT",
   "author": "RiddleDC",
