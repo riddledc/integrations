@@ -94,7 +94,7 @@ function assertFixedOutput(result, expectedCode) {
 }
 
 function runDirectDoctor(workbenchRoot, {
-  args = [], env = process.env, expectedCode = "OS_BOUNDARY_NOT_ENFORCED",
+  args = [], env = sanitizedFoundationEnvironment(), expectedCode = "OS_BOUNDARY_NOT_ENFORCED",
 } = {}) {
   const result = spawnSync(process.execPath, [
     "--require",
@@ -136,7 +136,7 @@ function runFoundationCheck(workbenchRoot, {
 }
 
 function runLauncher(workbenchRoot, {
-  args = [], env = process.env, expectedCode = "OS_BOUNDARY_NOT_ENFORCED",
+  args = [], env = sanitizedFoundationEnvironment(), expectedCode = "OS_BOUNDARY_NOT_ENFORCED",
 } = {}) {
   const result = spawnSync(join(workbenchRoot, "company-bootstrap", "run-doctor"), args, {
     cwd: workbenchRoot,
