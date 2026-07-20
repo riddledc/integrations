@@ -235,14 +235,42 @@ try {
   writeFileSync(localSample, "synthetic amendment bytes\n", "utf8");
   runNetworkDeniedSmoke(localInstall, "network-denied-core-local", `
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import * as core from "@riddledc/riddle-proof-core";
-import { captureDocumentSnapshot, verifyDocumentSnapshotReceipt } from "@riddledc/riddle-proof-local";
+import * as evidenceTrust from "@riddledc/riddle-proof-core/evidence-trust-root";
+import * as humanAttestation from "@riddledc/riddle-proof-core/human-attestation";
+import * as reviewProtocol from "@riddledc/riddle-proof-core/review-protocol";
+import * as ruleTrust from "@riddledc/riddle-proof-core/rule-trust-root";
+import {
+  captureDocumentSnapshot,
+  recaptureDocumentSnapshotCurrentness,
+  verifyDocumentSnapshotReceipt,
+} from "@riddledc/riddle-proof-local";
+const require = createRequire(import.meta.url);
+for (const subpath of [
+  "evidence-trust-root",
+  "human-attestation",
+  "review-protocol",
+  "rule-trust-root",
+]) {
+  assert.equal(typeof require("@riddledc/riddle-proof-core/" + subpath), "object");
+}
 assert.equal(typeof core.verifyRiddleProofSignedCaptureBundle, "function");
+assert.equal(typeof evidenceTrust.resolveRiddleProofEvidenceTrustRoot, "function");
+assert.equal(typeof humanAttestation.verifyRiddleProofHumanAttestation, "function");
+assert.equal(typeof reviewProtocol.verifyRiddleProofReviewPacket, "function");
+assert.equal(typeof ruleTrust.resolveRiddleProofRuleTrustRoot, "function");
 const receipt = await captureDocumentSnapshot({
   files: [{ role: "candidate", path: ${JSON.stringify(localSample)} }],
   capturedAt: "2026-07-19T20:00:00.000Z",
 });
 assert.equal(verifyDocumentSnapshotReceipt(receipt).ok, true);
+const currentness = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: receipt,
+  files: [{ role: "candidate", path: ${JSON.stringify(localSample)} }],
+  checkedAt: "2026-07-19T20:00:01.000Z",
+});
+assert.equal(currentness.status, "current");
 `);
 
   const playwrightInstall = installCase("core-playwright", [archives.core, archives.playwright]);

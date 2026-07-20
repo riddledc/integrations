@@ -23,7 +23,6 @@ const documentReceipt = await captureDocumentSnapshot({
     { role: "rendered", path: join(fixtureRoot, "rendered.pdf") },
   ],
   capturedAt,
-  label: "Synthetic amendment review packet",
 });
 const recipe = createDocumentSnapshotGroundingRecipe(documentReceipt);
 const verifier = grounded.createRiddleProofGroundedDeclarativeJsonVerifier(
@@ -128,6 +127,10 @@ const anchorRule = checked.createRiddleProofCheckedMeaningRule({
     premises: [{
       claim_id: "local-document-snapshot-captured",
       claim_version: "1",
+      parameters: {
+        snapshot_id: { op: "any" },
+        manifest_digest: { op: "any" },
+      },
     }],
     conclusion: {
       claim_id: "local-document-snapshot-anchor-available",

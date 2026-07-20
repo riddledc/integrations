@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   captureDocumentSnapshot,
   compareDocumentSnapshotReceipts,
+  createDocumentSnapshotCurrentnessGroundingRecipe,
   createDocumentSnapshotGroundingRecipe,
   createDocumentSnapshotObservation,
+  DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES,
+  DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+  recaptureDocumentSnapshotCurrentness,
   verifyDocumentSnapshotReceipt,
 } from "./dist/index.js";
 import { main as cliMain } from "./dist/cli.js";
-import { readStableRegularFile } from "./dist/stableRead.js";
+import { readStableRegularFile, readStableRegularFileSet } from "./dist/stableRead.js";
 
 const packageRoot = dirname(fileURLToPath(import.meta.url));
 const fixtureRoot = join(packageRoot, "fixtures", "amendment");
@@ -22,13 +26,17 @@ const files = fixtureSelection.files.map((selection) => ({
 }));
 const capturedAt = "2026-07-19T20:00:00.000Z";
 
-const receipt = await captureDocumentSnapshot({ files, capturedAt, label: "Ready for Legal Review" });
+const receipt = await captureDocumentSnapshot({ files, capturedAt });
 assert.equal(receipt.artifact_policy, "digest_only");
 assert.equal(receipt.snapshot.artifacts.length, 4);
 assert.deepEqual(receipt.snapshot.artifacts.map((artifact) => artifact.role), [
   "candidate", "original", "rendered", "template",
 ]);
 assert.equal(verifyDocumentSnapshotReceipt(receipt).ok, true);
+await assert.rejects(
+  captureDocumentSnapshot({ files, capturedAt, label: "PRIVATE MATTER NAME" }),
+  /digest_only receipts do not accept/u,
+);
 const serializedReceipt = JSON.stringify(receipt);
 assert.equal(serializedReceipt.includes(resolve(fixtureRoot)), false, "receipt must not contain absolute paths");
 for (const name of ["candidate.txt", "original.txt", "rendered.pdf", "template.txt"]) {
@@ -43,7 +51,6 @@ for (const artifact of receipt.snapshot.artifacts) {
 const laterReceipt = await captureDocumentSnapshot({
   files: [...files].reverse(),
   capturedAt: "2026-07-19T21:00:00.000Z",
-  label: "Legal Reviewed",
 });
 assert.equal(laterReceipt.snapshot.snapshot_id, receipt.snapshot.snapshot_id);
 assert.notEqual(laterReceipt.receipt_id, receipt.receipt_id);
@@ -63,8 +70,49 @@ assert.equal(
 );
 assert.equal(grounding.artifacts[0].role, "document_snapshot_observation");
 assert.equal(grounding.verifier_definition.program.pointer, "");
-assert.equal(grounding.contract_definition.program.all.length, 9);
+assert.equal(grounding.contract_definition.program.all.length, 7);
 assert.equal(JSON.stringify(createDocumentSnapshotGroundingRecipe(laterReceipt).observation), JSON.stringify(observation));
+
+const checkedAt = "2026-07-19T21:30:00.000Z";
+const currentness = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: receipt,
+  files: [...files].reverse(),
+  checkedAt,
+});
+assert.deepEqual(currentness, {
+  version: DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+  expected_snapshot_id: receipt.snapshot.snapshot_id,
+  expected_manifest_digest: receipt.snapshot.manifest_digest,
+  checked_at: checkedAt,
+  status: "current",
+  observed_snapshot_id: receipt.snapshot.snapshot_id,
+  observed_manifest_digest: receipt.snapshot.manifest_digest,
+  comparison: {
+    status: "unchanged",
+    added_roles: [],
+    removed_roles: [],
+    changed_roles: [],
+  },
+});
+const serializedCurrentness = JSON.stringify(currentness);
+assert.equal(serializedCurrentness.includes(resolve(fixtureRoot)), false);
+for (const name of ["candidate.txt", "original.txt", "rendered.pdf", "template.txt"]) {
+  assert.equal(serializedCurrentness.includes(name), false, "currentness must not contain filenames");
+}
+const currentnessGrounding = createDocumentSnapshotCurrentnessGroundingRecipe(currentness);
+assert.deepEqual(JSON.parse(currentnessGrounding.observation_json), currentness);
+assert.equal(currentnessGrounding.artifacts[0].role, "document_snapshot_currentness");
+assert.equal(
+  currentnessGrounding.contract_definition.claim.label,
+  "Selected document bytes matched the expected snapshot at checked_at",
+);
+assert.equal(currentnessGrounding.contract_definition.claim.label.includes("remain"), false);
+assert.deepEqual(currentnessGrounding.contract_definition.claim.parameters, {
+  snapshot_id: receipt.snapshot.snapshot_id,
+  manifest_digest: receipt.snapshot.manifest_digest,
+  checked_at: checkedAt,
+});
+assert.equal(currentnessGrounding.contract_definition.program.all.length, 12);
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "riddle-proof-local-"));
 const modifiedCandidate = join(temporaryRoot, "candidate.txt");
@@ -81,6 +129,103 @@ assert.deepEqual(compareDocumentSnapshotReceipts(receipt, changedReceipt), {
   removed_roles: [],
   changed_roles: ["candidate"],
 });
+
+const changedCurrentness = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: receipt,
+  files: files.map((selection) => selection.role === "candidate"
+    ? { ...selection, path: modifiedCandidate }
+    : selection),
+  checkedAt,
+});
+assert.equal(changedCurrentness.status, "changed");
+assert.notEqual(changedCurrentness.observed_snapshot_id, receipt.snapshot.snapshot_id);
+assert.deepEqual(changedCurrentness.comparison, {
+  status: "changed",
+  added_roles: [],
+  removed_roles: [],
+  changed_roles: ["candidate"],
+});
+assert.throws(
+  () => createDocumentSnapshotCurrentnessGroundingRecipe(changedCurrentness),
+  /canonical current snapshot witness/u,
+);
+
+const watchedCandidate = join(temporaryRoot, "watched-candidate.txt");
+const originalCandidateBytes = await readFile(join(fixtureRoot, "candidate.txt"));
+await writeFile(watchedCandidate, originalCandidateBytes);
+const watchedFiles = files.map((selection) => selection.role === "candidate"
+  ? { ...selection, path: watchedCandidate }
+  : selection);
+const beforeMutation = await captureDocumentSnapshot({ files: watchedFiles, capturedAt });
+await writeFile(watchedCandidate, "mutated private amendment bytes");
+const afterMutation = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: beforeMutation,
+  files: watchedFiles,
+  checkedAt,
+});
+assert.equal(afterMutation.status, "changed");
+assert.deepEqual(afterMutation.comparison?.changed_roles, ["candidate"]);
+
+await writeFile(watchedCandidate, originalCandidateBytes);
+const beforeReplacement = await captureDocumentSnapshot({ files: watchedFiles, capturedAt });
+const replacementCandidate = join(temporaryRoot, "replacement-private-name.txt");
+await writeFile(replacementCandidate, "replacement private amendment bytes");
+await rename(replacementCandidate, watchedCandidate);
+const afterReplacement = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: beforeReplacement,
+  files: watchedFiles,
+  checkedAt,
+});
+assert.equal(afterReplacement.status, "changed");
+assert.deepEqual(afterReplacement.comparison?.changed_roles, ["candidate"]);
+
+const selectionMismatch = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: receipt,
+  files: files.filter((selection) => selection.role !== "candidate"),
+  checkedAt,
+});
+assert.deepEqual(selectionMismatch, {
+  version: DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+  expected_snapshot_id: receipt.snapshot.snapshot_id,
+  expected_manifest_digest: receipt.snapshot.manifest_digest,
+  checked_at: checkedAt,
+  status: "unresolved",
+  error_code: DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES.roleSetMismatch,
+});
+
+const missingPrivatePath = join(temporaryRoot, "missing-private-amendment.txt");
+const unresolvedCurrentness = await recaptureDocumentSnapshotCurrentness({
+  expectedReceipt: receipt,
+  files: files.map((selection) => selection.role === "candidate"
+    ? { ...selection, path: missingPrivatePath }
+    : selection),
+  checkedAt,
+});
+assert.deepEqual(unresolvedCurrentness, {
+  version: DOCUMENT_SNAPSHOT_CURRENTNESS_VERSION,
+  expected_snapshot_id: receipt.snapshot.snapshot_id,
+  expected_manifest_digest: receipt.snapshot.manifest_digest,
+  checked_at: checkedAt,
+  status: "unresolved",
+  error_code: DOCUMENT_SNAPSHOT_CURRENTNESS_ERROR_CODES.recaptureFailed,
+});
+const currentnessResults = JSON.stringify({
+  changedCurrentness,
+  afterMutation,
+  afterReplacement,
+  selectionMismatch,
+  unresolvedCurrentness,
+});
+for (const forbidden of [
+  temporaryRoot,
+  "watched-candidate.txt",
+  "replacement-private-name.txt",
+  "missing-private-amendment.txt",
+  "mutated private amendment bytes",
+  "replacement private amendment bytes",
+]) {
+  assert.equal(currentnessResults.includes(forbidden), false, "currentness must not leak source details");
+}
 
 const minimalReceipt = await captureDocumentSnapshot({
   files,
@@ -143,6 +288,25 @@ await assert.rejects(
     afterRead: async () => writeFile(driftingPath, "after and a different length"),
   }),
   /changed/u,
+);
+
+const setFirstPath = join(temporaryRoot, "set-first.txt");
+const setSecondPath = join(temporaryRoot, "set-second.txt");
+await writeFile(setFirstPath, "first before");
+await writeFile(setSecondPath, "second stable");
+await assert.rejects(
+  readStableRegularFileSet([setFirstPath, setSecondPath], 1024, {
+    afterRead: async (_path, index) => {
+      if (index === 1) await writeFile(setFirstPath, "first changed after its individual read");
+    },
+  }),
+  /snapshot set/u,
+  "set capture must reject a first file changed while a later file is read",
+);
+await assert.rejects(
+  readStableRegularFileSet([setFirstPath, setSecondPath], 1024, {}, 16),
+  /total capture limit/u,
+  "set capture must reject aggregate size before allocating the full set",
 );
 
 const cliReceiptPath = join(temporaryRoot, "receipt.json");

@@ -1,0 +1,372 @@
+{
+  "version": "riddle-proof.evidence-profile-templates.v1",
+  "profile_templates": [
+    {
+      "mode": "declarative_template",
+      "profile_id": "riddle-proof.synthetic-snapshot",
+      "profile_version": "1",
+      "collector": {
+        "collector_id": "riddle-proof.synthetic-offline-collector",
+        "collector_version": "1",
+        "implementation_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "sensor_template": {
+        "kind": "other",
+        "name": "synthetic-local-files",
+        "version": "1",
+        "metadata": {
+          "network_used": false,
+          "source_mutation": false,
+          "synthetic": true
+        },
+        "observed_target_binding": "expected_scope.target"
+      },
+      "trusted_signer": {
+        "key_id": "synthetic-offline-foundation-key",
+        "public_key_spki_base64": "MCowBQYDK2VwAyEA0/Diax3hBEXiqPo6JLj41YdI+IbZniZ4FkPQbWRyej4="
+      },
+      "verifier_definition": {
+        "verifier_id": "riddle-proof.local-document-snapshot.declarative",
+        "verifier_version": "1",
+        "program": {
+          "artifact": {
+            "artifact_id": "document-snapshot-observation.json",
+            "role": "document_snapshot_observation",
+            "media_type": "application/json"
+          },
+          "pointer": ""
+        }
+      },
+      "observation_schema": {
+        "kind": "object",
+        "properties": {
+          "version": { "kind": "literal", "value": "riddle.document-snapshot-observation.v1" },
+          "snapshot_id": { "kind": "claim_parameter", "parameter": "snapshot_id" },
+          "manifest_digest": { "kind": "claim_parameter", "parameter": "manifest_digest" },
+          "artifact_policy": { "kind": "literal", "value": "digest_only" },
+          "capture": {
+            "kind": "object",
+            "properties": {
+              "method": { "kind": "literal", "value": "stable_file_descriptor_set_pre_read_post_stat.v1" },
+              "stable": { "kind": "literal", "value": true },
+              "source_documents_mutated": { "kind": "literal", "value": false }
+            }
+          },
+          "artifacts": {
+            "kind": "array",
+            "items": [
+              {
+                "kind": "object",
+                "properties": {
+                  "role": { "kind": "literal", "value": "candidate" },
+                  "media_type": { "kind": "literal", "value": "text/plain" },
+                  "byte_length": { "kind": "integer", "minimum": 0, "maximum": 67108864 },
+                  "digest": { "kind": "sha256" }
+                }
+              },
+              {
+                "kind": "object",
+                "properties": {
+                  "role": { "kind": "literal", "value": "original" },
+                  "media_type": { "kind": "literal", "value": "text/plain" },
+                  "byte_length": { "kind": "integer", "minimum": 0, "maximum": 67108864 },
+                  "digest": { "kind": "sha256" }
+                }
+              },
+              {
+                "kind": "object",
+                "properties": {
+                  "role": { "kind": "literal", "value": "rendered" },
+                  "media_type": { "kind": "literal", "value": "application/pdf" },
+                  "byte_length": { "kind": "integer", "minimum": 0, "maximum": 67108864 },
+                  "digest": { "kind": "sha256" }
+                }
+              },
+              {
+                "kind": "object",
+                "properties": {
+                  "role": { "kind": "literal", "value": "template" },
+                  "media_type": { "kind": "literal", "value": "text/plain" },
+                  "byte_length": { "kind": "integer", "minimum": 0, "maximum": 67108864 },
+                  "digest": { "kind": "sha256" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "contract_template": {
+        "contract_id": "riddle-proof.local-document-snapshot-captured.declarative",
+        "contract_version": "1",
+        "label": "A stable read-only local document snapshot was captured",
+        "claim": {
+          "claim_id": "riddle-proof.diagnostic.snapshot-captured",
+          "claim_version": "1",
+          "label": "Selected local document bytes were captured without source mutation"
+        },
+        "required_assertions": [
+          { "op": "equals", "source": "observation", "pointer": "/version", "value": "riddle.document-snapshot-observation.v1" },
+          { "op": "equals", "source": "observation", "pointer": "/capture/method", "value": "stable_file_descriptor_set_pre_read_post_stat.v1" },
+          { "op": "equals", "source": "observation", "pointer": "/capture/stable", "value": true },
+          { "op": "equals", "source": "observation", "pointer": "/capture/source_documents_mutated", "value": false },
+          { "op": "type_is", "source": "observation", "pointer": "/artifacts", "type": "array" }
+        ],
+        "parameter_bindings": [
+          { "parameter": "snapshot_id", "observation_pointers": ["/snapshot_id"], "allowed_json_types": ["string"] },
+          { "parameter": "manifest_digest", "observation_pointers": ["/manifest_digest"], "allowed_json_types": ["string"] }
+        ]
+      },
+      "required_artifact_roles": ["document_snapshot_observation"]
+    },
+    {
+      "mode": "declarative_template",
+      "profile_id": "riddle-proof.synthetic-required-document-roles",
+      "profile_version": "1",
+      "collector": {
+        "collector_id": "riddle-proof.synthetic-offline-collector",
+        "collector_version": "1",
+        "implementation_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "sensor_template": {
+        "kind": "other",
+        "name": "synthetic-required-document-role-sensor",
+        "version": "1",
+        "metadata": {
+          "network_used": false,
+          "source_mutation": false,
+          "synthetic": true
+        },
+        "observed_target_binding": "expected_scope.target"
+      },
+      "trusted_signer": {
+        "key_id": "synthetic-offline-foundation-key",
+        "public_key_spki_base64": "MCowBQYDK2VwAyEA0/Diax3hBEXiqPo6JLj41YdI+IbZniZ4FkPQbWRyej4="
+      },
+      "verifier_definition": {
+        "verifier_id": "riddle-proof.synthetic-required-document-roles.declarative",
+        "verifier_version": "1",
+        "program": {
+          "artifact": {
+            "artifact_id": "synthetic-required-document-roles.json",
+            "role": "required_document_roles",
+            "media_type": "application/json"
+          },
+          "pointer": ""
+        }
+      },
+      "observation_schema": {
+        "kind": "object",
+        "properties": {
+          "version": { "kind": "literal", "value": "riddle-proof.synthetic-required-document-roles.v1" },
+          "snapshot_id": { "kind": "claim_parameter", "parameter": "snapshot_id" },
+          "manifest_digest": { "kind": "claim_parameter", "parameter": "manifest_digest" },
+          "required_roles": {
+            "kind": "array",
+            "items": [
+              { "kind": "literal", "value": "candidate" },
+              { "kind": "literal", "value": "original" },
+              { "kind": "literal", "value": "rendered" },
+              { "kind": "literal", "value": "template" }
+            ]
+          },
+          "observed_roles": {
+            "kind": "array",
+            "items": [
+              { "kind": "literal", "value": "candidate" },
+              { "kind": "literal", "value": "original" },
+              { "kind": "literal", "value": "rendered" },
+              { "kind": "literal", "value": "template" }
+            ]
+          },
+          "status": { "kind": "literal", "value": "complete" }
+        }
+      },
+      "contract_template": {
+        "contract_id": "riddle-proof.synthetic-required-document-roles-observed.declarative",
+        "contract_version": "1",
+        "label": "The synthetic snapshot contains every required document role",
+        "claim": {
+          "claim_id": "riddle-proof.diagnostic.required-roles-present",
+          "claim_version": "1",
+          "label": "The synthetic snapshot contains every required document role"
+        },
+        "required_assertions": [
+          { "op": "equals", "source": "observation", "pointer": "/version", "value": "riddle-proof.synthetic-required-document-roles.v1" },
+          { "op": "equals", "source": "observation", "pointer": "/required_roles", "value": ["candidate", "original", "rendered", "template"] },
+          { "op": "equals", "source": "observation", "pointer": "/observed_roles", "value": ["candidate", "original", "rendered", "template"] },
+          { "op": "equals", "source": "observation", "pointer": "/status", "value": "complete" }
+        ],
+        "parameter_bindings": [
+          { "parameter": "snapshot_id", "observation_pointers": ["/snapshot_id"], "allowed_json_types": ["string"] },
+          { "parameter": "manifest_digest", "observation_pointers": ["/manifest_digest"], "allowed_json_types": ["string"] }
+        ]
+      },
+      "required_artifact_roles": ["required_document_roles"]
+    },
+    {
+      "mode": "declarative_template",
+      "profile_id": "riddle-proof.synthetic-currentness",
+      "profile_version": "1",
+      "collector": {
+        "collector_id": "riddle-proof.synthetic-offline-collector",
+        "collector_version": "1",
+        "implementation_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "sensor_template": {
+        "kind": "other",
+        "name": "synthetic-local-files",
+        "version": "1",
+        "metadata": {
+          "network_used": false,
+          "source_mutation": false,
+          "synthetic": true
+        },
+        "observed_target_binding": "expected_scope.target"
+      },
+      "trusted_signer": {
+        "key_id": "synthetic-offline-foundation-key",
+        "public_key_spki_base64": "MCowBQYDK2VwAyEA0/Diax3hBEXiqPo6JLj41YdI+IbZniZ4FkPQbWRyej4="
+      },
+      "verifier_definition": {
+        "verifier_id": "riddle-proof.local-document-snapshot-currentness.declarative",
+        "verifier_version": "1",
+        "program": {
+          "artifact": {
+            "artifact_id": "document-snapshot-currentness.json",
+            "role": "document_snapshot_currentness",
+            "media_type": "application/json"
+          },
+          "pointer": ""
+        }
+      },
+      "observation_schema": {
+        "kind": "object",
+        "properties": {
+          "version": { "kind": "literal", "value": "riddle-proof.snapshot-currentness-witness.v1" },
+          "status": { "kind": "literal", "value": "current" },
+          "expected_snapshot_id": { "kind": "claim_parameter", "parameter": "snapshot_id" },
+          "expected_manifest_digest": { "kind": "claim_parameter", "parameter": "manifest_digest" },
+          "checked_at": { "kind": "claim_parameter", "parameter": "checked_at" },
+          "observed_snapshot_id": { "kind": "claim_parameter", "parameter": "snapshot_id" },
+          "observed_manifest_digest": { "kind": "claim_parameter", "parameter": "manifest_digest" },
+          "comparison": {
+            "kind": "object",
+            "properties": {
+              "status": { "kind": "literal", "value": "unchanged" },
+              "added_roles": { "kind": "array", "items": [] },
+              "removed_roles": { "kind": "array", "items": [] },
+              "changed_roles": { "kind": "array", "items": [] }
+            }
+          }
+        }
+      },
+      "contract_template": {
+        "contract_id": "riddle-proof.local-document-snapshot-current-at-check.declarative",
+        "contract_version": "1",
+        "label": "Selected document bytes matched the expected snapshot at checked_at",
+        "claim": {
+          "claim_id": "riddle-proof.diagnostic.snapshot-current-at-check",
+          "claim_version": "1",
+          "label": "Selected document bytes matched the expected snapshot at checked_at"
+        },
+        "required_assertions": [
+          { "op": "equals", "source": "observation", "pointer": "/version", "value": "riddle-proof.snapshot-currentness-witness.v1" },
+          { "op": "equals", "source": "observation", "pointer": "/status", "value": "current" },
+          { "op": "equals", "source": "observation", "pointer": "/comparison/status", "value": "unchanged" },
+          { "op": "equals", "source": "observation", "pointer": "/comparison/added_roles", "value": [] },
+          { "op": "equals", "source": "observation", "pointer": "/comparison/removed_roles", "value": [] },
+          { "op": "equals", "source": "observation", "pointer": "/comparison/changed_roles", "value": [] }
+        ],
+        "parameter_bindings": [
+          { "parameter": "snapshot_id", "observation_pointers": ["/expected_snapshot_id", "/observed_snapshot_id"], "allowed_json_types": ["string"] },
+          { "parameter": "manifest_digest", "observation_pointers": ["/expected_manifest_digest", "/observed_manifest_digest"], "allowed_json_types": ["string"] },
+          { "parameter": "checked_at", "observation_pointers": ["/checked_at"], "allowed_json_types": ["string"] }
+        ]
+      },
+      "required_artifact_roles": ["document_snapshot_currentness"]
+    },
+    {
+      "mode": "declarative_template",
+      "profile_id": "riddle-proof.synthetic-procedure",
+      "profile_version": "1",
+      "collector": {
+        "collector_id": "riddle-proof.synthetic-offline-collector",
+        "collector_version": "1",
+        "implementation_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "sensor_template": {
+        "kind": "other",
+        "name": "synthetic-deterministic-procedure",
+        "version": "1",
+        "metadata": {
+          "network_used": false,
+          "source_mutation": false,
+          "synthetic": true
+        },
+        "observed_target_binding": "expected_scope.target"
+      },
+      "trusted_signer": {
+        "key_id": "synthetic-offline-foundation-key",
+        "public_key_spki_base64": "MCowBQYDK2VwAyEA0/Diax3hBEXiqPo6JLj41YdI+IbZniZ4FkPQbWRyej4="
+      },
+      "verifier_definition": {
+        "verifier_id": "riddle-proof.synthetic-procedural-review",
+        "verifier_version": "1",
+        "program": {
+          "artifact": {
+            "artifact_id": "synthetic-procedural-review.json",
+            "role": "synthetic_procedural_review",
+            "media_type": "application/json"
+          },
+          "pointer": ""
+        }
+      },
+      "observation_schema": {
+        "kind": "object",
+        "properties": {
+          "version": { "kind": "literal", "value": "riddle-proof.synthetic-procedural-review.v1" },
+          "snapshot_id": { "kind": "claim_parameter", "parameter": "snapshot_id" },
+          "manifest_digest": { "kind": "claim_parameter", "parameter": "manifest_digest" },
+          "packet_digest": { "kind": "claim_parameter", "parameter": "packet_digest" },
+          "rule_trust_root_digest": { "kind": "claim_parameter", "parameter": "rule_trust_root_digest" },
+          "protocol_version": { "kind": "claim_parameter", "parameter": "protocol_version" },
+          "execution_metadata_digest": { "kind": "claim_parameter", "parameter": "execution_metadata_digest" },
+          "execution_policy_digest": { "kind": "claim_parameter", "parameter": "execution_policy_digest" },
+          "required_steps_ran": { "kind": "literal", "value": true },
+          "assertions_classified": { "kind": "literal", "value": true },
+          "evidence_linked": { "kind": "literal", "value": true },
+          "uncertainties_disclosed": { "kind": "literal", "value": true },
+          "legal_correctness_established": { "kind": "literal", "value": false }
+        }
+      },
+      "contract_template": {
+        "contract_id": "riddle-proof.synthetic-procedural-review-complete",
+        "contract_version": "1",
+        "label": "Synthetic procedural review steps are complete",
+        "claim": {
+          "claim_id": "riddle-proof.diagnostic.procedure-observed",
+          "claim_version": "1",
+          "label": "Synthetic procedural review requirements were observed"
+        },
+        "required_assertions": [
+          { "op": "equals", "source": "observation", "pointer": "/version", "value": "riddle-proof.synthetic-procedural-review.v1" },
+          { "op": "equals", "source": "observation", "pointer": "/required_steps_ran", "value": true },
+          { "op": "equals", "source": "observation", "pointer": "/assertions_classified", "value": true },
+          { "op": "equals", "source": "observation", "pointer": "/evidence_linked", "value": true },
+          { "op": "equals", "source": "observation", "pointer": "/uncertainties_disclosed", "value": true },
+          { "op": "equals", "source": "observation", "pointer": "/legal_correctness_established", "value": false }
+        ],
+        "parameter_bindings": [
+          { "parameter": "snapshot_id", "observation_pointers": ["/snapshot_id"], "allowed_json_types": ["string"] },
+          { "parameter": "manifest_digest", "observation_pointers": ["/manifest_digest"], "allowed_json_types": ["string"] },
+          { "parameter": "packet_digest", "observation_pointers": ["/packet_digest"], "allowed_json_types": ["string"] },
+          { "parameter": "rule_trust_root_digest", "observation_pointers": ["/rule_trust_root_digest"], "allowed_json_types": ["string"] },
+          { "parameter": "protocol_version", "observation_pointers": ["/protocol_version"], "allowed_json_types": ["string"] },
+          { "parameter": "execution_metadata_digest", "observation_pointers": ["/execution_metadata_digest"], "allowed_json_types": ["string"] },
+          { "parameter": "execution_policy_digest", "observation_pointers": ["/execution_policy_digest"], "allowed_json_types": ["string"] }
+        ]
+      },
+      "required_artifact_roles": ["synthetic_procedural_review"]
+    }
+  ]
+}

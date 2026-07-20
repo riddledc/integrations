@@ -9,7 +9,7 @@ ownership gate.
 
 ```text
                     @riddledc/riddle-proof-core
-             claims, receipts, grounding, checked meaning
+       claims, receipts, grounding, checked meaning, review protocol
                  cryptography; no I/O or network
                               |
         +---------------------+---------------------+
@@ -72,6 +72,12 @@ host process's capabilities. Scanner-sensitive local flows should use the
 callback-free built-in declarative JSON path, or execute external callbacks in
 a separately controlled process.
 
+Core also owns the pure profile contracts and deterministic profile evaluators.
+The compatibility facade owns the legacy HTTP preflight and generated-browser
+script builder. The facade build keeps core external rather than rebundling a
+second copy, so its compatibility entrypoints resolve to the same installed
+core implementation. No core source file imports from the facade source tree.
+
 ## Evidence and meaning boundary
 
 The stack deliberately separates four different assertions:
@@ -108,15 +114,46 @@ Google Docs/Drive, DOCX rendering, and company amendment rules should be
 separate adapters or private bundles with their own capabilities and trust
 review. They are not silently folded into core or local.
 
-## Transitional source seam
+## Agent review boundary
 
-The published core tarball is self-contained and its installed dependency
-closure is clean. Inside this monorepo, `packages/riddle-proof-core/src/profile.ts`
-still selects pure profile types and evaluators from the facade's source during
-the build. That is a build-time migration seam, not a runtime dependency, but
-it means source ownership of the legacy profile module is not fully inverted
-yet. Do not describe the split as complete at source level until that module is
-physically moved or divided.
+The public agent-review protocol separates five objects that must not be
+collapsed:
+
+- an independently loaded rule trust root, identified by exact ID, version,
+  and complete bundle digest;
+- an independently loaded evidence-template trust root that fixes the
+  collector, signer, declarative verifier, fixed assertions, typed observation
+  bindings, sensor policy, a bounded recursive exact observation schema, and
+  the single permitted artifact ID, role, and media type across matters;
+- a content-free machine receipt containing opaque IDs, digests,
+  classifications, evidence links, and model/protocol routing metadata;
+- a privileged review packet that may contain contract excerpts, analysis,
+  questions, and proposed language, and therefore remains only in an approved
+  company-controlled directory; and
+- separately signed human attestations for `submitted_for_legal_review` and,
+  when a key is independently authorized for it, `legal_approved`.
+
+`amendment-review-packet-complete` is a deterministic procedural conclusion.
+It means the required steps ran, assertions were classified, evidence links
+resolved through consumer-derived replay authority, uncertainties were
+enumerated, the pinned rules and approved execution policy were used, and the
+snapshot matched at the stated currentness check. It does not assert that an
+agent's legal interpretation is correct and it cannot manufacture either human
+attestation.
+
+The exact observation schema makes proof handoffs closed rather than
+open-ended: objects may contain only reviewed root and nested fields, arrays
+have fixed length and order, and leaves are pinned literals, claim parameters,
+SHA-256 digests, or bounded integers. Final replay rejects undeclared fields,
+extra array entries, and additional signed artifacts before accepting the
+procedural root.
+
+The public `examples/private-workbench-transfer` material is synthetic. The
+instantiated workbench, immutable trust root, company rules, credentials,
+human-key registry, privileged examples, and model adapters belong in a
+company-controlled environment. Google and Anthropic access, if approved, are
+separate network-capable adapters with explicit destinations; neither is part
+of core or local.
 
 ## Private infrastructure
 

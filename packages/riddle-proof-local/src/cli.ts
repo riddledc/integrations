@@ -25,7 +25,7 @@ Select files explicitly:
 Receipt controls:
   --policy <mode>             digest_only (default), minimal, or full
   --reference-root <path>     Allow root-relative refs for minimal/full receipts
-  --label <text>              Human-readable run label
+  --label <text>              Privileged label (minimal/full only)
   --captured-at <iso-time>    Reproducible timestamp override
   --max-file-bytes <number>   Per-file size limit (default 67108864)
   --out <path>                Write receipt JSON; refuses to overwrite
@@ -173,8 +173,11 @@ export async function main(args: string[]): Promise<number> {
       process.stderr.write(`Captured ${receipt.snapshot.artifacts.length} stable file(s) as ${receipt.snapshot.snapshot_id}.\n`);
     }
     return 0;
-  } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  } catch {
+    process.stderr.write(`${JSON.stringify({
+      ok: false,
+      code: "RIDDLE_PROOF_LOCAL_COMMAND_FAILED",
+    })}\n`);
     return 1;
   }
 }

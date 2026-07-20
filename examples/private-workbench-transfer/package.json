@@ -1,0 +1,19 @@
+{
+  "name": "private-riddle-proof-workbench-transfer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic transfer scaffold for a company-controlled, offline Riddle Proof workbench.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "create:evidence-root": "node admin/create-evidence-root.mjs",
+    "create:rule-root": "node admin/create-rule-root.mjs",
+    "provision": "node admin/provision.mjs"
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof-core": "0.1.1",
+    "@riddledc/riddle-proof-local": "0.1.1"
+  }
+}

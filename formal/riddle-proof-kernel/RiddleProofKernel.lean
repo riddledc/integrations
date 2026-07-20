@@ -3,6 +3,7 @@ import RiddleProofKernel.SemanticComposition
 import RiddleProofKernel.SemanticClosure
 import RiddleProofKernel.GroundedEvidence
 import RiddleProofKernel.MeaningKernel
+import RiddleProofKernel.ReviewProtocol
 
 namespace RiddleProofKernel
 

@@ -1,0 +1,263 @@
+#!/bin/sh
+
+# This launcher is part of the independently administered bootstrap, not the
+# runtime-owned workbench.  It validates the complete executable/instruction
+# inventory before any workbench JavaScript is loaded.  Only this launcher may
+# translate FOUNDATION_READY into READY.
+
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+IFS=$(/usr/bin/printf ' \t\n_')
+IFS=${IFS%_}
+export PATH IFS
+
+emit_failure() {
+  /usr/bin/printf '%s\n' "{\"ok\":false,\"code\":\"$1\"}"
+  exit 1
+}
+
+[ "$#" -eq 0 ] || emit_failure ARGUMENT_OVERRIDE_FORBIDDEN
+
+# A loader or Node option can act before ordinary JavaScript validation.  The
+# service manager must start this launcher with a clean environment; this is a
+# second explicit refusal, and the child receives a fresh allowlisted env.
+for injection_name in \
+  BASH_ENV ENV NODE_OPTIONS NODE_PATH NODE_REPL_EXTERNAL_MODULE \
+  NODE_EXTRA_CA_CERTS OPENSSL_CONF SSL_CERT_FILE SSL_CERT_DIR \
+  DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH \
+  LD_PRELOAD LD_LIBRARY_PATH
+do
+  eval "injection_present=\${${injection_name}+yes}"
+  [ "${injection_present:-}" != yes ] || emit_failure RUNTIME_ENV_INVALID
+done
+
+SCRIPT_PATH=$0
+[ ! -L "$SCRIPT_PATH" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+case "$SCRIPT_PATH" in
+  /*) ;;
+  *) SCRIPT_PATH=$PWD/$SCRIPT_PATH ;;
+esac
+SCRIPT_DIR=$(/usr/bin/dirname "$SCRIPT_PATH")
+SCRIPT_DIR=$(cd -P "$SCRIPT_DIR" 2>/dev/null && /bin/pwd -P) \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+WORKBENCH_ROOT=$(cd -P "$SCRIPT_DIR/.." 2>/dev/null && /bin/pwd -P) \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ "$SCRIPT_PATH" = "$SCRIPT_DIR/run-doctor" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+
+OS_NAME=$(/usr/bin/uname -s 2>/dev/null) || emit_failure OS_BOUNDARY_NOT_ENFORCED
+stat_fields() {
+  if [ "$OS_NAME" = Darwin ]; then
+    /usr/bin/stat -f '%u %g %Lp' "$1" 2>/dev/null
+  else
+    /usr/bin/stat -c '%u %g %a' "$1" 2>/dev/null
+  fi
+}
+
+RUNTIME_UID=$(/usr/bin/id -u 2>/dev/null) || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ "$RUNTIME_UID" -gt 0 ] 2>/dev/null || emit_failure OS_BOUNDARY_NOT_ENFORCED
+RUNTIME_GIDS=" $(/usr/bin/id -G 2>/dev/null) " \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+
+set -- $(stat_fields "$WORKBENCH_ROOT")
+[ "$#" -eq 3 ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ "$1" != "$RUNTIME_UID" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+
+entry_fields() {
+  set -- $(stat_fields "$1")
+  [ "$#" -eq 3 ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+  ENTRY_UID=$1
+  ENTRY_GID=$2
+  ENTRY_MODE=$3
+  [ "$ENTRY_UID" != "$RUNTIME_UID" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+  case "$RUNTIME_GIDS" in
+    *" $ENTRY_GID "*) ;;
+    *) emit_failure OS_BOUNDARY_NOT_ENFORCED ;;
+  esac
+}
+
+check_file() {
+  [ -f "$1" ] && [ ! -L "$1" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+  entry_fields "$1"
+  [ "$ENTRY_MODE" = "$2" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+}
+
+check_directory() {
+  [ -d "$1" ] && [ ! -L "$1" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+  entry_fields "$1"
+  [ "$ENTRY_MODE" = "$2" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+}
+
+check_ancestor_chain() {
+  ancestor_path=$1
+  while :; do
+    [ -d "$ancestor_path" ] && [ ! -L "$ancestor_path" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    canonical_ancestor=$(cd -P "$ancestor_path" 2>/dev/null && /bin/pwd -P) \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ "$canonical_ancestor" = "$ancestor_path" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    set -- $(stat_fields "$ancestor_path")
+    [ "$#" -eq 3 ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ "$1" != "$RUNTIME_UID" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ -x "$ancestor_path" ] && [ ! -w "$ancestor_path" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ "$ancestor_path" = / ] && break
+    parent_path=$(/usr/bin/dirname "$ancestor_path") \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ "$parent_path" != "$ancestor_path" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    ancestor_path=$parent_path
+  done
+}
+
+NPM_BIN_DIR=$WORKBENCH_ROOT/node_modules/.bin
+NPM_BIN_LINK=$NPM_BIN_DIR/riddle-proof-local
+NPM_BIN_TARGET=../@riddledc/riddle-proof-local/bin/riddle-proof-local
+
+check_protected_tree() {
+  tree_entry=$1
+  if [ -L "$tree_entry" ]; then
+    [ "$tree_entry" = "$NPM_BIN_LINK" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ "$(/usr/bin/readlink "$tree_entry" 2>/dev/null)" = "$NPM_BIN_TARGET" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    [ -f "$NPM_BIN_DIR/$NPM_BIN_TARGET" ] \
+      || emit_failure OS_BOUNDARY_NOT_ENFORCED
+    return
+  fi
+  if [ -d "$tree_entry" ]; then
+    check_directory "$tree_entry" 750
+    for tree_child in "$tree_entry"/* "$tree_entry"/.[!.]* "$tree_entry"/..?*; do
+      [ -e "$tree_child" ] || [ -L "$tree_child" ] || continue
+      check_protected_tree "$tree_child"
+    done
+    return
+  fi
+  check_file "$tree_entry" 640
+}
+
+# Exact top-level inventory.  Unknown future code or instructions cannot be
+# silently omitted from the pre-execution ownership check.
+for top_entry in "$WORKBENCH_ROOT"/* "$WORKBENCH_ROOT"/.[!.]* "$WORKBENCH_ROOT"/..?*; do
+  [ -e "$top_entry" ] || [ -L "$top_entry" ] || continue
+  top_name=${top_entry##*/}
+  case "$top_name" in
+    .gitignore|CLAUDE.md|README.md|admin|admin-state|company-bootstrap|node_modules|package-lock.json|package.json|runtime|shared|synthetic) ;;
+    *) emit_failure OS_BOUNDARY_NOT_ENFORCED ;;
+  esac
+done
+
+check_directory "$WORKBENCH_ROOT" 750
+check_ancestor_chain "$(/usr/bin/dirname "$WORKBENCH_ROOT")"
+for protected_file in .gitignore CLAUDE.md README.md package.json package-lock.json; do
+  check_file "$WORKBENCH_ROOT/$protected_file" 640
+done
+for protected_directory in admin runtime shared synthetic node_modules; do
+  check_protected_tree "$WORKBENCH_ROOT/$protected_directory"
+done
+
+[ "$(/usr/bin/find "$NPM_BIN_DIR" -mindepth 1 -maxdepth 1 -print 2>/dev/null)" = "$NPM_BIN_LINK" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+
+check_directory "$WORKBENCH_ROOT/admin-state" 550
+[ "$(/usr/bin/find "$WORKBENCH_ROOT/admin-state" -mindepth 1 -maxdepth 1 -print 2>/dev/null | /usr/bin/sort)" = \
+"$WORKBENCH_ROOT/admin-state/evidence-trust-root.json
+$WORKBENCH_ROOT/admin-state/rule-trust-root.json
+$WORKBENCH_ROOT/admin-state/runtime-policy.json
+$WORKBENCH_ROOT/admin-state/supply-chain-lock.json" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+for state_file in evidence-trust-root.json rule-trust-root.json runtime-policy.json supply-chain-lock.json; do
+  check_file "$WORKBENCH_ROOT/admin-state/$state_file" 440
+done
+
+check_directory "$SCRIPT_DIR" 555
+[ "$(/usr/bin/find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -print 2>/dev/null | /usr/bin/sort)" = \
+"$SCRIPT_DIR/README.md
+$SCRIPT_DIR/admin-signer.json
+$SCRIPT_DIR/deny-network.cjs
+$SCRIPT_DIR/node-path
+$SCRIPT_DIR/run-doctor" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+for bootstrap_file in README.md admin-signer.json deny-network.cjs node-path; do
+  check_file "$SCRIPT_DIR/$bootstrap_file" 444
+done
+check_file "$SCRIPT_DIR/run-doctor" 555
+
+NODE_PATH_FILE=$SCRIPT_DIR/node-path
+IFS= read -r PINNED_NODE < "$NODE_PATH_FILE" \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ -n "$PINNED_NODE" ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ "$(/usr/bin/wc -l < "$NODE_PATH_FILE" | /usr/bin/tr -d ' ')" = 1 ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+case "$PINNED_NODE" in
+  /*) ;;
+  *) emit_failure OS_BOUNDARY_NOT_ENFORCED ;;
+esac
+[ -f "$PINNED_NODE" ] && [ ! -L "$PINNED_NODE" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+PINNED_NODE_DIR=$(/usr/bin/dirname "$PINNED_NODE")
+PINNED_NODE_DIR=$(cd -P "$PINNED_NODE_DIR" 2>/dev/null && /bin/pwd -P) \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+[ "$PINNED_NODE" = "$PINNED_NODE_DIR/${PINNED_NODE##*/}" ] \
+  || emit_failure OS_BOUNDARY_NOT_ENFORCED
+check_directory "$PINNED_NODE_DIR" 755
+check_ancestor_chain "$(/usr/bin/dirname "$PINNED_NODE_DIR")"
+entry_fields "$PINNED_NODE"
+[ "$ENTRY_MODE" = 555 ] || emit_failure OS_BOUNDARY_NOT_ENFORCED
+
+# Hosted configuration is checked only after the OS boundary establishes that
+# the runtime cannot edit the code performing this check.  A fixed key path is
+# rejected when the runtime identity could actually read it.
+for hosted_name in \
+  RIDDLE_API_KEY RIDDLE_API_KEY_FILE RIDDLE_API_BASE_URL \
+  RIDDLE_PROOF_API_KEY RIDDLE_API_URL RIDDLE_BASE_URL \
+  RIDDLE_PROOF_BASE_URL RIDDLE_PREVIEW_URL RIDDLE_UPLOAD_URL
+do
+  eval "hosted_present=\${${hosted_name}+yes}"
+  [ "${hosted_present:-}" != yes ] || emit_failure HOSTED_ENV_PRESENT
+done
+[ ! -r /tmp/riddle-api-key ] || emit_failure HOSTED_ENV_PRESENT
+
+FOUNDATION_RESULT=$(cd "$WORKBENCH_ROOT" && /usr/bin/env -i \
+  PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C TZ=UTC \
+  "$PINNED_NODE" --require "$SCRIPT_DIR/deny-network.cjs" \
+  "$WORKBENCH_ROOT/runtime/doctor.mjs" 2>&1)
+FOUNDATION_STATUS=$?
+
+if [ "$FOUNDATION_STATUS" -eq 0 ] \
+  && [ "$FOUNDATION_RESULT" = '{"ok":true,"code":"FOUNDATION_READY"}' ]; then
+  /usr/bin/printf '%s\n' '{"ok":true,"code":"READY"}'
+  exit 0
+fi
+
+case "$FOUNDATION_RESULT" in
+  '{"ok":false,"code":"ARGUMENT_OVERRIDE_FORBIDDEN"}'|\
+  '{"ok":false,"code":"HOSTED_ENV_PRESENT"}'|\
+  '{"ok":false,"code":"RUNTIME_ENV_INVALID"}'|\
+  '{"ok":false,"code":"BOOTSTRAP_INVALID"}'|\
+  '{"ok":false,"code":"POLICY_INVALID"}'|\
+  '{"ok":false,"code":"POLICY_PERMISSIONS_INVALID"}'|\
+  '{"ok":false,"code":"OS_BOUNDARY_NOT_ENFORCED"}'|\
+  '{"ok":false,"code":"SUPPLY_CHAIN_LOCK_INVALID"}'|\
+  '{"ok":false,"code":"SUPPLY_CHAIN_SIGNATURE_INVALID"}'|\
+  '{"ok":false,"code":"PACKAGE_MANIFEST_INVALID"}'|\
+  '{"ok":false,"code":"PACKAGE_VERSION_MISMATCH"}'|\
+  '{"ok":false,"code":"PACKAGE_INTEGRITY_MISMATCH"}'|\
+  '{"ok":false,"code":"PACKAGE_TREE_MISMATCH"}'|\
+  '{"ok":false,"code":"DEPENDENCY_CLOSURE_INVALID"}'|\
+  '{"ok":false,"code":"FORBIDDEN_PACKAGE_PRESENT"}'|\
+  '{"ok":false,"code":"CAPABILITY_MISMATCH"}'|\
+  '{"ok":false,"code":"RULE_TRUST_ROOT_INVALID"}'|\
+  '{"ok":false,"code":"EVIDENCE_TRUST_ROOT_INVALID"}'|\
+  '{"ok":false,"code":"OUTPUT_BOUNDARY_INVALID"}'|\
+  '{"ok":false,"code":"SYNTHETIC_CAPTURE_FAILED"}'|\
+  '{"ok":false,"code":"SYNTHETIC_SIGNING_FAILED"}'|\
+  '{"ok":false,"code":"SYNTHETIC_COMPOSITION_FAILED"}'|\
+  '{"ok":false,"code":"SYNTHETIC_CURRENTNESS_FAILED"}'|\
+  '{"ok":false,"code":"SYNTHETIC_REPLAY_FAILED"}'|\
+  '{"ok":false,"code":"INTERNAL_FAILURE"}')
+    /usr/bin/printf '%s\n' "$FOUNDATION_RESULT"
+    exit 1
+    ;;
+  *) emit_failure INTERNAL_FAILURE ;;
+esac

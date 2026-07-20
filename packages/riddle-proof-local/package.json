@@ -48,9 +48,10 @@
     "build": "tsup src/index.ts src/cli.ts src/stableRead.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
-    "test": "npm run build && node test.js",
-    "test:grounded": "pnpm --dir ../riddle-proof-core build && npm run build && node grounded-integration.test.js",
-    "test:meaning": "pnpm --dir ../riddle-proof-core build && npm run build && node meaning-integration.test.js"
+    "test": "npm run build && node --require ../../scripts/deny-network.cjs test.js",
+    "test:grounded": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs grounded-integration.test.js",
+    "test:meaning": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs meaning-integration.test.js",
+    "test:review": "pnpm --dir ../riddle-proof-core build && npm run build && node --require ../../scripts/deny-network.cjs review-protocol-integration.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
