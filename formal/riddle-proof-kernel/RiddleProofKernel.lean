@@ -5,6 +5,7 @@ import RiddleProofKernel.GroundedEvidence
 import RiddleProofKernel.MeaningKernel
 import RiddleProofKernel.GenericProtocol
 import RiddleProofKernel.BrowserPyramid
+import RiddleProofKernel.BrowserTransition
 
 namespace RiddleProofKernel
 

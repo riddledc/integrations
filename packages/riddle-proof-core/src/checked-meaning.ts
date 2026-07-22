@@ -6,6 +6,7 @@ import {
   validateRiddleProofGroundedSemanticCertificateClosure,
   type RiddleProofGroundedReplayContext,
   type RiddleProofGroundedSemanticCertificateClosure,
+  type RiddleProofGroundedVerificationReceipt,
 } from "./grounded-evidence";
 import type { JsonValue } from "./json";
 import type {
@@ -13,6 +14,7 @@ import type {
   RiddleProofSemanticClaimExpectation,
   RiddleProofSemanticClaimRef,
   RiddleProofSemanticCertificate,
+  RiddleProofSemanticContractRef,
   RiddleProofSemanticRule,
   RiddleProofSemanticScope,
 } from "./semantic-certificate";
@@ -20,6 +22,9 @@ import { validateRiddleProofSemanticCertificateClosure } from "./semantic-certif
 
 export const RIDDLE_PROOF_CHECKED_MEANING_CLOSURE_VERSION =
   "riddle-proof.checked-meaning-closure.v0" as const;
+
+export const RIDDLE_PROOF_CHECKED_MEANING_EXPLANATION_VERSION =
+  "riddle-proof.checked-meaning-explanation.v0" as const;
 
 export const RIDDLE_PROOF_CHECKED_MEANING_RULE_ENGINE =
   "riddle-proof.checked-meaning-rule.v0" as const;
@@ -214,6 +219,65 @@ export type RiddleProofCheckedMeaningClosureValidationResult =
       checked_closure: RiddleProofCheckedMeaningClosure;
       root_certificate: RiddleProofSemanticCertificate;
       root_assurance: "grounded_contract_leaf" | typeof RIDDLE_PROOF_CHECKED_MEANING_ASSURANCE;
+    }
+  | { ok: false; error: RiddleProofCheckedMeaningError };
+
+export interface RiddleProofCheckedMeaningExplanationNode {
+  certificate_id: string;
+  kind: "grounded_leaf" | "checked_composition";
+  assurance: "grounded_contract_leaf" | typeof RIDDLE_PROOF_CHECKED_MEANING_ASSURANCE;
+  scope: RiddleProofSemanticScope;
+  claim: RiddleProofSemanticClaim;
+  issued_at: string;
+  premise_certificate_ids: string[];
+  evidence: RiddleProofSemanticCertificate["evidence"];
+  semantic_contract?: RiddleProofSemanticContractRef;
+  checked_rule?: RiddleProofCheckedMeaningRuleBinding;
+}
+
+export interface RiddleProofCheckedMeaningExplanationFrontierEntry {
+  certificate_id: string;
+  bundle_id: string;
+  receipt_id: string;
+  statement_digest: string;
+  artifact_manifest_digest: string;
+  observation_digest: string;
+  captured_at: string;
+  signer: RiddleProofGroundedVerificationReceipt["signer"];
+  verifier: RiddleProofGroundedVerificationReceipt["verifier"];
+  contract: RiddleProofGroundedVerificationReceipt["contract"];
+}
+
+/**
+ * A deterministic, content-light expansion of a replayed checked closure.
+ *
+ * The closure remains the authoritative object. This view makes its exact DAG
+ * and grounded evidence frontier convenient to inspect without copying inline
+ * artifact bytes or verifier observations into an explanation surface.
+ */
+export interface RiddleProofCheckedMeaningExplanation {
+  version: typeof RIDDLE_PROOF_CHECKED_MEANING_EXPLANATION_VERSION;
+  root_certificate_id: string;
+  node_count: number;
+  grounded_leaf_count: number;
+  checked_composition_count: number;
+  nodes: RiddleProofCheckedMeaningExplanationNode[];
+  grounded_frontier: RiddleProofCheckedMeaningExplanationFrontierEntry[];
+}
+
+/**
+ * Only `explanation` is the content-light projection. The successful result
+ * also returns the authoritative replayed closure, which may contain inline
+ * artifact bytes and must not be treated as safe for ordinary logs. The
+ * projection itself retains scope and claim data, so content-light does not
+ * mean content-free.
+ */
+export type RiddleProofCheckedMeaningExplanationResult =
+  | {
+      ok: true;
+      explanation: RiddleProofCheckedMeaningExplanation;
+      checked_closure: RiddleProofCheckedMeaningClosure;
+      root_certificate: RiddleProofSemanticCertificate;
     }
   | { ok: false; error: RiddleProofCheckedMeaningError };
 
@@ -1377,6 +1441,117 @@ export function replayRiddleProofCheckedMeaningClosure(
   input: ValidateRiddleProofCheckedMeaningClosureInput,
 ): RiddleProofCheckedMeaningClosureValidationResult {
   return validateRiddleProofCheckedMeaningClosure(input);
+}
+
+export function explainRiddleProofCheckedMeaningClosure(
+  input: ValidateRiddleProofCheckedMeaningClosureInput,
+): RiddleProofCheckedMeaningExplanationResult {
+  const validation = validateRiddleProofCheckedMeaningClosure(input);
+  if (!validation.ok) return validation;
+
+  try {
+    const clone = <Value>(value: Value): Value =>
+      JSON.parse(stableJson(value)) as Value;
+    const groundingByCertificateId = new Map(
+      validation.checked_closure.grounded_closure.groundings.map((grounding) => [
+        grounding.certificate_id,
+        grounding,
+      ]),
+    );
+    const bindingByCertificateId = new Map(
+      validation.checked_closure.rule_bindings.map((binding) => [
+        binding.certificate_id,
+        binding,
+      ]),
+    );
+
+    const nodes = validation.checked_closure.grounded_closure.closure.certificates.map(
+      (certificate): RiddleProofCheckedMeaningExplanationNode => {
+        if (certificate.derivation.kind === "contract") {
+          return {
+            certificate_id: certificate.certificate_id,
+            kind: "grounded_leaf",
+            assurance: "grounded_contract_leaf",
+            scope: clone(certificate.scope),
+            claim: clone(certificate.claim),
+            issued_at: certificate.issued_at,
+            premise_certificate_ids: [],
+            evidence: clone(certificate.evidence),
+            semantic_contract: {
+              contract_id: certificate.derivation.contract.contract_id,
+              contract_version: certificate.derivation.contract.contract_version,
+              label: certificate.derivation.contract.label,
+            },
+          };
+        }
+        const checkedRule = bindingByCertificateId.get(certificate.certificate_id);
+        if (!checkedRule) {
+          // Replay above makes this unreachable; retain a fail-closed guard in
+          // case the validated representation changes in a future version.
+          throw new Error(
+            `Validated composition ${certificate.certificate_id} has no checked rule binding.`,
+          );
+        }
+        return {
+          certificate_id: certificate.certificate_id,
+          kind: "checked_composition",
+          assurance: RIDDLE_PROOF_CHECKED_MEANING_ASSURANCE,
+          scope: clone(certificate.scope),
+          claim: clone(certificate.claim),
+          issued_at: certificate.issued_at,
+          premise_certificate_ids: certificate.derivation.premises.map(
+            (premise) => premise.certificate_id,
+          ),
+          evidence: clone(certificate.evidence),
+          checked_rule: clone(checkedRule),
+        };
+      },
+    );
+
+    const groundedFrontier = nodes
+      .filter((node) => node.kind === "grounded_leaf")
+      .map((node): RiddleProofCheckedMeaningExplanationFrontierEntry => {
+        const grounding = groundingByCertificateId.get(node.certificate_id);
+        if (!grounding) {
+          throw new Error(
+            `Validated grounded leaf ${node.certificate_id} has no grounding binding.`,
+          );
+        }
+        return {
+          certificate_id: node.certificate_id,
+          bundle_id: grounding.receipt.bundle_id,
+          receipt_id: grounding.receipt.receipt_id,
+          statement_digest: grounding.receipt.statement_digest,
+          artifact_manifest_digest: grounding.receipt.artifact_manifest_digest,
+          observation_digest: grounding.receipt.observation_digest,
+          captured_at: grounding.bundle.statement.captured_at,
+          signer: clone(grounding.receipt.signer),
+          verifier: clone(grounding.receipt.verifier),
+          contract: clone(grounding.receipt.contract),
+        };
+      });
+    const groundedLeafCount = groundedFrontier.length;
+
+    return {
+      ok: true,
+      explanation: {
+        version: RIDDLE_PROOF_CHECKED_MEANING_EXPLANATION_VERSION,
+        root_certificate_id: validation.root_certificate.certificate_id,
+        node_count: nodes.length,
+        grounded_leaf_count: groundedLeafCount,
+        checked_composition_count: nodes.length - groundedLeafCount,
+        nodes,
+        grounded_frontier: groundedFrontier,
+      },
+      checked_closure: validation.checked_closure,
+      root_certificate: validation.root_certificate,
+    };
+  } catch (error) {
+    return failure(
+      "invalid_checked_closure",
+      `Checked meaning explanation failed after replay: ${safeErrorMessage(error)}`,
+    );
+  }
 }
 
 /**

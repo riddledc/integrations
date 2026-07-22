@@ -16,6 +16,7 @@ for (const name of [
   "composeRiddleProofCheckedMeaningClosures",
   "validateRiddleProofCheckedMeaningClosure",
   "replayRiddleProofCheckedMeaningClosure",
+  "explainRiddleProofCheckedMeaningClosure",
   "assessRiddleProofCheckedMeaningClosure",
   "matchRiddleProofCheckedMeaningClosure",
 ]) {
@@ -591,6 +592,61 @@ const nestedMatch = checked.matchRiddleProofCheckedMeaningClosure({
   expected_root_rule: finalRule.rule_ref,
 });
 assert.equal(nestedMatch.ok, true, nestedMatch.ok ? undefined : nestedMatch.error.message);
+
+const nestedExplanation = checked.explainRiddleProofCheckedMeaningClosure({
+  checked_closure: JSON.parse(JSON.stringify(nested.checked_closure)),
+  replay_contexts: JSON.parse(JSON.stringify(replayContexts)),
+  rule_registry: JSON.parse(JSON.stringify(registry)),
+  trusted_rules: JSON.parse(JSON.stringify(trusted)),
+});
+assert.equal(
+  nestedExplanation.ok,
+  true,
+  nestedExplanation.ok ? undefined : nestedExplanation.error.message,
+);
+assert.equal(
+  nestedExplanation.explanation.version,
+  checked.RIDDLE_PROOF_CHECKED_MEANING_EXPLANATION_VERSION,
+);
+assert.equal(nestedExplanation.explanation.root_certificate_id, nested.certificate.certificate_id);
+assert.equal(nestedExplanation.explanation.node_count, 5);
+assert.equal(nestedExplanation.explanation.grounded_leaf_count, 2);
+assert.equal(nestedExplanation.explanation.checked_composition_count, 3);
+assert.deepEqual(
+  nestedExplanation.explanation.nodes.map((node) => node.certificate_id),
+  nested.checked_closure.grounded_closure.closure.certificates.map(
+    (certificate) => certificate.certificate_id,
+  ),
+  "the explanation preserves the closure's exact dependency-first DAG order",
+);
+assert.deepEqual(
+  nestedExplanation.explanation.grounded_frontier.map((entry) => entry.certificate_id),
+  [requestLeaf.issued.certificate.certificate_id, readbackLeaf.issued.certificate.certificate_id],
+  "the explanation exposes the exact grounded leaf frontier",
+);
+assert.equal(
+  JSON.stringify(nestedExplanation.explanation).includes("bytes_base64"),
+  false,
+  "the content-light explanation does not duplicate inline artifact bytes",
+);
+assert.ok(
+  nestedExplanation.explanation.grounded_frontier.every(
+    (entry) => /^sha256:[0-9a-f]{64}$/u.test(entry.observation_digest),
+  ),
+  "the explanation retains observation digests needed to identify replayed evidence",
+);
+const replayedExplanation = checked.explainRiddleProofCheckedMeaningClosure({
+  checked_closure: nestedExplanation.checked_closure,
+  replay_contexts: replayContexts,
+  rule_registry: registry,
+  trusted_rules: trusted,
+});
+assert.equal(replayedExplanation.ok, true);
+assert.deepEqual(
+  replayedExplanation.explanation,
+  nestedExplanation.explanation,
+  "expansion is deterministic after replay",
+);
 
 const assessmentInput = {
   checked_closure: nested.checked_closure,

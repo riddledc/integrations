@@ -52,11 +52,19 @@ result retains one grounding sidecar for each contract leaf and exactly one
 checked-rule sidecar for each composition certificate. Shared descendants and
 their sidecars are content-deduplicated.
 
+`explainRiddleProofCheckedMeaningClosure` first performs the same independent
+replay, then returns a deterministic dependency-first view of every node and
+its exact grounded frontier. The explanation includes claims, premise IDs,
+rule/contract identities, and evidence digests, but does not duplicate inline
+artifact bytes or verifier observations. It is an audit view of the closure,
+not a second source of truth.
+
 ```ts
 import {
   assessRiddleProofCheckedMeaningClosure,
   composeRiddleProofCheckedMeaningClosures,
   createRiddleProofCheckedMeaningRule,
+  explainRiddleProofCheckedMeaningClosure,
   matchRiddleProofCheckedMeaningClosure,
 } from "@riddledc/riddle-proof-core/checked-meaning";
 
@@ -71,7 +79,23 @@ const result = composeRiddleProofCheckedMeaningClosures({
   rule_registry: [rule.registration], // complete data-only definition
   trusted_rules: [rule.rule_ref],     // caller-controlled allowlist
 });
+if (!result.ok) throw new Error(result.error.message);
+
+const expansion = explainRiddleProofCheckedMeaningClosure({
+  checked_closure: result.checked_closure,
+  replay_contexts: leafReplayContexts,
+  rule_registry: [rule.registration],
+  trusted_rules: [rule.rule_ref],
+});
+if (!expansion.ok) throw new Error(expansion.error.message);
 ```
+
+Only `expansion.explanation` is the content-light projection. The successful
+result also returns the replayed `checked_closure`, which can contain inline
+artifact bytes and should not be sent to ordinary logs. Content-light is not
+content-free: the projection retains scopes, claim labels, and claim
+parameters, so callers must still apply their own disclosure and logging
+policy.
 
 The additional assurance is named `checked_allowlisted_rule`. It means that
 the exact allowlisted rule accepted the exact grounded premises and produced

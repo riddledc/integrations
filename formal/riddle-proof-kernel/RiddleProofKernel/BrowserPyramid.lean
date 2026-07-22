@@ -23,13 +23,16 @@ def claim (canonicalParameters claimId : String) : ClaimKey where
   canonicalParameters := canonicalParameters
 
 /-!
-The runtime canonical-parameter object has exactly these six common fields:
-`profile_name`, `repository`, `revision`, `environment`, `target`, and
-`proof_attempt`.  Lean keeps their values structured and treats the runtime's
-canonical JSON encoder as an explicit boundary function.
+The runtime canonical-parameter object has exactly these seven common fields:
+`profile_name`, `profile_digest`, `repository`, `revision`, `environment`,
+`target`, and `proof_attempt`.  The digest binds the sealed claim to the exact
+normalized-profile artifact rather than merely to a reusable display name.
+Lean keeps the values structured and treats the runtime's canonical JSON
+encoder as an explicit boundary function.
 -/
 structure CommonParameters where
   profileName : String
+  profileDigest : String
   repository : String
   revision : String
   environment : String
@@ -382,6 +385,7 @@ namespace Hostile
 
 def fixtureCommonParameters : CommonParameters where
   profileName := "browser-pyramid-fixture"
+  profileDigest := "sha256:browser-pyramid-fixture"
   repository := "riddledc/browser-fixture"
   revision := "revision-a"
   environment := "playwright"
@@ -467,6 +471,23 @@ def substitutedParameterTree : MeaningTree :=
 theorem substituted_claim_parameters_are_rejected :
     disposition ruleDefinitionDigest (trustedRegistry fixtureParameters) 50
       substitutedParameterTree = .unresolved := by
+  native_decide
+
+def substitutedProfileDigestParameters : String :=
+  fixtureEncode { fixtureCommonParameters with
+    profileDigest := "sha256:different-normalized-profile" }
+
+def substitutedProfileDigestLeaf : GroundedLeaf :=
+  { captureLeaf with
+    claim := captureBoundToScopeClaim substitutedProfileDigestParameters }
+
+def substitutedProfileDigestTree : MeaningTree :=
+  browserPyramid fixtureScope fixtureParameters substitutedProfileDigestLeaf
+    routeLeaf profileLeaf runtimeLeaf
+
+theorem substituted_profile_digest_is_rejected :
+    disposition ruleDefinitionDigest (trustedRegistry fixtureParameters) 50
+      substitutedProfileDigestTree = .unresolved := by
   native_decide
 
 end Hostile

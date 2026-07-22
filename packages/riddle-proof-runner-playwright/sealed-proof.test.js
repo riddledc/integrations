@@ -3,8 +3,14 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import {
+  assessRiddleProofProfileEvidence,
   composeRiddleProofCheckedMeaningClosures,
+  createRiddleProofCheckedMeaningAtomicClosure,
+  createRiddleProofGroundedDeclarativeJsonContract,
+  createRiddleProofGroundedSemanticAtomicCertificateClosure,
+  createRiddleProofGroundedSemanticCertificate,
   createRiddleProofSignedCaptureBundle,
+  normalizeRiddleProofProfile,
 } from "@riddledc/riddle-proof-core";
 import {
   RIDDLE_PROOF_BROWSER_SEALED_CLAIMS,
@@ -34,6 +40,25 @@ const scope = {
   proof_attempt: "browser-pyramid-test-attempt",
 };
 const profileName = "synthetic-settings-profile";
+const normalizedProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: profileName,
+  target: { route: "/settings", viewports: [{ name: "desktop", width: 1280, height: 800 }] },
+  checks: [
+    { type: "selector_visible", selector: "#settings" },
+    { type: "no_fatal_console_errors" },
+  ],
+  artifacts: ["proof_json"],
+  baseline_policy: "invariant_only",
+  failure_policy: {},
+}, { url: scope.target });
+function normalizedProfileBytes(profile) {
+  return Buffer.from(JSON.stringify(profile, null, 2));
+}
+function normalizedProfileDigest(profile) {
+  return `sha256:${sha256Hex(normalizedProfileBytes(profile))}`;
+}
+const profileDigest = normalizedProfileDigest(normalizedProfile);
 const capturedAt = "2026-07-21T14:00:00.000Z";
 const leafIssuedAt = "2026-07-21T14:00:01.000Z";
 const targetIssuedAt = "2026-07-21T14:00:02.000Z";
@@ -49,6 +74,7 @@ const collector = {
 const protocolResult = createRiddleProofBrowserSealedProtocol({
   expected_scope: scope,
   expected_profile_name: profileName,
+  expected_profile_digest: profileDigest,
 });
 assert.equal(protocolResult.ok, true, protocolResult.ok ? undefined : protocolResult.error.message);
 const protocol = protocolResult.protocol;
@@ -72,9 +98,14 @@ assert.match(leanBrowserPyramid, /ruleVersion := "1"/u);
 const recreatedProtocol = createRiddleProofBrowserSealedProtocol({
   expected_scope: jsonClone(scope),
   expected_profile_name: profileName,
+  expected_profile_digest: profileDigest,
 });
 assert.equal(recreatedProtocol.ok, true);
-assert.deepEqual(recreatedProtocol.protocol, protocol, "the pinned protocol is deterministic JSON data");
+assert.deepEqual(
+  jsonClone(recreatedProtocol.protocol),
+  jsonClone(protocol),
+  "the pinned protocol is deterministic JSON data",
+);
 
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 const privateKeyBytes = privateKey.export({ format: "der", type: "pkcs8" });
@@ -91,31 +122,44 @@ const sensor = {
     mode: "synthetic-sealed-proof-test",
   },
 };
-const profileResult = {
-  version: "riddle-proof.profile-result.v1",
+const profileEvidence = {
+  version: "riddle-proof.profile-evidence.v1",
   profile_name: profileName,
-  status: "passed",
-  route: {
-    requested: scope.target,
-    matched: true,
-  },
-  checks: [
-    { type: "selector_visible", selector: "#settings", passed: true },
-    { type: "no_fatal_console_errors", passed: true },
-  ],
-  evidence: {
-    console: { fatal_count: 0 },
-    page_errors: [],
-    dom_summary: { partial: false },
-  },
+  target_url: scope.target,
+  baseline_policy: "invariant_only",
+  captured_at: capturedAt,
+  viewports: [{
+    name: "desktop",
+    width: 1280,
+    height: 800,
+    url: scope.target,
+    route: {
+      requested: scope.target,
+      observed: "/settings",
+      expected_path: "/settings",
+      matched: true,
+      http_status: 200,
+    },
+    selectors: { "#settings": { count: 1, visible_count: 1 } },
+  }],
+  console: { events: [], fatal_count: 0 },
+  page_errors: [],
+  dom_summary: { expected_viewport_count: 1, viewport_count: 1, partial: false },
 };
+const profileResult = assessRiddleProofProfileEvidence(
+  normalizedProfile,
+  profileEvidence,
+  { runner: "local-playwright" },
+);
 function signProfileResult({
   fixtureScope,
   fixtureNonce,
   fixtureSensor,
   fixtureProtocol,
+  fixtureProfile,
   result,
 }) {
+  const profileBytes = normalizedProfileBytes(fixtureProfile);
   return createRiddleProofSignedCaptureBundle({
     scope: fixtureScope,
     nonce: fixtureNonce,
@@ -123,12 +167,20 @@ function signProfileResult({
     collector,
     sensor: fixtureSensor,
     verifier: fixtureProtocol.verifier.verifier_ref,
-    artifacts: [{
-      artifact_id: "profile-result.json",
-      role: "derived_result",
-      media_type: "application/json",
-      bytes_base64: Buffer.from(JSON.stringify(result)).toString("base64"),
-    }],
+    artifacts: [
+      {
+        artifact_id: "normalized-profile.json",
+        role: "profile_contract",
+        media_type: "application/json",
+        bytes_base64: profileBytes.toString("base64"),
+      },
+      {
+        artifact_id: "profile-result.json",
+        role: "derived_result",
+        media_type: "application/json",
+        bytes_base64: Buffer.from(JSON.stringify(result)).toString("base64"),
+      },
+    ],
     signing_key: {
       key_id: keyId,
       private_key_pkcs8_base64: privateKeyBytes.toString("base64"),
@@ -151,7 +203,7 @@ function authorityFor({ fixtureScope, fixtureNonce, fixtureSensor, fixtureProtoc
       verification_time: leafIssuedAt,
       max_capture_age_ms: 60_000,
       max_future_skew_ms: 1_000,
-      required_artifact_roles: ["derived_result"],
+      required_artifact_roles: ["profile_contract", "derived_result"],
     },
     trusted_signers: [{
       key_id: keyId,
@@ -165,6 +217,7 @@ const signed = signProfileResult({
   fixtureNonce: nonce,
   fixtureSensor: sensor,
   fixtureProtocol: protocol,
+  fixtureProfile: normalizedProfile,
   result: profileResult,
 });
 assert.equal(signed.ok, true, signed.ok ? undefined : signed.error.message);
@@ -179,6 +232,7 @@ const proofInput = {
   bundle: signed.bundle,
   expected_scope: scope,
   expected_profile_name: profileName,
+  expected_profile_digest: profileDigest,
   authority,
   protocol,
   leaf_issued_at: leafIssuedAt,
@@ -238,11 +292,12 @@ for (const branch of Object.values(created.branches)) {
 
 const replayInput = {
   checked_closure: JSON.parse(JSON.stringify(created.checked_closure)),
-  replay_contexts: JSON.parse(JSON.stringify(created.replay_contexts)),
+  authority: JSON.parse(JSON.stringify(authority)),
   protocol: JSON.parse(JSON.stringify(protocol)),
   expected_root_certificate_id: created.root_certificate.certificate_id,
   expected_scope: JSON.parse(JSON.stringify(scope)),
   expected_profile_name: profileName,
+  expected_profile_digest: profileDigest,
 };
 const replayed = replayRiddleProofBrowserSealedProof(replayInput);
 assert.equal(replayed.ok, true, replayed.ok ? undefined : replayed.error.message);
@@ -258,6 +313,156 @@ const trustedRules = [
   protocol.rules.behavior_confirmed.rule_ref,
   protocol.rules.sealed_profile_satisfied.rule_ref,
 ];
+
+const { privateKey: attackerPrivateKey, publicKey: attackerPublicKey } =
+  generateKeyPairSync("ed25519");
+const attackerPrivateKeyBytes = attackerPrivateKey.export({ format: "der", type: "pkcs8" });
+const attackerPublicKeyBytes = attackerPublicKey.export({ format: "der", type: "spki" });
+const attackerKeyId = "browser-pyramid-attacker-key";
+const attackerNonce = Buffer.alloc(32, 99).toString("base64url");
+const attackerBundle = createRiddleProofSignedCaptureBundle({
+  scope,
+  nonce: attackerNonce,
+  captured_at: capturedAt,
+  collector,
+  sensor,
+  verifier: protocol.verifier.verifier_ref,
+  artifacts: [
+    {
+      artifact_id: "normalized-profile.json",
+      role: "profile_contract",
+      media_type: "application/json",
+      bytes_base64: normalizedProfileBytes(normalizedProfile).toString("base64"),
+    },
+    {
+      artifact_id: "profile-result.json",
+      role: "derived_result",
+      media_type: "application/json",
+      bytes_base64: Buffer.from(JSON.stringify(profileResult)).toString("base64"),
+    },
+  ],
+  signing_key: {
+    key_id: attackerKeyId,
+    private_key_pkcs8_base64: attackerPrivateKeyBytes.toString("base64"),
+  },
+});
+assert.equal(attackerBundle.ok, true, attackerBundle.ok ? undefined : attackerBundle.error.message);
+const attackerVerifierRegistration = {
+  ...protocol.verifier.verifier_ref,
+  verify: () => ({ attacker_selected: true }),
+};
+const attackerReplayContexts = [];
+const attackerLeaves = [];
+for (const exactContract of Object.values(protocol.contracts)) {
+  const permissiveContract = createRiddleProofGroundedDeclarativeJsonContract({
+    contract_id: exactContract.contract_ref.contract_id,
+    contract_version: exactContract.contract_ref.contract_version,
+    label: "Attacker-selected permissive browser contract",
+    claim: jsonClone(exactContract.registration.claim),
+    program: {
+      all: [{
+        op: "equals",
+        source: "scope",
+        pointer: "/repository",
+        value: scope.repository,
+      }],
+    },
+  });
+  assert.equal(
+    permissiveContract.ok,
+    true,
+    permissiveContract.ok ? undefined : permissiveContract.error.message,
+  );
+  assert.notEqual(
+    permissiveContract.contract_ref.implementation_digest,
+    exactContract.contract_ref.implementation_digest,
+  );
+  const attackerConfiguration = {
+    policy: {
+      expected_scope: scope,
+      expected_nonce: attackerNonce,
+      expected_collector: collector,
+      expected_sensor: sensor,
+      expected_verifier: protocol.verifier.verifier_ref,
+      expected_signer: {
+        key_id: attackerKeyId,
+        public_key_spki_sha256: `sha256:${sha256Hex(attackerPublicKeyBytes)}`,
+      },
+      verification_time: leafIssuedAt,
+      max_capture_age_ms: 60_000,
+      max_future_skew_ms: 1_000,
+      required_artifact_roles: ["profile_contract", "derived_result"],
+    },
+    trusted_signers: [{
+      key_id: attackerKeyId,
+      public_key_spki_base64: attackerPublicKeyBytes.toString("base64"),
+    }],
+    verifier_registry: [attackerVerifierRegistration],
+    contract_registry: [permissiveContract.registration],
+    expected_contract: permissiveContract.contract_ref,
+  };
+  const attackerIssued = createRiddleProofGroundedSemanticCertificate({
+    bundle: attackerBundle.bundle,
+    ...attackerConfiguration,
+    issued_at: leafIssuedAt,
+  });
+  assert.equal(attackerIssued.ok, true, attackerIssued.ok ? undefined : attackerIssued.error.message);
+  const attackerGrounded = createRiddleProofGroundedSemanticAtomicCertificateClosure({
+    certificate: attackerIssued.certificate,
+    grounding: attackerIssued.grounding,
+    configuration: attackerConfiguration,
+  });
+  assert.equal(
+    attackerGrounded.ok,
+    true,
+    attackerGrounded.ok ? undefined : attackerGrounded.error.message,
+  );
+  const attackerReplayContext = {
+    certificate_id: attackerIssued.certificate.certificate_id,
+    ...attackerConfiguration,
+  };
+  const attackerAtomic = createRiddleProofCheckedMeaningAtomicClosure({
+    grounded_closure: attackerGrounded.grounded_closure,
+    replay_contexts: [attackerReplayContext],
+  });
+  assert.equal(attackerAtomic.ok, true, attackerAtomic.ok ? undefined : attackerAtomic.error.message);
+  attackerReplayContexts.push(attackerReplayContext);
+  attackerLeaves.push(attackerAtomic.checked_closure);
+}
+const attackerTarget = composeRiddleProofCheckedMeaningClosures({
+  expected_rule: protocol.rules.target_confirmed.rule_ref,
+  closures: [attackerLeaves[0], attackerLeaves[1]],
+  issued_at: targetIssuedAt,
+  replay_contexts: attackerReplayContexts.slice(0, 2),
+  rule_registry: ruleRegistry,
+  trusted_rules: trustedRules,
+});
+assert.equal(attackerTarget.ok, true, attackerTarget.ok ? undefined : attackerTarget.error.message);
+const attackerBehavior = composeRiddleProofCheckedMeaningClosures({
+  expected_rule: protocol.rules.behavior_confirmed.rule_ref,
+  closures: [attackerLeaves[2], attackerLeaves[3]],
+  issued_at: behaviorIssuedAt,
+  replay_contexts: attackerReplayContexts.slice(2),
+  rule_registry: ruleRegistry,
+  trusted_rules: trustedRules,
+});
+assert.equal(attackerBehavior.ok, true, attackerBehavior.ok ? undefined : attackerBehavior.error.message);
+const attackerRoot = composeRiddleProofCheckedMeaningClosures({
+  expected_rule: protocol.rules.sealed_profile_satisfied.rule_ref,
+  closures: [attackerTarget.checked_closure, attackerBehavior.checked_closure],
+  issued_at: rootIssuedAt,
+  replay_contexts: attackerReplayContexts,
+  rule_registry: ruleRegistry,
+  trusted_rules: trustedRules,
+});
+assert.equal(attackerRoot.ok, true, attackerRoot.ok ? undefined : attackerRoot.error.message);
+const independentlyRejectedAttackerRoot = replayRiddleProofBrowserSealedProof({
+  ...replayInput,
+  checked_closure: jsonClone(attackerRoot.checked_closure),
+  expected_root_certificate_id: attackerRoot.certificate.certificate_id,
+});
+assertRejected(independentlyRejectedAttackerRoot);
+
 const reusedTargetId = created.branches.target_confirmed.certificate.certificate_id;
 const recomposedFromBranches = composeRiddleProofCheckedMeaningClosures({
   expected_rule: protocol.rules.sealed_profile_satisfied.rule_ref,
@@ -266,7 +471,7 @@ const recomposedFromBranches = composeRiddleProofCheckedMeaningClosures({
     jsonClone(created.branches.behavior_confirmed.checked_closure),
   ],
   issued_at: rootIssuedAt,
-  replay_contexts: jsonClone(created.replay_contexts),
+  replay_contexts: created.replay_contexts,
   rule_registry: jsonClone(ruleRegistry),
   trusted_rules: jsonClone(trustedRules),
 });
@@ -335,6 +540,7 @@ function createFromFreshObservation(result) {
     fixtureNonce: nonce,
     fixtureSensor: sensor,
     fixtureProtocol: protocol,
+    fixtureProfile: normalizedProfile,
     result,
   });
   assert.equal(fresh.ok, true, fresh.ok ? undefined : fresh.error.message);
@@ -350,13 +556,41 @@ const routeRejected = createFromFreshObservation({
   ...jsonClone(profileResult),
   route: { ...profileResult.route, matched: false },
 });
-assertRejected(routeRejected, "leaf:riddle-proof.browser.route-matched");
+assertRejected(routeRejected, "leaf:riddle-proof.browser.capture-bound-to-scope");
+
+const inconsistentObservedRoute = createFromFreshObservation({
+  ...jsonClone(profileResult),
+  route: { ...profileResult.route, observed: "/attacker-route", matched: true },
+});
+assertRejected(inconsistentObservedRoute, "leaf:riddle-proof.browser.capture-bound-to-scope");
 
 const statusRejected = createFromFreshObservation({
   ...jsonClone(profileResult),
   status: "failed",
 });
-assertRejected(statusRejected, "leaf:riddle-proof.browser.declared-profile-passed");
+assertRejected(statusRejected, "leaf:riddle-proof.browser.capture-bound-to-scope");
+
+const failedInternalCheckResult = jsonClone(profileResult);
+failedInternalCheckResult.checks[0].status = "failed";
+const failedInternalCheck = createFromFreshObservation(failedInternalCheckResult);
+assertRejected(failedInternalCheck, "leaf:riddle-proof.browser.capture-bound-to-scope");
+
+const emptyCheckSet = createFromFreshObservation({
+  ...jsonClone(profileResult),
+  checks: [],
+});
+assertRejected(emptyCheckSet, "leaf:riddle-proof.browser.capture-bound-to-scope");
+
+const missingCheckSetResult = jsonClone(profileResult);
+delete missingCheckSetResult.checks;
+const missingCheckSet = createFromFreshObservation(missingCheckSetResult);
+assertRejected(missingCheckSet, "leaf:riddle-proof.browser.capture-bound-to-scope");
+
+const omittedDeclaredCheck = createFromFreshObservation({
+  ...jsonClone(profileResult),
+  checks: jsonClone(profileResult.checks.slice(0, 1)),
+});
+assertRejected(omittedDeclaredCheck, "leaf:riddle-proof.browser.capture-bound-to-scope");
 
 const runtimeRejected = createFromFreshObservation({
   ...jsonClone(profileResult),
@@ -424,9 +658,15 @@ const changedScope = {
   proof_attempt: "browser-pyramid-other-attempt",
 };
 const changedProfileName = "synthetic-settings-profile-v2";
+const changedNormalizedProfile = {
+  ...jsonClone(normalizedProfile),
+  name: changedProfileName,
+};
+const changedProfileDigest = normalizedProfileDigest(changedNormalizedProfile);
 const changedProtocolResult = createRiddleProofBrowserSealedProtocol({
   expected_scope: changedScope,
   expected_profile_name: changedProfileName,
+  expected_profile_digest: changedProfileDigest,
 });
 assert.equal(changedProtocolResult.ok, true);
 const otherProtocol = changedProtocolResult.protocol;
@@ -435,15 +675,20 @@ const otherSensor = {
   ...sensor,
   metadata: { ...sensor.metadata, mode: "synthetic-other-branch" },
 };
-const otherResult = {
-  ...jsonClone(profileResult),
-  profile_name: changedProfileName,
-};
+const otherResult = assessRiddleProofProfileEvidence(
+  changedNormalizedProfile,
+  {
+    ...jsonClone(profileEvidence),
+    profile_name: changedProfileName,
+  },
+  { runner: "local-playwright" },
+);
 const otherSigned = signProfileResult({
   fixtureScope: changedScope,
   fixtureNonce: otherNonce,
   fixtureSensor: otherSensor,
   fixtureProtocol: otherProtocol,
+  fixtureProfile: changedNormalizedProfile,
   result: otherResult,
 });
 assert.equal(otherSigned.ok, true, otherSigned.ok ? undefined : otherSigned.error.message);
@@ -451,6 +696,7 @@ const otherProof = createRiddleProofBrowserSealedProof({
   bundle: otherSigned.bundle,
   expected_scope: changedScope,
   expected_profile_name: changedProfileName,
+  expected_profile_digest: changedProfileDigest,
   authority: authorityFor({
     fixtureScope: changedScope,
     fixtureNonce: otherNonce,
