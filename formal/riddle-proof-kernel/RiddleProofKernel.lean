@@ -4,6 +4,7 @@ import RiddleProofKernel.SemanticClosure
 import RiddleProofKernel.GroundedEvidence
 import RiddleProofKernel.MeaningKernel
 import RiddleProofKernel.GenericProtocol
+import RiddleProofKernel.BrowserPyramid
 
 namespace RiddleProofKernel
 

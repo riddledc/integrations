@@ -114,6 +114,77 @@ cycles. Verification still requires an independently supplied policy, trusted
 public key, and deterministic verifier via
 `verifyRiddleProofSignedCaptureBundle` from `@riddledc/riddle-proof-core`.
 
+## Sealed profile composition
+
+An exploratory browser run may remain unsealed. When a browser result is going
+to be reused as a proof premise, the package can turn one signed
+`profile-result.json` into an exact seven-node checked closure:
+
+```text
+capture bound to scope + route matched       -> target confirmed
+declared profile passed + captured run clean -> behavior confirmed
+target confirmed + behavior confirmed        -> sealed profile satisfied
+```
+
+Every node carries the same repository, revision, environment, target,
+proof-attempt, and profile-name parameters. The three rules require all six to
+match, so a fact from another run cannot silently enter the pyramid. The root
+means only that the declared profile was satisfied for that exact sealed
+scope; it does not mean that the page is generally correct or release-ready.
+
+Create the fixed profile-result verifier before capture, then independently
+construct the expected protocol and issue the checked closure:
+
+```ts
+import {
+  createRiddleProofBrowserProfileResultVerifier,
+  createRiddleProofBrowserSealedProof,
+  createRiddleProofBrowserSealedProtocol,
+  replayRiddleProofBrowserSealedProof,
+} from "@riddledc/riddle-proof-runner-playwright";
+
+const verifier = createRiddleProofBrowserProfileResultVerifier();
+if (!verifier.ok) throw new Error(verifier.error.message);
+
+// Pass verifier.verifier_ref to runProfileLocal({ groundedCapture: ... }).
+
+const expected = createRiddleProofBrowserSealedProtocol({
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+});
+if (!expected.ok) throw new Error(expected.error.message);
+
+const proof = createRiddleProofBrowserSealedProof({
+  bundle: groundedCaptureBundle,
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+  authority: { policy, trusted_signers },
+  protocol: expected.protocol,
+  leaf_issued_at: policy.verification_time,
+  target_issued_at: targetIssuedAt,
+  behavior_issued_at: behaviorIssuedAt,
+  root_issued_at: rootIssuedAt,
+});
+if (!proof.ok) throw new Error(proof.error.message);
+
+const replay = replayRiddleProofBrowserSealedProof({
+  checked_closure: JSON.parse(JSON.stringify(proof.checked_closure)),
+  replay_contexts: proof.replay_contexts,
+  protocol: expected.protocol,
+  expected_root_certificate_id: proof.root_certificate.certificate_id,
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+});
+if (!replay.ok) throw new Error(replay.error.message);
+```
+
+Replay, exact-root matching, missing-premise rejection, mutation rejection, and
+branch reuse are the acceptance criteria. A fresh agent can invoke replay as a
+portability check, but whether that agent happens to feel like rechecking is
+not a proof property. This is semantic compaction rather than byte
+compression: callers can rely on the root while the complete signed evidence
+and derivation graph remain available for expansion and audit.
+
 Artifacts are written to the output directory:
 
 - `profile-result.json`

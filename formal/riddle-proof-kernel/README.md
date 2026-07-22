@@ -387,6 +387,18 @@ exact registry membership still rejects it. The positive fixture gives the
 higher claims real conjunction semantics rather than making structural
 acceptance synonymous with truth.
 
+`RiddleProofKernel/BrowserPyramid.lean` specializes that kernel to one sealed
+browser profile. Its common parameter boundary names exactly `profile_name`,
+`repository`, `revision`, `environment`, `target`, and `proof_attempt`. Four
+grounded claims (`capture-bound-to-scope`, `route-matched`,
+`declared-profile-passed`, and `captured-runtime-clean`) compose through two
+fixed intermediate rules into `sealed-profile-satisfied`. The root-check iff
+theorem exposes the exact four leaf requirements, while separate `RuleSound`
+proofs show that the root meaning is precisely their conjunction. Hostile
+fixtures reject a missing capture/scope leaf, a substituted revision scope,
+and substituted common parameters. This is a semantic checkpoint and replay
+contract, not a claim that Lean authenticated the browser capture.
+
 The runtime assurance is therefore named `checked_allowlisted_rule`, not
 `proved_rule` or `true_meaning`. It establishes that the exact trusted,
 registered, fixed-interpreter rule accepted the exact grounded premises and

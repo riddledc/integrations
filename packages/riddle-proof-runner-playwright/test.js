@@ -12,10 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
-  createRiddleProofGroundedDeclarativeJsonVerifier,
   verifyRiddleProofSignedCaptureBundle,
 } from "@riddledc/riddle-proof-core";
-import { runProfileLocal } from "./dist/index.js";
+import {
+  createRiddleProofBrowserProfileResultVerifier,
+  runProfileLocal,
+} from "./dist/index.js";
 import { launchPlaywrightBrowser } from "./dist/browser.js";
 
 const fallbackLaunches = [];
@@ -169,18 +171,7 @@ try {
     collector_version: "0.4.6",
     implementation_digest: `sha256:${"1".repeat(64)}`,
   };
-  const groundedVerifierDefinition = createRiddleProofGroundedDeclarativeJsonVerifier({
-    verifier_id: "riddle-proof.browser-profile-evidence",
-    verifier_version: "1",
-    program: {
-      artifact: {
-        artifact_id: "profile-evidence.json",
-        role: "browser_observation",
-        media_type: "application/json",
-      },
-      pointer: "",
-    },
-  });
+  const groundedVerifierDefinition = createRiddleProofBrowserProfileResultVerifier();
   assert.equal(
     groundedVerifierDefinition.ok,
     true,
@@ -226,6 +217,7 @@ try {
   const groundedArtifactIds = groundedBundle.statement.artifacts.map((artifact) => artifact.artifact_id);
   assert.ok(groundedArtifactIds.includes("normalized-profile.json"));
   assert.ok(groundedArtifactIds.includes("profile-evidence.json"));
+  assert.ok(groundedArtifactIds.includes("profile-result.json"));
   assert.ok(groundedArtifactIds.some((artifactId) => artifactId.startsWith("screenshots/")));
   assert.equal(groundedArtifactIds.includes("artifact-manifest.json"), false);
   assert.equal(groundedArtifactIds.includes("observation-receipt.json"), false);
@@ -254,7 +246,12 @@ try {
     verification_time: groundedBundle.statement.captured_at,
     max_capture_age_ms: 60_000,
     max_future_skew_ms: 1_000,
-    required_artifact_roles: ["profile_contract", "browser_observation", "screenshot"],
+    required_artifact_roles: [
+      "profile_contract",
+      "browser_observation",
+      "derived_result",
+      "screenshot",
+    ],
   };
   const groundedVerificationInput = {
     bundle: groundedBundle,
