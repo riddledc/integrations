@@ -73,6 +73,11 @@ function commonProfile(name, setupActions, checks) {
 const transitionId = "browser-transition-marker-7c83";
 let persistedValue = "unset";
 const server = createServer((request, response) => {
+  if (request.method === "GET" && request.url === "/favicon.ico") {
+    response.writeHead(204);
+    response.end();
+    return;
+  }
   if (request.method === "POST" && request.url === "/state") {
     let body = "";
     request.setEncoding("utf8");
