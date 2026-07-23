@@ -387,6 +387,32 @@ exact registry membership still rejects it. The positive fixture gives the
 higher claims real conjunction semantics rather than making structural
 acceptance synonymous with truth.
 
+`RiddleProofKernel/BrowserPyramid.lean` specializes that kernel to one sealed
+browser profile. Its common parameter boundary names exactly `profile_name`,
+`profile_digest`, `repository`, `revision`, `environment`, `target`, and
+`proof_attempt`. Four grounded claims (`capture-bound-to-scope`, `route-matched`,
+`declared-profile-passed`, and `captured-runtime-clean`) compose through two
+fixed intermediate rules into `sealed-profile-satisfied`. The root-check iff
+theorem exposes the exact four leaf requirements, while separate `RuleSound`
+proofs show that the root meaning is precisely their conjunction. Hostile
+fixtures reject a missing capture/scope leaf, a substituted revision scope,
+substituted common parameters, and a substituted profile digest. Lean treats
+the digest as an abstract string; byte hashing and profile/digest
+correspondence remain runtime obligations. This is a semantic checkpoint and
+replay contract, not a claim that Lean authenticated the browser capture.
+
+`RiddleProofKernel/BrowserTransition.lean` composes four supplied sealed-profile
+meanings through the shared `before + action -> transition` node and its reload
+and fresh-context consumers. It proves that the abstract root retains exactly
+the four checkpoint meanings and that the four modeled rules are sound under
+that chosen interpretation. It does not establish those checkpoint meanings
+or model consumer authority reconstruction, deterministic profile/evidence
+reassessment, distinct profile digests and bundle IDs, transition-ID/scope
+binding, or the signed capture-time partial order. The current cross-language
+smoke test checks shared claim IDs and rule version; it does not prove that the
+complete TypeScript rule definitions, parameter projections, or digests are
+definitionally equal to the smaller Lean definitions.
+
 The runtime assurance is therefore named `checked_allowlisted_rule`, not
 `proved_rule` or `true_meaning`. It establishes that the exact trusted,
 registered, fixed-interpreter rule accepted the exact grounded premises and

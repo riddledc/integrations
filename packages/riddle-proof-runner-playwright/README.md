@@ -114,6 +114,134 @@ cycles. Verification still requires an independently supplied policy, trusted
 public key, and deterministic verifier via
 `verifyRiddleProofSignedCaptureBundle` from `@riddledc/riddle-proof-core`.
 
+## Sealed profile composition
+
+An exploratory browser run may remain unsealed. When a browser result is going
+to be reused as a proof premise, the package can turn one signed
+`profile-result.json` into an exact seven-node checked closure:
+
+```text
+capture bound to scope + route matched       -> target confirmed
+declared profile passed + captured run clean -> behavior confirmed
+target confirmed + behavior confirmed        -> sealed profile satisfied
+```
+
+Every node carries the same repository, revision, environment, target,
+proof-attempt, profile-name, and exact normalized-profile digest. The three
+rules require all seven to match, so a fact from another run or a weaker
+profile with the same name cannot silently enter the pyramid. The root means
+only that the exact declared profile was satisfied for that sealed scope; it
+does not mean that the page is generally correct or release-ready.
+
+Independently compute the digest of the exact normalized profile bytes,
+construct the expected protocol before capture, use its verifier reference for
+the signed capture, and then issue the checked closure:
+
+```ts
+import {
+  createRiddleProofBrowserSealedProof,
+  createRiddleProofBrowserSealedProtocol,
+  replayRiddleProofBrowserSealedProof,
+} from "@riddledc/riddle-proof-runner-playwright";
+
+const expected = createRiddleProofBrowserSealedProtocol({
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+  expected_profile_digest: expectedProfileDigest,
+});
+if (!expected.ok) throw new Error(expected.error.message);
+
+// Pass expected.protocol.verifier.verifier_ref to
+// runProfileLocal({ groundedCapture: ... }).
+
+const proof = createRiddleProofBrowserSealedProof({
+  bundle: groundedCaptureBundle,
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+  expected_profile_digest: expectedProfileDigest,
+  authority: { policy, trusted_signers },
+  protocol: expected.protocol,
+  leaf_issued_at: policy.verification_time,
+  target_issued_at: targetIssuedAt,
+  behavior_issued_at: behaviorIssuedAt,
+  root_issued_at: rootIssuedAt,
+});
+if (!proof.ok) throw new Error(proof.error.message);
+
+const replay = replayRiddleProofBrowserSealedProof({
+  checked_closure: JSON.parse(JSON.stringify(proof.checked_closure)),
+  // Independently supplied by the consumer; never copied from the packet.
+  authority: { policy, trusted_signers },
+  protocol: expected.protocol,
+  expected_root_certificate_id: proof.root_certificate.certificate_id,
+  expected_scope: scope,
+  expected_profile_name: profile.name,
+  expected_profile_digest: expectedProfileDigest,
+});
+if (!replay.ok) throw new Error(replay.error.message);
+```
+
+Replay, exact-root matching, missing-premise rejection, mutation rejection, and
+branch reuse are the acceptance criteria. A fresh agent can invoke replay as a
+portability check, but whether that agent happens to feel like rechecking is
+not a proof property. This is semantic compaction rather than byte
+compression: callers can rely on the root while the complete signed evidence
+and derivation graph remain available for expansion and audit.
+
+The installed package's external sealed-observation verifier is part of the
+trust boundary. Replay replaces serialized verifier callbacks with that pinned
+registration; the core checks its declared identity and invokes it, but does
+not derive an implementation digest from JavaScript function source.
+The verifier parses the exact digest-pinned normalized profile, binds result
+and evidence timestamps to the signed capture, deterministically reassesses
+the signed evidence against the profile, and requires the exact ordered check
+identity vector to be nonempty and entirely passed.
+
+Replay also reconstructs every exact contract registration and expected
+contract from the protocol. The consumer must supply the capture policy and
+trusted signer set independently. `proof.replay_contexts` is useful for
+same-process composition, but it is convenience output—not a portable trust
+root and not an input to sealed replay.
+
+## Durable browser-transition composition
+
+The transition protocol composes four separately signed, exact-profile
+checkpoints into a reusable fan-out graph:
+
+```text
+before + action/after -> transition observed (T)
+T + reload readback  -> transition survived reload (PR)
+T + fresh readback   -> transition visible in fresh context (PF)
+PR + PF              -> durable state transition observed (D)
+```
+
+`createRiddleProofBrowserTransitionProtocol` pins the scope, binds the
+transition ID to `scope.proof_attempt`,
+four profile names, four distinct normalized-profile digests, and all seven
+composition rules. `createRiddleProofBrowserTransition` independently replays
+the four sealed checkpoints using one caller-supplied evidence-authority entry
+per role, requires four distinct signed capture bundles, and enforces the
+signed capture partial order `before <= action`, `action <= reload`, and
+`action <= fresh` without imposing an order between reload and fresh. It then
+creates `D`.
+`replayRiddleProofBrowserTransition` independently reconstructs all 16 leaf
+contexts from those authorities and exact protocol contracts, re-verifies
+every signed leaf, checks the expected root, and repeats the bundle and signed-
+capture chronology checks. The shared `T` branch remains one content-
+addressed node, so replacing only the fresh-context capture preserves the
+before/action and reload certificate IDs while producing replacement `PF` and
+`D` certificates. The immutable historical certificates remain auditable.
+
+Returned transition replay contexts are likewise same-process convenience
+data. Consumers hand off the checked closure and separately pinned protocol,
+profiles, scope, root ID, and four evidence authorities; packet-supplied
+policies, signers, verifiers, or contracts never authorize replay.
+
+The root is intentionally narrow: the declared before, action/after, reload,
+and fresh-context profiles were observed under the exact protocol. It does not
+prove that the action caused the state, identify the persistence mechanism, or
+establish general application correctness.
+
 Artifacts are written to the output directory:
 
 - `profile-result.json`

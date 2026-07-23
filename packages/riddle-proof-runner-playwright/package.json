@@ -64,6 +64,7 @@
     "build": "tsup src/index.ts src/cli.ts src/runProfileLocal.ts src/browser.ts src/executeSetupActions.ts src/evaluateChecks.ts src/artifacts/localArtifactStore.ts src/artifacts/artifactManifest.ts --format cjs,esm --dts --out-dir dist --clean",
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
-    "test": "npm run build && node test.js"
+    "test:browser-transition": "npm run build && node browser-transition.test.js",
+    "test": "npm run build && node test.js && node sealed-proof.test.js && node browser-transition.test.js"
   }
 }
