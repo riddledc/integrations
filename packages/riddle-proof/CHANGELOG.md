@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof
 
+## 0.8.87
+
+### Patch Changes
+
+- Updated dependencies [52cd1c3]
+  - @riddledc/riddle-proof-core@0.2.0
+  - @riddledc/riddle-proof-riddle-client@0.4.4
+
 ## 0.8.86
 
 ### Patch Changes

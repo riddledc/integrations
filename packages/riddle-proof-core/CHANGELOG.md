@@ -1,5 +1,13 @@
 # @riddledc/riddle-proof-core
 
+## 0.2.0
+
+### Minor Changes
+
+- 52cd1c3: Add a replay-first checked-meaning explanation API with a content-light
+  projection of the exact dependency DAG and grounded evidence frontier. The
+  successful result still returns the authoritative closure separately.
+
 ## 0.1.1
 
 ### Patch Changes
