@@ -32,7 +32,7 @@ The capability is real only when all of these hold:
 7. Freshly signed but wrong-scope, wrong-subject, weaker-rule, or
    attacker-authorized substitutions fail—not just corrupted signatures.
 
-## Three experiments
+## Four experiments
 
 ### Browser state transition — selected implementation
 
@@ -66,6 +66,16 @@ packet-supplied replay contexts could purport to authorize exact-looking claims.
 Replay now reconstructs verifier and contract contexts from independently
 supplied authority and deterministically reassesses the exact signed profile
 and evidence.
+
+The conformance test now holds the four source profile definitions fixed and
+applies them unchanged to three separately scoped specimens. The broken
+specimen fails the immediate action profile and cannot seal it. The transient
+specimen seals the immediate action but fails reload and fresh-context
+readback, so it cannot produce the durable root. The durable specimen seals all
+four profiles and composes the root. Profile normalization includes the target
+URL, so the sealed profile digests are target-specific; what stays fixed across
+the specimens is the source suite, guarded by raw fixture hashes and loaded as
+deeply frozen data.
 
 ### Software artifact/release — strong cross-system prototype
 
@@ -118,6 +128,39 @@ This is valuable precisely because it marks the boundary: exact structured
 meaning composes cleanly; prose meaning still needs client-owned rules and
 stronger sensors.
 
+### Synthetic commercial records — compositional reconciliation
+
+The public-synthetic invoice, purchase-order, receiving, payment, and invoice
+register example gives deterministic composition a more substantial pyramid:
+
+```text
+invoice arithmetic + invoice↔PO agreement -> invoice/PO branch
+invoice arithmetic + invoice↔receiving support -> invoice/receiving branch
+invoice/PO branch + invoice/receiving branch -> three-source branch
+invoice arithmetic + invoice↔payment agreement -> payment branch
+invoice arithmetic + exact-register uniqueness -> identity branch
+identity branch + payment branch + three-source branch -> captured fields agree
+```
+
+All five meanings are relative to an independently pinned synthetic policy ID,
+version, and digest. The final root is
+`riddle-proof.commercial-record.captured-fields-agree-under-policy`: the exact
+captured fields satisfy the declared arithmetic, PO, receiving, payment, and
+exact supplied-register relationships under that policy. It does not establish
+record authenticity, authorization, fraud absence, completeness beyond the
+supplied register, accounting suitability, approval to pay, or movement of
+money.
+
+The runtime experiment deterministically replays and explains the full
+frontier, rejects wrong-SKU, wrong-currency, partial-receipt, over-invoice,
+duplicate-register, wrong-scope, changed-policy, byte-tamper, and
+signature-tamper cases, and demonstrates two forms of reuse. Replacing only
+the payment record and its capture identity preserves the three-source and
+invoice-identity branches, while a second invoice snapshot can reuse the same
+PO, receiving, payment, and register captures. The example is a
+theory/composition playground, not an accounts-payable product or workflow
+lifecycle.
+
 ## What is genuinely unlocked
 
 - Incremental proof: after a currentness check detects changed input, re-ground
@@ -143,17 +186,39 @@ stronger sensors.
 
 The existing Lean checked-meaning kernel models the shared conjunction, scope
 preservation, exact-premise, and evidence-retention algebra exercised by all
-three experiments, so the experiments did not justify another generic layer.
-The selected browser protocol adds a small sidecar proving that its abstract
-fan-out root means exactly the four supplied checkpoint meanings and that its
-four modeled rules are sound under that interpretation.
+four experiments, so the experiments do not add a generic lifecycle layer. The
+browser specialization proves that its abstract fan-out root means exactly the
+four supplied checkpoint meanings and that its four modeled rules are sound
+under that interpretation.
 
-This is not a proof that the TypeScript rule materializations are definitionally
-equal to the Lean definitions. Lean intentionally starts after the checkpoint
-meanings have been supplied. Browser observation, deterministic evidence
-reassessment, consumer authority reconstruction, signatures, hashes, exact
-profile bytes, bundle/profile distinctness, transition/scope binding, signed
-capture chronology, and runtime canonical encoding remain runtime obligations.
+`SyntheticRecordReconciliation.lean` separately keeps five intrinsic grounded
+meanings distinct from four cross-record relationships. The leaves mean
+invoice arithmetic, purchase-order arithmetic, normalized receipt capture,
+posted payment capture, and an exact supplied-register occurrence count.
+Invoice-to-PO, invoice-to-receipt, invoice-to-payment, and register-target
+agreement enter only through explicit materialization assumptions. An explicit
+canonical correspondence relates every opaque parameter string to the policy,
+record references, artifact digests, and register target it names.
+
+The exact root theorem exposes those facts, relationships, and the root
+parameter binding without assuming them. Separate rule-soundness and checked
+tree theorems consume the correspondence and materialization hypotheses. The
+module also proves payment-independence of the three-source and
+invoice-identity branches, payment replacement recomposition, positive
+end-to-end non-vacuity, and rejection of hostile record-digest, policy, scope,
+duplicate-register, and register-digest substitutions.
+
+The runtime commercial-record DAG has six N-ary, template-materialized
+compositions. Lean's smaller binary model has seven rules because it introduces
+one explicit formal-only identity-plus-payment association before its final
+rule. Claim IDs are shared where applicable, but neither this model nor the
+browser model is definitionally equal to the TypeScript rule materializations.
+Lean intentionally starts after grounded meanings have been supplied.
+Canonical JSON, SHA-256, signatures, verifier and source authenticity,
+currentness, accounting suitability, browser observation, deterministic
+evidence reassessment, consumer authority reconstruction, exact profile bytes,
+bundle/profile distinctness, transition/scope binding, and signed chronology
+remain runtime or trust-boundary obligations.
 
 ## Remaining boundary
 
@@ -174,7 +239,10 @@ core from the JavaScript function body. Package integrity and verifier-code
 substitution therefore remain outside the proof and must be established by the
 installation/trust boundary.
 
-Composition requires one exact semantic scope, which is appropriately strict
-for these experiments but will eventually need an explicit, separately
-justified bridge for cross-target or cross-system claims. Those are the next
-useful boundaries to test; a generic “meaning engine” would be premature.
+The commercial-record experiment shows that source-system diversity alone does
+not require a scope bridge: independently captured records can compose when a
+consumer places them in one exact reconciliation scope and the rules bind their
+record identities, artifact digests, and pinned policy. What remains unresolved
+is composition of claims that were already certified under genuinely different
+targets or scopes. Any such bridge must state and justify the relationship
+explicitly; silently weakening scope equality would discard the protection.

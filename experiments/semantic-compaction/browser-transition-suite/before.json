@@ -1,0 +1,52 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "transition-before-state",
+  "target": {
+    "viewports": [
+      {
+        "name": "desktop",
+        "width": 960,
+        "height": 720
+      }
+    ],
+    "wait_for_selector": "#state-app",
+    "setup_actions": [
+      {
+        "type": "wait_for_text",
+        "selector": "#current",
+        "text": "unset",
+        "timeout_ms": 5000
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "route_loaded",
+      "expected_path": "/"
+    },
+    {
+      "type": "selector_visible",
+      "selector": "#state-app"
+    },
+    {
+      "type": "selector_text_visible",
+      "selector": "#current",
+      "text": "unset"
+    },
+    {
+      "type": "no_fatal_console_errors"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "product_regression": "fail",
+    "proof_insufficient": "fail",
+    "environment_blocked": "fail"
+  }
+}

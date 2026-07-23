@@ -413,6 +413,41 @@ smoke test checks shared claim IDs and rule version; it does not prove that the
 complete TypeScript rule definitions, parameter projections, or digests are
 definitionally equal to the smaller Lean definitions.
 
+`RiddleProofKernel/SyntheticRecordReconciliation.lean` applies the same kernel
+to a public-synthetic commercial-record example. Under an independently
+expected policy ID, version, and digest, it starts from five intrinsic grounded
+meanings: invoice arithmetic, purchase-order arithmetic, a normalized receipt
+capture, a posted payment capture, and a queried identity occurring once in
+the exact supplied register. Cross-record agreement is not smuggled into those
+leaves. `RelationshipAssumptions` separately names invoice-to-PO,
+invoice-to-receipt, invoice-to-payment, and register-target-to-invoice
+materialization facts. `ParameterDescribes` and `CanonicalCorrespondence`
+separately bind every opaque claim parameter string to the exact policy,
+record references, artifact digests, and optional register target it names.
+The final claim is
+`riddle-proof.commercial-record.captured-fields-agree-under-policy`.
+
+The exact root theorem exposes the five intrinsic facts, four cross-record
+relationships, and exact root parameter binding without pre-assuming them. A
+corollary discharges the root binding from an independently supplied canonical
+correspondence. Separate theorems prove the soundness of every modeled rule
+under the explicit relationship and correspondence hypotheses, and show that
+the three-source and invoice-identity branches are payment-independent so a
+replacement posted payment can recompose the root without re-proving those
+branches. The positive fixture jointly witnesses structural checking, every
+grounded leaf meaning, and the resulting semantic root. Executable hostile
+fixtures reject substituted payment and receipt artifacts, policy digest,
+scope, duplicate-register meaning, and register digest.
+
+The runtime experiment uses six N-ary, template-materialized compositions. The
+binary Lean model uses seven rules because it inserts one explicit formal-only
+identity-plus-payment association before the final conjunction. Claim IDs are
+shared where the two structures represent the same claim; the formal-only
+association has its own ID. This is not a claim of definitional equality
+between the runtime DAG and Lean tree. Canonical JSON, SHA-256, signatures,
+verifier and source authenticity, currentness, and accounting suitability
+remain runtime or trust-boundary obligations.
+
 The runtime assurance is therefore named `checked_allowlisted_rule`, not
 `proved_rule` or `true_meaning`. It establishes that the exact trusted,
 registered, fixed-interpreter rule accepted the exact grounded premises and
