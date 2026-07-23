@@ -23,6 +23,14 @@ function jsonClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const member of Object.values(value)) deepFreeze(member);
+  }
+  return value;
+}
+
 function sha256(value) {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
@@ -45,60 +53,99 @@ function profileDigest(profile, url) {
   return sha256(Buffer.from(JSON.stringify(normalized, null, 2)));
 }
 
-function commonProfile(name, setupActions, checks) {
-  return {
-    version: "riddle-proof.profile.v1",
-    name,
-    target: {
-      viewports: [{ name: "desktop", width: 960, height: 720 }],
-      wait_for_selector: "#state-app",
-      setup_actions: setupActions,
-    },
-    checks: [
-      { type: "route_loaded", expected_path: "/" },
-      { type: "selector_visible", selector: "#state-app" },
-      ...checks,
-      { type: "no_fatal_console_errors" },
-    ],
-    artifacts: ["screenshot", "console", "dom_summary", "proof_json"],
-    baseline_policy: "invariant_only",
-    failure_policy: {
-      product_regression: "fail",
-      proof_insufficient: "fail",
-      environment_blocked: "fail",
-    },
-  };
-}
-
 const transitionId = "browser-transition-marker-7c83";
-let persistedValue = "unset";
-const server = createServer((request, response) => {
-  if (request.method === "GET" && request.url === "/favicon.ico") {
-    response.writeHead(204);
-    response.end();
-    return;
-  }
-  if (request.method === "POST" && request.url === "/state") {
-    let body = "";
-    request.setEncoding("utf8");
-    request.on("data", (chunk) => { body += chunk; });
-    request.on("end", () => {
-      try {
-        const parsed = JSON.parse(body);
-        persistedValue = String(parsed.value || "");
-        response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ value: persistedValue }));
-      } catch {
-        response.writeHead(400, { "content-type": "application/json" });
-        response.end(JSON.stringify({ error: "invalid_json" }));
+const proofSuitePaths = {
+  before: new URL(
+    "../../experiments/semantic-compaction/browser-transition-suite/before.json",
+    import.meta.url,
+  ),
+  action: new URL(
+    "../../experiments/semantic-compaction/browser-transition-suite/action.json",
+    import.meta.url,
+  ),
+  reload: new URL(
+    "../../experiments/semantic-compaction/browser-transition-suite/reload.json",
+    import.meta.url,
+  ),
+  fresh_context: new URL(
+    "../../experiments/semantic-compaction/browser-transition-suite/fresh-context.json",
+    import.meta.url,
+  ),
+};
+const proofSuiteBytes = Object.fromEntries(Object.entries(proofSuitePaths).map(
+  ([role, fixtureUrl]) => [role, readFileSync(fixtureUrl)],
+));
+const proofSuiteRawDigests = Object.fromEntries(Object.entries(proofSuiteBytes).map(
+  ([role, bytes]) => [role, sha256(bytes)],
+));
+const BROWSER_TRANSITION_PROOF_SUITE = deepFreeze(
+  Object.fromEntries(Object.entries(proofSuiteBytes).map(
+    ([role, bytes]) => [role, JSON.parse(bytes.toString("utf8"))],
+  )),
+);
+const proofSuiteDefinitionDigests = Object.fromEntries(
+  Object.entries(BROWSER_TRANSITION_PROOF_SUITE).map(
+    ([role, profile]) => [role, sha256(Buffer.from(JSON.stringify(profile)))],
+  ),
+);
+const {
+  before: beforeProfile,
+  action: actionProfile,
+  reload: reloadProfile,
+  fresh_context: freshProfile,
+} = BROWSER_TRANSITION_PROOF_SUITE;
+
+function createSpecimenServer(behavior) {
+  const state = { persistedValue: "unset" };
+  const server = createServer((request, response) => {
+    if (request.method === "GET" && request.url === "/favicon.ico") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
+    if (request.method === "POST" && request.url === "/state") {
+      if (behavior !== "durable") {
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "persistence_not_supported" }));
+        return;
       }
-    });
-    return;
-  }
-  if (request.method === "GET" && request.url === "/") {
-    const initialValue = JSON.stringify(persistedValue);
-    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(`<!doctype html>
+      let body = "";
+      request.setEncoding("utf8");
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        try {
+          const parsed = JSON.parse(body);
+          state.persistedValue = String(parsed.value || "");
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify({ value: state.persistedValue }));
+        } catch {
+          response.writeHead(400, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "invalid_json" }));
+        }
+      });
+      return;
+    }
+    if (request.method === "GET" && request.url === "/") {
+      const initialValue = JSON.stringify(
+        behavior === "durable" ? state.persistedValue : "unset",
+      );
+      const saveImplementation = behavior === "broken"
+        ? "document.body.dataset.saved = 'false';"
+        : behavior === "transient"
+          ? `
+            current.textContent = input.value;
+            document.body.dataset.saved = 'transient';`
+          : `
+            const result = await fetch('/state', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ value: input.value }),
+            });
+            const payload = await result.json();
+            current.textContent = payload.value;
+            document.body.dataset.saved = 'true';`;
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
       <html><body>
         <main id="state-app">
           <label>Value <input id="value" /></label>
@@ -111,98 +158,88 @@ const server = createServer((request, response) => {
           current.textContent = ${initialValue};
           input.value = ${initialValue};
           document.querySelector('#save').addEventListener('click', async () => {
-            const result = await fetch('/state', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ value: input.value }),
-            });
-            const payload = await result.json();
-            current.textContent = payload.value;
-            document.body.dataset.saved = 'true';
+            ${saveImplementation}
           });
         </script>
       </body></html>`);
-    return;
-  }
-  response.writeHead(404);
-  response.end("not found");
-});
+      return;
+    }
+    response.writeHead(404);
+    response.end("not found");
+  });
+  return { behavior, server, state };
+}
 
-await new Promise((resolve, reject) => {
-  server.once("error", reject);
-  server.listen(0, "127.0.0.1", resolve);
-});
+const specimenServers = {
+  s0: createSpecimenServer("broken"),
+  s1: createSpecimenServer("transient"),
+  s2: createSpecimenServer("durable"),
+};
+await Promise.all(Object.values(specimenServers).map(({ server }) =>
+  new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  })));
 
-const address = server.address();
-assert.ok(address && typeof address === "object");
-const targetUrl = `http://127.0.0.1:${address.port}/`;
 const workspace = mkdtempSync(path.join(tmpdir(), "riddle-proof-browser-transition-"));
 
-const beforeProfile = commonProfile(
-  "transition-before-state",
-  [{ type: "wait_for_text", selector: "#current", text: "unset", timeout_ms: 5_000 }],
-  [{ type: "selector_text_visible", selector: "#current", text: "unset" }],
-);
-const actionProfile = commonProfile(
-  "transition-action-and-after",
-  [
-    { type: "fill", selector: "#value", value: transitionId },
-    { type: "click", selector: "#save" },
-    { type: "wait_for_text", selector: "#current", text: transitionId, timeout_ms: 5_000 },
-  ],
-  [{ type: "selector_text_visible", selector: "#current", text: transitionId }],
-);
-const reloadProfile = commonProfile(
-  "transition-reload-readback",
-  [
-    { type: "clear_storage", storage: "both", reload: true },
-    { type: "wait_for_text", selector: "#current", text: transitionId, timeout_ms: 5_000 },
-  ],
-  [{ type: "selector_text_visible", selector: "#current", text: transitionId }],
-);
-const freshProfile = commonProfile(
-  "transition-fresh-context-readback",
-  [{ type: "wait_for_text", selector: "#current", text: transitionId, timeout_ms: 5_000 }],
-  [{ type: "selector_text_visible", selector: "#current", text: transitionId }],
-);
+function createScenario(name, specimen) {
+  const address = specimen.server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  const scope = {
+    repository: "https://github.com/riddledc/integrations.git",
+    revision: `browser-transition-e2e-${name}`,
+    environment: "local-playwright-synthetic-state-server",
+    target: targetUrl,
+    proof_attempt: transitionId,
+  };
+  const profiles = Object.fromEntries(Object.entries(BROWSER_TRANSITION_PROOF_SUITE).map(
+    ([role, profile]) => [role, {
+      profile_name: profile.name,
+      profile_digest: profileDigest(profile, targetUrl),
+    }],
+  ));
+  const protocolResult = createRiddleProofBrowserTransitionProtocol({
+    expected_scope: scope,
+    transition_id: transitionId,
+    profiles,
+  });
+  assert.equal(
+    protocolResult.ok,
+    true,
+    protocolResult.ok ? undefined : protocolResult.error.message,
+  );
+  return {
+    name,
+    profiles,
+    scope,
+    specimen,
+    targetUrl,
+    transitionProtocol: protocolResult.protocol,
+  };
+}
 
-const scope = {
-  repository: "https://github.com/riddledc/integrations.git",
-  revision: "browser-transition-e2e-revision",
-  environment: "local-playwright-synthetic-state-server",
-  target: targetUrl,
-  proof_attempt: transitionId,
+const scenarios = {
+  s0: createScenario("s0", specimenServers.s0),
+  s1: createScenario("s1", specimenServers.s1),
+  s2: createScenario("s2", specimenServers.s2),
 };
-const profiles = {
-  before: {
-    profile_name: beforeProfile.name,
-    profile_digest: profileDigest(beforeProfile, targetUrl),
-  },
-  action: {
-    profile_name: actionProfile.name,
-    profile_digest: profileDigest(actionProfile, targetUrl),
-  },
-  reload: {
-    profile_name: reloadProfile.name,
-    profile_digest: profileDigest(reloadProfile, targetUrl),
-  },
-  fresh_context: {
-    profile_name: freshProfile.name,
-    profile_digest: profileDigest(freshProfile, targetUrl),
-  },
-};
-
-const transitionProtocolResult = createRiddleProofBrowserTransitionProtocol({
-  expected_scope: scope,
-  transition_id: transitionId,
+for (const role of Object.keys(BROWSER_TRANSITION_PROOF_SUITE)) {
+  assert.equal(
+    new Set(Object.values(scenarios).map(
+      (scenario) => scenario.profiles[role].profile_digest,
+    )).size,
+    3,
+    `${role} normalization binds the unchanged fixture to each target URL`,
+  );
+}
+const {
   profiles,
-});
-assert.equal(
-  transitionProtocolResult.ok,
-  true,
-  transitionProtocolResult.ok ? undefined : transitionProtocolResult.error.message,
-);
-const transitionProtocol = transitionProtocolResult.protocol;
+  scope,
+  targetUrl,
+  transitionProtocol,
+} = scenarios.s2;
 
 const leanBrowserTransition = readFileSync(
   new URL(
@@ -248,14 +285,21 @@ const collector = {
   implementation_digest: `sha256:${"8".repeat(64)}`,
 };
 
-async function captureRole(role, profile, ordinal, protocol = transitionProtocol.sealed_protocols[role]) {
+async function captureRole(
+  role,
+  profile,
+  ordinal,
+  protocol = transitionProtocol.sealed_protocols[role],
+  scenario = scenarios.s2,
+  expectedStatus = "passed",
+) {
   const nonce = Buffer.alloc(32, ordinal).toString("base64url");
   const output = await runProfileLocal({
     profile,
-    url: targetUrl,
-    outputDir: path.join(workspace, `${role}-${ordinal}`),
+    url: scenario.targetUrl,
+    outputDir: path.join(workspace, `${scenario.name}-${role}-${ordinal}`),
     groundedCapture: {
-      scope,
+      scope: scenario.scope,
       nonce,
       collector,
       verifier: protocol.verifier.verifier_ref,
@@ -265,19 +309,30 @@ async function captureRole(role, profile, ordinal, protocol = transitionProtocol
       },
     },
   });
-  assert.equal(output.result.status, "passed", JSON.stringify(output.result, null, 2));
+  assert.equal(output.result.status, expectedStatus, JSON.stringify(output.result, null, 2));
   assert.ok(output.groundedCaptureBundle, output.groundedCaptureError?.message);
   const normalizedArtifact = output.groundedCaptureBundle.statement.artifacts.find(
     (artifact) => artifact.artifact_id === "normalized-profile.json",
   );
-  assert.equal(normalizedArtifact?.artifact_digest, profileDigest(profile, targetUrl));
-  return { role, profile, nonce, output, protocol };
+  assert.equal(
+    normalizedArtifact?.artifact_digest,
+    profileDigest(profile, scenario.targetUrl),
+  );
+  return {
+    role,
+    profile,
+    nonce,
+    output,
+    protocol,
+    scenario,
+    scope: scenario.scope,
+  };
 }
 
 function authorityFor(capture, verificationTime) {
   return {
     policy: {
-      expected_scope: scope,
+      expected_scope: capture.scope,
       expected_nonce: capture.nonce,
       expected_collector: collector,
       expected_sensor: capture.output.groundedCaptureBundle.statement.sensor,
@@ -301,11 +356,11 @@ function authorityFor(capture, verificationTime) {
   };
 }
 
-function createCheckpoint(capture, profileSpec, leafIssuedAt) {
+function attemptCheckpoint(capture, profileSpec, leafIssuedAt) {
   const authority = authorityFor(capture, leafIssuedAt);
   const created = createRiddleProofBrowserSealedProof({
     bundle: capture.output.groundedCaptureBundle,
-    expected_scope: scope,
+    expected_scope: capture.scope,
     expected_profile_name: profileSpec.profile_name,
     expected_profile_digest: profileSpec.profile_digest,
     authority,
@@ -315,8 +370,14 @@ function createCheckpoint(capture, profileSpec, leafIssuedAt) {
     behavior_issued_at: plusMilliseconds(leafIssuedAt, 1),
     root_issued_at: plusMilliseconds(leafIssuedAt, 2),
   });
+  return { authority, created };
+}
+
+function createCheckpoint(capture, profileSpec, leafIssuedAt) {
+  const attempted = attemptCheckpoint(capture, profileSpec, leafIssuedAt);
+  const { created } = attempted;
   assert.equal(created.ok, true, created.ok ? undefined : created.error.message);
-  return { ...created, authority };
+  return { ...created, authority: attempted.authority };
 }
 
 function checkpointAuthorities(checkpoints) {
@@ -350,9 +411,131 @@ function transitionTrust(protocol) {
 }
 
 try {
+  // This is one fixed suite applied to three separately identified browser
+  // specimens. S0 cannot update immediately; S1 updates only the live DOM; S2
+  // implements the complete durable behavior. Nothing rewrites the profiles
+  // between runs.
+  const s0ActionCapture = await captureRole(
+    "action",
+    actionProfile,
+    1,
+    scenarios.s0.transitionProtocol.sealed_protocols.action,
+    scenarios.s0,
+    "product_regression",
+  );
+  const s0ActionAttempt = attemptCheckpoint(
+    s0ActionCapture,
+    scenarios.s0.profiles.action,
+    plusMilliseconds(s0ActionCapture.output.result.captured_at, 1_000),
+  );
+  assertRejected(
+    s0ActionAttempt.created,
+    "leaf:riddle-proof.browser.capture-bound-to-scope",
+  );
+  assert.match(s0ActionAttempt.created.error.message, /nonempty all-passed check set/u);
+
+  const s1BeforeCapture = await captureRole(
+    "before",
+    beforeProfile,
+    2,
+    scenarios.s1.transitionProtocol.sealed_protocols.before,
+    scenarios.s1,
+  );
+  const s1ActionCapture = await captureRole(
+    "action",
+    actionProfile,
+    3,
+    scenarios.s1.transitionProtocol.sealed_protocols.action,
+    scenarios.s1,
+  );
+  const s1ReloadCapture = await captureRole(
+    "reload",
+    reloadProfile,
+    4,
+    scenarios.s1.transitionProtocol.sealed_protocols.reload,
+    scenarios.s1,
+    "product_regression",
+  );
+  const s1FreshCapture = await captureRole(
+    "fresh_context",
+    freshProfile,
+    5,
+    scenarios.s1.transitionProtocol.sealed_protocols.fresh_context,
+    scenarios.s1,
+    "product_regression",
+  );
+  const s1TimelineBase = plusMilliseconds(
+    maxTimestamp([
+      s1BeforeCapture,
+      s1ActionCapture,
+      s1ReloadCapture,
+      s1FreshCapture,
+    ].map((capture) => capture.output.result.captured_at)),
+    1_000,
+  );
+  const s1Before = createCheckpoint(
+    s1BeforeCapture,
+    scenarios.s1.profiles.before,
+    s1TimelineBase,
+  );
+  const s1Action = createCheckpoint(
+    s1ActionCapture,
+    scenarios.s1.profiles.action,
+    plusMilliseconds(s1TimelineBase, 10),
+  );
+  const s1ReloadAttempt = attemptCheckpoint(
+    s1ReloadCapture,
+    scenarios.s1.profiles.reload,
+    plusMilliseconds(s1TimelineBase, 20),
+  );
+  const s1FreshAttempt = attemptCheckpoint(
+    s1FreshCapture,
+    scenarios.s1.profiles.fresh_context,
+    plusMilliseconds(s1TimelineBase, 30),
+  );
+  assertRejected(
+    s1ReloadAttempt.created,
+    "leaf:riddle-proof.browser.capture-bound-to-scope",
+  );
+  assert.match(s1ReloadAttempt.created.error.message, /nonempty all-passed check set/u);
+  assertRejected(
+    s1FreshAttempt.created,
+    "leaf:riddle-proof.browser.capture-bound-to-scope",
+  );
+  assert.match(s1FreshAttempt.created.error.message, /nonempty all-passed check set/u);
+
+  const s1DurableRootAttempt = createRiddleProofBrowserTransition({
+    expected_scope: scenarios.s1.scope,
+    transition_id: transitionId,
+    profiles: scenarios.s1.profiles,
+    protocol: scenarios.s1.transitionProtocol,
+    checkpoints: {
+      before: s1Before,
+      action: s1Action,
+      reload: s1Action,
+      fresh_context: s1Action,
+    },
+    authorities: {
+      before: s1Before.authority,
+      action: s1Action.authority,
+      reload: s1Action.authority,
+      fresh_context: s1Action.authority,
+    },
+    transition_issued_at: plusMilliseconds(s1TimelineBase, 15),
+    reload_issued_at: plusMilliseconds(s1TimelineBase, 25),
+    fresh_context_issued_at: plusMilliseconds(s1TimelineBase, 35),
+    root_issued_at: plusMilliseconds(s1TimelineBase, 40),
+  });
+  assertRejected(s1DurableRootAttempt, "checkpoint:reload");
+
+  specimenServers.s2.state.persistedValue = "unset";
   const beforeCapture = await captureRole("before", beforeProfile, 11);
   const actionCapture = await captureRole("action", actionProfile, 12);
-  assert.equal(persistedValue, transitionId, "the visible browser action changed server state");
+  assert.equal(
+    specimenServers.s2.state.persistedValue,
+    transitionId,
+    "the S2 browser action changed durable server state",
+  );
   const reloadCapture = await captureRole("reload", reloadProfile, 13);
   const freshCapture = await captureRole("fresh_context", freshProfile, 14);
 
@@ -385,6 +568,16 @@ try {
     created.root_certificate.claim.claim_id,
     RIDDLE_PROOF_BROWSER_TRANSITION_CLAIMS.durable_state_transition_observed.claim_id,
   );
+
+  const crossSpecimenAction = createRiddleProofBrowserTransition({
+    ...creationInput,
+    checkpoints: { ...checkpoints, action: s1Action },
+    authorities: {
+      ...creationInput.authorities,
+      action: s1Action.authority,
+    },
+  });
+  assertRejected(crossSpecimenAction, "checkpoint:action");
 
   const repeatedCheckpoint = createRiddleProofBrowserTransition({
     ...creationInput,
@@ -510,11 +703,19 @@ try {
     assert.ok(originalIds.has(preserved) && replacementIds.has(preserved));
   }
 
-  const weakerFreshProfile = commonProfile(
-    freshProfile.name,
-    [{ type: "wait_for_selector", selector: "#state-app" }],
-    [{ type: "selector_visible", selector: "#current" }],
-  );
+  const weakerFreshProfile = {
+    ...jsonClone(freshProfile),
+    target: {
+      ...jsonClone(freshProfile.target),
+      setup_actions: [{ type: "wait_for_selector", selector: "#state-app" }],
+    },
+    checks: [
+      { type: "route_loaded", expected_path: "/" },
+      { type: "selector_visible", selector: "#state-app" },
+      { type: "selector_visible", selector: "#current" },
+      { type: "no_fatal_console_errors" },
+    ],
+  };
   const weakerProfiles = {
     ...profiles,
     fresh_context: {
@@ -582,9 +783,9 @@ try {
     "final transition replay rejects a same-name weaker profile presented as the expected profile digest",
   );
 
-  persistedValue = "unset";
+  specimenServers.s2.state.persistedValue = "unset";
   const lateBeforeCapture = await captureRole("before", beforeProfile, 17);
-  persistedValue = transitionId;
+  specimenServers.s2.state.persistedValue = transitionId;
   assert.ok(
     Date.parse(lateBeforeCapture.output.groundedCaptureBundle.statement.captured_at)
       > Date.parse(actionCapture.output.groundedCaptureBundle.statement.captured_at),
@@ -723,8 +924,24 @@ try {
   });
   assertRejected(substitutedRuleReplay, "protocol_trust_root");
 
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(BROWSER_TRANSITION_PROOF_SUITE).map(
+      ([role, profile]) => [role, sha256(Buffer.from(JSON.stringify(profile)))],
+    )),
+    proofSuiteDefinitionDigests,
+    "the deeply frozen proof-suite definitions remain unchanged after all target applications",
+  );
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(proofSuitePaths).map(
+      ([role, fixtureUrl]) => [role, sha256(readFileSync(fixtureUrl))],
+    )),
+    proofSuiteRawDigests,
+    "the proof-suite fixture bytes remain unchanged after all target applications",
+  );
+
   console.log("riddle-proof-runner-playwright browser transition tests passed");
 } finally {
-  await new Promise((resolve) => server.close(resolve));
+  await Promise.all(Object.values(specimenServers).map(({ server }) =>
+    new Promise((resolve) => server.close(resolve))));
   rmSync(workspace, { recursive: true, force: true });
 }

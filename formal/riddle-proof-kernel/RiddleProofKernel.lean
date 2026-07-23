@@ -6,6 +6,7 @@ import RiddleProofKernel.MeaningKernel
 import RiddleProofKernel.GenericProtocol
 import RiddleProofKernel.BrowserPyramid
 import RiddleProofKernel.BrowserTransition
+import RiddleProofKernel.SyntheticRecordReconciliation
 
 namespace RiddleProofKernel
 
