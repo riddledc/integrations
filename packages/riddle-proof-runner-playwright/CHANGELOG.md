@@ -1,5 +1,24 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.5.0
+
+### Minor Changes
+
+- 52cd1c3: Bind sealed browser proofs to the exact normalized profile digest, perform a
+  deterministic evidence reassessment, and reconstruct replay trust from
+  independently supplied signer policies plus exact protocol contracts. Add a
+  four-checkpoint browser-transition protocol with shared branches, distinct
+  capture enforcement, and signed-capture partial-order validation.
+- 52cd1c3: Add a deterministic sealed browser-profile protocol that grounds four exact
+  browser facts, composes them through a checked 4-to-2-to-1 proof pyramid, and
+  replays the resulting semantic checkpoint against independently supplied
+  evidence and rule trust roots.
+
+### Patch Changes
+
+- Updated dependencies [52cd1c3]
+  - @riddledc/riddle-proof-core@0.2.0
+
 ## 0.4.7
 
 ### Patch Changes
