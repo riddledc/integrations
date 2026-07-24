@@ -427,6 +427,20 @@ record references, artifact digests, and optional register target it names.
 The final claim is
 `riddle-proof.commercial-record.captured-fields-agree-under-policy`.
 
+The arithmetic slice is list-shaped even though the older cross-record
+projection remains single-line. `MultiLineArithmeticRecomputed` requires a
+nonempty finite list, an exact quantity-times-unit-price extension for every
+line, a subtotal equal to the sum of stated extensions, and a total equal to
+subtotal plus stated tax. Lean proves that these premises force the total to
+equal the sum of every recomputed line term plus tax. Concrete theorems cover
+both the internally consistent two-line over-invoiced workbench specimen
+(`12 × 500` on its second line) and its typed correction (`10 × 500`).
+Source-level correspondence tests bind the first theorem fixture to the public
+synthetic invoice JSON and the corrected theorem fixture to the unchanged
+purchase-order target values. Runtime parsing, JavaScript safe-integer
+overflow checks, the 1,000-line limit, line ordering and identity, and
+file-to-Lean correspondence remain outside the theorem.
+
 The exact root theorem exposes the five intrinsic facts, four cross-record
 relationships, and exact root parameter binding without pre-assuming them. A
 corollary discharges the root binding from an independently supplied canonical
@@ -438,6 +452,18 @@ branches. The positive fixture jointly witnesses structural checking, every
 grounded leaf meaning, and the resulting semantic root. Executable hostile
 fixtures reject substituted payment and receipt artifacts, policy digest,
 scope, duplicate-register meaning, and register digest.
+
+The three-source branch also has an exact-premise iff theorem for invoice
+arithmetic, purchase-order arithmetic, normalized receipt capture, and both
+cross-record relationships. A typed invoice replacement definitionally
+preserves the independently captured purchase-order and receipt meanings.
+Under an explicit single-valued canonical-parameter-description premise, a
+changed invoice reference forces different three-source and full-root claim
+keys; any revised root must supply arithmetic and every relationship for the
+replacement invoice and bind its exact reference. At the application boundary,
+a replacement subject cannot reuse the prior report as a conforming result.
+These are specimen-binding invariants, not claims that Lean parsed a document,
+computed a digest, verified a signature, or assessed clock freshness.
 
 The runtime experiment uses six N-ary, template-materialized compositions. The
 binary Lean model uses seven rules because it inserts one explicit formal-only

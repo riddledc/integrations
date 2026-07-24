@@ -50,6 +50,8 @@ test("the formal kernel retains every runtime fail-closed obligation", () => {
   const obligations = [
     "disposition_conforms_iff_conformance_basis",
     "report_authority_mismatch_cannot_conform",
+    "report_subject_mismatch_cannot_conform",
+    "replacement_subject_requires_replacement_bound_report",
     "missing_required_requirement_cannot_conform",
     "duplicate_pinned_requirement_cannot_conform",
     "duplicate_reported_requirement_cannot_conform",

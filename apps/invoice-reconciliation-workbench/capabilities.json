@@ -1,0 +1,29 @@
+{
+  "version": "riddle-proof.experimental-capabilities.v1",
+  "name": "invoice-reconciliation-workbench",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": false,
+    "subprocess": false,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "delegated_capabilities": [
+    "explicit_local_file_capture",
+    "loopback_user_interface",
+    "signing_key_provider",
+    "clock"
+  ],
+  "notes": [
+    "The workbench is a private client outside the publishable npm workspace.",
+    "All business records are synthetic structured JSON fixtures in this public repository.",
+    "The application reads only explicitly selected invoice, purchase-order, and receipt files and writes only new application-owned invoice revisions.",
+    "Proof and replay material are process-local in this demo; only explicitly requested content-light audit projections leave that in-memory boundary.",
+    "The local interface binds only to an ephemeral 127.0.0.1 port and has no outbound request path.",
+    "Ordinary views contain human-readable math and reconciliation findings; content-light digests, hashed nonce IDs, bundle IDs, and certificate identities appear only in the audit view, while raw nonces and signatures remain private proof material.",
+    "The pinned synthetic policy does not establish authenticity, authorization, tax correctness, fraud absence, approval to pay, or actual movement of money.",
+    "Arbitrary PDF, DOCX, XLSX, email, and OCR extraction are outside this workbench."
+  ]
+}

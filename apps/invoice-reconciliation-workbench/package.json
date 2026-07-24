@@ -1,0 +1,48 @@
+{
+  "name": "riddle-invoice-reconciliation-workbench",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private, offline proof-guided synthetic invoice reconciliation workbench.",
+  "type": "module",
+  "main": "./dist/application.js",
+  "types": "./dist/application.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/application.d.ts",
+      "import": "./dist/application.js"
+    },
+    "./application": {
+      "types": "./dist/application.d.ts",
+      "import": "./dist/application.js"
+    },
+    "./contract": {
+      "types": "./dist/contract.d.ts",
+      "import": "./dist/contract.js"
+    },
+    "./proof": {
+      "types": "./dist/proof.d.ts",
+      "import": "./dist/proof.js"
+    },
+    "./records": {
+      "types": "./dist/records.d.ts",
+      "import": "./dist/records.js"
+    }
+  },
+  "bin": {
+    "riddle-invoice-workbench": "./bin/riddle-invoice-workbench"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "demo": "pnpm run build && node bin/riddle-invoice-workbench",
+    "test": "pnpm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof-core": "link:../../packages/riddle-proof-core",
+    "@riddledc/riddle-proof-local": "link:../../packages/riddle-proof-local",
+    "riddle-proof-application-projection-experiment": "link:../../experiments/application-projection"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

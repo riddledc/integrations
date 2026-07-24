@@ -50,6 +50,24 @@ assert.match(
   /\btheorem captured_fields_root_meaning_iff_exact_relationships\b/u,
   "Lean must retain the exact root-meaning theorem",
 );
+for (const obligation of [
+  "exact_line_extensions_have_exact_recomputed_sum",
+  "multi_line_arithmetic_implies_exact_total_from_terms",
+  "workbench_over_invoiced_two_line_arithmetic_holds",
+  "workbench_corrected_two_line_arithmetic_holds",
+  "three_source_meaning_iff_exact_declared_premises",
+  "invoice_replacement_preserves_purchase_order_meaning",
+  "invoice_replacement_preserves_receipt_meaning",
+  "invoice_replacement_changes_three_source_conclusion",
+  "invoice_replacement_changes_root_conclusion",
+  "revised_root_requires_replacement_bound_invoice_premises",
+]) {
+  assert.match(
+    leanSource,
+    new RegExp(`\\btheorem ${obligation}\\b`, "u"),
+    `Lean must retain invoice-revision obligation ${obligation}`,
+  );
+}
 assert.match(
   leanSource,
   /\bstructure CanonicalCorrespondence\b/u,
