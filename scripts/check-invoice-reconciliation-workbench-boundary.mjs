@@ -171,7 +171,12 @@ for (const [name, directory] of localClosure) {
   }
 }
 const installedRoot = join(appDirectory, "node_modules");
-if (existsSync(installedRoot)) {
+assert.equal(
+  existsSync(installedRoot),
+  true,
+  "Prepare the isolated workbench dependency closure before checking it.",
+);
+{
   const installedTopLevel = readdirSync(installedRoot)
     .filter((name) => !name.startsWith("."))
     .sort();
