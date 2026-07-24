@@ -185,40 +185,75 @@ if (existsSync(installedRoot)) {
     ["riddle-proof-core", "riddle-proof-local"],
     "The installed @riddledc scope contains an unapproved package.",
   );
-  const packageMap = readJson(join(installedRoot, ".package-map.json"));
-  const packageEntries = Object.values(packageMap.packages ?? {});
-  const rootEntry = packageEntries.find((entry) => entry.url === "..");
-  assert.ok(rootEntry, "The installed package map has no application root.");
+  for (const [name, directory] of localClosure) {
+    const installed = join(
+      installedRoot,
+      ...name.split("/"),
+    );
+    assert.equal(
+      existsSync(installed),
+      true,
+      `${name} is absent from the installed dependency closure.`,
+    );
+    assert.equal(
+      realpathSync(installed),
+      realpathSync(directory),
+      `${name} is not installed from the reviewed local package.`,
+    );
+  }
   assert.deepEqual(
-    Object.keys(rootEntry.dependencies ?? {}).sort(),
-    [
-      "@riddledc/riddle-proof-core",
-      "@riddledc/riddle-proof-local",
-      "riddle-invoice-reconciliation-workbench",
-      "riddle-proof-application-projection-experiment",
-    ],
-    "The actual installed dependency map changed.",
+    readdirSync(join(installedRoot, ".bin")).sort(),
+    ["riddle-proof-local"],
+    "The installed executable closure changed.",
   );
-  for (const entry of packageEntries) {
-    const installedEntry = JSON.stringify(entry);
-    for (const forbidden of [
-      "@riddledc/riddle-proof",
-      "@riddledc/riddle-proof-packs",
-      "@riddledc/riddle-proof-riddle-client",
-      "@riddledc/riddle-proof-runner-playwright",
-      "playwright",
-    ]) {
-      assert.equal(
-        installedEntry.includes(`"${forbidden}"`),
-        false,
-        `The actual installed closure contains ${forbidden}.`,
+  assert.deepEqual(
+    readdirSync(join(installedRoot, ".pnpm")).sort(),
+    ["lock.yaml"],
+    "The installed virtual store contains an unapproved package.",
+  );
+
+  // pnpm 11 emits .package-map.json for this link-only installation, while
+  // the repository-pinned pnpm 9 does not. Exact top-level links, exact
+  // realpaths, an empty virtual store, and dependency-free linked manifests
+  // above are the portable closure check. Validate the package map as an
+  // additional witness whenever the active pnpm version supplies it.
+  const packageMapFilename = join(installedRoot, ".package-map.json");
+  if (existsSync(packageMapFilename)) {
+    const packageMap = readJson(packageMapFilename);
+    const packageEntries = Object.values(packageMap.packages ?? {});
+    const rootEntry = packageEntries.find((entry) => entry.url === "..");
+    assert.ok(rootEntry, "The installed package map has no application root.");
+    assert.deepEqual(
+      Object.keys(rootEntry.dependencies ?? {}).sort(),
+      [
+        "@riddledc/riddle-proof-core",
+        "@riddledc/riddle-proof-local",
+        "riddle-invoice-reconciliation-workbench",
+        "riddle-proof-application-projection-experiment",
+      ],
+      "The actual installed dependency map changed.",
+    );
+    for (const entry of packageEntries) {
+      const installedEntry = JSON.stringify(entry);
+      for (const forbidden of [
+        "@riddledc/riddle-proof",
+        "@riddledc/riddle-proof-packs",
+        "@riddledc/riddle-proof-riddle-client",
+        "@riddledc/riddle-proof-runner-playwright",
+        "playwright",
+      ]) {
+        assert.equal(
+          installedEntry.includes(`"${forbidden}"`),
+          false,
+          `The actual installed closure contains ${forbidden}.`,
+        );
+      }
+      assert.doesNotMatch(
+        installedEntry,
+        /"@aws-sdk\//u,
+        "The actual installed closure contains an AWS SDK package.",
       );
     }
-    assert.doesNotMatch(
-      installedEntry,
-      /"@aws-sdk\//u,
-      "The actual installed closure contains an AWS SDK package.",
-    );
   }
 }
 
