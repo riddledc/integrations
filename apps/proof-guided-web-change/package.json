@@ -1,0 +1,62 @@
+{
+  "name": "riddle-proof-guided-web-change-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Private proof-guided durable-setting repair application.",
+  "type": "module",
+  "main": "./dist/application.js",
+  "types": "./dist/application.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/application.d.ts",
+      "import": "./dist/application.js"
+    },
+    "./application": {
+      "types": "./dist/application.d.ts",
+      "import": "./dist/application.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    },
+    "./local-runtime": {
+      "types": "./dist/local-runtime.d.ts",
+      "import": "./dist/local-runtime.js"
+    },
+    "./main": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    },
+    "./project-candidate-resolver": {
+      "types": "./dist/project-candidate-resolver.d.ts",
+      "import": "./dist/project-candidate-resolver.js"
+    },
+    "./repair-executor": {
+      "types": "./dist/repair-executor.d.ts",
+      "import": "./dist/repair-executor.js"
+    },
+    "./specimen": {
+      "types": "./dist/specimen.d.ts",
+      "import": "./dist/specimen.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "proof-guided-web-change": "./bin/proof-guided-web-change"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "demo": "pnpm run build && node bin/proof-guided-web-change",
+    "test": "pnpm run build && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "riddle-proof-guided-web-change-experiment": "link:../../experiments/proof-guided-web-change"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

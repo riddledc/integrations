@@ -65,6 +65,6 @@
     "clean": "rm -rf dist",
     "lint": "echo 'lint: (not configured)'",
     "test:browser-transition": "npm run build && node browser-transition.test.js",
-    "test": "npm run build && node test.js && node sealed-proof.test.js && node browser-transition.test.js"
+    "test": "npm run build && node test.js && node extra-http-headers.test.js && node sealed-proof.test.js && node browser-transition.test.js"
   }
 }

@@ -53,6 +53,29 @@ it cannot independently prove that a trusted provider actually performed its
 declared environmental work. A production adapter must therefore pin and
 independently trust or attest its verifier implementation.
 
+`createLocalBrowserReportProvider` is the reviewed local Playwright adapter for
+this experiment. Its caller supplies the artifact root, Ed25519 signing key,
+collector identity, source identity, and currentness clock. The provider
+captures and signs all four contract-owned profiles and replays the resulting
+checked meaning before returning verifier facts. It never chooses the
+candidate, profiles, authority, disposition, finding prose, or repair
+guidance.
+
+The artifact root is caller-owned and is never deleted by the provider.
+Screenshots and other captured browser material may live beneath it, so an
+application must protect that directory according to the sensitivity of the
+target. The local provider requires a private caller-owned root, creates
+private attempt directories, seals retained files, and rewrites retained
+publication references to a portable relative value. Process-internal output
+paths and content-light attempt telemetry remain adapter-side details; they do
+not enter the ordinary outcome or meaning views.
+
+When a target needs local authorization, the provider may obtain runtime-only
+headers from a trusted callback and inject them into the Playwright context.
+Header values are transport capabilities, not semantic evidence: they are not
+added to the resolved target, normalized profiles, receipts, audit views, or
+retained artifacts.
+
 ## Trust boundary
 
 The browser sensor can report only what the pinned profiles observed at the

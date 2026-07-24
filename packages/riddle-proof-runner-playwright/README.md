@@ -81,6 +81,28 @@ const result = await runProfileLocal({
 console.log(result.result.status);
 ```
 
+For a trusted target that requires a runtime credential, the Node API can add
+headers directly to the Playwright browser context:
+
+```ts
+const result = await runProfileLocal({
+  profile,
+  outputDir: "./artifacts/riddle-proof",
+  url: "http://127.0.0.1:4173",
+  extraHTTPHeaders: {
+    "x-local-run-capability": process.env.LOCAL_RUN_CAPABILITY!,
+  },
+});
+```
+
+`extraHTTPHeaders` is runtime-only. It is not a profile field or CLI option,
+and the runner does not write the header map into results, receipts, grounded
+capture bundles, manifests, summaries, or other artifacts. Playwright applies
+these headers across the browser context, including redirects and subresource
+requests, so use the option only with an isolated target whose entire request
+graph is trusted. A target can still expose a received secret in its own DOM or
+responses; callers must not capture such reflected content as evidence.
+
 To bind the browser observation to an independent challenge, semantic scope,
 collector/verifier identities, and an Ed25519 signer, pass `groundedCapture` to
 `runProfileLocal`:

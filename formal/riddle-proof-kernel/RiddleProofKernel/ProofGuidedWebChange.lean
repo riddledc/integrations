@@ -156,6 +156,19 @@ def prepareRepair
     (nextCandidateRef : CandidateRef) : Option PreparedAttempt :=
   controller.prepareAttempt nextCandidateRef
 
+/-!
+An unusable one-shot result is retried by preparing another candidate through
+the same pinned controller.  The runtime must supply a distinct target while
+retaining the exact source revision; Lean keeps those as explicit premises.
+This definition prepares a new attempt; one-shot consumption of the previous
+attempt remains a runtime obligation.
+-/
+def prepareFreshAttempt
+    (controller : Controller)
+    (_previous : PreparedAttempt)
+    (nextCandidateRef : CandidateRef) : Option PreparedAttempt :=
+  controller.prepareAttempt nextCandidateRef
+
 theorem prepared_attempt_uses_exact_resolver_scope_and_contract_derived_subject_and_authority
     {controller : Controller}
     {candidateRef : CandidateRef}
@@ -336,6 +349,93 @@ theorem repair_changes_subject_and_authority_not_contract
   rw [hOldPreparedParts.2.2.2, hNextPreparedParts.2.2.2]
   exact Ne.symm
     (changed_subject_cannot_reuse_unhashed_authority hDerivedChanged)
+
+theorem fresh_attempt_preserves_revision_and_changes_subject_and_authority
+    {controller : Controller}
+    {oldCandidateRef nextCandidateRef : CandidateRef}
+    {oldAttempt nextAttempt : PreparedAttempt}
+    (hOldPrepared :
+      controller.prepareAttempt oldCandidateRef = some oldAttempt)
+    (hFreshPrepared :
+      controller.prepareFreshAttempt oldAttempt nextCandidateRef =
+        some nextAttempt)
+    (hSameRevision :
+      nextAttempt.resolvedScope.candidateRevision =
+        oldAttempt.resolvedScope.candidateRevision)
+    (hDifferentTarget :
+      nextAttempt.resolvedScope.targetIdentity ≠
+        oldAttempt.resolvedScope.targetIdentity) :
+    nextAttempt.contract = oldAttempt.contract ∧
+      nextAttempt.resolvedScope.candidateRevision =
+        oldAttempt.resolvedScope.candidateRevision ∧
+      nextAttempt.resolvedSubject ≠ oldAttempt.resolvedSubject ∧
+      nextAttempt.authority ≠ oldAttempt.authority := by
+  have hNextPrepared :
+      controller.prepareAttempt nextCandidateRef = some nextAttempt := by
+    exact hFreshPrepared
+  have hOldPreparedParts :=
+    prepared_attempt_uses_exact_resolver_scope_and_contract_derived_subject_and_authority
+      hOldPrepared
+  have hNextPreparedParts :=
+    prepared_attempt_uses_exact_resolver_scope_and_contract_derived_subject_and_authority
+      hNextPrepared
+  have hOldSubjectScope :
+      oldAttempt.resolvedSubject.scope = oldAttempt.resolvedScope := by
+    rw [hOldPreparedParts.2.2.1]
+    rfl
+  have hNextSubjectScope :
+      nextAttempt.resolvedSubject.scope = nextAttempt.resolvedScope := by
+    rw [hNextPreparedParts.2.2.1]
+    rfl
+  have hSubjectChanged :
+      oldAttempt.resolvedSubject ≠ nextAttempt.resolvedSubject := by
+    intro hSubjectsEqual
+    apply hDifferentTarget
+    have hScopesEqual :
+        oldAttempt.resolvedScope = nextAttempt.resolvedScope := by
+      calc
+        oldAttempt.resolvedScope =
+            oldAttempt.resolvedSubject.scope := hOldSubjectScope.symm
+        _ = nextAttempt.resolvedSubject.scope :=
+          congrArg ResolvedSubject.scope hSubjectsEqual
+        _ = nextAttempt.resolvedScope := hNextSubjectScope
+    exact (congrArg ResolvedScope.targetIdentity hScopesEqual).symm
+  have hAsRepair :
+      controller.prepareRepair oldAttempt nextCandidateRef =
+        some nextAttempt := by
+    exact hFreshPrepared
+  have hRepairFacts :=
+    repair_changes_subject_and_authority_not_contract
+      hOldPrepared hAsRepair hSubjectChanged
+  exact ⟨hRepairFacts.1, hSameRevision, hRepairFacts.2.1,
+    hRepairFacts.2.2⟩
+
+theorem fresh_attempt_cannot_reuse_previous_result
+    {controller : Controller}
+    {oldCandidateRef nextCandidateRef : CandidateRef}
+    {oldAttempt nextAttempt : PreparedAttempt}
+    {result : AttemptResult}
+    (hOldPrepared :
+      controller.prepareAttempt oldCandidateRef = some oldAttempt)
+    (hFreshPrepared :
+      controller.prepareFreshAttempt oldAttempt nextCandidateRef =
+        some nextAttempt)
+    (hSameRevision :
+      nextAttempt.resolvedScope.candidateRevision =
+        oldAttempt.resolvedScope.candidateRevision)
+    (hDifferentTarget :
+      nextAttempt.resolvedScope.targetIdentity ≠
+        oldAttempt.resolvedScope.targetIdentity)
+    (hOldResult : ResultBelongsTo result oldAttempt) :
+    ¬ ResultBelongsTo result nextAttempt := by
+  have hFacts :=
+    fresh_attempt_preserves_revision_and_changes_subject_and_authority
+      hOldPrepared hFreshPrepared hSameRevision hDifferentTarget
+  have hNextPrepared :
+      controller.prepareAttempt nextCandidateRef = some nextAttempt := by
+    exact hFreshPrepared
+  exact changed_subject_cannot_reuse_attempt_result
+    hOldPrepared hNextPrepared (Ne.symm hFacts.2.2.1) hOldResult
 
 end Controller
 

@@ -13,17 +13,22 @@ import {
 const digest = (character) => `sha256:${character.repeat(64)}`;
 const contract = DURABLE_TEXT_TRANSITION_CONTRACT;
 
-function candidate(candidateRef = "candidate-a", revision = "revision-a") {
+function candidate(
+  candidateRef = "candidate-a",
+  revision = "revision-a",
+  target = "http://127.0.0.1:43117/",
+) {
   return createResolvedWebChangeCandidate({
     contract,
     candidate_ref: candidateRef,
-    scope: candidateResolution(candidateRef, revision).scope,
+    scope: candidateResolution(candidateRef, revision, target).scope,
   });
 }
 
 function candidateResolution(
   candidateRef = "candidate-a",
   revision = "revision-a",
+  target = "http://127.0.0.1:43117/",
 ) {
   return {
     candidate_ref: candidateRef,
@@ -31,7 +36,7 @@ function candidateResolution(
       repository: "https://example.invalid/repository.git",
       revision,
       environment: "synthetic-browser-target",
-      target: "http://127.0.0.1:43117/",
+      target,
     },
   };
 }
@@ -165,8 +170,8 @@ test("ordinary check input is only an opaque candidate reference", async () => {
     candidate_ref: "candidate-a",
     disposition: "conforms",
     current: true,
-    headline: "The browser target matches the requested change.",
-    next_action: "No repair is needed for this pinned change.",
+    headline: "This candidate matches the requested change.",
+    next_action: "No repair is needed for this change.",
   });
   assert.equal(calls[0].capability, "resolver");
   assert.deepEqual(Object.keys(calls[0].input), [
@@ -189,10 +194,15 @@ test("ordinary check input is only an opaque candidate reference", async () => {
   );
 });
 
-test("attempt authority is deterministic while repaired candidates remain distinct", () => {
+test("attempt authority is deterministic while repaired and fresh-target candidates remain distinct", () => {
   const firstCandidate = candidate("candidate-a", "revision-a");
   const repeatedCandidate = candidate("candidate-a", "revision-a");
   const repairedCandidate = candidate("candidate-b", "revision-b");
+  const freshTargetCandidate = candidate(
+    "candidate-c",
+    "revision-a",
+    "http://127.0.0.1:43118/",
+  );
   const first = deriveWebChangeAttemptAuthority({
     contract,
     candidate: firstCandidate,
@@ -205,12 +215,36 @@ test("attempt authority is deterministic while repaired candidates remain distin
     contract,
     candidate: repairedCandidate,
   });
+  const freshTarget = deriveWebChangeAttemptAuthority({
+    contract,
+    candidate: freshTargetCandidate,
+  });
 
   assert.deepEqual(first, repeated);
   assert.notEqual(first.authority_digest, repaired.authority_digest);
   assert.notEqual(
     first.specification.ref.digest,
     repaired.specification.ref.digest,
+  );
+  assert.equal(
+    firstCandidate.scope.revision,
+    freshTargetCandidate.scope.revision,
+    "a fresh attempt may retain the exact source revision",
+  );
+  assert.notEqual(
+    firstCandidate.subject.digest,
+    freshTargetCandidate.subject.digest,
+    "a different exact target creates a distinct subject",
+  );
+  assert.notEqual(
+    first.authority_digest,
+    freshTarget.authority_digest,
+    "a different exact target creates a distinct attempt authority",
+  );
+  assert.notEqual(
+    first.specification.ref.digest,
+    freshTarget.specification.ref.digest,
+    "the resolved attempt specification binds the new target",
   );
   assert.equal(contract.digest, DURABLE_TEXT_TRANSITION_CONTRACT.digest);
   assert.equal(
@@ -381,7 +415,7 @@ test("a report provider cannot author disposition, prose, or repair guidance", a
   assert.equal(result.disposition, "could_not_check");
   assert.equal(
     result.headline,
-    "The browser target could not be checked.",
+    "This candidate could not be checked.",
   );
   assert.equal(JSON.stringify(result).includes("Provider says"), false);
   const audit = client.inspect(result.check_ref, "audit");
@@ -426,7 +460,7 @@ test("invalid root establishment and evidence linkage fail closed", async () => 
 test("outcome and meaning hide proof plumbing while audit can expand it", async () => {
   const { client } = clientFor("does_not_conform");
   const result = await client.check({ candidate_ref: "candidate-a" });
-  assert.equal(result.headline, "The browser target is not yet in spec.");
+  assert.equal(result.headline, "This candidate is not yet in spec.");
   assert.match(result.next_action, /Persist the changed state/u);
 
   const meaning = client.inspect(result.check_ref, "meaning");
@@ -447,20 +481,20 @@ test("outcome and meaning hide proof plumbing while audit can expand it", async 
 test("the four application dispositions receive narrow next actions", async () => {
   const expected = {
     conforms: {
-      headline: "The browser target matches the requested change.",
+      headline: "This candidate matches the requested change.",
       next: /No repair is needed/u,
     },
     does_not_conform: {
-      headline: "The browser target is not yet in spec.",
+      headline: "This candidate is not yet in spec.",
       next: /Persist the changed state/u,
     },
     stale: {
-      headline: "The prior browser check is out of date.",
-      next: /Run the same pinned check again/u,
+      headline: "The last check is out of date.",
+      next: /Prepare a fresh attempt/u,
     },
     could_not_check: {
-      headline: "The browser target could not be checked.",
-      next: /Restore the capture or verification environment/u,
+      headline: "This candidate could not be checked.",
+      next: /Restore the check environment/u,
     },
   };
   for (const [disposition, expectation] of Object.entries(expected)) {

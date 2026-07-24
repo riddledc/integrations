@@ -2,6 +2,14 @@
   "name": "riddle-proof-guided-web-change-experiment",
   "private": true,
   "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
   "dependencies": {
     "@riddledc/riddle-proof-core": "link:../../packages/riddle-proof-core",
     "@riddledc/riddle-proof-runner-playwright": "link:../../packages/riddle-proof-runner-playwright",

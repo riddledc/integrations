@@ -1,0 +1,30 @@
+{
+  "version": "riddle-proof.experimental-capabilities.v1",
+  "name": "proof-guided-web-change-app",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "delegated_capabilities": [
+    "browser_report_provider",
+    "browser_capture",
+    "proof_transport",
+    "signing_key_provider",
+    "proof_store",
+    "clock"
+  ],
+  "notes": [
+    "The owned specimen server binds only to an ephemeral 127.0.0.1 port.",
+    "The shell and each specimen require an ephemeral 256-bit run capability; proof-target authorization is injected into the Playwright context and excluded from semantic targets and retained artifacts.",
+    "The application resolver accepts only app-issued opaque candidate references.",
+    "Only two exact app-owned specimen source variants may execute, and display runtimes are separate from fresh proof-target runtimes.",
+    "The local runtime directly owns loopback networking, artifact filesystem access, ephemeral signing, specimen execution, and the Playwright subprocess; the proof client/provider remains the verification seam.",
+    "The deterministic repair executor receives source bytes and meaning-level findings, never proof audit material.",
+    "The application has no hosted Riddle client or configuration."
+  ]
+}

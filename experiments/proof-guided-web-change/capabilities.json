@@ -5,7 +5,7 @@
     "network": true,
     "filesystem": true,
     "browser": true,
-    "subprocess": false,
+    "subprocess": true,
     "hosted_riddle": false,
     "cryptography": true,
     "ambient_clock": true
@@ -19,7 +19,8 @@
   ],
   "notes": [
     "The ordinary client request contains only an opaque candidate reference.",
-    "Browser, filesystem, clock, and signing effects are explicit injected capabilities.",
+    "The optional local browser provider directly invokes the Playwright runner and therefore owns browser, filesystem, subprocess, clock, and signing effects.",
+    "Runtime-only browser context headers may authorize a target but are excluded from semantic scope, profiles, receipts, and retained artifacts.",
     "The experiment has no Riddle-hosted client or configuration.",
     "No browser egress allowlist is enforced: the target page may request redirects or subresources from other origins."
   ]
