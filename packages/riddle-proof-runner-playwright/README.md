@@ -287,6 +287,11 @@ Artifacts are written to the output directory:
 - optional `screenshots/*.png`
 - optional grounded-capture files listed above
 
+The output directory is one replaceable evidence packet. When a prior local-runner
+manifest is present, the next run clears that owned directory before writing so
+stale screenshots or custom artifacts cannot survive into a new packet. Use a
+different output directory for files that must persist across runs.
+
 The Observation receipt records the local executor and source Git identity,
 uses the final viewport frame as its canonical screenshot, distinguishes setup
 screenshots from final evidence, and points at the actual artifact paths in the

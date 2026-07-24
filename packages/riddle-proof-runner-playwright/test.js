@@ -46,6 +46,18 @@ const workspace = mkdtempSync(path.join(tmpdir(), "riddle-proof-runner-playwrigh
 const outputDir = path.join(workspace, "artifacts");
 const targetPath = path.join(workspace, "target.html");
 
+mkdirSync(path.join(outputDir, "screenshots"), { recursive: true });
+writeFileSync(path.join(outputDir, "screenshots", "stale.png"), "stale", "utf8");
+writeFileSync(path.join(outputDir, "stale-custom.json"), "{}", "utf8");
+writeFileSync(path.join(outputDir, "unrelated.txt"), "owned packet", "utf8");
+writeFileSync(path.join(outputDir, "artifact-manifest.json"), JSON.stringify({
+  version: "riddle-proof-local-runner-manifest.v1",
+  artifacts: [
+    { path: "screenshots/stale.png" },
+    { path: "stale-custom.json" },
+  ],
+}), "utf8");
+
 writeFileSync(
   targetPath,
   "<!doctype html><html><body><div id=\"app\">Local runner smoke</div><script>document.body.dataset.maxTouchPoints=String(navigator.maxTouchPoints)</script></body></html>",
@@ -95,6 +107,9 @@ try {
 
   assert.equal(output.result.profile_name, "local-runner-smoke");
   assert.equal(path.resolve(output.outputDir), path.resolve(outputDir));
+  assert.equal(existsSync(path.join(outputDir, "screenshots", "stale.png")), false);
+  assert.equal(existsSync(path.join(outputDir, "stale-custom.json")), false);
+  assert.equal(existsSync(path.join(outputDir, "unrelated.txt")), false);
   assert.equal(output.result.artifacts.proof_json, "proof.json");
   assert.ok(
     output.result.artifacts.riddle_artifacts?.some((artifact) => artifact.kind === "screenshot"),
