@@ -46,6 +46,7 @@ export type RunProfileLocalOptions = {
   source?: RiddleProofSourceIdentity;
   sourceDirectory?: string;
   groundedCapture?: RiddleProofLocalGroundedCaptureOptions;
+  extraHTTPHeaders?: Readonly<Record<string, string>>;
 };
 
 export type RunProfileLocalResult = {
@@ -392,6 +393,7 @@ export async function runProfileLocal(
       browser: options.browser || "chromium",
       headless: options.headful !== true,
       launchArgs: [],
+      extraHTTPHeaders: options.extraHTTPHeaders,
     });
 
     const saveScreenshot = async (label?: unknown, screenshotOptions?: { fullPage?: boolean }) => {

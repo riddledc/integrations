@@ -12,13 +12,13 @@ import {
 function headlineFor(disposition: WebChangeDisposition): string {
   switch (disposition) {
     case "conforms":
-      return "The browser target matches the requested change.";
+      return "This candidate matches the requested change.";
     case "does_not_conform":
-      return "The browser target is not yet in spec.";
+      return "This candidate is not yet in spec.";
     case "stale":
-      return "The prior browser check is out of date.";
+      return "The last check is out of date.";
     case "could_not_check":
-      return "The browser target could not be checked.";
+      return "This candidate could not be checked.";
   }
 }
 
@@ -26,14 +26,14 @@ function nextActionFor(record: WebChangeCheckRecord): string {
   const disposition = record.projection?.disposition ?? "could_not_check";
   switch (disposition) {
     case "conforms":
-      return "No repair is needed for this pinned change.";
+      return "No repair is needed for this change.";
     case "does_not_conform":
       return record.projection?.repair_guidance[0]
-        ?? "Repair the failed requirement, then run the same pinned check again.";
+        ?? "Repair the failed requirement, then check the new candidate.";
     case "stale":
-      return "Run the same pinned check again against the current candidate.";
+      return "Prepare a fresh attempt from the unchanged source, then check it.";
     case "could_not_check":
-      return "Restore the capture or verification environment, then run the same pinned check again.";
+      return "Restore the check environment, then prepare a fresh attempt.";
   }
 }
 

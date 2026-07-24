@@ -202,10 +202,18 @@ assert.equal(
   "riddle-proof.experimental-capabilities.v1",
 );
 assert.equal(capabilities.name, "proof-guided-web-change-client");
-assert.equal(
-  capabilities.capabilities?.hosted_riddle,
-  false,
-  "The private client must declare hosted_riddle=false.",
+assert.deepEqual(
+  capabilities.capabilities,
+  {
+    network: true,
+    filesystem: true,
+    browser: true,
+    subprocess: true,
+    hosted_riddle: false,
+    cryptography: true,
+    ambient_clock: true,
+  },
+  "The private client's exact capability declaration changed.",
 );
 
 function filesBelow(entry) {

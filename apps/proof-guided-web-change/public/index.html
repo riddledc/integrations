@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A local workbench for checking and repairing one pinned website change."
+    >
+    <title>Proof-guided web change</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workbench</a>
+    <main id="main" class="shell" aria-busy="false">
+      <header class="masthead">
+        <p class="eyebrow">Local change workbench</p>
+        <h1 id="task-title">Loading task…</h1>
+        <p id="task-description" class="lede">
+          Loading the installed change contract.
+        </p>
+      </header>
+
+      <div
+        id="live-status"
+        class="live-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        Loading current candidate…
+      </div>
+
+      <section class="candidate-card" aria-labelledby="candidate-heading">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Current specimen</p>
+            <h2 id="candidate-heading">Candidate</h2>
+          </div>
+          <span id="candidate-state" class="state-pill state-idle">
+            Not checked
+          </span>
+        </div>
+
+        <dl class="candidate-meta">
+          <div>
+            <dt>Candidate</dt>
+            <dd id="candidate-label">Loading…</dd>
+          </div>
+          <div>
+            <dt>Revision</dt>
+            <dd id="candidate-revision">Loading…</dd>
+          </div>
+          <div>
+            <dt>Attempt</dt>
+            <dd id="candidate-attempt">Loading…</dd>
+          </div>
+        </dl>
+
+        <div class="preview-shell">
+          <div class="preview-bar" aria-hidden="true">
+            <span></span><span></span><span></span>
+            <strong>Preview · separate from check</strong>
+          </div>
+          <iframe
+            id="candidate-preview"
+            title="Live preview of the current candidate"
+            referrerpolicy="no-referrer"
+            sandbox="allow-forms allow-scripts allow-same-origin"
+          ></iframe>
+          <p id="preview-unavailable" class="empty-copy" hidden>
+            No live preview is available for this candidate.
+          </p>
+        </div>
+
+        <p id="last-activity" class="activity-note" hidden></p>
+
+        <div class="primary-actions">
+          <button
+            id="check-button"
+            class="button button-primary"
+            type="button"
+            disabled
+          >
+            Check current candidate
+          </button>
+          <button
+            id="retry-button"
+            class="button button-quiet"
+            type="button"
+            hidden
+          >
+            Prepare fresh attempt
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="result-section"
+        class="result-card"
+        aria-labelledby="result-heading"
+        hidden
+      >
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Current result</p>
+            <h2 id="result-heading">Result</h2>
+          </div>
+        </div>
+        <p id="result-next-action" class="next-action"></p>
+
+        <div id="findings-region" hidden>
+          <h3>What needs attention</h3>
+          <ul id="findings-list" class="findings-list"></ul>
+        </div>
+
+        <div id="scope-region" class="scope-region" hidden>
+          <h3>What this result does not establish</h3>
+          <ul id="scope-list" class="scope-list"></ul>
+        </div>
+
+        <div id="repair-region" class="repair-region" hidden>
+          <div>
+            <h3>Available repair</h3>
+            <p id="repair-reason"></p>
+          </div>
+          <button id="repair-button" class="button button-repair" type="button">
+            Apply repair
+          </button>
+        </div>
+      </section>
+
+      <section class="contract-card" aria-labelledby="contract-heading">
+        <p class="section-kicker">Installed task</p>
+        <h2 id="contract-heading">What this check requires</h2>
+        <ul id="requirements-list" class="requirements-list"></ul>
+      </section>
+
+      <section class="history-card" aria-labelledby="history-heading">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Attempt history</p>
+            <h2 id="history-heading">Checks</h2>
+          </div>
+        </div>
+        <p id="history-empty" class="empty-copy">No checks have run yet.</p>
+        <ol id="history-list" class="history-list"></ol>
+      </section>
+
+      <details id="audit-panel" class="audit-panel">
+        <summary>Audit details</summary>
+        <div class="audit-content">
+          <p>
+            Audit details are loaded only when explicitly requested from a
+            check in the history.
+          </p>
+          <pre id="audit-output" tabindex="0">Select “View audit” on a check.</pre>
+        </div>
+      </details>
+    </main>
+  </body>
+</html>

@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import {
   createHash,
   generateKeyPairSync,
-  randomBytes,
 } from "node:crypto";
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
 } from "node:fs";
 import { createServer } from "node:http";
@@ -15,32 +16,10 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
-  assessRiddleProofCheckedMeaningClosure,
-  explainRiddleProofCheckedMeaningClosure,
-} from "@riddledc/riddle-proof-core";
-import {
-  createRiddleProofBrowserSealedProof,
-  createRiddleProofBrowserTransition,
-  createRiddleProofBrowserTransitionProtocol,
-  replayRiddleProofBrowserTransition,
-  runProfileLocal,
-} from "@riddledc/riddle-proof-runner-playwright";
-
-import {
-  applicationAuthorityRef,
-  assertApplicationVerification,
-} from "riddle-proof-application-projection-experiment";
-import {
-  applicationVerificationFromCheckedMeaning,
-} from "riddle-proof-application-projection-experiment/checked-meaning";
-
-import {
   DURABLE_TEXT_TRANSITION_CONTRACT,
-  assessRiddleProofBrowserTransitionCheckReport,
+  createLocalBrowserReportProvider,
   createProofGuidedWebChangeClient,
   createResolvedWebChangeCandidate,
-  createRiddleProofBrowserTransitionCheckReport,
-  replayRiddleProofBrowserTransitionCheckReport,
 } from "../dist/src/index.js";
 
 const PROFILE_ROLES = [
@@ -65,12 +44,6 @@ function plusMilliseconds(timestamp, milliseconds) {
   return new Date(Date.parse(timestamp) + milliseconds).toISOString();
 }
 
-function maxTimestamp(timestamps) {
-  return new Date(
-    Math.max(...timestamps.map((timestamp) => Date.parse(timestamp))),
-  ).toISOString();
-}
-
 function loadPinnedProfiles() {
   return Object.fromEntries(PROFILE_ROLES.map((role) => {
     const bytes = readFileSync(PROFILE_FILES[role]);
@@ -80,125 +53,6 @@ function loadPinnedProfiles() {
       source_digest: sha256(bytes),
     }];
   }));
-}
-
-function transitionTrust(protocol) {
-  const ruleRegistry = [
-    protocol.sealed_protocols.before.rules.target_confirmed.registration,
-    protocol.sealed_protocols.before.rules.behavior_confirmed.registration,
-    protocol.sealed_protocols.before.rules.sealed_profile_satisfied.registration,
-    protocol.rules.transition_observed.registration,
-    protocol.rules.transition_survived_reload.registration,
-    protocol.rules.transition_visible_in_fresh_context.registration,
-    protocol.rules.durable_state_transition_observed.registration,
-  ];
-  return {
-    rule_registry: ruleRegistry,
-    trusted_rules: ruleRegistry.map((registration) => ({
-      rule_id: registration.rule_id,
-      rule_version: registration.rule_version,
-      engine: registration.engine,
-      implementation_digest: registration.implementation_digest,
-    })),
-  };
-}
-
-function currentnessFromAssessment(assessment, rootCertificateId) {
-  if (
-    assessment.disposition !== "unresolved"
-    && assessment.root_certificate.certificate_id !== rootCertificateId
-  ) {
-    return {
-      status: "unresolved",
-      diagnostic_code: "assessment_root_mismatch",
-    };
-  }
-  if (assessment.disposition === "checked") {
-    return {
-      status: "current",
-      consumption_time: assessment.consumption_time,
-    };
-  }
-  if (assessment.disposition === "stale") {
-    return {
-      status: "stale",
-      consumption_time: assessment.consumption_time,
-      stale_certificate_ids: [...assessment.stale_certificate_ids],
-    };
-  }
-  return {
-    status: "unresolved",
-    diagnostic_code: assessment.error.code,
-  };
-}
-
-function applicationVerificationFromCheckReport({
-  authority,
-  subject,
-  report,
-  assessment,
-  replayedAt,
-}) {
-  const root = report.root_certificate;
-  const explanation = report.explanation;
-  const requirements = authority.specification.requirements.map(
-    ({ requirement_id: requirementId }) => {
-      const requirement = report.requirements[requirementId];
-      assert.ok(
-        requirement,
-        `report covers pinned requirement ${requirementId}`,
-      );
-      return {
-        requirement_id: requirementId,
-        status: requirement.status,
-        evidence_ids: [...requirement.role_certificate_ids],
-      };
-    },
-  );
-  return {
-    version: "riddle-proof.application-verification.v1",
-    verification_kind: "checked_meaning_replay",
-    status: "verified",
-    proof_id: root.certificate_id,
-    authority: applicationAuthorityRef(authority),
-    spec: authority.specification.ref,
-    subject,
-    replayed_at: replayedAt,
-    proof_root: {
-      root_certificate_id: root.certificate_id,
-      claim: {
-        claim_id: root.claim.claim_id,
-        claim_version: root.claim.claim_version,
-        ...(root.claim.parameters === undefined
-          ? {}
-          : { parameters: root.claim.parameters }),
-      },
-      expected_root_established: false,
-    },
-    currentness: currentnessFromAssessment(
-      assessment,
-      root.certificate_id,
-    ),
-    requirements,
-    explanation: {
-      root_certificate_id: explanation.root_certificate_id,
-      node_count: explanation.node_count,
-      grounded_leaf_count: explanation.grounded_leaf_count,
-      checked_composition_count: explanation.checked_composition_count,
-      node_certificate_ids: explanation.nodes
-        .map((node) => node.certificate_id)
-        .sort(),
-      grounded_frontier: explanation.grounded_frontier.map((entry) => ({
-        certificate_id: entry.certificate_id,
-        bundle_id: entry.bundle_id,
-        receipt_id: entry.receipt_id,
-        statement_digest: entry.statement_digest,
-        artifact_manifest_digest: entry.artifact_manifest_digest,
-        observation_digest: entry.observation_digest,
-        captured_at: entry.captured_at,
-      })),
-    },
-  };
 }
 
 function createMutableSpecimenServer() {
@@ -321,431 +175,61 @@ function createRealBrowserReportProvider({
     path.join(tmpdir(), "riddle-proof-guided-web-change-"),
   );
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
-  const privateKeyBytes = privateKey.export({
-    format: "der",
-    type: "pkcs8",
-  });
-  const publicKeyBytes = publicKey.export({
-    format: "der",
-    type: "spki",
-  });
-  const keyId = "proof-guided-web-change-e2e-key";
-  const collector = {
-    collector_id: "@riddledc/riddle-proof-runner-playwright",
-    collector_version: "proof-guided-web-change-e2e",
-    implementation_digest: sha256(
-      Buffer.from("proof-guided-web-change-e2e-collector.v1\0"),
-    ),
-  };
   const attempts = [];
-  let captureOrdinal = 0;
-
-  function authorityFor({
-    bundle,
-    candidate,
-    nonce,
-    verifier,
-    verificationTime,
-  }) {
-    return {
-      policy: {
-        expected_scope: candidate.scope,
-        expected_nonce: nonce,
-        expected_collector: collector,
-        expected_sensor: bundle.statement.sensor,
-        expected_verifier: verifier,
-        expected_signer: {
-          key_id: keyId,
-          public_key_spki_sha256: sha256(publicKeyBytes),
-        },
-        verification_time: verificationTime,
-        max_capture_age_ms: 5 * 60 * 1000,
-        max_future_skew_ms: 1_000,
-        required_artifact_roles: [
-          "profile_contract",
-          "derived_result",
-        ],
-      },
-      trusted_signers: [{
-        key_id: keyId,
-        public_key_spki_base64: publicKeyBytes.toString("base64"),
-      }],
-    };
-  }
-
-  async function captureAttempt(candidate) {
-    const transitionProfiles = Object.fromEntries(
-      PROFILE_ROLES.map((role) => [role, {
-        profile_name: candidate.profiles[role].profile_name,
-        profile_digest: candidate.profiles[role].profile_digest,
-      }]),
-    );
-    const protocolResult = createRiddleProofBrowserTransitionProtocol({
-      expected_scope: candidate.scope,
-      transition_id: candidate.scope.proof_attempt,
-      profiles: transitionProfiles,
-    });
-    assert.equal(
-      protocolResult.ok,
-      true,
-      protocolResult.ok ? undefined : protocolResult.error.message,
-    );
-    const transitionProtocol = protocolResult.protocol;
-    const captures = {};
-    for (const role of PROFILE_ROLES) {
-      captureOrdinal += 1;
-      const nonce = randomBytes(32).toString("base64url");
-      const output = await runProfileLocal({
-        profile: candidate.profiles[role].normalized_profile,
-        url: candidate.scope.target,
-        ...(candidate.candidate_ref === "candidate:unavailable"
-          ? { timeout: 1 }
-          : {}),
-        outputDir: path.join(
-          workspace,
-          `${candidate.candidate_ref.replaceAll(":", "-")}-${role}-${captureOrdinal}`,
-        ),
-        source: {
-          repository: candidate.scope.repository,
-          git_revision: candidate.scope.revision,
-          dirty: false,
-          label: "controlled-repair synthetic candidate",
-        },
-        groundedCapture: {
-          scope: candidate.scope,
-          nonce,
-          collector,
-          verifier:
-            transitionProtocol.sealed_protocols[role].verifier.verifier_ref,
-          signingKey: {
-            key_id: keyId,
-            private_key_pkcs8_base64:
-              privateKeyBytes.toString("base64"),
-          },
-        },
-      });
-      captures[role] = {
-        nonce,
-        output,
-        protocol: transitionProtocol.sealed_protocols[role],
+  const provider = createLocalBrowserReportProvider({
+    artifacts_directory: workspace,
+    signing_key: {
+      key_id: "proof-guided-web-change-e2e-key",
+      private_key_pkcs8_base64: privateKey.export({
+        format: "der",
+        type: "pkcs8",
+      }).toString("base64"),
+      public_key_spki_base64: publicKey.export({
+        format: "der",
+        type: "spki",
+      }).toString("base64"),
+    },
+    collector: {
+      collector_id: "@riddledc/riddle-proof-runner-playwright",
+      collector_version: "proof-guided-web-change-e2e",
+      implementation_digest: sha256(
+        Buffer.from("proof-guided-web-change-e2e-collector.v1\0"),
+      ),
+    },
+    source_for({ candidate }) {
+      return {
+        repository: candidate.scope.repository,
+        git_revision: candidate.scope.revision,
+        dirty: false,
+        label: "controlled-repair synthetic candidate",
       };
-      if (!output.groundedCaptureBundle) {
-        break;
-      }
-    }
-    return { captures, transitionProfiles, transitionProtocol };
-  }
-
-  function authoritiesFor(candidate, captured, timelineBase) {
-    return Object.fromEntries(PROFILE_ROLES.map((role, index) => {
-      const capture = captured.captures[role];
-      assert.ok(capture?.output.groundedCaptureBundle);
-      return [role, authorityFor({
-        bundle: capture.output.groundedCaptureBundle,
-        candidate,
-        nonce: capture.nonce,
-        verifier: capture.protocol.verifier.verifier_ref,
-        verificationTime: plusMilliseconds(timelineBase, index * 10),
-      })];
-    }));
-  }
-
-  function createCheckReport({
-    candidate,
-    captured,
-    authorities,
-    timelineBase,
-  }) {
-    const created = createRiddleProofBrowserTransitionCheckReport({
-      bundles: Object.fromEntries(PROFILE_ROLES.map((role) => [
-        role,
-        captured.captures[role].output.groundedCaptureBundle,
-      ])),
-      authorities,
-      expected_scope: candidate.scope,
-      transition_id: candidate.scope.proof_attempt,
-      profiles: captured.transitionProfiles,
-      role_issued_at: Object.fromEntries(
-        PROFILE_ROLES.map((role, index) => [
-          role,
-          plusMilliseconds(timelineBase, index * 10 + 2),
-        ]),
-      ),
-      root_issued_at: plusMilliseconds(timelineBase, 40),
-    });
-    assert.equal(
-      created.ok,
-      true,
-      created.ok ? undefined : created.error.message,
-    );
-    const replayed = replayRiddleProofBrowserTransitionCheckReport({
-      checked_closure: JSON.parse(JSON.stringify(created.checked_closure)),
-      authorities: JSON.parse(JSON.stringify(authorities)),
-      expected_root_certificate_id:
-        created.root_certificate.certificate_id,
-      expected_scope: JSON.parse(JSON.stringify(candidate.scope)),
-      transition_id: candidate.scope.proof_attempt,
-      profiles: JSON.parse(
-        JSON.stringify(captured.transitionProfiles),
-      ),
-    });
-    assert.equal(
-      replayed.ok,
-      true,
-      replayed.ok ? undefined : replayed.error.message,
-    );
-    return replayed;
-  }
-
-  function createDurableTransition({
-    candidate,
-    captured,
-    authorities,
-    timelineBase,
-  }) {
-    const checkpoints = Object.fromEntries(PROFILE_ROLES.map(
-      (role, index) => {
-        const sealed = createRiddleProofBrowserSealedProof({
-          bundle:
-            captured.captures[role].output.groundedCaptureBundle,
-          expected_scope: candidate.scope,
-          expected_profile_name:
-            captured.transitionProfiles[role].profile_name,
-          expected_profile_digest:
-            captured.transitionProfiles[role].profile_digest,
-          authority: authorities[role],
-          protocol: captured.transitionProtocol.sealed_protocols[role],
-          leaf_issued_at: plusMilliseconds(
-            timelineBase,
-            index * 10,
-          ),
-          target_issued_at: plusMilliseconds(
-            timelineBase,
-            index * 10 + 1,
-          ),
-          behavior_issued_at: plusMilliseconds(
-            timelineBase,
-            index * 10 + 1,
-          ),
-          root_issued_at: plusMilliseconds(
-            timelineBase,
-            index * 10 + 2,
-          ),
-        });
-        assert.equal(
-          sealed.ok,
-          true,
-          sealed.ok ? undefined : sealed.error.message,
-        );
-        return [role, sealed];
-      },
-    ));
-    const created = createRiddleProofBrowserTransition({
-      expected_scope: candidate.scope,
-      transition_id: candidate.scope.proof_attempt,
-      profiles: captured.transitionProfiles,
-      protocol: captured.transitionProtocol,
-      checkpoints,
-      authorities,
-      transition_issued_at: plusMilliseconds(timelineBase, 15),
-      reload_issued_at: plusMilliseconds(timelineBase, 25),
-      fresh_context_issued_at: plusMilliseconds(timelineBase, 35),
-      root_issued_at: plusMilliseconds(timelineBase, 40),
-    });
-    assert.equal(
-      created.ok,
-      true,
-      created.ok ? undefined : created.error.message,
-    );
-    const replayed = replayRiddleProofBrowserTransition({
-      checked_closure: JSON.parse(JSON.stringify(created.checked_closure)),
-      authorities: JSON.parse(JSON.stringify(authorities)),
-      protocol: JSON.parse(JSON.stringify(captured.transitionProtocol)),
-      expected_root_certificate_id:
-        created.root_certificate.certificate_id,
-      expected_scope: JSON.parse(JSON.stringify(candidate.scope)),
-      transition_id: candidate.scope.proof_attempt,
-      profiles: JSON.parse(
-        JSON.stringify(captured.transitionProfiles),
-      ),
-    });
-    assert.equal(
-      replayed.ok,
-      true,
-      replayed.ok ? undefined : replayed.error.message,
-    );
-    return replayed;
-  }
-
+    },
+    timeout_seconds_for({ candidate }) {
+      return candidate.candidate_ref === "candidate:unavailable"
+        ? 1
+        : undefined;
+    },
+    consumption_time_for({
+      candidate,
+      ordinary_consumption_time: ordinaryConsumptionTime,
+    }) {
+      return staleCandidateRefs.has(candidate.candidate_ref)
+        ? plusMilliseconds(ordinaryConsumptionTime, 10 * 60 * 1000)
+        : ordinaryConsumptionTime;
+    },
+    on_attempt(attempt) {
+      attempts.push(attempt);
+      throw new Error(
+        "synthetic audit observer failure must not change verification",
+      );
+    },
+  });
   return {
     attempts,
+    artifacts_directory: workspace,
+    provider,
     close() {
       rmSync(workspace, { recursive: true, force: true });
-    },
-    provider: {
-      async check({ candidate, authority }) {
-        const captured = await captureAttempt(candidate);
-        const capturedRoles = Object.keys(captured.captures);
-        if (
-          capturedRoles.length !== PROFILE_ROLES.length
-          || PROFILE_ROLES.some(
-            (role) =>
-              !captured.captures[role]?.output.groundedCaptureBundle,
-          )
-        ) {
-          attempts.push({
-            candidate_ref: candidate.candidate_ref,
-            statuses: Object.fromEntries(capturedRoles.map((role) => [
-              role,
-              captured.captures[role].output.result.status,
-            ])),
-            unavailable: true,
-          });
-          return {
-            version: "riddle-proof.application-verification.v1",
-            verification_kind: "checked_meaning_replay",
-            status: "unresolved",
-            proof_id:
-              `unavailable:${candidate.subject.digest}`,
-            authority: applicationAuthorityRef(authority),
-            diagnostic_code: "browser_capture_unavailable",
-          };
-        }
-
-        const timelineBase = plusMilliseconds(
-          maxTimestamp(PROFILE_ROLES.map(
-            (role) =>
-              captured.captures[role].output.result.captured_at,
-          )),
-          1_000,
-        );
-        const authorities = authoritiesFor(
-          candidate,
-          captured,
-          timelineBase,
-        );
-        const report = createCheckReport({
-          candidate,
-          captured,
-          authorities,
-          timelineBase,
-        });
-        const statuses = report.reported_statuses;
-        const allPassed = PROFILE_ROLES.every(
-          (role) => statuses[role] === "passed",
-        );
-        const ordinaryConsumptionTime = plusMilliseconds(
-          timelineBase,
-          41,
-        );
-        const consumptionTime = staleCandidateRefs.has(
-          candidate.candidate_ref,
-        )
-          ? plusMilliseconds(timelineBase, 10 * 60 * 1000)
-          : ordinaryConsumptionTime;
-
-        if (!allPassed) {
-          const assessment =
-            assessRiddleProofBrowserTransitionCheckReport({
-              report,
-              consumption_time: consumptionTime,
-              max_grounded_age_ms: 5 * 60 * 1000,
-              max_future_skew_ms: 0,
-            });
-          const verification = applicationVerificationFromCheckReport({
-            authority,
-            subject: candidate.subject,
-            report,
-            assessment,
-            replayedAt: consumptionTime,
-          });
-          try {
-            assertApplicationVerification(verification);
-          } catch (error) {
-            attempts.push({
-              candidate_ref: candidate.candidate_ref,
-              statuses,
-              verification_error:
-                error instanceof Error ? error.message : String(error),
-            });
-            throw error;
-          }
-          attempts.push({
-            candidate_ref: candidate.candidate_ref,
-            statuses,
-            check_report_id: report.root_certificate.certificate_id,
-            durable_root_id: null,
-            verification_status: verification.status,
-          });
-          return verification;
-        }
-
-        const durable = createDurableTransition({
-          candidate,
-          captured,
-          authorities,
-          timelineBase,
-        });
-        const trust = transitionTrust(captured.transitionProtocol);
-        const explanation = explainRiddleProofCheckedMeaningClosure({
-          checked_closure: durable.checked_closure,
-          replay_contexts: durable.replay_contexts,
-          ...trust,
-        });
-        assert.equal(
-          explanation.ok,
-          true,
-          explanation.ok ? undefined : explanation.error.message,
-        );
-        const assessment = assessRiddleProofCheckedMeaningClosure({
-          checked_closure: durable.checked_closure,
-          replay_contexts: durable.replay_contexts,
-          ...trust,
-          consumption_time: consumptionTime,
-          max_grounded_age_ms: 5 * 60 * 1000,
-          max_future_skew_ms: 0,
-        });
-        const verification =
-          applicationVerificationFromCheckedMeaning({
-            authority: applicationAuthorityRef(authority),
-            specification: authority.specification.ref,
-            expected_root: authority.specification.expected_root,
-            subject: candidate.subject,
-            replayed_at: consumptionTime,
-            replay: durable,
-            assessment,
-            explanation,
-            requirement_claims: [
-              {
-                requirement_id: "declared_transition_observed",
-                claim_id:
-                  "riddle-proof.browser.transition-observed",
-                claim_version: "1",
-              },
-              {
-                requirement_id: "transition_survived_reload",
-                claim_id:
-                  "riddle-proof.browser.transition-survived-reload",
-                claim_version: "1",
-              },
-              {
-                requirement_id:
-                  "transition_visible_in_fresh_context",
-                claim_id:
-                  "riddle-proof.browser.transition-visible-in-fresh-context",
-                claim_version: "1",
-              },
-            ],
-          });
-        attempts.push({
-          candidate_ref: candidate.candidate_ref,
-          statuses,
-          check_report_id: report.root_certificate.certificate_id,
-          durable_root_id: durable.root_certificate.certificate_id,
-          verification_status: verification.status,
-        });
-        return verification;
-      },
     },
   };
 }
@@ -862,7 +346,7 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
       assert.equal(transient.current, true);
       assert.equal(
         transient.headline,
-        "The browser target is not yet in spec.",
+        "This candidate is not yet in spec.",
       );
       const transientMeaning = client.inspect(
         transient.check_ref,
@@ -913,7 +397,7 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
       assert.equal(repaired.current, true);
       assert.equal(
         repaired.headline,
-        "The browser target matches the requested change.",
+        "This candidate matches the requested change.",
       );
       const repairedMeaning = client.inspect(
         repaired.check_ref,
@@ -922,7 +406,7 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
       assert.deepEqual(repairedMeaning.findings, []);
       assert.equal(
         repairedMeaning.next_action,
-        "No repair is needed for this pinned change.",
+        "No repair is needed for this change.",
       );
       const repairedAudit = client.inspect(repaired.check_ref, "audit");
       assert.equal(
@@ -947,7 +431,7 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
       assert.equal(stale.current, false);
       assert.equal(
         stale.headline,
-        "The prior browser check is out of date.",
+        "The last check is out of date.",
       );
 
       const unavailable = await client.check({
@@ -957,7 +441,7 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
       assert.equal(unavailable.current, false);
       assert.equal(
         unavailable.headline,
-        "The browser target could not be checked.",
+        "This candidate could not be checked.",
       );
       const unavailableAudit = client.inspect(
         unavailable.check_ref,
@@ -1009,6 +493,15 @@ test("the same pinned proof rejects a transient candidate and accepts its durabl
           reload: "passed",
           fresh_context: "passed",
         },
+      );
+      assert.equal(
+        existsSync(realReports.artifacts_directory),
+        true,
+        "the caller-owned artifact root remains available for audit",
+      );
+      assert.ok(
+        readdirSync(realReports.artifacts_directory).length > 0,
+        "the provider retained attempt artifacts beneath the caller-owned root",
       );
       assert.equal(
         client.contract.digest,

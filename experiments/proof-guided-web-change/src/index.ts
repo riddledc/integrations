@@ -15,3 +15,9 @@ export {
 export { presentWebChangeCheck } from "./presentation.js";
 export { createProofGuidedWebChangeClient } from "./runtime.js";
 export * from "./browser-check-report.js";
+export {
+  createLocalBrowserReportProvider,
+  type LocalBrowserReportAttempt,
+  type LocalBrowserReportProviderConfiguration,
+  type LocalBrowserReportSigningKey,
+} from "./local-browser-report-provider.js";

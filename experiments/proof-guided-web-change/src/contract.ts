@@ -365,7 +365,7 @@ export const DURABLE_TEXT_TRANSITION_CONTRACT =
         failure_summary:
           "The requested browser change did not produce its required immediate result.",
         repair_guidance:
-          "Repair the action or its immediate result, then run the same pinned check again.",
+          "Repair the action or its immediate result, then check the new candidate.",
       },
       {
         requirement_id: "transition_survived_reload",
@@ -373,7 +373,7 @@ export const DURABLE_TEXT_TRANSITION_CONTRACT =
         failure_summary:
           "The changed state did not survive a browser reload.",
         repair_guidance:
-          "Persist the changed state beyond the current page, then run the same pinned check again.",
+          "Persist the changed state beyond the current page, then check the new candidate.",
       },
       {
         requirement_id: "transition_visible_in_fresh_context",
@@ -381,7 +381,7 @@ export const DURABLE_TEXT_TRANSITION_CONTRACT =
         failure_summary:
           "The changed state was not visible in a fresh browser context.",
         repair_guidance:
-          "Persist the changed state outside the original browser context, then run the same pinned check again.",
+          "Persist the changed state outside the original browser context, then check the new candidate.",
       },
     ],
     non_conclusions: [
