@@ -58,6 +58,7 @@ function page(route) {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
     <title>${title}</title>
     <style>
       * { box-sizing: border-box; }
@@ -92,6 +93,11 @@ async function startSite() {
       request.url ?? "/",
       "http://127.0.0.1",
     ).pathname;
+    if (route === "/favicon.ico") {
+      response.writeHead(204, { "cache-control": "no-store" });
+      response.end();
+      return;
+    }
     if (!["/", "/features", "/pricing"].includes(route)) {
       response.writeHead(404, { "content-type": "text/plain" });
       response.end("not found");
