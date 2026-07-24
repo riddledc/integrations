@@ -1731,6 +1731,89 @@ assert.equal(explained.explanation.checked_composition_count, 6);
 assert.equal(explained.explanation.grounded_frontier.length, 5);
 assert.equal(JSON.stringify(explained.explanation).includes("bytes_base64"), false);
 
+const assessedForApplication = checked.assessRiddleProofCheckedMeaningClosure({
+  checked_closure: jsonClone(baseline.checked_closure),
+  replay_contexts: clonedReplayContexts(baselineContexts),
+  rule_registry: jsonClone(ruleRegistry),
+  trusted_rules: jsonClone(trustedRules),
+  consumption_time: "2026-07-23T01:00:03.000Z",
+  max_grounded_age_ms: MAX_AGE_MS,
+  max_future_skew_ms: 0,
+});
+assert.equal(
+  assessedForApplication.disposition,
+  "checked",
+  assessedForApplication.disposition === "unresolved"
+    ? assessedForApplication.error.message
+    : undefined,
+);
+
+if (process.env.RIDDLE_PROOF_APPLICATION_PROJECTION_INTEGRATION === "1") {
+  const [
+    application,
+    commercialExample,
+    checkedMeaningExample,
+  ] = await Promise.all([
+    import("../../application-projection/dist/src/index.js"),
+    import("../../application-projection/dist/examples/commercial-records.js"),
+    import("../../application-projection/dist/examples/checked-meaning.js"),
+  ]);
+  const applicationAuthority =
+    commercialExample.createCommercialRecordAuthority({
+      authority_digest: canonicalDigest({
+        example: "synthetic-commercial-records",
+        policy: RECONCILIATION_POLICY,
+        expected_root: baseline.certificate.claim,
+      }),
+      policy_id: RECONCILIATION_POLICY.policy_id,
+      policy_version: RECONCILIATION_POLICY.policy_version,
+      policy_digest: RECONCILIATION_POLICY.policy_digest,
+      expected_root_parameters: baseline.certificate.claim.parameters,
+    });
+  const applicationSubject =
+    commercialExample.createCommercialRecordSubject({
+      reconciliation_scope: scope.target,
+      record_set_digest: canonicalDigest({
+        scope,
+        root_parameters: baseline.certificate.claim.parameters,
+      }),
+    });
+  const applicationVerification =
+    checkedMeaningExample.applicationVerificationFromCheckedMeaning({
+      authority: application.applicationAuthorityRef(applicationAuthority),
+      specification: applicationAuthority.specification.ref,
+      expected_root: applicationAuthority.specification.expected_root,
+      subject: applicationSubject,
+      replayed_at: "2026-07-23T01:00:03.000Z",
+      replay: replayed,
+      assessment: assessedForApplication,
+      explanation: explained,
+      requirement_claims:
+        commercialExample.COMMERCIAL_RECORD_REQUIREMENT_CLAIMS,
+    });
+  const projected = application.projectApplicationResult({
+    authority: applicationAuthority,
+    subject: applicationSubject,
+    verification: applicationVerification,
+  });
+  assert.equal(projected.disposition, "conforms");
+  assert.equal(projected.identity.proof_id, baseline.certificate.certificate_id);
+  assert.equal(projected.findings.length, 0);
+  const meaningView = application.inspectApplicationResult(projected, "meaning");
+  const auditView = application.inspectApplicationResult(projected, "audit");
+  assert.deepEqual(meaningView.identity, auditView.identity);
+  assert.ok(meaningView.non_conclusions.includes("actual movement of money"));
+  assert.equal(
+    auditView.explanation.root_certificate_id,
+    baseline.certificate.certificate_id,
+  );
+  assert.deepEqual(
+    auditView.binding.authority,
+    application.applicationAuthorityRef(applicationAuthority),
+  );
+  assert.equal(auditView.explanation.grounded_frontier.length, 5);
+}
+
 const recomposed = compose(
   rootRule,
   [
