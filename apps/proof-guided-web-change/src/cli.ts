@@ -6,11 +6,13 @@ import {
 
 export type ProofGuidedWebChangeCliOptions = {
   args?: readonly string[];
+  command_name?: string;
   createApplication(): (
     ProofGuidedWebChangeShellApplication
     | Promise<ProofGuidedWebChangeShellApplication>
   );
   stdout?: Pick<NodeJS.WriteStream, "write">;
+  workbench_name?: string;
 };
 
 type ParsedArguments = {
@@ -18,14 +20,24 @@ type ParsedArguments = {
   port: number;
 };
 
-const HELP = `Usage: proof-guided-web-change [options]
-
-Run the local proof-guided website-change workbench.
-
-Options:
-  --port <port>  Bind port (default: choose an available port)
-  -h, --help     Show this help
-`;
+function displayLabel(
+  value: string | undefined,
+  fallback: string,
+  context: string,
+): string {
+  const checked = value ?? fallback;
+  if (
+    typeof checked !== "string"
+    || checked.trim().length === 0
+    || checked.includes("\n")
+    || checked.includes("\r")
+  ) {
+    throw new TypeError(
+      `${context} must be a non-empty single-line string.`,
+    );
+  }
+  return checked;
+}
 
 function nextValue(
   args: readonly string[],
@@ -78,9 +90,26 @@ export async function runProofGuidedWebChangeCli(
   options: ProofGuidedWebChangeCliOptions,
 ): Promise<RunningProofGuidedWebChangeShell | null> {
   const stdout = options.stdout ?? process.stdout;
+  const commandName = displayLabel(
+    options.command_name,
+    "proof-guided-web-change",
+    "command_name",
+  );
+  const workbenchName = displayLabel(
+    options.workbench_name,
+    "Proof-guided web change",
+    "workbench_name",
+  );
   const parsed = parseArgs(options.args ?? process.argv.slice(2));
   if (parsed.help) {
-    stdout.write(HELP);
+    stdout.write(`Usage: ${commandName} [options]
+
+Run the local proof-guided website-change workbench.
+
+Options:
+  --port <port>  Bind port (default: choose an available port)
+  -h, --help     Show this help
+`);
     return null;
   }
   const application = await options.createApplication();
@@ -94,6 +123,6 @@ export async function runProofGuidedWebChangeCli(
     await application.close();
     throw error;
   }
-  stdout.write(`Proof-guided web change: ${running.launch_url}\n`);
+  stdout.write(`${workbenchName}: ${running.launch_url}\n`);
   return running;
 }

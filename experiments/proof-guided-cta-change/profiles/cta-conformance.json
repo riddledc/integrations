@@ -1,0 +1,109 @@
+{
+  "version": "riddle-proof.profile.v1",
+  "name": "cta-route-layout-runtime-conformance-v1",
+  "target": {
+    "route": "/",
+    "viewports": [
+      {
+        "name": "mobile",
+        "width": 390,
+        "height": 844
+      },
+      {
+        "name": "desktop",
+        "width": 1440,
+        "height": 1000
+      }
+    ],
+    "wait_for_selector": "[data-testid='home-page']",
+    "timeout_sec": 180,
+    "setup_actions": [
+      {
+        "type": "window_eval",
+        "label": "primary-cta-href-exact",
+        "script": "const element = document.querySelector(\"[data-testid='primary-cta']\"); return element ? element.getAttribute('href') : null;",
+        "expect_return": "/pricing"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "type": "route_loaded",
+      "label": "home-route-loaded",
+      "expected_path": "/"
+    },
+    {
+      "type": "selector_count_equals",
+      "label": "one-primary-cta",
+      "selector": "[data-testid='primary-cta']",
+      "expected_count": 1
+    },
+    {
+      "type": "selector_visible",
+      "label": "primary-cta-visible",
+      "selector": "[data-testid='primary-cta']"
+    },
+    {
+      "type": "selector_text_visible",
+      "label": "primary-cta-text-exact",
+      "selector": "[data-testid='primary-cta']",
+      "pattern": "^View pricing$"
+    },
+    {
+      "type": "selector_visible",
+      "label": "site-navigation-visible",
+      "selector": "[data-testid='site-nav']"
+    },
+    {
+      "type": "route_inventory",
+      "label": "pinned-route-inventory",
+      "expected_routes": [
+        {
+          "name": "Home",
+          "path": "/"
+        },
+        {
+          "name": "Features",
+          "path": "/features"
+        },
+        {
+          "name": "Pricing",
+          "path": "/pricing"
+        }
+      ],
+      "link_selector": "[data-testid='site-nav'] a[data-proof-route]",
+      "route_path_prefix": "/",
+      "route_ready_selector": "[data-testid='route-page']",
+      "timeout_ms": 15000,
+      "run_direct_routes": true,
+      "run_clickthroughs": true,
+      "run_all_viewports": true,
+      "require_unique_routes": true,
+      "allow_unexpected_routes": false,
+      "save_route_screenshots": true
+    },
+    {
+      "type": "no_horizontal_overflow",
+      "label": "responsive-horizontal-bounds",
+      "max_overflow_px": 1
+    },
+    {
+      "type": "no_fatal_console_errors",
+      "label": "captured-runtime-clean"
+    }
+  ],
+  "artifacts": [
+    "screenshot",
+    "console",
+    "dom_summary",
+    "proof_json"
+  ],
+  "baseline_policy": "invariant_only",
+  "failure_policy": {
+    "product_regression": "fail",
+    "proof_insufficient": "fail",
+    "environment_blocked": "fail",
+    "configuration_error": "fail",
+    "needs_human_review": "fail"
+  }
+}

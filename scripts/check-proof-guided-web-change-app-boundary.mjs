@@ -27,6 +27,11 @@ const clientDirectory = join(
   "experiments",
   "proof-guided-web-change",
 );
+const ctaClientDirectory = join(
+  repositoryRoot,
+  "experiments",
+  "proof-guided-cta-change",
+);
 
 function readJson(filename) {
   return JSON.parse(readFileSync(filename, "utf8"));
@@ -61,6 +66,8 @@ assert.equal(
 assert.deepEqual(
   appManifest.dependencies,
   {
+    "riddle-proof-guided-cta-change-experiment":
+      "link:../../experiments/proof-guided-cta-change",
     "riddle-proof-guided-web-change-experiment":
       "link:../../experiments/proof-guided-web-change",
   },
@@ -116,12 +123,14 @@ assert.deepEqual(
   "The private app capability declaration changed.",
 );
 
-const clientManifest = readJson(join(clientDirectory, "package.json"));
-assert.equal(
-  clientManifest.private,
-  true,
-  "The app's proof-guided client dependency must remain private.",
-);
+for (const directory of [clientDirectory, ctaClientDirectory]) {
+  const clientManifest = readJson(join(directory, "package.json"));
+  assert.equal(
+    clientManifest.private,
+    true,
+    "Each app proof-guided client dependency must remain private.",
+  );
+}
 
 function filesBelow(entry) {
   if (!existsSync(entry)) return [];
@@ -227,25 +236,49 @@ const specimenSource = readFileSync(
   join(appDirectory, "src", "specimen.ts"),
   "utf8",
 );
-for (const requiredBoundary of [
-  /sourceIsAppOwnedVariant/u,
-  /timingSafeEqual/u,
-  /x-riddle-preview-run/u,
-  /proofTargetAccess/u,
-  /proof_target_url/u,
-  /extra_http_headers/u,
-]) {
-  assert.match(
-    specimenSource,
-    requiredBoundary,
-    "The owned specimen execution boundary changed.",
-  );
+const ctaSpecimenSource = readFileSync(
+  join(appDirectory, "src", "cta-specimen.ts"),
+  "utf8",
+);
+for (const source of [specimenSource, ctaSpecimenSource]) {
+  for (const requiredBoundary of [
+    /sourceIsAppOwnedVariant/u,
+    /timingSafeEqual/u,
+    /x-riddle-preview-run/u,
+    /proofTargetAccess/u,
+    /proof_target_url/u,
+    /extra_http_headers/u,
+  ]) {
+    assert.match(
+      source,
+      requiredBoundary,
+      "An owned specimen execution boundary changed.",
+    );
+  }
 }
 assert.doesNotMatch(
-  `${serverSource}\n${specimenSource}`,
+  `${serverSource}\n${specimenSource}\n${ctaSpecimenSource}`,
   /\b(?:set-cookie|riddle_(?:preview|web_change)_run)\b/iu,
   "Run capabilities must not enter host-scoped loopback cookies.",
 );
+const ctaAgentSource = readFileSync(
+  join(appDirectory, "src", "cta-agent.ts"),
+  "utf8",
+);
+for (const requiredBoundary of [
+  /CTA_MUTATION_POLICY_DIGEST/u,
+  /only-primary-cta-text-and-href/u,
+  /app-reconstructs-reviewed-source/u,
+  /shell:\s*false/u,
+  /The agent proposal is not bound to the exact base source/u,
+  /\],\s*"agent proposal",\s*\);/u,
+]) {
+  assert.match(
+    ctaAgentSource,
+    requiredBoundary,
+    "The bounded CTA agent protocol changed.",
+  );
+}
 assert.doesNotMatch(
   readFileSync(join(appDirectory, "public", "index.html"), "utf8"),
   /\b(?:sha256|nonce|signature|certificate|proof DAG)\b/iu,

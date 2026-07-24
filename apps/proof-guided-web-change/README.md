@@ -1,115 +1,168 @@
 # Proof-guided web change app
 
-This private local app is the first visible client built on the Riddle Proof
-application layer. It owns one deliberately narrow synthetic task:
+This private local app contains two deliberately narrow clients of the Riddle
+Proof application layer:
 
-> Replace page-only Save behavior so the saved value remains after reload and
-> in a fresh browser context.
+| Workflow | Pinned question | Permitted change |
+|---|---|---|
+| Durable setting | Does the saved value survive reload and a fresh browser context? | One deterministic, app-owned page-only-to-server-backed repair |
+| Primary CTA | Does the page contain the requested CTA while preserving routes, responsive layout, and captured runtime health? | One bounded agent proposal changing only the CTA text and destination |
 
-It is not an arbitrary website editor. The installed proof contract knows one
-owned specimen shape (`#state-app`, `#value`, `#save`, and `#current`) and one
-fixed transition. The purpose of the app is to test whether the proof
-machinery can become quiet and useful inside an ordinary repair workflow.
+Neither workflow is an arbitrary website editor. Each owns its specimen
+shapes, immutable loopback previews, candidate resolver, pinned contract, and
+source-change policy. They share only the generic candidate lifecycle in
+`workflow-controller.ts`: check an immutable attempt once, retain its history,
+create a new revision after a permitted change, or create a fresh attempt of
+the unchanged revision after an unusable check.
 
-## Run it
+That is the demonstrated application seam. Contracts, proof providers,
+candidate resolution, and change implementations remain workflow-specific.
 
-From the repository root:
+## Run and verify
+
+Start the durable-setting workflow with:
 
 ```sh
 pnpm run demo:proof-guided-web-change
 ```
 
-Open the printed loopback URL. The ordinary workflow is:
+Open the printed loopback URL, then:
 
-1. **Check current candidate.** The page-only implementation fails the reload
-   and fresh-context requirements.
-2. **Apply server-backed persistence repair.** The app-owned repair executor
-   verifies the exact base source bytes, changes only the owned persistence
-   seam, and starts a new immutable preview.
-3. **Check current candidate again.** The unchanged pinned contract now
-   evaluates the repaired candidate.
+1. Check the page-only candidate. It fails the reload and fresh-context
+   requirements.
+2. Apply the server-backed persistence repair. The repair verifies the exact
+   base source, changes only the owned persistence seam, and starts a new
+   immutable preview.
+3. Check the new candidate. The unchanged pinned contract now evaluates the
+   repaired revision.
 
-Applying a repair does not confer a proof result. The repaired candidate is
-shown as unchecked until the second browser check completes.
+Start the bounded CTA-agent workflow with:
 
-If a check is stale, unavailable, or throws before it can return a usable
-result, the app does not reset and reuse that attempt. **Prepare fresh
-attempt** copies the unchanged source into a distinct candidate and proof
-target. The revision stays the same, the attempt number changes, and the old
-returned result remains in history; if the check threw, the failed attempt
-still remains consumed. A source repair changes both the revision and the
-attempt.
+```sh
+pnpm run demo:proof-guided-cta-change
+```
 
-## What stays quiet
+It starts with `Explore features` linking to `/features`, reports only the
+pinned CTA mismatch, accepts a bounded proposal for `View pricing` linking to
+`/pricing`, reconstructs the exact reviewed source variant inside the app, and
+checks the new revision under the same contract. The routes, declared mobile
+and desktop layout bounds, and captured fatal-error checks must continue to
+pass. The app-level executable name for this workflow is
+`proof-guided-cta-change`.
 
-The ordinary interface shows the task, revision and attempt numbers, the four
-application outcomes, failed requirements, proof boundaries, and repair
-guidance. It does not ask for or display profile digests, nonces, signatures,
-authorities, certificate identifiers, or proof-graph structure.
+```sh
+pnpm run verify:proof-guided-web-change-app
+```
 
-Those identities remain available through the explicit **Audit details**
-control. Browser artifacts and the public verification authority are retained
-under:
+This verification command runs the private-boundary scans, deterministic
+workflow and change-policy tests, real Playwright proof flow, visible Chromium
+UI flow, and the separate Lean build.
+
+Applying either change does not confer a proof result. The new candidate is
+unchecked until its own browser check completes. A stale, unavailable, or
+thrown check also consumes its attempt: **Prepare fresh attempt** creates a
+distinct candidate and proof target with the same source revision. Earlier
+results remain in history and are never silently reset or inherited.
+
+## Quiet proof plumbing
+
+The ordinary application snapshot and interface show the task, revision and
+attempt, the four CTA requirement outcomes, failed requirements, proof boundaries,
+and available next action. They do not require the user or a change agent to
+provide or interpret profile digests, nonces, signatures, authorities,
+certificate identifiers, or proof-graph structure.
+
+Those details remain available only through the explicit proof audit for a
+check. The CTA workflow also has a separate `proposalAudit(repair_ref)` view.
+It links a committed repair and its before/after candidate references to the
+agent ID, proposal reference, base and proposed source digests, and pinned
+mutation-policy digest. A proposal is recorded only after the generic
+controller commits the new candidate; it is not a proof result and does not
+appear in the ordinary workflow snapshot.
+
+Browser artifacts and public verification authority for the runnable local
+workflows are retained under their respective private run directories:
 
 ```text
 .riddle-proof/proof-guided-web-change/<run>/
+.riddle-proof/proof-guided-cta-change/<run>/
 ```
 
 The process-local private signing key is not written there.
 
 ## Separation of responsibility
 
-- The app owns the two exact specimen-source variants, immutable loopback
-  previews, opaque candidate registry, and deterministic repair. It does not
-  execute caller-supplied source or a caller-supplied repair implementation.
-- `experiments/proof-guided-web-change` owns the pinned contract, browser
-  report adapter, replay, deterministic application projection, and audit
-  views.
-- Public Riddle core and Playwright packages own the underlying evidence,
-  certificate, transition, and checked-meaning machinery.
-- Lean proves the generic repair invariant and disposition algebra: a repair
-  prepared by the same controller retains the pinned contract, while a changed
-  subject receives a distinct authority and cannot reuse the old result.
+- The shared controller owns serialization, one-check-per-attempt consumption,
+  candidate/revision/attempt history, new-revision changes, and fresh attempts.
+  It receives an already configured proof client and a meaning-level change
+  policy; it does not select either.
+- Each application wrapper independently pins its expected contract identity
+  and rejects a proof client with a changed contract. Ordinary checks accept
+  only an app-issued opaque candidate reference.
+- The durable workflow owns exactly two source variants and a deterministic
+  repair. Its repair receives immutable source bytes, the displayed task, and
+  checked meaning-level findings—never proof audit material.
+- The CTA workflow owns its two source variants and the
+  `riddle-proof.cta-change-agent.v1` protocol. The agent receives a proposal
+  reference, exact base-source digest, displayed task, meaning-level findings,
+  current and requested CTA values, and one permitted mutation kind. It does
+  not receive or select the contract, browser profile, proof authority,
+  signing key, run capability, proof transport, disposition, or audit record.
+- The CTA executor requires an exact-key response bound to the issued proposal
+  and base digest. It accepts only the pinned CTA values. The app—not the
+  agent—then reconstructs and verifies the one reviewed output source.
+- The two private experiments own their pinned contracts, local browser report
+  adapters, signing and replay, deterministic application projection, and
+  audit views. Public Riddle core and Playwright packages own the underlying
+  evidence, certificates, and checked-meaning machinery.
 
-Lean does not prove that the source edit was wise, that Chromium observed the
-outside world accurately, or that the configured report provider actually
-performed its declared work. Those remain runtime and trust-boundary facts.
+Lean proves the bounded application relationships: a configured change
+retains the pinned contract and policy, a changed subject cannot reuse an old
+result, conformity requires a current verified result for the new subject,
+and the CTA model has exact coverage of its four declared requirements. Lean
+does not prove that Chromium observed the outside world accurately, that a
+source change was commercially wise, or that a configured runtime provider
+performed its declared work. Those remain explicit runtime and trust-boundary
+facts.
 
-## Safety boundary
+## Agent process boundary
 
-The workbench and owned specimen servers bind only to `127.0.0.1`. Each
+The deterministic reviewed fixture agent is used for reproducible tests. An
+external CTA agent can instead be connected through
+`createSubprocessCtaChangeAgent`. That adapter requires:
+
+- an absolute executable path;
+- an explicit real, non-symlink working directory;
+- an empty environment by default, or an explicit string-only environment;
+- `shell: false`, a bounded timeout, and bounded standard output.
+
+These controls narrow ambient process input and command interpretation. They
+are **not an operating-system sandbox**. The child still has every filesystem,
+network, and subprocess capability that the operating system grants to its
+user and executable. A real deployment must run it inside the company's
+approved sandbox, container, account, and network policy when those
+capabilities need further restriction.
+
+## Local security and artifact boundary
+
+The workbench and specimen servers bind only to `127.0.0.1`. Each local
 process issues a 256-bit run capability. The workbench moves its launch token
 into port-scoped `sessionStorage`, removes it from the address bar, and sends
-it explicitly on API requests. A visible specimen preview uses its own
-short-lived launch token, but the semantic proof target is token-free. The
-trusted local provider injects that proof runtime's secret directly into its
-Playwright context; the header is never part of the profile, scope, audit
-identity, signed evidence, or retained artifacts. No capability is placed in
-a host-scoped loopback cookie, where another local port could receive it.
-Tokens expire when their local server closes. Mutating HTTP calls accept no
-caller-selected target, revision, profile, contract, or repair fields. The
-app has no hosted Riddle client or configuration.
+it explicitly on API requests. A visible specimen preview and its semantic
+proof target are separate disposable runtimes created from the same immutable
+source bytes. Editing the visible preview therefore cannot seed the later
+check.
 
-The visible preview and proof target are separate disposable runtimes created
-from the same immutable source bytes. Editing the visible preview therefore
-cannot seed the later check. Browser artifacts are created beneath private
-`0700` directories, retained files are sealed to `0600`, and portable receipts
-use relative publication references rather than workstation paths.
+The trusted local provider injects the proof target's short-lived
+authorization header directly into its Playwright context. That secret is not
+part of the profile, target identity, signed evidence, audit view, or retained
+artifacts. No capability is placed in a host-scoped loopback cookie.
+Capabilities expire when their server closes, and mutating HTTP calls accept
+no caller-selected target, revision, profile, contract, repair, or agent
+policy.
 
-Each proof target is checked at most once. The current v1 contract starts from
-the exact `unset` state and writes a fixed marker, so silently resetting and
-rechecking the same target would be dishonest. Repair therefore creates a new
-source revision, preview, candidate reference, subject, and attempt authority
-while preserving the earlier failure. Recovery from an unusable check creates
-a new target and authority without pretending that the source revision
-changed.
-
-## Verify it
-
-```sh
-pnpm run verify:proof-guided-web-change-app
-```
-
-The verification command runs the private-boundary scan, deterministic app and
-repair tests, real Playwright proof flow, visible Chromium UI flow, and the
-separate Lean build.
+Browser artifacts can contain sensitive rendered material. They are created
+beneath caller-owned `0700` directories, retained files are sealed to `0600`,
+and portable receipts use relative publication references rather than
+workstation paths. The app has no hosted Riddle client, configuration, or
+request path.

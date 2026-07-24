@@ -1,0 +1,23 @@
+{
+  "name": "riddle-proof-guided-cta-change-experiment",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "dependencies": {
+    "@riddledc/riddle-proof-core": "link:../../packages/riddle-proof-core",
+    "@riddledc/riddle-proof-runner-playwright": "link:../../packages/riddle-proof-runner-playwright",
+    "riddle-proof-application-projection-experiment": "link:../application-projection"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-profiles.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "test": "pnpm -w run build:application-projection && pnpm run build && node --require ../../scripts/deny-hosted-riddle.cjs --test test/*.test.mjs"
+  }
+}

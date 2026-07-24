@@ -23,6 +23,23 @@ const experimentDirectory = join(
   "experiments",
   "proof-guided-web-change",
 );
+const ctaExperimentDirectory = join(
+  repositoryRoot,
+  "experiments",
+  "proof-guided-cta-change",
+);
+const experiments = [
+  {
+    directory: experimentDirectory,
+    packageName: "riddle-proof-guided-web-change-experiment",
+    capabilityName: "proof-guided-web-change-client",
+  },
+  {
+    directory: ctaExperimentDirectory,
+    packageName: "riddle-proof-guided-cta-change-experiment",
+    capabilityName: "proof-guided-cta-change-client",
+  },
+];
 const expectedDependencies = {
   "@riddledc/riddle-proof-core":
     "link:../../packages/riddle-proof-core",
@@ -40,6 +57,10 @@ const localPackages = new Map([
   [
     "riddle-proof-guided-web-change-experiment",
     experimentDirectory,
+  ],
+  [
+    "riddle-proof-guided-cta-change-experiment",
+    ctaExperimentDirectory,
   ],
   [
     "@riddledc/riddle-proof-core",
@@ -100,30 +121,38 @@ function assertNoForbiddenDependency(packageDirectory) {
   }
 }
 
-const experimentManifest = manifest(experimentDirectory);
-assert.equal(
-  experimentManifest.private,
-  true,
-  "The proof-guided client must remain a private experiment.",
-);
-assert.deepEqual(
-  experimentManifest.dependencies,
-  expectedDependencies,
-  "The proof-guided client dependency set and local link targets must remain exact.",
-);
-assert.deepEqual(
-  experimentManifest.optionalDependencies ?? {},
-  {},
-  "The proof-guided client must not gain optional dependencies.",
-);
-assert.deepEqual(
-  experimentManifest.peerDependencies ?? {},
-  {},
-  "The proof-guided client must not gain peer dependencies.",
-);
+for (const experiment of experiments) {
+  const experimentManifest = manifest(experiment.directory);
+  assert.equal(experimentManifest.name, experiment.packageName);
+  assert.equal(
+    experimentManifest.private,
+    true,
+    `${experiment.packageName} must remain a private experiment.`,
+  );
+  assert.deepEqual(
+    experimentManifest.dependencies,
+    expectedDependencies,
+    `${experiment.packageName} dependency set and local link targets must remain exact.`,
+  );
+  assert.deepEqual(
+    experimentManifest.optionalDependencies ?? {},
+    {},
+    `${experiment.packageName} must not gain optional dependencies.`,
+  );
+  assert.deepEqual(
+    experimentManifest.peerDependencies ?? {},
+    {},
+    `${experiment.packageName} must not gain peer dependencies.`,
+  );
+}
 
 const expectedLocalClosure = {
   "riddle-proof-guided-web-change-experiment": [
+    "@riddledc/riddle-proof-core",
+    "@riddledc/riddle-proof-runner-playwright",
+    "riddle-proof-application-projection-experiment",
+  ],
+  "riddle-proof-guided-cta-change-experiment": [
     "@riddledc/riddle-proof-core",
     "@riddledc/riddle-proof-runner-playwright",
     "riddle-proof-application-projection-experiment",
@@ -136,6 +165,11 @@ const expectedLocalClosure = {
 };
 const expectedProductionDependencyNames = {
   "riddle-proof-guided-web-change-experiment": [
+    "@riddledc/riddle-proof-core",
+    "@riddledc/riddle-proof-runner-playwright",
+    "riddle-proof-application-projection-experiment",
+  ],
+  "riddle-proof-guided-cta-change-experiment": [
     "@riddledc/riddle-proof-core",
     "@riddledc/riddle-proof-runner-playwright",
     "riddle-proof-application-projection-experiment",
@@ -196,25 +230,29 @@ for (const [name, packageDirectory] of localPackages) {
   }
 }
 
-const capabilities = readJson(join(experimentDirectory, "capabilities.json"));
-assert.equal(
-  capabilities.version,
-  "riddle-proof.experimental-capabilities.v1",
-);
-assert.equal(capabilities.name, "proof-guided-web-change-client");
-assert.deepEqual(
-  capabilities.capabilities,
-  {
-    network: true,
-    filesystem: true,
-    browser: true,
-    subprocess: true,
-    hosted_riddle: false,
-    cryptography: true,
-    ambient_clock: true,
-  },
-  "The private client's exact capability declaration changed.",
-);
+for (const experiment of experiments) {
+  const capabilities = readJson(
+    join(experiment.directory, "capabilities.json"),
+  );
+  assert.equal(
+    capabilities.version,
+    "riddle-proof.experimental-capabilities.v1",
+  );
+  assert.equal(capabilities.name, experiment.capabilityName);
+  assert.deepEqual(
+    capabilities.capabilities,
+    {
+      network: true,
+      filesystem: true,
+      browser: true,
+      subprocess: true,
+      hosted_riddle: false,
+      cryptography: true,
+      ambient_clock: true,
+    },
+    `${experiment.packageName} exact capability declaration changed.`,
+  );
+}
 
 function filesBelow(entry) {
   if (!existsSync(entry)) return [];
@@ -229,11 +267,13 @@ function filesBelow(entry) {
 }
 
 const scanEntries = [
-  join(experimentDirectory, "src"),
-  join(experimentDirectory, "profiles"),
-  join(experimentDirectory, "scripts"),
-  join(experimentDirectory, "package.json"),
-  join(experimentDirectory, "capabilities.json"),
+  ...experiments.flatMap(({ directory }) => [
+    join(directory, "src"),
+    join(directory, "profiles"),
+    join(directory, "scripts"),
+    join(directory, "package.json"),
+    join(directory, "capabilities.json"),
+  ]),
   join(repositoryRoot, "experiments", "application-projection", "src"),
   join(repositoryRoot, "experiments", "application-projection", "examples"),
   join(repositoryRoot, "experiments", "application-projection", "package.json"),
@@ -306,7 +346,9 @@ for (const program of deniedPrograms) {
 process.stdout.write(`${JSON.stringify({
   ok: true,
   suite: "riddle-proof.proof-guided-web-change-boundary",
-  direct_dependencies: Object.keys(expectedDependencies).length,
+  direct_dependencies:
+    experiments.length * Object.keys(expectedDependencies).length,
+  checked_experiments: experiments.length,
   checked_local_packages: localPackages.size,
   scanned_files: scanEntries.flatMap(filesBelow).length,
   deny_guard_cases: deniedPrograms.length,
