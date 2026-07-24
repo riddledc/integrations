@@ -1,5 +1,11 @@
 # @riddledc/riddle-proof-runner-playwright
 
+## 0.6.1
+
+### Patch Changes
+
+- 641e2cb: Add a validated, runtime-only `extraHTTPHeaders` option for trusted Playwright targets without persisting header credentials into proof artifacts.
+
 ## 0.6.0
 
 ### Minor Changes
