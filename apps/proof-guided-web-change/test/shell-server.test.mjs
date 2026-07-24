@@ -14,6 +14,17 @@ import {
   repairIsAvailable,
 } from "../public/view-model.js";
 
+async function createTestBrowserSession() {
+  const { createPlaywrightBrowserSession } = await import(new URL(
+    "../../../packages/riddle-proof-runner-playwright/dist/browser.js",
+    import.meta.url,
+  ));
+  return createPlaywrightBrowserSession({
+    browser: "chromium",
+    headless: true,
+  });
+}
+
 function deferred() {
   let resolve;
   const promise = new Promise((accept) => {
@@ -717,10 +728,6 @@ test("the server cannot bind outside loopback", async () => {
 });
 
 test("the visible shell refreshes after a thrown check and offers a fresh attempt", async () => {
-  const { chromium } = await import(new URL(
-    "../../../packages/riddle-proof-runner-playwright/node_modules/playwright/index.mjs",
-    import.meta.url,
-  ));
   const fake = fakeApplication();
   fake.application.checkCurrent = () => {
     fake.calls.check += 1;
@@ -740,9 +747,10 @@ test("the visible shell refreshes after a thrown check and offers a fresh attemp
     throw new Error("synthetic check crash");
   };
   const running = await runningFor(fake);
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let browserSession;
   try {
+    browserSession = await createTestBrowserSession();
+    const page = browserSession.page;
     await page.goto(running.launch_url);
     await page.getByRole("button", {
       name: "Check current candidate",
@@ -781,16 +789,15 @@ test("the visible shell refreshes after a thrown check and offers a fresh attemp
       true,
     );
   } finally {
-    await browser.close();
-    await running.close();
+    try {
+      await browserSession?.browser.close();
+    } finally {
+      await running.close();
+    }
   }
 });
 
 test("the visible shell announces results, requests audit explicitly, and prevents duplicate repair", async () => {
-  const { chromium } = await import(new URL(
-    "../../../packages/riddle-proof-runner-playwright/node_modules/playwright/index.mjs",
-    import.meta.url,
-  ));
   const repairGate = deferred();
   const fake = fakeApplication();
   fake.application.applyRepair = async () => {
@@ -830,9 +837,10 @@ test("the visible shell announces results, requests audit explicitly, and preven
     });
   };
   const running = await runningFor(fake);
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let browserSession;
   try {
+    browserSession = await createTestBrowserSession();
+    const page = browserSession.page;
     await page.goto(running.launch_url);
     await assert.doesNotReject(
       page.getByRole("heading", {
@@ -925,8 +933,10 @@ test("the visible shell announces results, requests audit explicitly, and preven
     );
   } finally {
     repairGate.resolve();
-    await page.close();
-    await browser.close();
-    await running.close();
+    try {
+      await browserSession?.browser.close();
+    } finally {
+      await running.close();
+    }
   }
 });

@@ -35,6 +35,17 @@ function previewCapabilityHeader(previewUrl) {
   return runToken;
 }
 
+async function createTestBrowserSession() {
+  const { createPlaywrightBrowserSession } = await import(new URL(
+    "../../../packages/riddle-proof-runner-playwright/dist/browser.js",
+    import.meta.url,
+  ));
+  return createPlaywrightBrowserSession({
+    browser: "chromium",
+    headless: true,
+  });
+}
+
 test("the local runtime rejects permissive and symlinked artifact roots", async () => {
   const parent = mkdtempSync(
     path.join(tmpdir(), "riddle-proof-web-change-root-policy-"),
@@ -76,24 +87,23 @@ test("the real local app repairs a new candidate and proves it under the unchang
     "2026-07-24T13:00:00.000Z",
     "2026-07-24T13:01:00.000Z",
   ];
-  const application = await createLocalDurableSettingApplication({
-    artifacts_directory: artifacts,
-    now: () => timestamps.shift(),
-    on_attempt(attempt) {
-      attempts.push(attempt);
-    },
-  });
-  const shell = await startProofGuidedWebChangeShell({
-    application,
-  });
-  const { chromium } = await import(new URL(
-    "../../../packages/riddle-proof-runner-playwright/node_modules/playwright/index.mjs",
-    import.meta.url,
-  ));
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  let application;
+  let shell;
+  let browserSession;
 
   try {
+    application = await createLocalDurableSettingApplication({
+      artifacts_directory: artifacts,
+      now: () => timestamps.shift(),
+      on_attempt(attempt) {
+        attempts.push(attempt);
+      },
+    });
+    shell = await startProofGuidedWebChangeShell({
+      application,
+    });
+    browserSession = await createTestBrowserSession();
+    const page = browserSession.page;
     await page.goto(shell.launch_url);
     const initial = application.snapshot();
     assert.equal(initial.candidate.revision, "Revision 1");
@@ -305,8 +315,18 @@ test("the real local app repairs a new candidate and proves it under the unchang
       });
     }
   } finally {
-    await browser.close();
-    await shell.close();
-    rmSync(artifacts, { recursive: true, force: true });
+    try {
+      await browserSession?.browser.close();
+    } finally {
+      try {
+        if (shell) {
+          await shell.close();
+        } else {
+          await application?.close();
+        }
+      } finally {
+        rmSync(artifacts, { recursive: true, force: true });
+      }
+    }
   }
 });
