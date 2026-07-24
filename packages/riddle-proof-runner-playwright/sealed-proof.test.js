@@ -552,6 +552,345 @@ function createFromFreshObservation(result) {
   return createRiddleProofBrowserSealedProof({ ...proofInput, bundle: fresh.bundle });
 }
 
+function createCustomProfileFixture({
+  fixtureProfile,
+  fixtureEvidence,
+  fixtureNonce,
+  expectedStatus,
+}) {
+  const fixtureDigest = normalizedProfileDigest(fixtureProfile);
+  const fixtureProtocolResult = createRiddleProofBrowserSealedProtocol({
+    expected_scope: scope,
+    expected_profile_name: fixtureProfile.name,
+    expected_profile_digest: fixtureDigest,
+  });
+  assert.equal(
+    fixtureProtocolResult.ok,
+    true,
+    fixtureProtocolResult.ok
+      ? undefined
+      : fixtureProtocolResult.error.message,
+  );
+  const fixtureProtocol = fixtureProtocolResult.protocol;
+  const result = assessRiddleProofProfileEvidence(
+    fixtureProfile,
+    fixtureEvidence,
+    { runner: "local-playwright" },
+  );
+  assert.equal(
+    result.status,
+    expectedStatus,
+    `the fixture must deterministically reassess as ${expectedStatus}`,
+  );
+  const fixtureSigned = signProfileResult({
+    fixtureScope: scope,
+    fixtureNonce,
+    fixtureSensor: sensor,
+    fixtureProtocol,
+    fixtureProfile,
+    result,
+  });
+  assert.equal(
+    fixtureSigned.ok,
+    true,
+    fixtureSigned.ok ? undefined : fixtureSigned.error.message,
+  );
+  const fixtureAuthority = authorityFor({
+    fixtureScope: scope,
+    fixtureNonce,
+    fixtureSensor: sensor,
+    fixtureProtocol,
+  });
+  return {
+    fixtureDigest,
+    fixtureProtocol,
+    fixtureAuthority,
+    fixtureSigned,
+    result,
+  };
+}
+
+function createFromCustomProfile({
+  fixtureProfile,
+  fixtureEvidence,
+  fixtureNonce,
+}) {
+  const fixture = createCustomProfileFixture({
+    fixtureProfile,
+    fixtureEvidence,
+    fixtureNonce,
+    expectedStatus: "passed",
+  });
+  return createSealedFromCustomFixture(fixtureProfile, fixture);
+}
+
+function createSealedFromCustomFixture(fixtureProfile, fixture) {
+  return createRiddleProofBrowserSealedProof({
+    bundle: fixture.fixtureSigned.bundle,
+    expected_scope: scope,
+    expected_profile_name: fixtureProfile.name,
+    expected_profile_digest: fixture.fixtureDigest,
+    authority: fixture.fixtureAuthority,
+    protocol: fixture.fixtureProtocol,
+    leaf_issued_at: leafIssuedAt,
+    target_issued_at: targetIssuedAt,
+    behavior_issued_at: behaviorIssuedAt,
+    root_issued_at: rootIssuedAt,
+  });
+}
+
+function issueCustomCaptureBinding(fixture) {
+  return createRiddleProofGroundedSemanticCertificate({
+    bundle: fixture.fixtureSigned.bundle,
+    policy: fixture.fixtureAuthority.policy,
+    trusted_signers: fixture.fixtureAuthority.trusted_signers,
+    verifier_registry: [fixture.fixtureProtocol.verifier.registration],
+    contract_registry: [
+      fixture.fixtureProtocol.contracts.capture_bound_to_scope.registration,
+    ],
+    expected_contract:
+      fixture.fixtureProtocol.contracts.capture_bound_to_scope.contract_ref,
+    issued_at: leafIssuedAt,
+  });
+}
+
+const aliasedProfile = jsonClone(normalizedProfile);
+aliasedProfile.checks[0] = {
+  type: "selector_count_at_least",
+  selector: "#settings",
+  minCount: 10,
+};
+const aliasedProfileAttempt = createFromCustomProfile({
+  fixtureProfile: aliasedProfile,
+  fixtureEvidence: jsonClone(profileEvidence),
+  fixtureNonce: Buffer.alloc(32, 44).toString("base64url"),
+});
+assertRejected(
+  aliasedProfileAttempt,
+  "leaf:riddle-proof.browser.capture-bound-to-scope",
+);
+assert.match(
+  aliasedProfileAttempt.error.message,
+  /exact canonical normalized profile/u,
+);
+
+const canonicalRegressionProfile = normalizeRiddleProofProfile({
+  ...jsonClone(normalizedProfile),
+  checks: [{
+    type: "selector_count_at_least",
+    selector: "#settings",
+    min_count: 10,
+  }],
+});
+const canonicalRegressionFixture = createCustomProfileFixture({
+  fixtureProfile: canonicalRegressionProfile,
+  fixtureEvidence: jsonClone(profileEvidence),
+  fixtureNonce: Buffer.alloc(32, 50).toString("base64url"),
+  expectedStatus: "product_regression",
+});
+assert.equal(
+  canonicalRegressionFixture.result.checks[0].status,
+  "failed",
+  "canonical min_count is used by deterministic reassessment",
+);
+const canonicalRegressionBinding = issueCustomCaptureBinding(
+  canonicalRegressionFixture,
+);
+assert.equal(
+  canonicalRegressionBinding.ok,
+  true,
+  canonicalRegressionBinding.ok
+    ? undefined
+    : canonicalRegressionBinding.error.message,
+);
+const canonicalRegressionSealed = createSealedFromCustomFixture(
+  canonicalRegressionProfile,
+  canonicalRegressionFixture,
+);
+assertRejected(
+  canonicalRegressionSealed,
+  "leaf:riddle-proof.browser.declared-profile-passed",
+);
+
+const multiViewportProfile = normalizeRiddleProofProfile({
+  version: "riddle-proof.profile.v1",
+  name: "synthetic-multi-viewport-profile",
+  target: {
+    route: "/settings",
+    viewports: [
+      { name: "desktop", width: 1280, height: 800 },
+      { name: "mobile", width: 390, height: 844 },
+    ],
+  },
+  checks: [
+    { type: "selector_visible", selector: "#settings" },
+    { type: "no_fatal_console_errors" },
+  ],
+  artifacts: ["proof_json"],
+  baseline_policy: "invariant_only",
+  failure_policy: {},
+}, { url: scope.target });
+const desktopViewportEvidence = jsonClone(profileEvidence.viewports[0]);
+const duplicateViewportAttempt = createFromCustomProfile({
+  fixtureProfile: multiViewportProfile,
+  fixtureEvidence: {
+    ...jsonClone(profileEvidence),
+    profile_name: multiViewportProfile.name,
+    viewports: [
+      desktopViewportEvidence,
+      jsonClone(desktopViewportEvidence),
+    ],
+    dom_summary: {
+      expected_viewport_count: 2,
+      viewport_count: 2,
+      partial: false,
+    },
+  },
+  fixtureNonce: Buffer.alloc(32, 45).toString("base64url"),
+});
+assertRejected(
+  duplicateViewportAttempt,
+  "leaf:riddle-proof.browser.capture-bound-to-scope",
+);
+assert.match(
+  duplicateViewportAttempt.error.message,
+  /exact normalized viewport name, width, and height vector/u,
+);
+
+const alteredViewportDimensionsAttempt = createFromCustomProfile({
+  fixtureProfile: multiViewportProfile,
+  fixtureEvidence: {
+    ...jsonClone(profileEvidence),
+    profile_name: multiViewportProfile.name,
+    viewports: [
+      jsonClone(desktopViewportEvidence),
+      {
+        ...jsonClone(desktopViewportEvidence),
+        name: "mobile",
+        width: 391,
+        height: 844,
+      },
+    ],
+    dom_summary: {
+      expected_viewport_count: 2,
+      viewport_count: 2,
+      partial: false,
+    },
+  },
+  fixtureNonce: Buffer.alloc(32, 47).toString("base64url"),
+});
+assertRejected(
+  alteredViewportDimensionsAttempt,
+  "leaf:riddle-proof.browser.capture-bound-to-scope",
+);
+assert.match(
+  alteredViewportDimensionsAttempt.error.message,
+  /exact normalized viewport name, width, and height vector/u,
+);
+
+const wrongTargetViewportAttempt = createFromCustomProfile({
+  fixtureProfile: multiViewportProfile,
+  fixtureEvidence: {
+    ...jsonClone(profileEvidence),
+    profile_name: multiViewportProfile.name,
+    viewports: [
+      jsonClone(desktopViewportEvidence),
+      {
+        ...jsonClone(desktopViewportEvidence),
+        name: "mobile",
+        width: 390,
+        height: 844,
+        url: "https://attacker.example/settings",
+      },
+    ],
+    dom_summary: {
+      expected_viewport_count: 2,
+      viewport_count: 2,
+      partial: false,
+    },
+  },
+  fixtureNonce: Buffer.alloc(32, 46).toString("base64url"),
+});
+assertRejected(
+  wrongTargetViewportAttempt,
+  "leaf:riddle-proof.browser.capture-bound-to-scope",
+);
+assert.match(
+  wrongTargetViewportAttempt.error.message,
+  /every signed browser viewport must be bound/iu,
+);
+
+const incompleteProofInsufficientFixture = createCustomProfileFixture({
+  fixtureProfile: multiViewportProfile,
+  fixtureEvidence: {
+    ...jsonClone(profileEvidence),
+    profile_name: multiViewportProfile.name,
+    viewports: [jsonClone(desktopViewportEvidence)],
+    dom_summary: {
+      expected_viewport_count: 2,
+      viewport_count: 1,
+      partial: true,
+    },
+  },
+  fixtureNonce: Buffer.alloc(32, 48).toString("base64url"),
+  expectedStatus: "proof_insufficient",
+});
+const incompleteProofInsufficientBinding = issueCustomCaptureBinding(
+  incompleteProofInsufficientFixture,
+);
+assert.equal(
+  incompleteProofInsufficientBinding.ok,
+  true,
+  incompleteProofInsufficientBinding.ok
+    ? undefined
+    : incompleteProofInsufficientBinding.error.message,
+);
+const incompleteProofInsufficientSealed = createSealedFromCustomFixture(
+  multiViewportProfile,
+  incompleteProofInsufficientFixture,
+);
+assertRejected(
+  incompleteProofInsufficientSealed,
+  "leaf:riddle-proof.browser.declared-profile-passed",
+);
+
+const incompleteEnvironmentBlockedFixture = createCustomProfileFixture({
+  fixtureProfile: multiViewportProfile,
+  fixtureEvidence: {
+    ...jsonClone(profileEvidence),
+    profile_name: multiViewportProfile.name,
+    viewports: [{
+      ...jsonClone(desktopViewportEvidence),
+      navigation_error: "synthetic browser navigation blocked",
+    }],
+    dom_summary: {
+      expected_viewport_count: 2,
+      viewport_count: 1,
+      partial: true,
+    },
+  },
+  fixtureNonce: Buffer.alloc(32, 49).toString("base64url"),
+  expectedStatus: "environment_blocked",
+});
+const incompleteEnvironmentBlockedBinding = issueCustomCaptureBinding(
+  incompleteEnvironmentBlockedFixture,
+);
+assert.equal(
+  incompleteEnvironmentBlockedBinding.ok,
+  true,
+  incompleteEnvironmentBlockedBinding.ok
+    ? undefined
+    : incompleteEnvironmentBlockedBinding.error.message,
+);
+const incompleteEnvironmentBlockedSealed = createSealedFromCustomFixture(
+  multiViewportProfile,
+  incompleteEnvironmentBlockedFixture,
+);
+assertRejected(
+  incompleteEnvironmentBlockedSealed,
+  "leaf:riddle-proof.browser.declared-profile-passed",
+);
+
 const routeRejected = createFromFreshObservation({
   ...jsonClone(profileResult),
   route: { ...profileResult.route, matched: false },

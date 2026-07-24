@@ -2,9 +2,21 @@
   "name": "riddle-proof-application-projection-experiment",
   "private": true,
   "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./checked-meaning": {
+      "types": "./dist/examples/checked-meaning.d.ts",
+      "import": "./dist/examples/checked-meaning.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "test": "node --require ../../scripts/deny-network.cjs --test test/applicationRuntime.test.mjs test/domain-conformance.test.mjs test/formal-correspondence.test.mjs"
+    "test": "pnpm run build && node --require ../../scripts/deny-network.cjs --test test/applicationRuntime.test.mjs test/domain-conformance.test.mjs test/formal-correspondence.test.mjs"
   }
 }

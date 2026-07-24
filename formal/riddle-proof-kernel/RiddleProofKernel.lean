@@ -8,6 +8,7 @@ import RiddleProofKernel.BrowserPyramid
 import RiddleProofKernel.BrowserTransition
 import RiddleProofKernel.SyntheticRecordReconciliation
 import RiddleProofKernel.ApplicationProjection
+import RiddleProofKernel.ProofGuidedWebChange
 
 namespace RiddleProofKernel
 
