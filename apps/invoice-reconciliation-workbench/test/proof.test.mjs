@@ -11,8 +11,10 @@ import { test } from "node:test";
 import { captureExactRecordSet } from "../dist/capture.js";
 import { applyTypedInvoiceCorrection, proposeTypedInvoiceCorrection } from "../dist/records.js";
 import { createInvoiceProofEngine } from "../dist/proof.js";
+import { reviseSyntheticInvoiceWorkbook } from "../dist/xlsx.js";
 import {
   copyFixtureSet,
+  fixtureBytes,
   keyPair,
 } from "./helpers.mjs";
 
@@ -29,13 +31,22 @@ test("signed replay composes a negative report, then a fresh positive root with 
     selection,
     captured_at: firstAt,
   });
+  assert.deepEqual(
+    Buffer.from(firstCapture.bytes.invoice),
+    fixtureBytes().invoice,
+    "the pinned workbook feeds the unchanged canonical JSON invoice contract",
+  );
   const engine = createInvoiceProofEngine({
     session_id: "session_proof_001",
     signing_key: keyPair(),
   });
   const first = engine.prove({ captured: firstCapture, issued_at: firstAt });
   assert.equal(first.projection.disposition, "does_not_conform");
-  assert.equal(first.verification.explanation.node_count, 16);
+  assert.deepEqual(first.reusable_branch_actions, {
+    purchase_order: "new",
+    receipt: "new",
+  });
+  assert.equal(first.verification.explanation.node_count, 18);
   assert.deepEqual(engine.replay({ proof: first }), {
     ok: true,
     root_certificate_id: first.projection.identity.root_certificate_id,
@@ -47,13 +58,21 @@ test("signed replay composes a negative report, then a fresh positive root with 
     analysis: first.analysis,
     correction,
   });
-  const secondInvoicePath = join(directory, "invoice.v2.json");
-  writeFileSync(secondInvoicePath, revised.bytes, { mode: 0o600 });
-  const secondAt = "2026-07-24T18:00:01.000Z";
+  const revisedWorkbook = reviseSyntheticInvoiceWorkbook({
+    workbook_bytes: firstCapture.invoice_workbook_bytes,
+    base_extraction: firstCapture.invoice_workbook_extraction,
+    correction,
+    expected_invoice: revised.invoice,
+  });
+  const secondInvoicePath = join(directory, "invoice.v2.xlsx");
+  writeFileSync(secondInvoicePath, revisedWorkbook.workbook_bytes, {
+    mode: 0o600,
+  });
+  const secondAt = "2026-07-24T19:00:00.000Z";
   const secondCapture = await captureExactRecordSet({
     selection: {
       ...selection,
-      invoice_path: secondInvoicePath,
+      invoice_workbook_path: secondInvoicePath,
       revision: "r2",
     },
     captured_at: secondAt,
@@ -63,7 +82,11 @@ test("signed replay composes a negative report, then a fresh positive root with 
     issued_at: secondAt,
   });
   assert.equal(second.projection.disposition, "conforms");
-  assert.equal(second.verification.explanation.node_count, 17);
+  assert.deepEqual(second.reusable_branch_actions, {
+    purchase_order: "reused",
+    receipt: "reused",
+  });
+  assert.equal(second.verification.explanation.node_count, 19);
   assert.deepEqual(
     second.reusable_certificate_ids.purchase_order,
     first.reusable_certificate_ids.purchase_order,
@@ -82,7 +105,7 @@ test("signed replay composes a negative report, then a fresh positive root with 
   );
   assert.equal(
     second.projection.identity.subject.digest,
-    secondCapture.digests.record_set,
+    secondCapture.specimen_digests.record_set,
   );
   assert.notEqual(
     second.projection.identity.subject.digest,
@@ -95,6 +118,35 @@ test("signed replay composes a negative report, then a fresh positive root with 
     }).ok,
     false,
     "the prior closure cannot establish a result for the revised subject",
+  );
+
+  const rollbackAt = "2026-07-24T17:59:59.000Z";
+  const rollbackCapture = await captureExactRecordSet({
+    selection: {
+      ...selection,
+      invoice_workbook_path: secondInvoicePath,
+      revision: "r2",
+    },
+    captured_at: rollbackAt,
+  });
+  const afterClockRollback = engine.prove({
+    captured: rollbackCapture,
+    issued_at: rollbackAt,
+  });
+  assert.equal(afterClockRollback.projection.disposition, "conforms");
+  assert.deepEqual(afterClockRollback.reusable_branch_actions, {
+    purchase_order: "refreshed",
+    receipt: "refreshed",
+  });
+  assert.notDeepEqual(
+    afterClockRollback.reusable_certificate_ids.purchase_order,
+    second.reusable_certificate_ids.purchase_order,
+    "a cached capture from the future is never reused",
+  );
+  assert.notDeepEqual(
+    afterClockRollback.reusable_certificate_ids.receipt,
+    second.reusable_certificate_ids.receipt,
+    "a cached capture from the future is never reused",
   );
 });
 
@@ -157,21 +209,16 @@ test("byte, signature, policy, and record-role substitution fail replay or proof
     false,
   );
 
-  const swappedCapture = await captureExactRecordSet({
-    selection: {
-      invoice_path: selection.purchase_order_path,
-      purchase_order_path: selection.invoice_path,
-      receipt_path: selection.receipt_path,
-      revision: "swapped",
-    },
-    captured_at: "2026-07-24T18:30:01.000Z",
-  });
-  assert.throws(
-    () => engine.prove({
-      captured: swappedCapture,
-      issued_at: "2026-07-24T18:30:01.000Z",
+  await assert.rejects(
+    captureExactRecordSet({
+      selection: {
+        invoice_workbook_path: selection.purchase_order_path,
+        purchase_order_path: selection.invoice_workbook_path,
+        receipt_path: selection.receipt_path,
+        revision: "swapped",
+      },
+      captured_at: "2026-07-24T18:30:01.000Z",
     }),
-    /could not be checked|proof failed/u,
   );
 });
 
@@ -190,6 +237,18 @@ test("digest-only receipts and audit identities contain no selected bytes, paths
   }).prove({ captured, issued_at: at });
   assert.equal(captured.receipt.artifact_policy, "digest_only");
   assert.match(captured.digests.record_set, /^sha256:[0-9a-f]{64}$/u);
+  assert.match(
+    captured.specimen_digests.record_set,
+    /^sha256:[0-9a-f]{64}$/u,
+  );
+  assert.notEqual(
+    captured.specimen_digests.record_set,
+    captured.digests.record_set,
+  );
+  assert.deepEqual(
+    captured.receipt.snapshot.artifacts.map(({ role }) => role).sort(),
+    ["invoice_workbook", "purchase_order", "receipt"],
+  );
   for (const artifact of captured.receipt.snapshot.artifacts) {
     assert.equal(artifact.reference.kind, "opaque");
     assert.equal("content_base64" in artifact, false);
@@ -221,7 +280,7 @@ test("digest-only receipts and audit identities contain no selected bytes, paths
     );
   }
   for (const selectedPath of [
-    selection.invoice_path,
+    selection.invoice_workbook_path,
     selection.purchase_order_path,
     selection.receipt_path,
   ]) {

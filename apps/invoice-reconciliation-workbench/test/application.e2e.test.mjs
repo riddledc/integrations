@@ -22,6 +22,10 @@ import {
   keyPair,
   sequenceClock,
 } from "./helpers.mjs";
+import {
+  BASE_INVOICE,
+  workbookForInvoice,
+} from "./xlsx-builder.mjs";
 
 test("the workbench completes fail → typed correction → fresh conforming check", async (t) => {
   const workspace = freshWorkspace(t, "invoice-workbench-e2e-");
@@ -38,7 +42,7 @@ test("the workbench completes fail → typed correction → fresh conforming che
     ]),
   });
   const originalInvoice = readFileSync(
-    join(application.paths.records, "invoice.r1.json"),
+    join(application.paths.records, "invoice.r1.xlsx"),
   );
   const originalPo = readFileSync(
     join(application.paths.records, "purchase-order.json"),
@@ -78,7 +82,7 @@ test("the workbench completes fail → typed correction → fresh conforming che
   assert.equal(corrected.history[0].disposition, "stale");
   assert.equal(corrected.history[0].current, false);
   assert.deepEqual(
-    readFileSync(join(application.paths.records, "invoice.r1.json")),
+    readFileSync(join(application.paths.records, "invoice.r1.xlsx")),
     originalInvoice,
     "the original invoice specimen remains immutable",
   );
@@ -91,7 +95,7 @@ test("the workbench completes fail → typed correction → fresh conforming che
     originalReceipt,
   );
   assert.notDeepEqual(
-    readFileSync(join(application.paths.records, "invoice.r2.json")),
+    readFileSync(join(application.paths.records, "invoice.r2.xlsx")),
     originalInvoice,
   );
 
@@ -112,6 +116,7 @@ test("the workbench completes fail → typed correction → fresh conforming che
       .filter(({ action }) => action === "recomputed")
       .map(({ branch_id }) => branch_id),
     [
+      "invoice-workbook-extraction",
       "invoice-capture",
       "invoice-to-purchase-order",
       "invoice-to-receipt",
@@ -124,19 +129,37 @@ test("the workbench completes fail → typed correction → fresh conforming che
   assert.equal(oldAudit.disposition, "stale");
   assert.equal(newAudit.disposition, "conforms");
   assert.equal(newAudit.replay.ok, true);
+  assert.equal(
+    newAudit.subject.digest,
+    newAudit.xlsx_source_binding.specimen_record_set_digest,
+  );
+  for (const value of Object.values(newAudit.xlsx_source_binding)
+    .flatMap((entry) => typeof entry === "object"
+      ? Object.values(entry)
+      : [entry])) {
+    assert.match(value, /^(?:sha256:[0-9a-f]{64}|[a-z0-9._-]+|1)$/u);
+  }
   assert.deepEqual(
-    oldAudit.reused_certificate_ids.purchase_order,
-    newAudit.reused_certificate_ids.purchase_order,
+    oldAudit.cacheable_branch_certificate_ids.purchase_order,
+    newAudit.cacheable_branch_certificate_ids.purchase_order,
   );
   assert.deepEqual(
-    oldAudit.reused_certificate_ids.receipt,
-    newAudit.reused_certificate_ids.receipt,
+    oldAudit.cacheable_branch_certificate_ids.receipt,
+    newAudit.cacheable_branch_certificate_ids.receipt,
   );
+  assert.deepEqual(newAudit.branch_cache_actions, {
+    purchase_order: "reused",
+    receipt: "reused",
+  });
   const auditText = JSON.stringify(newAudit);
   for (const forbidden of [
     workspace,
-    "invoice.r2.json",
+    "invoice.r2.xlsx",
     "Synthetic fixture:",
+    "buyer-northwind",
+    "WIDGET-A",
+    "C10*D10",
+    "SUM(E10:E11)",
     "signature_base64",
     "private_key",
     "inline_artifacts",
@@ -151,8 +174,8 @@ test("the workbench completes fail → typed correction → fresh conforming che
     assert.equal(statSync(directory).mode & 0o777, 0o700);
   }
   for (const filename of [
-    "invoice.r1.json",
-    "invoice.r2.json",
+    "invoice.r1.xlsx",
+    "invoice.r2.xlsx",
     "purchase-order.json",
     "receipt.json",
   ]) {
@@ -161,6 +184,88 @@ test("the workbench completes fail → typed correction → fresh conforming che
       0o600,
     );
   }
+});
+
+test("a correction after the one-hour capture window refreshes unchanged branches and still conforms", async (t) => {
+  const workspace = freshWorkspace(
+    t,
+    "invoice-workbench-expired-reuse-",
+  );
+  const application = await createInvoiceReconciliationWorkbench({
+    fixture_directory: fixtureRoot,
+    workspace_directory: workspace,
+    session_id: "session_application_expired_reuse",
+    signing_key: keyPair("application-expired-reuse-key"),
+    clock: sequenceClock([
+      "2026-07-24T18:00:00.000Z",
+      "2026-07-24T18:00:00.001Z",
+      "2026-07-24T19:00:00.002Z",
+      "2026-07-24T19:00:00.003Z",
+    ]),
+  });
+
+  const failed = await application.checkCurrent();
+  assert.equal(failed.current_check.disposition, "does_not_conform");
+  const oldAudit = await application.audit("invoicecheck_1");
+
+  await application.applyCorrection();
+  const conformed = await application.checkCurrent();
+  assert.equal(conformed.current_check.disposition, "conforms");
+  assert.equal(conformed.current_check.current, true);
+  assert.match(
+    conformed.reuse.summary,
+    /branches were refreshed because their prior captures were outside the current one-hour freshness window/u,
+  );
+  assert.deepEqual(
+    conformed.reuse.branches
+      .filter(({ action }) => action === "refreshed")
+      .map(({ branch_id }) => branch_id),
+    ["purchase-order-capture", "receipt-capture"],
+  );
+  assert.deepEqual(
+    conformed.reuse.branches
+      .filter(({ action }) => action === "reused")
+      .map(({ branch_id }) => branch_id),
+    [],
+  );
+  assert.deepEqual(
+    conformed.reuse.branches
+      .filter(({ action }) => action === "recomputed")
+      .map(({ branch_id }) => branch_id),
+    [
+      "invoice-workbook-extraction",
+      "invoice-capture",
+      "invoice-to-purchase-order",
+      "invoice-to-receipt",
+      "three-record-root",
+    ],
+  );
+  assert.deepEqual(
+    {
+      reused: conformed.history[1].reused_branch_count,
+      refreshed: conformed.history[1].refreshed_branch_count,
+      recomputed: conformed.history[1].recomputed_branch_count,
+    },
+    { reused: 0, refreshed: 2, recomputed: 5 },
+  );
+
+  const newAudit = await application.audit("invoicecheck_2");
+  assert.equal(newAudit.disposition, "conforms");
+  assert.equal(newAudit.replay.ok, true);
+  assert.notDeepEqual(
+    oldAudit.cacheable_branch_certificate_ids.purchase_order,
+    newAudit.cacheable_branch_certificate_ids.purchase_order,
+    "expired purchase-order certificates are freshly issued",
+  );
+  assert.notDeepEqual(
+    oldAudit.cacheable_branch_certificate_ids.receipt,
+    newAudit.cacheable_branch_certificate_ids.receipt,
+    "expired receipt certificates are freshly issued",
+  );
+  assert.deepEqual(newAudit.branch_cache_actions, {
+    purchase_order: "refreshed",
+    receipt: "refreshed",
+  });
 });
 
 test("an out-of-band record change is stale/unavailable, never silently rebased", async (t) => {
@@ -210,11 +315,10 @@ test("a post-check file change makes correction unavailable before any revision 
   await application.checkCurrent();
   const invoicePath = join(
     application.paths.records,
-    "invoice.r1.json",
+    "invoice.r1.xlsx",
   );
-  const invoice = JSON.parse(readFileSync(invoicePath, "utf8"));
-  invoice.memo = "Synthetic fixture: changed outside the workbench";
-  writeFileSync(invoicePath, `${JSON.stringify(invoice, null, 2)}\n`, {
+  const invoice = readFileSync(invoicePath);
+  writeFileSync(invoicePath, Buffer.concat([invoice, Buffer.from([0])]), {
     mode: 0o600,
   });
 
@@ -228,9 +332,43 @@ test("a post-check file change makes correction unavailable before any revision 
     /changed after the failed check/u,
   );
   assert.equal(
-    existsSync(join(application.paths.records, "invoice.r2.json")),
+    existsSync(join(application.paths.records, "invoice.r2.xlsx")),
     false,
   );
+});
+
+test("a byte-distinct valid workbook with identical facts still makes the prior result stale", async (t) => {
+  const workspace = freshWorkspace(
+    t,
+    "invoice-workbench-same-facts-stale-",
+  );
+  const application = await createInvoiceReconciliationWorkbench({
+    fixture_directory: fixtureRoot,
+    workspace_directory: workspace,
+    session_id: "session_application_same_facts",
+    signing_key: keyPair("same-facts-currentness-key"),
+    clock: sequenceClock([
+      "2026-07-24T19:45:00.000Z",
+      "2026-07-24T19:45:01.000Z",
+    ]),
+  });
+  const checked = await application.checkCurrent();
+  assert.equal(checked.current_check.disposition, "does_not_conform");
+  writeFileSync(
+    join(application.paths.records, "invoice.r1.xlsx"),
+    workbookForInvoice(BASE_INVOICE, { method: 8 }),
+    { mode: 0o600 },
+  );
+
+  const stale = await application.snapshot();
+  assert.equal(stale.current_check.current, false);
+  assert.equal(stale.current_check.disposition, "stale");
+  assert.equal(stale.can_correct, false);
+  assert.equal(stale.record_set.records[0].lines[1].quantity, "12");
+  const audit = await application.audit("invoicecheck_1");
+  assert.equal(audit.current, false);
+  assert.equal(audit.historical_disposition, "does_not_conform");
+  assert.equal(audit.replay.ok, true);
 });
 
 test("a post-conformance file change makes state and audit stale while preserving historical replay", async (t) => {
@@ -322,8 +460,8 @@ test("fixture symlinks are rejected before a workspace is created", async (t) =>
     join(fixtureDirectory, "receipt.json"),
   );
   symlinkSync(
-    join(fixtureRoot, "invoice.v1.json"),
-    join(fixtureDirectory, "invoice.v1.json"),
+    join(fixtureRoot, "invoice.v1.xlsx"),
+    join(fixtureDirectory, "invoice.v1.xlsx"),
   );
 
   await assert.rejects(

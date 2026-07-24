@@ -5,26 +5,45 @@ import {
   type DocumentSnapshotArtifact,
 } from "@riddledc/riddle-proof-local";
 
-import { canonicalDigest, sha256Bytes } from "./canonical.js";
+import {
+  canonicalDigest,
+  canonicalPrettyJson,
+  sha256Bytes,
+} from "./canonical.js";
 import type {
   CapturedRecordSet,
+  InvoiceWorkbookExtraction,
   RecordBytes,
   RecordSetSelection,
 } from "./types.js";
+import {
+  computeInvoiceWorkbookSpecimenDigest,
+} from "./specimen.js";
+import {
+  SYNTHETIC_XLSX_INVOICE_POLICY,
+  extractSyntheticInvoiceWorkbook,
+} from "./xlsx.js";
 
 const EXPECTED_ROLES = [
-  "invoice",
+  "invoice_workbook",
   "purchase_order",
   "receipt",
 ] as const;
 const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 
+type CapturedSourceBytes = {
+  invoice_workbook: Uint8Array;
+  purchase_order: Uint8Array;
+  receipt: Uint8Array;
+};
+
 function selections(input: RecordSetSelection) {
   return [
     {
-      role: "invoice",
-      path: input.invoice_path,
-      mediaType: "application/json",
+      role: "invoice_workbook",
+      path: input.invoice_workbook_path,
+      mediaType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     },
     {
       role: "purchase_order",
@@ -41,7 +60,7 @@ function selections(input: RecordSetSelection) {
 
 function fullBytes(
   artifacts: readonly DocumentSnapshotArtifact[],
-): RecordBytes {
+): CapturedSourceBytes {
   const byRole = new Map(artifacts.map((artifact) => [
     artifact.role,
     artifact,
@@ -59,8 +78,35 @@ function fullBytes(
       throw new Error("Private full capture bytes do not match their digest.");
     }
     return [role, decoded];
-  })) as unknown as RecordBytes;
+  })) as unknown as CapturedSourceBytes;
   return bytes;
+}
+
+function assertExtractionMatchesCapturedWorkbook(input: {
+  extraction: InvoiceWorkbookExtraction;
+  workbook_bytes: Uint8Array;
+}): void {
+  const canonicalInvoiceBytes = Buffer.from(
+    canonicalPrettyJson(input.extraction.normalized_invoice),
+    "utf8",
+  );
+  if (
+    input.extraction.policy.id !== SYNTHETIC_XLSX_INVOICE_POLICY.id
+    || input.extraction.policy.version
+      !== SYNTHETIC_XLSX_INVOICE_POLICY.version
+    || input.extraction.policy.digest
+      !== SYNTHETIC_XLSX_INVOICE_POLICY.digest
+    || input.extraction.workbook_digest
+      !== sha256Bytes(input.workbook_bytes)
+    || input.extraction.normalized_invoice_digest
+      !== sha256Bytes(input.extraction.normalized_invoice_bytes)
+    || !Buffer.from(input.extraction.normalized_invoice_bytes)
+      .equals(canonicalInvoiceBytes)
+  ) {
+    throw new Error(
+      "The XLSX extraction did not bind the captured workbook to one canonical invoice.",
+    );
+  }
 }
 
 export async function captureExactRecordSet(input: {
@@ -98,7 +144,7 @@ export async function captureExactRecordSet(input: {
   ) {
     throw new Error("The private byte capture changed before redaction.");
   }
-  const bytes = fullBytes(privateFull.snapshot.artifacts);
+  const sourceBytes = fullBytes(privateFull.snapshot.artifacts);
   const artifactDigests = Object.fromEntries(
     digestOnly.snapshot.artifacts.map((artifact) => [
       artifact.role,
@@ -106,24 +152,63 @@ export async function captureExactRecordSet(input: {
     ]),
   ) as Record<string, string>;
   for (const role of EXPECTED_ROLES) {
-    if (sha256Bytes(bytes[role]) !== artifactDigests[role]) {
+    if (sha256Bytes(sourceBytes[role]) !== artifactDigests[role]) {
       throw new Error("Captured record bytes do not match the content-light receipt.");
     }
   }
+  const extraction = extractSyntheticInvoiceWorkbook(
+    sourceBytes.invoice_workbook,
+  );
+  assertExtractionMatchesCapturedWorkbook({
+    extraction,
+    workbook_bytes: sourceBytes.invoice_workbook,
+  });
+  if (
+    artifactDigests.invoice_workbook !== extraction.workbook_digest
+  ) {
+    throw new Error(
+      "The XLSX extraction does not identify the captured workbook artifact.",
+    );
+  }
+  const bytes: RecordBytes = {
+    invoice: Buffer.from(extraction.normalized_invoice_bytes),
+    purchase_order: Buffer.from(sourceBytes.purchase_order),
+    receipt: Buffer.from(sourceBytes.receipt),
+  };
+  const normalizedDigests = {
+    invoice: extraction.normalized_invoice_digest,
+    purchase_order: artifactDigests.purchase_order!,
+    receipt: artifactDigests.receipt!,
+  };
+  const normalizedRecordSetDigest = canonicalDigest({
+    version: "riddle.synthetic.invoice-record-set.v1",
+    invoice_digest: normalizedDigests.invoice,
+    purchase_order_digest: normalizedDigests.purchase_order,
+    receipt_digest: normalizedDigests.receipt,
+  });
+  const specimenRecordSetDigest = computeInvoiceWorkbookSpecimenDigest({
+    workbook_policy: extraction.policy,
+    workbook_digest: extraction.workbook_digest,
+    normalized_invoice_digest: extraction.normalized_invoice_digest,
+    normalized_record_set_digest: normalizedRecordSetDigest,
+    extraction_binding_digest: extraction.binding_digest,
+  });
   return {
     selection: { ...input.selection },
     receipt: digestOnly,
+    invoice_workbook_bytes: Buffer.from(sourceBytes.invoice_workbook),
+    invoice_workbook_extraction: extraction,
     bytes,
     digests: {
-      invoice: artifactDigests.invoice!,
-      purchase_order: artifactDigests.purchase_order!,
-      receipt: artifactDigests.receipt!,
-      record_set: canonicalDigest({
-        version: "riddle.synthetic.invoice-record-set.v1",
-        invoice_digest: artifactDigests.invoice,
-        purchase_order_digest: artifactDigests.purchase_order,
-        receipt_digest: artifactDigests.receipt,
-      }),
+      ...normalizedDigests,
+      record_set: normalizedRecordSetDigest,
+    },
+    specimen_digests: {
+      invoice_workbook: extraction.workbook_digest,
+      normalized_invoice: extraction.normalized_invoice_digest,
+      normalized_record_set: normalizedRecordSetDigest,
+      extraction_binding: extraction.binding_digest,
+      record_set: specimenRecordSetDigest,
     },
   };
 }

@@ -18,12 +18,13 @@
   ],
   "notes": [
     "The workbench is a private client outside the publishable npm workspace.",
-    "All business records are synthetic structured JSON fixtures in this public repository.",
-    "The application reads only explicitly selected invoice, purchase-order, and receipt files and writes only new application-owned invoice revisions.",
+    "All business records are public synthetic fixtures: one exact pinned XLSX invoice profile plus structured JSON purchase-order and receipt records.",
+    "The application reads only the explicitly selected invoice workbook, purchase order, and receipt and writes only new application-owned XLSX invoice revisions.",
+    "Workbook bytes, normalized record content, cells, formulas, and cached values remain inside the local process and private workspace.",
     "Proof and replay material are process-local in this demo; only explicitly requested content-light audit projections leave that in-memory boundary.",
     "The local interface binds only to an ephemeral 127.0.0.1 port and has no outbound request path.",
-    "Ordinary views contain human-readable math and reconciliation findings; content-light digests, hashed nonce IDs, bundle IDs, and certificate identities appear only in the audit view, while raw nonces and signatures remain private proof material.",
+    "Ordinary views contain human-readable workbook extraction, math, reconciliation findings, and reused-versus-recomputed branches; technical proof identities appear only after an explicit audit request, while raw nonces and signatures remain private proof material.",
     "The pinned synthetic policy does not establish authenticity, authorization, tax correctness, fraud absence, approval to pay, or actual movement of money.",
-    "Arbitrary PDF, DOCX, XLSX, email, and OCR extraction are outside this workbench."
+    "Every XLSX layout except the exact pinned synthetic invoice profile, plus arbitrary PDF, DOCX, email, and OCR extraction, is outside this workbench."
   ]
 }

@@ -25,8 +25,6 @@ import {
   recaptureExactRecordSetCurrentness,
 } from "./capture.js";
 import {
-  canonicalDigest,
-  canonicalPrettyJson,
   deepFreeze,
 } from "./canonical.js";
 import {
@@ -45,9 +43,12 @@ import {
   createInvoiceProofEngine,
   type InvoiceProofEngine,
 } from "./proof.js";
+import {
+  InvoiceWorkbookInputError,
+  reviseSyntheticInvoiceWorkbook,
+} from "./xlsx.js";
 import type {
   CapturedRecordSet,
-  InvoiceRecord,
   InvoiceRequirementId,
   ParsedRecordSet,
   ReconciliationAnalysis,
@@ -61,6 +62,7 @@ import type {
 } from "./types.js";
 
 const TASK_REQUIREMENTS = [
+  "Extract one exact, pinned synthetic XLSX worksheet into canonical invoice facts and reject ambiguous formulas or cached values.",
   "Recompute every invoice and purchase-order line extension in integer minor units.",
   "Confirm each subtotal equals its stated line extensions and each total equals subtotal plus stated tax.",
   "Require exact invoice and purchase-order identities, currency, terms, lines, prices, quantities, and total.",
@@ -69,7 +71,25 @@ const TASK_REQUIREMENTS = [
 
 type CheckRecord = {
   check_ref: string;
+  /**
+   * Outer specimen identity: raw workbook, extraction binding, and normalized
+   * three-record set. This—not the normalized record-set digest alone—governs
+   * application currentness.
+   */
   record_set_digest: string;
+  normalized_record_set_digest: string;
+  source_binding: {
+    policy: {
+      id: string;
+      version: string;
+      digest: string;
+    };
+    invoice_workbook_digest: string;
+    normalized_invoice_digest: string;
+    normalized_record_set_digest: string;
+    extraction_binding_digest: string;
+    specimen_record_set_digest: string;
+  };
   revision: string;
   attempt: string;
   checked_at: string;
@@ -78,8 +98,11 @@ type CheckRecord = {
   analysis: ReconciliationAnalysis | null;
   diagnostic_code?: string;
   reused_branch_count: number;
+  refreshed_branch_count: number;
   recomputed_branch_count: number;
 };
+
+const MAX_PRIVATE_FIXTURE_BYTES = 4 * 1024 * 1024;
 
 export interface InvoiceWorkbenchSnapshot {
   task: {
@@ -142,6 +165,14 @@ function assertCanonicalTimestamp(value: string): void {
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== value) {
     throw new TypeError("The workbench clock must return canonical UTC time.");
   }
+}
+
+function hasDiagnosticCode(value: unknown): value is { code: string } {
+  return value !== null
+    && typeof value === "object"
+    && "code" in value
+    && typeof value.code === "string"
+    && value.code.length > 0;
 }
 
 function money(value: number, currency: string): string {
@@ -288,6 +319,7 @@ function displayRecords(
       revision: `Invoice revision ${invoiceRevision}`,
       status: invoiceRevision === 1 ? "Selected" : "Corrected",
       metadata: [
+        { label: "Source", value: "Pinned synthetic XLSX workbook" },
         { label: "Buyer", value: invoice.buyer_id },
         { label: "Supplier", value: invoice.supplier_id },
         { label: "PO", value: invoice.po_id },
@@ -470,7 +502,11 @@ async function readPrivateFixture(source: string): Promise<Buffer> {
   );
   try {
     const stats = await handle.stat();
-    if (!stats.isFile()) {
+    if (
+      !stats.isFile()
+      || stats.size < 1
+      || stats.size > MAX_PRIVATE_FIXTURE_BYTES
+    ) {
       throw new Error("A synthetic fixture source is not a regular file.");
     }
     return await handle.readFile();
@@ -501,6 +537,26 @@ function checkIsCurrent(
 ): boolean {
   return selectedBytesAreCurrent
     && record.record_set_digest === activeDigest;
+}
+
+function sourceBinding(captured: CapturedRecordSet): CheckRecord["source_binding"] {
+  return {
+    policy: {
+      id: captured.invoice_workbook_extraction.policy.id,
+      version: captured.invoice_workbook_extraction.policy.version,
+      digest: captured.invoice_workbook_extraction.policy.digest,
+    },
+    invoice_workbook_digest:
+      captured.specimen_digests.invoice_workbook,
+    normalized_invoice_digest:
+      captured.specimen_digests.normalized_invoice,
+    normalized_record_set_digest:
+      captured.specimen_digests.normalized_record_set,
+    extraction_binding_digest:
+      captured.specimen_digests.extraction_binding,
+    specimen_record_set_digest:
+      captured.specimen_digests.record_set,
+  };
 }
 
 function unavailableProjection(input: {
@@ -539,8 +595,8 @@ export async function createInvoiceReconciliationWorkbench(
     );
   }
   const fixtureBytes = {
-    invoice: await readPrivateFixture(
-      join(fixtureRoot, "invoice.v1.json"),
+    invoice_workbook: await readPrivateFixture(
+      join(fixtureRoot, "invoice.v1.xlsx"),
     ),
     purchase_order: await readPrivateFixture(
       join(fixtureRoot, "purchase-order.json"),
@@ -550,12 +606,12 @@ export async function createInvoiceReconciliationWorkbench(
     ),
   };
   await requireFreshWorkspace(paths);
-  const initialInvoicePath = join(paths.records, "invoice.r1.json");
+  const initialInvoicePath = join(paths.records, "invoice.r1.xlsx");
   const purchaseOrderPath = join(paths.records, "purchase-order.json");
   const receiptPath = join(paths.records, "receipt.json");
   await writePrivateFixture(
     initialInvoicePath,
-    fixtureBytes.invoice,
+    fixtureBytes.invoice_workbook,
   );
   await writePrivateFixture(
     purchaseOrderPath,
@@ -575,7 +631,7 @@ export async function createInvoiceReconciliationWorkbench(
   let attemptNumber = 1;
   let checkOrdinal = 0;
   let selection: RecordSetSelection = {
-    invoice_path: initialInvoicePath,
+    invoice_workbook_path: initialInvoicePath,
     purchase_order_path: purchaseOrderPath,
     receipt_path: receiptPath,
     revision: `r${revisionNumber}`,
@@ -621,7 +677,7 @@ export async function createInvoiceReconciliationWorkbench(
   ) {
     const current = checkIsCurrent(
       record,
-      captured.digests.record_set,
+      captured.specimen_digests.record_set,
       selectedBytesAreCurrent,
     );
     const headline = currentHeadline(record);
@@ -637,6 +693,7 @@ export async function createInvoiceReconciliationWorkbench(
         : "This historical check belongs to an earlier immutable record set",
       checked_at: record.checked_at,
       reused_branch_count: record.reused_branch_count,
+      refreshed_branch_count: record.refreshed_branch_count,
       recomputed_branch_count: record.recomputed_branch_count,
     };
   }
@@ -648,7 +705,7 @@ export async function createInvoiceReconciliationWorkbench(
     if (!record) return null;
     const current = checkIsCurrent(
       record,
-      captured.digests.record_set,
+      captured.specimen_digests.record_set,
       selectedBytesAreCurrent,
     );
     const text = currentHeadline(record);
@@ -688,7 +745,7 @@ export async function createInvoiceReconciliationWorkbench(
       || currentCheck.projection.disposition !== "does_not_conform"
       || !checkIsCurrent(
         currentCheck,
-        captured.digests.record_set,
+        captured.specimen_digests.record_set,
         selectedBytesAreCurrent,
       )
       || !currentCheck.analysis
@@ -732,12 +789,13 @@ export async function createInvoiceReconciliationWorkbench(
       task: {
         title: `Reconcile invoice ${currentAnalysis.records.invoice.invoice_id}`,
         description:
-          `Check the exact structured invoice against purchase order ${currentAnalysis.records.purchase_order.po_id} and receipt ${currentAnalysis.records.receipt.receipt_id}.`,
+          `Extract the pinned XLSX invoice and check its exact normalized facts against purchase order ${currentAnalysis.records.purchase_order.po_id} and receipt ${currentAnalysis.records.receipt.receipt_id}.`,
         requirements: TASK_REQUIREMENTS,
       },
       record_set: {
         record_set_ref: recordSetRef(sessionId, revisionNumber),
-        label: "Three explicitly selected synthetic records",
+        label:
+          "One pinned XLSX invoice workbook and two structured synthetic records",
         revision: `Revision ${revisionNumber}`,
         attempt: `Attempt ${attemptNumber}`,
         records: displayRecords(
@@ -772,8 +830,37 @@ export async function createInvoiceReconciliationWorkbench(
           selection,
           captured_at: checkedAt,
         });
-      } catch {
-        throw new Error("The explicitly selected record set could not be captured.");
+      } catch (error) {
+        const code = (
+          error instanceof InvoiceWorkbookInputError
+          && hasDiagnosticCode(error)
+        )
+          ? error.code
+          : "record_set_capture_failed";
+        const projection = unavailableProjection({
+          session_id: sessionId,
+          record_set_digest: captured.specimen_digests.record_set,
+          diagnostic_code: code,
+        });
+        checkOrdinal += 1;
+        currentCheck = {
+          check_ref: `invoicecheck_${checkOrdinal}`,
+          record_set_digest: captured.specimen_digests.record_set,
+          normalized_record_set_digest: captured.digests.record_set,
+          source_binding: sourceBinding(captured),
+          revision: `r${revisionNumber}`,
+          attempt: `a${attemptNumber}`,
+          checked_at: checkedAt,
+          projection,
+          proof: null,
+          analysis: null,
+          diagnostic_code: code,
+          reused_branch_count: 0,
+          refreshed_branch_count: 0,
+          recomputed_branch_count: 0,
+        };
+        checks.set(currentCheck.check_ref, currentCheck);
+        return snapshot();
       }
       const comparison = compareDocumentSnapshotReceipts(
         captured.receipt,
@@ -782,13 +869,15 @@ export async function createInvoiceReconciliationWorkbench(
       if (comparison.status !== "unchanged") {
         const projection = unavailableProjection({
           session_id: sessionId,
-          record_set_digest: captured.digests.record_set,
+          record_set_digest: captured.specimen_digests.record_set,
           diagnostic_code: "selected_record_set_changed_outside_workbench",
         });
         checkOrdinal += 1;
         currentCheck = {
           check_ref: `invoicecheck_${checkOrdinal}`,
-          record_set_digest: captured.digests.record_set,
+          record_set_digest: captured.specimen_digests.record_set,
+          normalized_record_set_digest: captured.digests.record_set,
+          source_binding: sourceBinding(captured),
           revision: `r${revisionNumber}`,
           attempt: `a${attemptNumber}`,
           checked_at: checkedAt,
@@ -797,6 +886,7 @@ export async function createInvoiceReconciliationWorkbench(
           analysis: null,
           diagnostic_code: "selected_record_set_changed_outside_workbench",
           reused_branch_count: 0,
+          refreshed_branch_count: 0,
           recomputed_branch_count: 0,
         };
         checks.set(currentCheck.check_ref, currentCheck);
@@ -810,18 +900,24 @@ export async function createInvoiceReconciliationWorkbench(
           issued_at: checkedAt,
         });
       } catch (error) {
-        const code = error instanceof RecordInputError
+        const knownInputError = (
+          error instanceof RecordInputError
+          || error instanceof InvoiceWorkbookInputError
+        );
+        const code = knownInputError && hasDiagnosticCode(error)
           ? error.code
           : "proof_replay_failed";
         const projection = unavailableProjection({
           session_id: sessionId,
-          record_set_digest: captured.digests.record_set,
+          record_set_digest: captured.specimen_digests.record_set,
           diagnostic_code: code,
         });
         checkOrdinal += 1;
         currentCheck = {
           check_ref: `invoicecheck_${checkOrdinal}`,
-          record_set_digest: captured.digests.record_set,
+          record_set_digest: captured.specimen_digests.record_set,
+          normalized_record_set_digest: captured.digests.record_set,
+          source_binding: sourceBinding(captured),
           revision: `r${revisionNumber}`,
           attempt: `a${attemptNumber}`,
           checked_at: checkedAt,
@@ -830,48 +926,88 @@ export async function createInvoiceReconciliationWorkbench(
           analysis: null,
           diagnostic_code: code,
           reused_branch_count: 0,
+          refreshed_branch_count: 0,
           recomputed_branch_count: 0,
         };
         checks.set(currentCheck.check_ref, currentCheck);
         return snapshot();
       }
       let reusedBranchCount = 0;
-      let recomputedBranchCount = 4;
+      let refreshedBranchCount = 0;
+      let recomputedBranchCount = 5;
       if (previousProof) {
-        if (
-          !isDeepStrictEqual(
-            previousProof.reusable_certificate_ids.purchase_order,
-            proof.reusable_certificate_ids.purchase_order,
-          )
-          || !isDeepStrictEqual(
-            previousProof.reusable_certificate_ids.receipt,
-            proof.reusable_certificate_ids.receipt,
-          )
-        ) {
+        const stableBranches = [
+          {
+            branch_id: "purchase-order-capture",
+            label: "Purchase-order arithmetic and capture",
+            action: proof.reusable_branch_actions.purchase_order,
+            previous_ids:
+              previousProof.reusable_certificate_ids.purchase_order,
+            current_ids: proof.reusable_certificate_ids.purchase_order,
+            record_label: "purchase-order",
+          },
+          {
+            branch_id: "receipt-capture",
+            label: "Receipt capture",
+            action: proof.reusable_branch_actions.receipt,
+            previous_ids: previousProof.reusable_certificate_ids.receipt,
+            current_ids: proof.reusable_certificate_ids.receipt,
+            record_label: "receipt",
+          },
+        ] as const;
+        for (const branch of stableBranches) {
+          const idsUnchanged = isDeepStrictEqual(
+            branch.previous_ids,
+            branch.current_ids,
+          );
+          if (
+            (branch.action === "reused" && !idsUnchanged)
+            || (branch.action === "refreshed" && idsUnchanged)
+            || !["reused", "refreshed"].includes(branch.action)
+          ) {
+            throw new Error(
+              `The unchanged ${branch.record_label} proof branch reported inconsistent cache accounting.`,
+            );
+          }
+        }
+        reusedBranchCount = stableBranches.filter(
+          (branch) => branch.action === "reused",
+        ).length;
+        refreshedBranchCount = stableBranches.filter(
+          (branch) => branch.action === "refreshed",
+        ).length;
+        if (reusedBranchCount + refreshedBranchCount !== 2) {
           throw new Error(
-            "The unchanged purchase-order and receipt proof branches were not reused exactly.",
+            "The unchanged purchase-order and receipt proof branches were neither reused nor refreshed.",
           );
         }
-        reusedBranchCount = 2;
+        const branchSummary = refreshedBranchCount === 0
+          ? "The unchanged purchase-order and receipt certificates were reused within their freshness window"
+          : reusedBranchCount === 0
+            ? "The unchanged purchase-order and receipt branches were refreshed because their prior captures were outside the current one-hour freshness window"
+            : "The unchanged branches were reused while fresh or refreshed when outside the current one-hour freshness window";
         reuseState = {
           summary:
-            "The unchanged purchase-order and receipt certificates were reused exactly; every invoice-dependent branch and the root were checked again.",
+            `${branchSummary}; workbook extraction, every invoice-dependent branch, and the source-bound root were checked again.`,
           branches: [
+            ...stableBranches.map((branch) => ({
+              branch_id: branch.branch_id,
+              label: branch.label,
+              action: branch.action,
+              reason: branch.action === "reused"
+                ? `The exact ${branch.record_label} bytes are unchanged and the prior certificates remain within the one-hour freshness window.`
+                : `The exact ${branch.record_label} bytes are unchanged, but the prior capture was outside the current one-hour freshness window, so fresh certificates were issued.`,
+            })),
             {
-              branch_id: "purchase-order-capture",
-              label: "Purchase-order arithmetic and capture",
-              action: "reused",
-              reason: "The exact purchase-order digest and certificate IDs are unchanged.",
-            },
-            {
-              branch_id: "receipt-capture",
-              label: "Receipt capture",
-              action: "reused",
-              reason: "The exact receipt digest and certificate ID are unchanged.",
+              branch_id: "invoice-workbook-extraction",
+              label: "Workbook capture and extraction",
+              action: "recomputed",
+              reason:
+                "The corrected invoice is a new immutable XLSX specimen with a new extraction binding.",
             },
             {
               branch_id: "invoice-capture",
-              label: "Invoice arithmetic and capture",
+              label: "Normalized invoice arithmetic",
               action: "recomputed",
               reason: "The invoice is a new immutable revision.",
             },
@@ -889,14 +1025,15 @@ export async function createInvoiceReconciliationWorkbench(
             },
             {
               branch_id: "three-record-root",
-              label: "Three-record conclusion",
+              label: "Source-bound reconciliation conclusion",
               action: "recomputed",
-              reason: "The root names the new record-set digest.",
+              reason:
+                "The root names the new workbook, extraction binding, and normalized record-set digest.",
             },
           ],
         };
       } else {
-        recomputedBranchCount = 4;
+        recomputedBranchCount = 5;
         reuseState = {
           summary:
             "This is the first proof for the selected record set; all branches were established from their exact captured bytes.",
@@ -914,14 +1051,20 @@ export async function createInvoiceReconciliationWorkbench(
               reason: "First check.",
             },
             {
+              branch_id: "invoice-workbook-extraction",
+              label: "Workbook capture and extraction",
+              action: "new",
+              reason: "First check.",
+            },
+            {
               branch_id: "invoice-capture",
-              label: "Invoice arithmetic and capture",
+              label: "Normalized invoice arithmetic",
               action: "new",
               reason: "First check.",
             },
             {
               branch_id: "three-record-root",
-              label: "Three-record status",
+              label: "Source-bound reconciliation status",
               action: "new",
               reason: "First check.",
             },
@@ -932,7 +1075,9 @@ export async function createInvoiceReconciliationWorkbench(
       currentAnalysis = proof.analysis;
       currentCheck = {
         check_ref: `invoicecheck_${checkOrdinal}`,
-        record_set_digest: captured.digests.record_set,
+        record_set_digest: captured.specimen_digests.record_set,
+        normalized_record_set_digest: captured.digests.record_set,
+        source_binding: sourceBinding(captured),
         revision: `r${revisionNumber}`,
         attempt: `a${attemptNumber}`,
         checked_at: checkedAt,
@@ -940,6 +1085,7 @@ export async function createInvoiceReconciliationWorkbench(
         proof,
         analysis: proof.analysis,
         reused_branch_count: reusedBranchCount,
+        refreshed_branch_count: refreshedBranchCount,
         recomputed_branch_count: recomputedBranchCount,
       };
       checks.set(currentCheck.check_ref, currentCheck);
@@ -955,24 +1101,31 @@ export async function createInvoiceReconciliationWorkbench(
         || !currentCheck.analysis
         || !currentCheck.proof
         || currentCheck.record_set_digest
-          !== captured.digests.record_set
+          !== captured.specimen_digests.record_set
       ) {
         throw new Error("No current typed invoice correction is available.");
       }
       const correctedAt = clock.now();
       assertCanonicalTimestamp(correctedAt);
-      const preflightCapture = await captureExactRecordSet({
-        selection,
-        captured_at: correctedAt,
-      });
+      let preflightCapture: CapturedRecordSet;
+      try {
+        preflightCapture = await captureExactRecordSet({
+          selection,
+          captured_at: correctedAt,
+        });
+      } catch {
+        throw new Error(
+          "The selected record set changed after the failed check; correction is unavailable.",
+        );
+      }
       const preflightComparison = compareDocumentSnapshotReceipts(
         captured.receipt,
         preflightCapture.receipt,
       );
       if (
         preflightComparison.status !== "unchanged"
-        || preflightCapture.digests.record_set
-          !== captured.digests.record_set
+        || preflightCapture.specimen_digests.record_set
+          !== captured.specimen_digests.record_set
       ) {
         throw new Error(
           "The selected record set changed after the failed check; correction is unavailable.",
@@ -989,22 +1142,42 @@ export async function createInvoiceReconciliationWorkbench(
         analysis: currentCheck.analysis,
         correction,
       });
+      const revisedWorkbook = reviseSyntheticInvoiceWorkbook({
+        workbook_bytes: captured.invoice_workbook_bytes,
+        base_extraction: captured.invoice_workbook_extraction,
+        correction,
+        expected_invoice: corrected.invoice,
+      });
+      if (
+        !Buffer.from(revisedWorkbook.extraction.normalized_invoice_bytes)
+          .equals(Buffer.from(corrected.bytes))
+        || !isDeepStrictEqual(
+          revisedWorkbook.extraction.normalized_invoice,
+          corrected.invoice,
+        )
+      ) {
+        throw new Error(
+          "The XLSX correction did not produce the exact typed normalized invoice.",
+        );
+      }
       const nextRevision = revisionNumber + 1;
       const nextInvoicePath = join(
         paths.records,
-        `invoice.r${nextRevision}.json`,
+        `invoice.r${nextRevision}.xlsx`,
       );
-      await writeFile(nextInvoicePath, corrected.bytes, {
+      await writeFile(nextInvoicePath, revisedWorkbook.workbook_bytes, {
         flag: "wx",
         mode: 0o600,
       });
       await chmod(nextInvoicePath, 0o600);
       const written = await readFile(nextInvoicePath);
-      if (!written.equals(Buffer.from(corrected.bytes))) {
-        throw new Error("The immutable invoice revision was not written exactly.");
+      if (!written.equals(Buffer.from(revisedWorkbook.workbook_bytes))) {
+        throw new Error(
+          "The immutable XLSX invoice revision was not written exactly.",
+        );
       }
       const nextSelection: RecordSetSelection = {
-        invoice_path: nextInvoicePath,
+        invoice_workbook_path: nextInvoicePath,
         purchase_order_path: selection.purchase_order_path,
         receipt_path: selection.receipt_path,
         revision: `r${nextRevision}`,
@@ -1018,9 +1191,21 @@ export async function createInvoiceReconciliationWorkbench(
           !== captured.digests.purchase_order
         || nextCaptured.digests.receipt !== captured.digests.receipt
         || nextCaptured.digests.invoice === captured.digests.invoice
+        || nextCaptured.specimen_digests.invoice_workbook
+          === captured.specimen_digests.invoice_workbook
+        || nextCaptured.specimen_digests.extraction_binding
+          === captured.specimen_digests.extraction_binding
+        || nextCaptured.specimen_digests.normalized_record_set
+          === captured.specimen_digests.normalized_record_set
+        || nextCaptured.specimen_digests.record_set
+          === captured.specimen_digests.record_set
+        || nextCaptured.invoice_workbook_extraction.binding_digest
+          !== revisedWorkbook.extraction.binding_digest
+        || !Buffer.from(nextCaptured.bytes.invoice)
+          .equals(Buffer.from(corrected.bytes))
       ) {
         throw new Error(
-          "The typed correction did not preserve PO/receipt bytes and replace only the invoice.",
+          "The typed XLSX correction did not preserve PO/receipt bytes and replace only the bound invoice specimen.",
         );
       }
       previousProof = currentCheck.proof;
@@ -1032,7 +1217,7 @@ export async function createInvoiceReconciliationWorkbench(
       currentCheck = null;
       reuseState = {
         summary:
-          "The invoice changed. The exact purchase-order and receipt bytes remain unchanged; fresh proof will determine certificate reuse.",
+          "The XLSX invoice and its normalized facts changed. The exact purchase-order and receipt bytes remain unchanged; fresh proof will determine certificate reuse.",
         branches: [
           {
             branch_id: "purchase-order-capture",
@@ -1047,17 +1232,25 @@ export async function createInvoiceReconciliationWorkbench(
             reason: "The receipt was not edited.",
           },
           {
-            branch_id: "invoice-capture",
-            label: "Invoice arithmetic and capture",
+            branch_id: "invoice-workbook-extraction",
+            label: "Workbook capture and extraction",
             action: "new",
-            reason: "A new immutable invoice file was created.",
+            reason:
+              "A new immutable XLSX workbook and extraction binding were created.",
+          },
+          {
+            branch_id: "invoice-capture",
+            label: "Normalized invoice arithmetic",
+            action: "new",
+            reason:
+              "The new workbook was re-extracted into a new canonical invoice.",
           },
         ],
       };
       lastActivity = {
         kind: "correction",
         summary:
-          `Created invoice revision ${nextRevision}; the prior proof is historical and cannot apply to this record set.`,
+          `Created XLSX invoice revision ${nextRevision}; the prior proof is historical and cannot apply to this specimen record set.`,
         revision: `Revision ${nextRevision}`,
         attempt: `Attempt ${attemptNumber}`,
       };
@@ -1076,7 +1269,7 @@ export async function createInvoiceReconciliationWorkbench(
     if (!record) throw new Error(`No check exists for ${checkRef}.`);
     const isCurrent = checkIsCurrent(
       record,
-      captured.digests.record_set,
+      captured.specimen_digests.record_set,
       await selectionMatchesCapturedBytes(),
     );
     const replay = record.proof
@@ -1096,14 +1289,17 @@ export async function createInvoiceReconciliationWorkbench(
         version: INVOICE_POLICY.version,
         digest: INVOICE_POLICY.digest,
       },
+      xlsx_source_binding: record.source_binding,
       subject: record.projection.identity.subject,
       proof_id: record.projection.identity.proof_id,
       root_certificate_id:
         record.projection.identity.root_certificate_id,
       requirement_certificate_ids:
         record.proof?.certificate_ids ?? null,
-      reused_certificate_ids:
+      cacheable_branch_certificate_ids:
         record.proof?.reusable_certificate_ids ?? null,
+      branch_cache_actions:
+        record.proof?.reusable_branch_actions ?? null,
       snapshot_receipt: record.proof?.audit.snapshot_receipt ?? null,
       signed_bundle_ids:
         record.proof?.audit.signed_bundle_ids ?? [],
@@ -1113,7 +1309,7 @@ export async function createInvoiceReconciliationWorkbench(
         ...INVOICE_POLICY_DEFINITION.non_conclusions,
       ],
       note:
-        "This content-light audit intentionally excludes record bytes, filenames, paths, signing keys, signatures, and the authoritative closure containing inline artifacts.",
+        "This content-light audit intentionally excludes workbook and record bytes, cell values, formulas, cached values, filenames, paths, signing keys, signatures, and the authoritative closure containing inline artifacts.",
     });
   }
 

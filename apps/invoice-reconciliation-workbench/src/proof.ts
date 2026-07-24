@@ -46,10 +46,12 @@ import {
 } from "./canonical.js";
 import {
   INVOICE_POLICY,
+  INVOICE_NORMALIZED_RECONCILIATION_STATUS_CLAIM,
   INVOICE_RECONCILIATION_STATUS_CLAIM,
   INVOICE_RECONCILIATION_SUCCESS_CLAIM,
   INVOICE_RECORD_SET_BINDING_CLAIM,
   INVOICE_REQUIREMENT_STATUS_CLAIM,
+  INVOICE_WORKBOOK_EXTRACTION_BINDING_CLAIM,
   createInvoiceApplicationAuthority,
 } from "./contract.js";
 import {
@@ -58,6 +60,7 @@ import {
   analyzeRecordSet,
   inspectReceiptRecord,
 } from "./records.js";
+import { computeInvoiceWorkbookSpecimenDigest } from "./specimen.js";
 import {
   INVOICE_REQUIREMENT_IDS,
   type CapturedRecordSet,
@@ -68,6 +71,10 @@ import {
   type RecordRole,
   type WorkbenchSigningKey,
 } from "./types.js";
+import {
+  SYNTHETIC_XLSX_INVOICE_POLICY,
+  extractSyntheticInvoiceWorkbook,
+} from "./xlsx.js";
 
 const RECORD_CAPTURED_CLAIM = {
   claim_id: "riddle-proof.commercial-record.structured-record-captured",
@@ -182,18 +189,44 @@ type BundleContext = {
   issued_at: string;
 };
 
+type WorkbookBundleContext = {
+  bundle: RiddleProofSignedCaptureBundle;
+  policy: RiddleProofGroundedCaptureVerificationPolicy;
+  trusted_signers: [RiddleProofGroundedTrustedSigner];
+  verifier_registry: [RiddleProofGroundedExternalVerifierRegistration];
+  observation: VerifiedWorkbookObservation;
+  bundle_id: string;
+  nonce_id: string;
+  issued_at: string;
+};
+
+type IssuableBundleContext = Pick<
+  BundleContext,
+  "bundle" | "policy" | "trusted_signers" | "verifier_registry" | "issued_at"
+>;
+
 type RecordGroup = {
   kind: "invoice" | "purchase_order" | "receipt";
   digest: string;
+  issued_at: string;
   capture: IssuedLeaf;
   requirements: Partial<Record<InvoiceRequirementId, IssuedLeaf>>;
   bundle_id: string;
   nonce_id: string;
 };
 
+type ReusableBranchAction =
+  ReconciliationProofResult["reusable_branch_actions"]["purchase_order"];
+
 type RelationGroup = {
   binding: IssuedLeaf;
   requirements: Record<InvoiceRequirementId, IssuedLeaf>;
+  bundle_id: string;
+  nonce_id: string;
+};
+
+type WorkbookBindingGroup = {
+  binding: IssuedLeaf;
   bundle_id: string;
   nonce_id: string;
 };
@@ -410,6 +443,142 @@ const VERIFIER_REGISTRATION: RiddleProofGroundedExternalVerifierRegistration = {
   verify: verifyStructuredRecord,
 };
 
+const WORKBOOK_VERIFIER_IMPLEMENTATION = deepFreeze({
+  schema: "riddle-proof.external-verifier-definition.v1",
+  verifier_id: "riddle-proof.private.synthetic-invoice-workbook-verifier",
+  verifier_version: "1",
+  input_boundary:
+    "one exact pinned XLSX invoice workbook plus normalized invoice, purchase-order, and receipt JSON artifacts",
+  workbook_policy: SYNTHETIC_XLSX_INVOICE_POLICY,
+  invoice_policy_digest: INVOICE_POLICY.digest,
+  arithmetic:
+    "strict integer cells and independently recomputed formula caches before normalized JSON reconciliation",
+  source_units: [
+    "extractSyntheticInvoiceWorkbook",
+    "analyzeRecordSet",
+    "computeInvoiceWorkbookSpecimenDigest",
+  ],
+});
+
+const WORKBOOK_VERIFIER_REF = deepFreeze({
+  verifier_id: WORKBOOK_VERIFIER_IMPLEMENTATION.verifier_id,
+  verifier_version: WORKBOOK_VERIFIER_IMPLEMENTATION.verifier_version,
+  implementation_digest: canonicalDigest(WORKBOOK_VERIFIER_IMPLEMENTATION),
+  trust_basis: { kind: "external_registry" as const },
+});
+
+type VerifiedWorkbookObservation = {
+  version: "riddle-proof.invoice-workbook-observation.v1";
+  policy: {
+    policy_id: string;
+    policy_version: string;
+    policy_digest: string;
+    workbook_policy_id: string;
+    workbook_policy_version: string;
+    workbook_policy_digest: string;
+  };
+  digests: {
+    invoice_workbook: string;
+    normalized_invoice: string;
+    purchase_order: string;
+    receipt: string;
+    normalized_record_set: string;
+    private_trace: string;
+    extraction_binding: string;
+    record_set: string;
+  };
+};
+
+function workbookArtifactMap(input: RiddleProofGroundedVerifierInput) {
+  const expectedMediaTypes: Readonly<Record<string, string>> = {
+    invoice_workbook:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    normalized_invoice: "application/json",
+    purchase_order: "application/json",
+    receipt: "application/json",
+  };
+  const artifacts = new Map<string, Uint8Array>();
+  for (const artifact of input.artifacts) {
+    if (
+      expectedMediaTypes[artifact.role] !== artifact.media_type
+      || artifacts.has(artifact.role)
+      || sha256Bytes(artifact.bytes) !== artifact.artifact_digest
+    ) {
+      throw new Error("workbook_artifact_invalid");
+    }
+    artifacts.set(artifact.role, artifact.bytes);
+  }
+  if (
+    stableJson([...artifacts.keys()].sort())
+    !== stableJson(Object.keys(expectedMediaTypes).sort())
+  ) {
+    throw new Error("workbook_artifact_roles_invalid");
+  }
+  return artifacts;
+}
+
+function verifyWorkbookExtraction(
+  input: RiddleProofGroundedVerifierInput,
+): VerifiedWorkbookObservation {
+  const artifacts = workbookArtifactMap(input);
+  const workbookBytes = artifacts.get("invoice_workbook")!;
+  const normalizedInvoiceBytes = artifacts.get("normalized_invoice")!;
+  const purchaseOrderBytes = artifacts.get("purchase_order")!;
+  const receiptBytes = artifacts.get("receipt")!;
+  const extraction = extractSyntheticInvoiceWorkbook(workbookBytes);
+  if (
+    !Buffer.from(extraction.normalized_invoice_bytes).equals(
+      Buffer.from(normalizedInvoiceBytes),
+    )
+  ) {
+    throw new Error("workbook_normalized_invoice_mismatch");
+  }
+  const analysis = analyzeRecordSet({
+    invoice: normalizedInvoiceBytes,
+    purchase_order: purchaseOrderBytes,
+    receipt: receiptBytes,
+  });
+  if (
+    analysis.records.digests.invoice !== extraction.normalized_invoice_digest
+  ) {
+    throw new Error("workbook_normalized_invoice_digest_mismatch");
+  }
+  const specimenDigest = computeInvoiceWorkbookSpecimenDigest({
+    workbook_policy: extraction.policy,
+    workbook_digest: extraction.workbook_digest,
+    normalized_invoice_digest: extraction.normalized_invoice_digest,
+    normalized_record_set_digest: analysis.records.digests.record_set,
+    extraction_binding_digest: extraction.binding_digest,
+  });
+  return {
+    version: "riddle-proof.invoice-workbook-observation.v1",
+    policy: {
+      policy_id: INVOICE_POLICY.id,
+      policy_version: INVOICE_POLICY.version,
+      policy_digest: INVOICE_POLICY.digest,
+      workbook_policy_id: extraction.policy.id,
+      workbook_policy_version: extraction.policy.version,
+      workbook_policy_digest: extraction.policy.digest,
+    },
+    digests: {
+      invoice_workbook: extraction.workbook_digest,
+      normalized_invoice: extraction.normalized_invoice_digest,
+      purchase_order: analysis.records.digests.purchase_order,
+      receipt: analysis.records.digests.receipt,
+      normalized_record_set: analysis.records.digests.record_set,
+      private_trace: extraction.private_trace_digest,
+      extraction_binding: extraction.binding_digest,
+      record_set: specimenDigest,
+    },
+  };
+}
+
+const WORKBOOK_VERIFIER_REGISTRATION:
+  RiddleProofGroundedExternalVerifierRegistration = {
+    ...WORKBOOK_VERIFIER_REF,
+    verify: verifyWorkbookExtraction,
+  };
+
 function policyParameters() {
   return {
     policy_id: INVOICE_POLICY.id,
@@ -454,6 +623,9 @@ function buildContract(input: {
   label: string;
   claim: RiddleProofSemanticClaim;
   assertions: ReturnType<typeof jsonPointerAssertions>;
+  observation_version?:
+    | "riddle-proof.invoice-record-observation.v1"
+    | "riddle-proof.invoice-workbook-observation.v1";
 }): SuccessfulContract {
   return requireOk(createRiddleProofGroundedDeclarativeJsonContract({
     contract_id: input.contract_id,
@@ -466,7 +638,9 @@ function buildContract(input: {
           op: "equals",
           source: "observation",
           pointer: "/version",
-          value: "riddle-proof.invoice-record-observation.v1",
+          value:
+            input.observation_version
+            ?? "riddle-proof.invoice-record-observation.v1",
         },
         ...input.assertions,
       ],
@@ -569,8 +743,127 @@ function createBundle(input: {
   };
 }
 
+function createWorkbookBundle(input: {
+  captured: CapturedRecordSet;
+  scope: RiddleProofSemanticScope;
+  signing_key: WorkbenchSigningKey;
+  issued_at: string;
+}): WorkbookBundleContext {
+  const nonce = randomBytes(32).toString("base64url");
+  const sensor = {
+    kind: "command" as const,
+    name: "invoice-workbench-pinned-xlsx-extraction",
+    version: "1",
+    observed_target: input.scope.target,
+    metadata: {
+      workbench: "private-offline-synthetic-invoice",
+      capture_kind: "invoice_workbook",
+      workbook_policy_id: SYNTHETIC_XLSX_INVOICE_POLICY.id,
+      workbook_policy_version: SYNTHETIC_XLSX_INVOICE_POLICY.version,
+    },
+  };
+  const entries = [
+    {
+      artifact_id: "invoice_workbook/source",
+      role: "invoice_workbook",
+      media_type:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      bytes: input.captured.invoice_workbook_bytes,
+    },
+    {
+      artifact_id: "invoice_workbook/normalized_invoice",
+      role: "normalized_invoice",
+      media_type: "application/json",
+      bytes: input.captured.bytes.invoice,
+    },
+    {
+      artifact_id: "invoice_workbook/purchase_order",
+      role: "purchase_order",
+      media_type: "application/json",
+      bytes: input.captured.bytes.purchase_order,
+    },
+    {
+      artifact_id: "invoice_workbook/receipt",
+      role: "receipt",
+      media_type: "application/json",
+      bytes: input.captured.bytes.receipt,
+    },
+  ] as const;
+  const signed = requireOk(createRiddleProofSignedCaptureBundle({
+    scope: input.scope,
+    nonce,
+    captured_at: input.issued_at,
+    collector: COLLECTOR,
+    sensor,
+    verifier: WORKBOOK_VERIFIER_REF,
+    artifacts: entries.map((entry) => ({
+      artifact_id: entry.artifact_id,
+      role: entry.role,
+      media_type: entry.media_type,
+      bytes_base64: Buffer.from(entry.bytes).toString("base64"),
+    })) as [
+      {
+        artifact_id: string;
+        role: string;
+        media_type: string;
+        bytes_base64: string;
+      },
+      ...Array<{
+        artifact_id: string;
+        role: string;
+        media_type: string;
+        bytes_base64: string;
+      }>,
+    ],
+    signing_key: {
+      key_id: input.signing_key.key_id,
+      private_key_pkcs8_base64:
+        input.signing_key.private_key_pkcs8_base64,
+    },
+  }), "capture:invoice-workbook");
+  const policy: RiddleProofGroundedCaptureVerificationPolicy = {
+    expected_scope: input.scope,
+    expected_nonce: nonce,
+    expected_collector: COLLECTOR,
+    expected_sensor: sensor,
+    expected_verifier: WORKBOOK_VERIFIER_REF,
+    expected_signer: {
+      key_id: input.signing_key.key_id,
+      public_key_spki_sha256: publicKeyDigest(input.signing_key),
+    },
+    verification_time: input.issued_at,
+    max_capture_age_ms: MAX_CAPTURE_AGE_MS,
+    max_future_skew_ms: MAX_FUTURE_SKEW_MS,
+    required_artifact_roles: entries.map((entry) => entry.role) as [
+      string,
+      ...string[],
+    ],
+  };
+  const trustedSigners: [RiddleProofGroundedTrustedSigner] = [{
+    key_id: input.signing_key.key_id,
+    public_key_spki_base64: input.signing_key.public_key_spki_base64,
+  }];
+  const verified = requireOk(verifyRiddleProofSignedCaptureBundle({
+    bundle: signed.bundle,
+    policy,
+    trusted_signers: trustedSigners,
+    verifier_registry: [WORKBOOK_VERIFIER_REGISTRATION],
+  }), "preverify:invoice-workbook");
+  return {
+    bundle: signed.bundle,
+    policy,
+    trusted_signers: trustedSigners,
+    verifier_registry: [WORKBOOK_VERIFIER_REGISTRATION],
+    observation:
+      verified.verified_capture.observation as VerifiedWorkbookObservation,
+    bundle_id: verified.verified_capture.bundle_id,
+    nonce_id: sha256Bytes(Buffer.from(nonce, "utf8")),
+    issued_at: input.issued_at,
+  };
+}
+
 function issueLeaf(
-  bundle: BundleContext,
+  bundle: IssuableBundleContext,
   contract: SuccessfulContract,
 ): IssuedLeaf {
   const configuration = {
@@ -700,11 +993,30 @@ function createRecordGroup(input: {
   return {
     kind: input.kind,
     digest,
+    issued_at: input.issued_at,
     capture: issueLeaf(bundle, captureContract),
     requirements,
     bundle_id: bundle.bundle_id,
     nonce_id: bundle.nonce_id,
   };
+}
+
+function reusableRecordGroupAction(input: {
+  cached: RecordGroup | null;
+  digest: string;
+  issued_at: string;
+}): ReusableBranchAction {
+  if (!input.cached) return "new";
+  if (input.cached.digest !== input.digest) return "recomputed";
+  const cachedAt = Date.parse(input.cached.issued_at);
+  const issuedAt = Date.parse(input.issued_at);
+  if (!Number.isFinite(cachedAt) || !Number.isFinite(issuedAt)) {
+    throw new TypeError("Reusable proof branch timestamps must be valid.");
+  }
+  const age = issuedAt - cachedAt;
+  return age < 0 || age > MAX_CAPTURE_AGE_MS
+    ? "refreshed"
+    : "reused";
 }
 
 function createRelationGroup(input: {
@@ -803,6 +1115,114 @@ function createRelationGroup(input: {
   };
 }
 
+function createWorkbookBindingGroup(input: {
+  captured: CapturedRecordSet;
+  scope: RiddleProofSemanticScope;
+  signing_key: WorkbenchSigningKey;
+  issued_at: string;
+}): WorkbookBindingGroup {
+  const bundle = createWorkbookBundle(input);
+  const observation = bundle.observation;
+  const expectedPolicy = input.captured.invoice_workbook_extraction.policy;
+  if (
+    observation.policy.workbook_policy_id !== expectedPolicy.id
+    || observation.policy.workbook_policy_version !== expectedPolicy.version
+    || observation.policy.workbook_policy_digest !== expectedPolicy.digest
+  ) {
+    throw new Error("Verified workbook policy does not match the local snapshot.");
+  }
+  const expectedDigests = {
+    invoice_workbook:
+      input.captured.specimen_digests.invoice_workbook,
+    normalized_invoice:
+      input.captured.specimen_digests.normalized_invoice,
+    purchase_order: input.captured.digests.purchase_order,
+    receipt: input.captured.digests.receipt,
+    normalized_record_set:
+      input.captured.specimen_digests.normalized_record_set,
+    private_trace:
+      input.captured.invoice_workbook_extraction.private_trace_digest,
+    extraction_binding:
+      input.captured.specimen_digests.extraction_binding,
+    record_set: input.captured.specimen_digests.record_set,
+  };
+  if (stableJson(observation.digests) !== stableJson(expectedDigests)) {
+    throw new Error(
+      "Verified workbook extraction does not match the local specimen snapshot.",
+    );
+  }
+  const parameters = {
+    ...policyParameters(),
+    workbook_policy_id: observation.policy.workbook_policy_id,
+    workbook_policy_version: observation.policy.workbook_policy_version,
+    workbook_policy_digest: observation.policy.workbook_policy_digest,
+    workbook_digest: observation.digests.invoice_workbook,
+    normalized_invoice_digest: observation.digests.normalized_invoice,
+    purchase_order_digest: observation.digests.purchase_order,
+    receipt_digest: observation.digests.receipt,
+    normalized_record_set_digest:
+      observation.digests.normalized_record_set,
+    private_trace_digest: observation.digests.private_trace,
+    extraction_binding_digest: observation.digests.extraction_binding,
+    record_set_digest: observation.digests.record_set,
+  };
+  const bindingClaim = claim(
+    INVOICE_WORKBOOK_EXTRACTION_BINDING_CLAIM,
+    "The exact pinned invoice workbook deterministically yields the normalized invoice in this record set",
+    parameters,
+  );
+  const bindingContract = buildContract({
+    contract_id:
+      "riddle-proof.private.invoice-workbench.workbook-extraction-bound",
+    label:
+      "Bind the exact workbook, pinned extraction profile, normalized invoice, and three-record specimen",
+    claim: bindingClaim,
+    observation_version: "riddle-proof.invoice-workbook-observation.v1",
+    assertions: jsonPointerAssertions([
+      ["/policy/policy_id", INVOICE_POLICY.id],
+      ["/policy/policy_version", INVOICE_POLICY.version],
+      ["/policy/policy_digest", INVOICE_POLICY.digest],
+      [
+        "/policy/workbook_policy_id",
+        observation.policy.workbook_policy_id,
+      ],
+      [
+        "/policy/workbook_policy_version",
+        observation.policy.workbook_policy_version,
+      ],
+      [
+        "/policy/workbook_policy_digest",
+        observation.policy.workbook_policy_digest,
+      ],
+      [
+        "/digests/invoice_workbook",
+        observation.digests.invoice_workbook,
+      ],
+      [
+        "/digests/normalized_invoice",
+        observation.digests.normalized_invoice,
+      ],
+      ["/digests/purchase_order", observation.digests.purchase_order],
+      ["/digests/receipt", observation.digests.receipt],
+      [
+        "/digests/normalized_record_set",
+        observation.digests.normalized_record_set,
+      ],
+      ["/digests/private_trace", observation.digests.private_trace],
+      [
+        "/digests/extraction_binding",
+        observation.digests.extraction_binding,
+      ],
+      ["/digests/record_set", observation.digests.record_set],
+    ]),
+  });
+  return {
+    binding: issueLeaf(bundle, bindingContract),
+    bundle_id: bundle.bundle_id,
+    nonce_id: bundle.nonce_id,
+  };
+}
+
 function patternParameters(
   names: readonly string[],
   fixed: Readonly<Record<string, string>> = {},
@@ -824,6 +1244,7 @@ function selector(
 
 function createRules(): {
   report: SuccessfulRule;
+  source_bound_report: SuccessfulRule;
   success: SuccessfulRule;
   requirement_indices: Readonly<Record<InvoiceRequirementId, number>>;
 } {
@@ -1002,9 +1423,9 @@ function createRules(): {
         "Compose exact structured records and eleven grounded requirement statuses",
       premises,
       conclusion: {
-        ...INVOICE_RECONCILIATION_STATUS_CLAIM,
+        ...INVOICE_NORMALIZED_RECONCILIATION_STATUS_CLAIM,
         label:
-          "The exact invoice record set has eleven replayed requirement statuses",
+          "The normalized invoice record set has eleven replayed requirement statuses",
         parameters: {
           ...Object.fromEntries(policyNames.map((name) => [
             name,
@@ -1047,6 +1468,122 @@ function createRules(): {
     "record_set_digest",
     ...INVOICE_REQUIREMENT_IDS,
   ];
+  const workbookBindingParameterNames = [
+    ...policyNames,
+    "workbook_policy_id",
+    "workbook_policy_version",
+    "workbook_policy_digest",
+    "workbook_digest",
+    "normalized_invoice_digest",
+    "purchase_order_digest",
+    "receipt_digest",
+    "normalized_record_set_digest",
+    "private_trace_digest",
+    "extraction_binding_digest",
+    "record_set_digest",
+  ];
+  const sourceBoundReport = requireOk(createRiddleProofCheckedMeaningRule({
+    definition: {
+      rule_id:
+        "riddle-proof.private.invoice-workbench.source-bound-status-report",
+      rule_version: "1",
+      label:
+        "Bind normalized reconciliation statuses to the exact pinned workbook specimen",
+      premises: [
+        {
+          ...INVOICE_NORMALIZED_RECONCILIATION_STATUS_CLAIM,
+          parameters: patternParameters(reportParameterNames, policyFixed),
+        },
+        {
+          ...INVOICE_WORKBOOK_EXTRACTION_BINDING_CLAIM,
+          parameters: patternParameters(
+            workbookBindingParameterNames,
+            {
+              ...policyFixed,
+              workbook_policy_id: SYNTHETIC_XLSX_INVOICE_POLICY.id,
+              workbook_policy_version:
+                SYNTHETIC_XLSX_INVOICE_POLICY.version,
+              workbook_policy_digest:
+                SYNTHETIC_XLSX_INVOICE_POLICY.digest,
+            },
+          ),
+        },
+      ],
+      conclusion: {
+        ...INVOICE_RECONCILIATION_STATUS_CLAIM,
+        label:
+          "The exact pinned workbook specimen has eleven replayed reconciliation statuses",
+        parameters: {
+          ...Object.fromEntries(policyNames.map((name) => [
+            name,
+            {
+              op: "from_premise" as const,
+              premise_index: 0,
+              parameter: name,
+            },
+          ])),
+          record_set_digest: {
+            op: "from_premise",
+            premise_index: 1,
+            parameter: "record_set_digest",
+          },
+          ...Object.fromEntries(INVOICE_REQUIREMENT_IDS.map(
+            (requirementId) => [
+              requirementId,
+              {
+                op: "from_premise" as const,
+                premise_index: 0,
+                parameter: requirementId,
+              },
+            ],
+          )),
+        },
+      },
+      constraints: {
+        all_of: true,
+        parameter_equalities: [
+          {
+            members: [
+              selector(0, "policy_id"),
+              selector(1, "policy_id"),
+            ] as [
+              ReturnType<typeof selector>,
+              ReturnType<typeof selector>,
+            ],
+          },
+          {
+            members: [
+              selector(0, "policy_version"),
+              selector(1, "policy_version"),
+            ] as [
+              ReturnType<typeof selector>,
+              ReturnType<typeof selector>,
+            ],
+          },
+          {
+            members: [
+              selector(0, "policy_digest"),
+              selector(1, "policy_digest"),
+            ] as [
+              ReturnType<typeof selector>,
+              ReturnType<typeof selector>,
+            ],
+          },
+          {
+            members: [
+              selector(0, "record_set_digest"),
+              selector(1, "normalized_record_set_digest"),
+            ] as [
+              ReturnType<typeof selector>,
+              ReturnType<typeof selector>,
+            ],
+          },
+        ],
+        ordered_premise_chronology: true,
+        max_age_ms: MAX_RULE_AGE_MS,
+      },
+    } satisfies RiddleProofCheckedMeaningRuleDefinition,
+  }), "rule:source-bound-status-report");
   const success = requireOk(createRiddleProofCheckedMeaningRule({
     definition: {
       rule_id: "riddle-proof.private.invoice-workbench.exact-match",
@@ -1094,6 +1631,7 @@ function createRules(): {
   }), "rule:exact-match");
   return {
     report,
+    source_bound_report: sourceBoundReport,
     success,
     requirement_indices: requirementIndices,
   };
@@ -1248,14 +1786,17 @@ export function createInvoiceProofEngine(input: {
     if (
       analysis.records.digests.record_set
       !== proveInput.captured.digests.record_set
+      || analysis.records.digests.record_set
+        !== proveInput.captured.specimen_digests.normalized_record_set
     ) {
       throw new Error("Structured record bytes do not match the local snapshot.");
     }
-    if (
-      !cachedPurchaseOrder
-      || cachedPurchaseOrder.digest
-        !== analysis.records.digests.purchase_order
-    ) {
+    const purchaseOrderAction = reusableRecordGroupAction({
+      cached: cachedPurchaseOrder,
+      digest: analysis.records.digests.purchase_order,
+      issued_at: proveInput.issued_at,
+    });
+    if (purchaseOrderAction !== "reused") {
       cachedPurchaseOrder = createRecordGroup({
         kind: "purchase_order",
         bytes: proveInput.captured.bytes.purchase_order,
@@ -1264,10 +1805,12 @@ export function createInvoiceProofEngine(input: {
         issued_at: proveInput.issued_at,
       });
     }
-    if (
-      !cachedReceipt
-      || cachedReceipt.digest !== analysis.records.digests.receipt
-    ) {
+    const receiptAction = reusableRecordGroupAction({
+      cached: cachedReceipt,
+      digest: analysis.records.digests.receipt,
+      issued_at: proveInput.issued_at,
+    });
+    if (receiptAction !== "reused") {
       cachedReceipt = createRecordGroup({
         kind: "receipt",
         bytes: proveInput.captured.bytes.receipt,
@@ -1276,6 +1819,11 @@ export function createInvoiceProofEngine(input: {
         issued_at: proveInput.issued_at,
       });
     }
+    if (!cachedPurchaseOrder || !cachedReceipt) {
+      throw new Error("Reusable proof branch creation did not complete.");
+    }
+    const purchaseOrderGroup = cachedPurchaseOrder;
+    const receiptGroup = cachedReceipt;
     const invoiceGroup = createRecordGroup({
       kind: "invoice",
       bytes: proveInput.captured.bytes.invoice,
@@ -1289,12 +1837,18 @@ export function createInvoiceProofEngine(input: {
       signing_key: input.signing_key,
       issued_at: proveInput.issued_at,
     });
-    const orderedLeaves: IssuedLeaf[] = [
-      cachedPurchaseOrder.capture,
-      cachedPurchaseOrder.requirements.purchase_order_line_extensions!,
-      cachedPurchaseOrder.requirements.purchase_order_subtotal!,
-      cachedPurchaseOrder.requirements.purchase_order_tax_total!,
-      cachedReceipt.capture,
+    const workbookBindingGroup = createWorkbookBindingGroup({
+      captured: proveInput.captured,
+      scope,
+      signing_key: input.signing_key,
+      issued_at: proveInput.issued_at,
+    });
+    const normalizedLeaves: IssuedLeaf[] = [
+      purchaseOrderGroup.capture,
+      purchaseOrderGroup.requirements.purchase_order_line_extensions!,
+      purchaseOrderGroup.requirements.purchase_order_subtotal!,
+      purchaseOrderGroup.requirements.purchase_order_tax_total!,
+      receiptGroup.capture,
       invoiceGroup.capture,
       invoiceGroup.requirements.invoice_line_extensions!,
       invoiceGroup.requirements.invoice_subtotal!,
@@ -1304,7 +1858,17 @@ export function createInvoiceProofEngine(input: {
         (requirementId) => relationGroup.requirements[requirementId],
       ),
     ];
-    const contexts = orderedLeaves.map(
+    const allLeaves = [
+      ...normalizedLeaves,
+      workbookBindingGroup.binding,
+    ];
+    const normalizedContexts = normalizedLeaves.map(
+      (leaf) => leaf.replay_context,
+    ) as [
+      RiddleProofGroundedReplayContext,
+      ...RiddleProofGroundedReplayContext[],
+    ];
+    const contexts = allLeaves.map(
       (leaf) => leaf.replay_context,
     ) as [
       RiddleProofGroundedReplayContext,
@@ -1312,6 +1876,7 @@ export function createInvoiceProofEngine(input: {
     ];
     const ruleRegistry = [
       rules.report.registration,
+      rules.source_bound_report.registration,
       rules.success.registration,
     ] as [
       RiddleProofCheckedMeaningRuleRegistration,
@@ -1319,6 +1884,7 @@ export function createInvoiceProofEngine(input: {
     ];
     const trustedRules = [
       rules.report.rule_ref,
+      rules.source_bound_report.rule_ref,
       rules.success.rule_ref,
     ] as [
       RiddleProofCheckedMeaningRuleRef,
@@ -1326,40 +1892,56 @@ export function createInvoiceProofEngine(input: {
     ];
     const report = requireOk(composeRiddleProofCheckedMeaningClosures({
       expected_rule: rules.report.rule_ref,
-      closures: orderedLeaves.map(
+      closures: normalizedLeaves.map(
         (leaf) => leaf.checked_closure,
       ) as [unknown, ...unknown[]],
       issued_at: proveInput.issued_at,
-      replay_contexts: contexts,
+      replay_contexts: normalizedContexts,
       rule_registry: ruleRegistry,
       trusted_rules: trustedRules,
     }), "compose:status-report");
+    const sourceBoundReport = requireOk(
+      composeRiddleProofCheckedMeaningClosures({
+        expected_rule: rules.source_bound_report.rule_ref,
+        closures: [
+          report.checked_closure,
+          workbookBindingGroup.binding.checked_closure,
+        ],
+        issued_at: proveInput.issued_at,
+        replay_contexts: contexts,
+        rule_registry: ruleRegistry,
+        trusted_rules: trustedRules,
+      }),
+      "compose:source-bound-status-report",
+    );
     const allSatisfied = analysis.checks.every(
       (entry) => entry.status === "satisfied",
     );
     const root = allSatisfied
       ? requireOk(composeRiddleProofCheckedMeaningClosures({
           expected_rule: rules.success.rule_ref,
-          closures: [report.checked_closure],
+          closures: [sourceBoundReport.checked_closure],
           issued_at: proveInput.issued_at,
           replay_contexts: contexts,
           rule_registry: ruleRegistry,
           trusted_rules: trustedRules,
         }), "compose:exact-match")
-      : report;
+      : sourceBoundReport;
     const expectedClaim: RiddleProofSemanticClaimExpectation = allSatisfied
       ? {
           ...INVOICE_RECONCILIATION_SUCCESS_CLAIM,
           parameters: {
             ...policyParameters(),
-            record_set_digest: analysis.records.digests.record_set,
+            record_set_digest:
+              proveInput.captured.specimen_digests.record_set,
           },
         }
       : {
           ...INVOICE_RECONCILIATION_STATUS_CLAIM,
           parameters: {
             ...policyParameters(),
-            record_set_digest: analysis.records.digests.record_set,
+            record_set_digest:
+              proveInput.captured.specimen_digests.record_set,
             ...Object.fromEntries(analysis.checks.map((entry) => [
               entry.requirement_id,
               entry.status,
@@ -1368,7 +1950,7 @@ export function createInvoiceProofEngine(input: {
         };
     const expectedRootRule = allSatisfied
       ? rules.success.rule_ref
-      : rules.report.rule_ref;
+      : rules.source_bound_report.rule_ref;
     const matched = requireOk(matchRiddleProofCheckedMeaningClosure({
       checked_closure: root.checked_closure,
       replay_contexts: contexts,
@@ -1399,7 +1981,7 @@ export function createInvoiceProofEngine(input: {
         const leaf = INVOICE_REQUIREMENT_SET.has(requirementId)
           ? invoiceGroup.requirements[requirementId]
           : PURCHASE_ORDER_REQUIREMENT_SET.has(requirementId)
-            ? cachedPurchaseOrder!.requirements[requirementId]
+            ? purchaseOrderGroup.requirements[requirementId]
             : relationGroup.requirements[requirementId];
         if (!leaf) {
           throw new Error(`Requirement certificate ${requirementId} is missing.`);
@@ -1408,12 +1990,12 @@ export function createInvoiceProofEngine(input: {
       }),
     ) as Record<InvoiceRequirementId, string>;
     const authority = createInvoiceApplicationAuthority(
-      analysis.records.digests.record_set,
+      proveInput.captured.specimen_digests.record_set,
     );
     const subject: ApplicationSubjectRef = {
       id: input.session_id,
-      digest: analysis.records.digests.record_set,
-      kind: "invoice_record_set",
+      digest: proveInput.captured.specimen_digests.record_set,
+      kind: "invoice_workbook_record_set",
     };
     const verification: ApplicationVerification =
       verifiedApplicationReplay({
@@ -1453,15 +2035,19 @@ export function createInvoiceProofEngine(input: {
       certificate_ids: requirementCertificates,
       reusable_certificate_ids: {
         purchase_order: [
-          cachedPurchaseOrder.capture.certificate_id,
-          cachedPurchaseOrder.requirements
+          purchaseOrderGroup.capture.certificate_id,
+          purchaseOrderGroup.requirements
             .purchase_order_line_extensions!.certificate_id,
-          cachedPurchaseOrder.requirements
+          purchaseOrderGroup.requirements
             .purchase_order_subtotal!.certificate_id,
-          cachedPurchaseOrder.requirements
+          purchaseOrderGroup.requirements
             .purchase_order_tax_total!.certificate_id,
         ],
-        receipt: [cachedReceipt.capture.certificate_id],
+        receipt: [receiptGroup.capture.certificate_id],
+      },
+      reusable_branch_actions: {
+        purchase_order: purchaseOrderAction,
+        receipt: receiptAction,
       },
       audit: {
         snapshot_receipt: proveInput.captured.receipt,
@@ -1471,16 +2057,18 @@ export function createInvoiceProofEngine(input: {
           digest: INVOICE_POLICY.digest,
         },
         signed_bundle_ids: [
-          cachedPurchaseOrder.bundle_id,
-          cachedReceipt.bundle_id,
+          purchaseOrderGroup.bundle_id,
+          receiptGroup.bundle_id,
           invoiceGroup.bundle_id,
           relationGroup.bundle_id,
+          workbookBindingGroup.bundle_id,
         ],
         nonce_ids: [
-          cachedPurchaseOrder.nonce_id,
-          cachedReceipt.nonce_id,
+          purchaseOrderGroup.nonce_id,
+          receiptGroup.nonce_id,
           invoiceGroup.nonce_id,
           relationGroup.nonce_id,
+          workbookBindingGroup.nonce_id,
         ],
       },
     });

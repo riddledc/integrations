@@ -32,6 +32,10 @@ export function fixtureBytes() {
   };
 }
 
+export function workbookFixtureBytes() {
+  return readFileSync(join(fixtureRoot, "invoice.v1.xlsx"));
+}
+
 export function parseFixture(name) {
   return JSON.parse(readFileSync(join(fixtureRoot, name), "utf8"));
 }
@@ -52,13 +56,16 @@ export function keyPair(keyId = "invoice-workbench-test-key") {
 export function copyFixtureSet(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const paths = {
-    invoice_path: join(directory, "invoice.v1.json"),
+    invoice_workbook_path: join(directory, "invoice.v1.xlsx"),
     purchase_order_path: join(directory, "purchase-order.json"),
     receipt_path: join(directory, "receipt.json"),
     revision: "r1",
   };
   for (const [source, destination] of [
-    [join(fixtureRoot, "invoice.v1.json"), paths.invoice_path],
+    [
+      join(fixtureRoot, "invoice.v1.xlsx"),
+      paths.invoice_workbook_path,
+    ],
     [join(fixtureRoot, "purchase-order.json"), paths.purchase_order_path],
     [join(fixtureRoot, "receipt.json"), paths.receipt_path],
   ]) {

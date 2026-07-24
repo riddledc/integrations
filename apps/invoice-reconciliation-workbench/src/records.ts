@@ -777,7 +777,6 @@ export function applyTypedInvoiceCorrection(input: {
   revised.subtotal_minor = expected.to_subtotal_minor;
   revised.tax_minor = expected.to_tax_minor;
   revised.total_minor = expected.to_total_minor;
-  revised.memo = "Synthetic fixture: corrected by the bounded invoice workbench.";
   const revisedBytes = Buffer.from(canonicalPrettyJson(revised), "utf8");
   const analysis = analyzeRecordSet({
     invoice: revisedBytes,

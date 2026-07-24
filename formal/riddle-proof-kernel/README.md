@@ -474,6 +474,26 @@ between the runtime DAG and Lean tree. Canonical JSON, SHA-256, signatures,
 verifier and source authenticity, currentness, and accounting suitability
 remain runtime or trust-boundary obligations.
 
+`RiddleProofKernel/WorkbookInvoiceExtraction.lean` adds a narrow adapter model
+in front of that existing reconciliation arithmetic. A typed workbook
+projection retains the expected and observed formula text, cached minor-unit
+value, independently recomputed value, normalized invoice fields, exact
+workbook source reference, distinct normalized-invoice reference, extraction
+binding, and independently expected worksheet-schema reference. Lean proves
+that an exactly bound projection supplies `MultiLineArithmeticRecomputed`, and
+that a changed workbook reference cannot retain the old extraction binding.
+It deliberately allows byte-distinct workbooks to retain the same normalized
+invoice reference when their facts are identical. The existing replacement
+and application-projection theorems then own downstream invalidation and
+independent PO/receipt branch reuse.
+
+This model starts after extraction. It does not parse ZIP/OOXML, evaluate
+Excel, authenticate cached values or cell addresses, detect macros or external
+relationships, establish safe-integer or resource bounds, hash workbook bytes,
+or inspect filesystem currentness. The runtime XLSX adapter, canonical fixture,
+hostile-input suite, source-bound proof composition, and immutable-revision
+tests establish those executable obligations separately.
+
 The runtime assurance is therefore named `checked_allowlisted_rule`, not
 `proved_rule` or `true_meaning`. It establishes that the exact trusted,
 registered, fixed-interpreter rule accepted the exact grounded premises and

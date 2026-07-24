@@ -26,7 +26,7 @@
           <span aria-hidden="true">✓</span>
           <p>
             <strong>Deterministic check</strong>
-            Proof details stay in Audit.
+            Technical integrity details stay out of the workflow.
           </p>
         </div>
       </header>
@@ -173,8 +173,8 @@
       >
         <div class="section-heading">
           <div>
-            <p class="section-kicker">Compositional reuse</p>
-            <h2 id="reuse-heading">What carried forward</h2>
+            <p class="section-kicker">Compositional check</p>
+            <h2 id="reuse-heading">What was reused and checked again</h2>
           </div>
         </div>
         <p id="reuse-summary" class="reuse-summary"></p>
@@ -204,8 +204,9 @@
         <summary>Audit</summary>
         <div class="audit-content">
           <p>
-            Digests, certificate identities, signatures, and proof-graph
-            structure are loaded only for the historical check you select.
+            Content-light technical identities and replay status are loaded
+            only for the historical check you select. Workbook and record
+            content stay out of this view.
           </p>
           <pre id="audit-output" tabindex="0">Select “View audit” on a check.</pre>
         </div>
