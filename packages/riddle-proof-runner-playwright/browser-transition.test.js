@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
+  assessRiddleProofCheckedMeaningClosure,
   composeRiddleProofCheckedMeaningClosures,
   explainRiddleProofCheckedMeaningClosure,
   normalizeRiddleProofProfile,
@@ -624,6 +625,81 @@ try {
   assert.equal(explained.explanation.checked_composition_count, 16);
   assert.equal(explained.explanation.node_count, 32);
   assert.equal(explained.explanation.grounded_frontier.length, 16);
+
+  const assessedForApplication = assessRiddleProofCheckedMeaningClosure({
+    checked_closure: jsonClone(created.checked_closure),
+    replay_contexts: replayed.replay_contexts,
+    ...jsonClone(trust),
+    consumption_time: plusMilliseconds(timelineBase, 41),
+    max_grounded_age_ms: 60 * 60 * 1000,
+    max_future_skew_ms: 0,
+  });
+  assert.equal(
+    assessedForApplication.disposition,
+    "checked",
+    assessedForApplication.disposition === "unresolved"
+      ? assessedForApplication.error.message
+      : undefined,
+  );
+
+  if (process.env.RIDDLE_PROOF_APPLICATION_PROJECTION_INTEGRATION === "1") {
+    const [
+      application,
+      browserExample,
+      checkedMeaningExample,
+    ] = await Promise.all([
+      import("../../experiments/application-projection/dist/src/index.js"),
+      import("../../experiments/application-projection/dist/examples/browser-publishing.js"),
+      import("../../experiments/application-projection/dist/examples/checked-meaning.js"),
+    ]);
+    const applicationAuthority = browserExample.createBrowserPublishingAuthority({
+      authority_digest: sha256(Buffer.from(JSON.stringify({
+        example: "browser-publishing",
+        protocol: transitionProtocol,
+      }))),
+      specification_digest: sha256(Buffer.from(JSON.stringify(transitionProtocol))),
+      expected_root_parameters: transitionProtocol.expected_root_claim.parameters,
+    });
+    const applicationSubject = browserExample.createBrowserPublishingSubject({
+      repository: scope.repository,
+      revision: scope.revision,
+      target: scope.target,
+      digest: sha256(Buffer.from(JSON.stringify({ scope, profiles }))),
+    });
+    const applicationVerification =
+      checkedMeaningExample.applicationVerificationFromCheckedMeaning({
+        authority: application.applicationAuthorityRef(applicationAuthority),
+        specification: applicationAuthority.specification.ref,
+        expected_root: applicationAuthority.specification.expected_root,
+        subject: applicationSubject,
+        replayed_at: plusMilliseconds(timelineBase, 41),
+        replay: replayed,
+        assessment: assessedForApplication,
+        explanation: explained,
+        requirement_claims:
+          browserExample.BROWSER_PUBLISHING_REQUIREMENT_CLAIMS,
+      });
+    const projected = application.projectApplicationResult({
+      authority: applicationAuthority,
+      subject: applicationSubject,
+      verification: applicationVerification,
+    });
+    assert.equal(projected.disposition, "conforms");
+    assert.equal(projected.identity.proof_id, created.root_certificate.certificate_id);
+    assert.equal(projected.findings.length, 0);
+    const meaningView = application.inspectApplicationResult(projected, "meaning");
+    const auditView = application.inspectApplicationResult(projected, "audit");
+    assert.deepEqual(meaningView.identity, auditView.identity);
+    assert.equal(
+      auditView.explanation.root_certificate_id,
+      created.root_certificate.certificate_id,
+    );
+    assert.deepEqual(
+      auditView.binding.authority,
+      application.applicationAuthorityRef(applicationAuthority),
+    );
+    assert.equal(auditView.explanation.grounded_frontier.length, 16);
+  }
 
   const transitionNodeId = created.branches.transition_observed.certificate.certificate_id;
   const transitionNode = explained.explanation.nodes.find(

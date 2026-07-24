@@ -1,0 +1,10 @@
+{
+  "name": "riddle-proof-application-projection-experiment",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "test": "node --require ../../scripts/deny-network.cjs --test test/applicationRuntime.test.mjs test/domain-conformance.test.mjs test/formal-correspondence.test.mjs"
+  }
+}

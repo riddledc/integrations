@@ -1,0 +1,25 @@
+{
+  "version": "riddle-proof.experimental-capabilities.v1",
+  "name": "application-projection-controller",
+  "capabilities": {
+    "network": false,
+    "filesystem": false,
+    "browser": false,
+    "subprocess": false,
+    "hosted_riddle": false,
+    "cryptography": false,
+    "ambient_clock": false
+  },
+  "delegated_capabilities": [
+    "challenge_provider",
+    "signing_key_provider",
+    "proof_producer",
+    "verifier",
+    "proof_store",
+    "clock"
+  ],
+  "notes": [
+    "The controller performs no I/O itself.",
+    "Effects are explicit constructor-injected capabilities and remain outside the pure projection."
+  ]
+}
