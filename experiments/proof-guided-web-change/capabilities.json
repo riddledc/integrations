@@ -1,0 +1,26 @@
+{
+  "version": "riddle-proof.experimental-capabilities.v1",
+  "name": "proof-guided-web-change-client",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": false,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "delegated_capabilities": [
+    "candidate_resolver",
+    "browser_capture",
+    "signing_key_provider",
+    "proof_store",
+    "clock"
+  ],
+  "notes": [
+    "The ordinary client request contains only an opaque candidate reference.",
+    "Browser, filesystem, clock, and signing effects are explicit injected capabilities.",
+    "The experiment has no Riddle-hosted client or configuration.",
+    "No browser egress allowlist is enforced: the target page may request redirects or subresources from other origins."
+  ]
+}

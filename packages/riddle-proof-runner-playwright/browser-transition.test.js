@@ -431,9 +431,9 @@ try {
   );
   assertRejected(
     s0ActionAttempt.created,
-    "leaf:riddle-proof.browser.capture-bound-to-scope",
+    "leaf:riddle-proof.browser.declared-profile-passed",
   );
-  assert.match(s0ActionAttempt.created.error.message, /nonempty all-passed check set/u);
+  assert.match(s0ActionAttempt.created.error.message, /contract rejected/u);
 
   const s1BeforeCapture = await captureRole(
     "before",
@@ -496,14 +496,14 @@ try {
   );
   assertRejected(
     s1ReloadAttempt.created,
-    "leaf:riddle-proof.browser.capture-bound-to-scope",
+    "leaf:riddle-proof.browser.declared-profile-passed",
   );
-  assert.match(s1ReloadAttempt.created.error.message, /nonempty all-passed check set/u);
+  assert.match(s1ReloadAttempt.created.error.message, /contract rejected/u);
   assertRejected(
     s1FreshAttempt.created,
-    "leaf:riddle-proof.browser.capture-bound-to-scope",
+    "leaf:riddle-proof.browser.declared-profile-passed",
   );
-  assert.match(s1FreshAttempt.created.error.message, /nonempty all-passed check set/u);
+  assert.match(s1FreshAttempt.created.error.message, /contract rejected/u);
 
   const s1DurableRootAttempt = createRiddleProofBrowserTransition({
     expected_scope: scenarios.s1.scope,

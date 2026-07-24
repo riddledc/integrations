@@ -26,7 +26,17 @@ import {
 } from "@riddledc/riddle-proof-core";
 
 export const RIDDLE_PROOF_BROWSER_SEALED_PROTOCOL_VERSION =
-  "riddle-proof.browser-sealed-profile-protocol.v2" as const;
+  "riddle-proof.browser-sealed-profile-protocol.v3" as const;
+
+export const RIDDLE_PROOF_BROWSER_SEALED_OBSERVATION_VERSION =
+  "riddle-proof.browser-sealed-observation.v3" as const;
+
+const RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES = [
+  "passed",
+  "product_regression",
+  "proof_insufficient",
+  "environment_blocked",
+] as const;
 
 export const RIDDLE_PROOF_BROWSER_SEALED_RULE_MAX_AGE_MS = 5 * 60 * 1000;
 
@@ -279,12 +289,112 @@ function checkIdentityProjection(checks: RiddleProofProfileResult["checks"]) {
   }));
 }
 
+function reassessedBrowserStatus(value: unknown):
+  | (typeof RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES)[number]
+  | null {
+  return (
+    typeof value === "string"
+    && (RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES as readonly string[])
+      .includes(value)
+  )
+    ? value as (typeof RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES)[number]
+    : null;
+}
+
+type BrowserViewportIdentity = {
+  name: string;
+  width: number;
+  height: number;
+};
+
+function browserViewportIdentity(
+  value: unknown,
+): BrowserViewportIdentity | undefined {
+  if (!isPlainRecord(value)) return undefined;
+  if (
+    typeof value.name !== "string"
+    || !value.name
+    || typeof value.width !== "number"
+    || !Number.isFinite(value.width)
+    || typeof value.height !== "number"
+    || !Number.isFinite(value.height)
+  ) {
+    return undefined;
+  }
+  return {
+    name: value.name,
+    width: value.width,
+    height: value.height,
+  };
+}
+
+function uniqueViewportNames(
+  viewports: BrowserViewportIdentity[],
+): boolean {
+  return new Set(viewports.map((viewport) => viewport.name)).size
+    === viewports.length;
+}
+
+function statusAwareViewportIdentity(
+  profile: RiddleProofProfile,
+  evidence: RiddleProofProfileEvidence,
+  status: (typeof RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES)[number],
+): boolean {
+  if (!Array.isArray(evidence.viewports)) return false;
+  const expected = profile.target.viewports.map((viewport) => ({
+    name: viewport.name,
+    width: viewport.width,
+    height: viewport.height,
+  }));
+  const observed = evidence.viewports.map(browserViewportIdentity);
+  if (
+    observed.some((viewport) => viewport === undefined)
+    || !uniqueViewportNames(expected)
+    || !uniqueViewportNames(observed as BrowserViewportIdentity[])
+  ) {
+    return false;
+  }
+  const typedObserved = observed as BrowserViewportIdentity[];
+  if (status === "passed" || status === "product_regression") {
+    return sameJsonData(typedObserved, expected);
+  }
+  const expectedByName = new Map(
+    expected.map((viewport) => [viewport.name, viewport]),
+  );
+  return typedObserved.every((viewport) =>
+    sameJsonData(viewport, expectedByName.get(viewport.name)));
+}
+
+function exactViewportTargetBinding(input: {
+  evidence: RiddleProofProfileEvidence;
+  status: (typeof RIDDLE_PROOF_BROWSER_REASSESSED_STATUSES)[number];
+  target: string;
+}): boolean {
+  return input.evidence.viewports.every((viewport) => {
+    if (
+      !isPlainRecord(viewport)
+      || !isPlainRecord(viewport.route)
+      || !sameNormalizedTarget(viewport.route.requested, input.target)
+    ) {
+      return false;
+    }
+    const mustMatchTarget =
+      input.status === "passed" || viewport.route.matched === true;
+    if (!mustMatchTarget) return true;
+    return viewport.route.matched === true
+      && sameNormalizedTarget(viewport.url, input.target)
+      && observedRouteMatchesTarget(viewport.route.observed, input.target);
+  });
+}
+
 export function createRiddleProofBrowserSealedObservationVerifier() {
   const verifierRef = {
     verifier_id: "riddle-proof.browser.sealed-observation",
-    verifier_version: "2",
+    verifier_version: "3",
     implementation_digest: `sha256:${createHash("sha256")
-      .update("riddle-proof.browser.sealed-observation.external-verifier.v2\0")
+      .update(
+        "riddle-proof.browser.sealed-observation.external-verifier.v3.status-aware-viewport-binding\0",
+      )
       .digest("hex")}`,
     trust_basis: { kind: "external_registry" as const },
   };
@@ -320,8 +430,12 @@ export function createRiddleProofBrowserSealedObservationVerifier() {
       if (!isPlainRecord(parsedProfile)) {
         throw new Error("The signed normalized browser profile must be a plain JSON object.");
       }
-      normalizeRiddleProofProfile(parsedProfile);
-      const normalizedProfile = parsedProfile as unknown as RiddleProofProfile;
+      const normalizedProfile = normalizeRiddleProofProfile(parsedProfile);
+      if (!sameJsonData(parsedProfile, normalizedProfile)) {
+        throw new Error(
+          "The signed normalized browser profile must contain the exact canonical normalized profile.",
+        );
+      }
       if (!sameNormalizedTarget(resolveRiddleProofProfileTargetUrl(normalizedProfile), input.scope.target)) {
         throw new Error("The signed normalized browser profile does not resolve to the exact proof target.");
       }
@@ -331,46 +445,88 @@ export function createRiddleProofBrowserSealedObservationVerifier() {
         throw new Error("The signed browser profile result must be a plain JSON object.");
       }
       const profileResult = parsedResult as unknown as RiddleProofProfileResult;
+      const signedStatus = reassessedBrowserStatus(profileResult.status);
+      if (!signedStatus) {
+        throw new Error(
+          "The signed browser result status is not supported by the sealed observation protocol.",
+        );
+      }
       if (
         profileResult.version !== "riddle-proof.profile-result.v1"
         || profileResult.profile_name !== normalizedProfile.name
         || typeof profileResult.runner !== "string"
         || profileResult.baseline_policy !== normalizedProfile.baseline_policy
+        || !Array.isArray(profileResult.checks)
+        || !isPlainRecord(profileResult.route)
       ) {
         throw new Error("The signed browser profile result identity is inconsistent with its normalized profile.");
       }
+      const evidence = profileResult.evidence;
       if (
         profileResult.captured_at !== input.captured_at
-        || !isPlainRecord(profileResult.evidence)
-        || profileResult.evidence.version !== "riddle-proof.profile-evidence.v1"
-        || profileResult.evidence.profile_name !== normalizedProfile.name
-        || profileResult.evidence.captured_at !== input.captured_at
-        || !sameNormalizedTarget(profileResult.evidence.target_url, input.scope.target)
+        || !isPlainRecord(evidence)
+        || evidence.version !== "riddle-proof.profile-evidence.v1"
+        || evidence.profile_name !== normalizedProfile.name
+        || evidence.baseline_policy !== normalizedProfile.baseline_policy
+        || evidence.captured_at !== input.captured_at
+        || !sameNormalizedTarget(evidence.target_url, input.scope.target)
       ) {
         throw new Error("The signed browser result and evidence must match the signed capture time, profile, and target.");
       }
-      if (
-        !isPlainRecord(profileResult.route)
-        || profileResult.route.matched !== true
-        || !sameNormalizedTarget(profileResult.route.requested, input.scope.target)
-        || !observedRouteMatchesTarget(profileResult.route.observed, input.scope.target)
-      ) {
-        throw new Error("The signed browser route must match the exact requested and observed target.");
+      const typedEvidence = evidence as unknown as RiddleProofProfileEvidence;
+      if (!statusAwareViewportIdentity(
+        normalizedProfile,
+        typedEvidence,
+        signedStatus,
+      )) {
+        throw new Error(
+          signedStatus === "passed" || signedStatus === "product_regression"
+            ? "The signed browser evidence must contain the exact normalized viewport name, width, and height vector in declared order with unique names."
+            : "Every supplied unresolved browser viewport must be a unique declared viewport with exact normalized dimensions.",
+        );
       }
-      const sensorObservedUrl = isPlainRecord(input.sensor.metadata)
-        ? input.sensor.metadata.observed_url
+      if (!exactViewportTargetBinding({
+        evidence: typedEvidence,
+        status: signedStatus,
+        target: input.scope.target,
+      })) {
+        throw new Error(
+          "Every signed browser viewport must be bound to the exact requested proof target.",
+        );
+      }
+      if (
+        !sameNormalizedTarget(profileResult.route.requested, input.scope.target)
+      ) {
+        throw new Error("The signed browser route must name the exact requested target.");
+      }
+      const sensorMetadata = isPlainRecord(input.sensor.metadata)
+        ? input.sensor.metadata
         : undefined;
-      if (!sameNormalizedTarget(sensorObservedUrl, input.scope.target)) {
-        throw new Error("The signed browser sensor must report the exact observed target URL.");
+      if (
+        input.sensor.kind !== "browser"
+        || !sameNormalizedTarget(input.sensor.observed_target, input.scope.target)
+        || !sameNormalizedTarget(sensorMetadata?.requested_url, input.scope.target)
+      ) {
+        throw new Error(
+          "The signed browser sensor is not bound to the exact requested proof target.",
+        );
       }
       if (
-        profileResult.status !== "passed"
-        || !Array.isArray(profileResult.checks)
-        || profileResult.checks.length === 0
-        || !profileResult.checks.every((check) =>
-          isPlainRecord(check) && check.status === "passed")
+        profileResult.route.matched === true
+        && (
+          !observedRouteMatchesTarget(
+            profileResult.route.observed,
+            input.scope.target,
+          )
+          || !sameNormalizedTarget(
+            sensorMetadata?.observed_url,
+            input.scope.target,
+          )
+        )
       ) {
-        throw new Error("The signed browser result must contain a nonempty all-passed check set.");
+        throw new Error(
+          "A matched browser route must report the exact observed target URL.",
+        );
       }
       const artifacts = isPlainRecord(profileResult.artifacts)
         && Array.isArray(profileResult.artifacts.riddle_artifacts)
@@ -378,15 +534,16 @@ export function createRiddleProofBrowserSealedObservationVerifier() {
         : undefined;
       const recomputed = assessRiddleProofProfileEvidence(
         normalizedProfile,
-        profileResult.evidence as RiddleProofProfileEvidence,
+        typedEvidence,
         {
           runner: profileResult.runner,
           riddle: profileResult.riddle,
           artifacts,
         },
       );
+      const recomputedStatus = reassessedBrowserStatus(recomputed.status);
       const reassessmentMismatches = [
-        ...(recomputed.status === "passed" ? [] : [`status=${recomputed.status}`]),
+        ...(recomputedStatus === signedStatus ? [] : ["status"]),
         ...(recomputed.captured_at === input.captured_at ? [] : ["captured_at"]),
         ...(sameJsonData(recomputed.route, profileResult.route) ? [] : ["route"]),
         ...(sameJsonData(
@@ -400,12 +557,13 @@ export function createRiddleProofBrowserSealedObservationVerifier() {
         );
       }
       return {
-        version: "riddle-proof.browser-sealed-observation.v2",
+        version: RIDDLE_PROOF_BROWSER_SEALED_OBSERVATION_VERSION,
         normalized_profile_artifact: {
           artifact_id: profileArtifacts[0].artifact_id,
           artifact_digest: profileArtifacts[0].artifact_digest,
         },
         profile_result: profileResult,
+        reassessed_status: signedStatus,
       };
     },
   };
@@ -442,7 +600,7 @@ function contractDefinitions(
             op: "equals",
             source: "observation",
             pointer: "/version",
-            value: "riddle-proof.browser-sealed-observation.v2",
+            value: RIDDLE_PROOF_BROWSER_SEALED_OBSERVATION_VERSION,
           },
           {
             op: "equals",

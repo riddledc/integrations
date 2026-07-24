@@ -23,7 +23,7 @@ import {
 } from "./sealedProof";
 
 export const RIDDLE_PROOF_BROWSER_TRANSITION_PROTOCOL_VERSION =
-  "riddle-proof.browser-transition-protocol.v2" as const;
+  "riddle-proof.browser-transition-protocol.v3" as const;
 
 export const RIDDLE_PROOF_BROWSER_TRANSITION_RULE_MAX_AGE_MS = 30 * 60 * 1000;
 

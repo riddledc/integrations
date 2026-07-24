@@ -194,8 +194,19 @@ registration; the core checks its declared identity and invokes it, but does
 not derive an implementation digest from JavaScript function source.
 The verifier parses the exact digest-pinned normalized profile, binds result
 and evidence timestamps to the signed capture, deterministically reassesses
-the signed evidence against the profile, and requires the exact ordered check
-identity vector to be nonempty and entirely passed.
+the signed evidence against the profile, and requires the reported status,
+route, and exact ordered check-identity vector to match that reassessment. It
+can therefore authenticate `passed`, `product_regression`,
+`proof_insufficient`, and `environment_blocked` observations without treating
+those outcomes as interchangeable. The sealed-profile contracts—not the
+observation verifier—separately require `passed` evidence before issuing a
+successful sealed root. The same signed capture can consequently support an
+honest negative or unresolved report without weakening the successful proof.
+
+Sealed-observation protocol v3 intentionally does not replay archived v2
+protocol objects. Version 3 tightens canonical-profile and result binding, so
+callers with v2 captures must recapture and recompose instead of silently
+receiving the newer verification semantics.
 
 Replay also reconstructs every exact contract registration and expected
 contract from the protocol. The consumer must supply the capture policy and
