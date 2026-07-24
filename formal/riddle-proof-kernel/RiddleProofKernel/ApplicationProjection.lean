@@ -408,6 +408,33 @@ theorem report_authority_mismatch_cannot_conform
     (conforms_implies_pinned_spec_expected_root_verified_and_current
       hConforms).reportUsesPinnedAuthority
 
+theorem report_subject_mismatch_cannot_conform
+    {input : ProjectionInput}
+    (hMismatch : input.report.subject ≠ input.request.subject) :
+    projectDisposition input ≠ .conforms := by
+  intro hConforms
+  exact hMismatch
+    (conforms_implies_pinned_spec_expected_root_verified_and_current
+      hConforms).reportUsesRequestedSubject
+
+/-!
+Changing only the requested specimen cannot reuse the prior runtime report as
+a conforming result.  A runtime must produce a report bound to the replacement
+subject before the deterministic projection can say `conforms`.  Lean does not
+assert that the runtime actually reran capture, hashing, signature checks, or
+currentness assessment.
+-/
+theorem replacement_subject_requires_replacement_bound_report
+    (input : ProjectionInput)
+    (replacementSubject : SubjectRef)
+    (hChanged : replacementSubject ≠ input.report.subject) :
+    projectDisposition
+        (input.withRequest
+          { input.request with subject := replacementSubject }) ≠
+      .conforms := by
+  apply report_subject_mismatch_cannot_conform
+  simpa [ProjectionInput.withRequest] using hChanged.symm
+
 theorem root_mismatch_cannot_conform
     {input : ProjectionInput}
     (hMismatch : input.report.observedRoot ≠ input.authority.expectedRoot) :

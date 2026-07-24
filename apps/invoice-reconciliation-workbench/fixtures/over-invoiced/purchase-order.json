@@ -1,0 +1,27 @@
+{
+  "schema": "riddle.synthetic.purchase-order.v1",
+  "buyer_id": "buyer-northwind",
+  "supplier_id": "supplier-acme",
+  "po_id": "PO-7001",
+  "currency": "USD",
+  "payment_terms": "NET_30",
+  "line_items": [
+    {
+      "line_id": "line-1",
+      "sku": "WIDGET-A",
+      "quantity": 10,
+      "unit_price_minor": 1250,
+      "extended_minor": 12500
+    },
+    {
+      "line_id": "line-2",
+      "sku": "SERVICE-B",
+      "quantity": 10,
+      "unit_price_minor": 500,
+      "extended_minor": 5000
+    }
+  ],
+  "subtotal_minor": 17500,
+  "tax_minor": 1400,
+  "total_minor": 18900
+}

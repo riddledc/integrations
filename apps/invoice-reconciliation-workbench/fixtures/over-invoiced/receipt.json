@@ -1,0 +1,20 @@
+{
+  "schema": "riddle.synthetic.receipt.v1",
+  "buyer_id": "buyer-northwind",
+  "supplier_id": "supplier-acme",
+  "receipt_id": "RCPT-9003",
+  "po_id": "PO-7001",
+  "received_at": "2026-07-23T14:00:00.000Z",
+  "line_items": [
+    {
+      "line_id": "line-1",
+      "sku": "WIDGET-A",
+      "quantity": 10
+    },
+    {
+      "line_id": "line-2",
+      "sku": "SERVICE-B",
+      "quantity": 10
+    }
+  ]
+}

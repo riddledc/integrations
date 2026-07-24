@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="A private offline workbench for checking a synthetic invoice against its purchase order and receipt."
+    >
+    <title>Invoice reconciliation</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to reconciliation</a>
+    <main id="main" class="shell" aria-busy="false">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Private · offline · synthetic</p>
+          <h1 id="task-title">Loading reconciliation…</h1>
+          <p id="task-description" class="lede">
+            Loading the installed policy and current record set.
+          </p>
+        </div>
+        <div class="quiet-proof">
+          <span aria-hidden="true">✓</span>
+          <p>
+            <strong>Deterministic check</strong>
+            Proof details stay in Audit.
+          </p>
+        </div>
+      </header>
+
+      <div
+        id="live-status"
+        class="live-status"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        Loading local records…
+      </div>
+
+      <section class="record-set-card" aria-labelledby="record-set-heading">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Immutable specimen</p>
+            <h2 id="record-set-heading">Current record set</h2>
+          </div>
+          <span id="record-set-state" class="state-pill state-idle">
+            Not checked
+          </span>
+        </div>
+
+        <dl class="record-set-meta">
+          <div>
+            <dt>Revision</dt>
+            <dd id="record-set-revision">Loading…</dd>
+          </div>
+          <div>
+            <dt>Attempt</dt>
+            <dd id="record-set-attempt">Loading…</dd>
+          </div>
+          <div>
+            <dt>Record set</dt>
+            <dd id="record-set-label">Loading…</dd>
+          </div>
+        </dl>
+
+        <p id="last-activity" class="activity-note" hidden></p>
+        <div id="records-grid" class="records-grid"></div>
+
+        <div class="primary-actions">
+          <p>
+            The interface displays application-provided values; it does not
+            recalculate them or decide whether they pass in the browser.
+          </p>
+          <button
+            id="check-button"
+            class="button button-primary"
+            type="button"
+            disabled
+          >
+            Check current record set
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="result-section"
+        class="result-card"
+        aria-labelledby="result-heading"
+        hidden
+      >
+        <div class="section-heading result-heading">
+          <div>
+            <p class="section-kicker">Deterministic result</p>
+            <h2 id="result-heading">Result</h2>
+          </div>
+          <span id="result-state" class="state-pill state-idle">
+            Not checked
+          </span>
+        </div>
+        <p id="result-summary" class="result-summary"></p>
+        <p id="result-next-action" class="next-action"></p>
+
+        <div class="result-columns">
+          <div id="findings-region" class="finding-region" hidden>
+            <h3>What needs attention</h3>
+            <ul id="findings-list" class="check-list finding-list"></ul>
+          </div>
+          <div id="passed-region" class="passing-region" hidden>
+            <h3>What checked out</h3>
+            <ul id="passed-list" class="check-list passing-list"></ul>
+          </div>
+        </div>
+
+        <details id="scope-region" class="scope-region" hidden>
+          <summary>What this result does not establish</summary>
+          <ul id="scope-list"></ul>
+        </details>
+      </section>
+
+      <section
+        id="correction-section"
+        class="correction-card"
+        aria-labelledby="correction-heading"
+        hidden
+      >
+        <div>
+          <p class="section-kicker">Invoice-only next step</p>
+          <h2 id="correction-heading">Exact invoice correction</h2>
+          <p id="correction-reason" class="correction-reason"></p>
+        </div>
+
+        <div class="change-table-wrap">
+          <table class="change-table">
+            <caption class="visually-hidden">
+              Exact fields changed by the bounded invoice correction
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Invoice field</th>
+                <th scope="col">Current</th>
+                <th scope="col">Corrected</th>
+              </tr>
+            </thead>
+            <tbody id="correction-changes"></tbody>
+          </table>
+        </div>
+
+        <div class="correction-action">
+          <p>
+            This button cannot choose a policy or edit the purchase order or
+            receipt. It applies only the typed change shown above.
+          </p>
+          <button
+            id="correct-button"
+            class="button button-correct"
+            type="button"
+            disabled
+          >
+            Create corrected invoice revision
+          </button>
+        </div>
+      </section>
+
+      <section
+        id="reuse-section"
+        class="reuse-card"
+        aria-labelledby="reuse-heading"
+        hidden
+      >
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">Compositional reuse</p>
+            <h2 id="reuse-heading">What carried forward</h2>
+          </div>
+        </div>
+        <p id="reuse-summary" class="reuse-summary"></p>
+        <ul id="reuse-list" class="reuse-list"></ul>
+      </section>
+
+      <div class="supporting-grid">
+        <section class="policy-card" aria-labelledby="policy-heading">
+          <p class="section-kicker">Pinned policy</p>
+          <h2 id="policy-heading">What this check requires</h2>
+          <ul id="requirements-list" class="requirements-list"></ul>
+        </section>
+
+        <section class="history-card" aria-labelledby="history-heading">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Immutable history</p>
+              <h2 id="history-heading">Checks</h2>
+            </div>
+          </div>
+          <p id="history-empty" class="empty-copy">No checks have run yet.</p>
+          <ol id="history-list" class="history-list"></ol>
+        </section>
+      </div>
+
+      <details id="audit-panel" class="audit-panel">
+        <summary>Audit</summary>
+        <div class="audit-content">
+          <p>
+            Digests, certificate identities, signatures, and proof-graph
+            structure are loaded only for the historical check you select.
+          </p>
+          <pre id="audit-output" tabindex="0">Select “View audit” on a check.</pre>
+        </div>
+      </details>
+    </main>
+  </body>
+</html>

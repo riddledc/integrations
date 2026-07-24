@@ -35,12 +35,14 @@ replacement `M` branch and recomposed ancestors.  The runtime experiment uses
 an N-ary final rule; this v0 Lean kernel is binary, so `QS` is the explicit
 binary association of its identity and payment premises.
 
-The semantics are intentionally not an accounting standard.  They model one
-single-line invoice in integer minor currency units under an explicitly pinned
-synthetic policy.  They do not cover partial payments, split receipts,
-tolerances, credits, duplicate detection outside the exact supplied register,
-foreign exchange, tax correctness, authorization, fraud, legal validity,
-delivery, or bank settlement.
+The semantics are intentionally not an accounting standard.  The
+cross-record pyramid models one single-line projection under an explicitly
+pinned synthetic policy.  A separate arithmetic slice below covers arbitrary
+finite lists of priced lines in integer minor currency units, including the
+workbench's two-line fixture.  Neither slice covers partial payments, split
+receipts, tolerances, credits, duplicate detection outside the exact supplied
+register, foreign exchange, tax correctness, authorization, fraud, legal
+validity, delivery, or bank settlement.
 
 This module also starts after runtime grounding.  Runtime code remains
 responsible for source parsing, canonical JSON, the correspondence between
@@ -72,10 +74,80 @@ structure PolicyRef where
   deriving DecidableEq, Repr, BEq
 
 /-!
-Amounts use integer minor units.  The fixture is single-line on purpose: it
-lets Lean state the arithmetic exactly without pretending to settle rounding,
-allocation, tax, or line-matching policy for real accounting systems.
+Amounts use integer minor units.  `PricedLine` and
+`MultiLineArithmeticRecomputed` model the workbench's arithmetic shape for any
+finite nonempty list: every stated line extension is recomputed, the stated
+subtotal is the sum of those extensions, and the stated total is subtotal plus
+stated tax.  Natural numbers avoid rounding and overflow inside Lean; runtime
+safe-integer bounds and the 1,000-line resource limit remain parser
+obligations.
+
+The later `Invoice` and `PurchaseOrder` structures retain the older
+single-line cross-record projection.  The generic theorem below closes the
+multi-line arithmetic invariant without pretending that Lean parsed runtime
+JSON or proved the line-order and identity correspondence.
 -/
+structure PricedLine where
+  lineId : String
+  itemId : String
+  quantity : Nat
+  unitPriceMinor : Nat
+  extendedMinor : Nat
+  deriving DecidableEq, Repr, BEq
+
+def EveryLineExtensionExact (lines : List PricedLine) : Prop :=
+  ∀ line ∈ lines,
+    line.extendedMinor = line.quantity * line.unitPriceMinor
+
+def statedExtensionSubtotal (lines : List PricedLine) : Nat :=
+  (lines.map (fun line => line.extendedMinor)).sum
+
+def recomputedExtensionSubtotal (lines : List PricedLine) : Nat :=
+  (lines.map (fun line => line.quantity * line.unitPriceMinor)).sum
+
+def MultiLineArithmeticRecomputed
+    (lines : List PricedLine)
+    (subtotalMinor taxMinor totalMinor : Nat) : Prop :=
+  lines ≠ [] ∧
+    EveryLineExtensionExact lines ∧
+    subtotalMinor = statedExtensionSubtotal lines ∧
+    totalMinor = subtotalMinor + taxMinor
+
+theorem exact_line_extensions_have_exact_recomputed_sum
+    (lines : List PricedLine)
+    (hExact : EveryLineExtensionExact lines) :
+    statedExtensionSubtotal lines = recomputedExtensionSubtotal lines := by
+  induction lines with
+  | nil =>
+      rfl
+  | cons head tail inductionHypothesis =>
+      have hHead :
+          head.extendedMinor = head.quantity * head.unitPriceMinor :=
+        hExact head (by simp)
+      have hTail : EveryLineExtensionExact tail := by
+        intro line hMember
+        exact hExact line (by simp [hMember])
+      have hTailSum := inductionHypothesis hTail
+      unfold statedExtensionSubtotal recomputedExtensionSubtotal at hTailSum
+      simp only [statedExtensionSubtotal, recomputedExtensionSubtotal,
+        List.map_cons, List.sum_cons]
+      rw [hHead, hTailSum]
+
+theorem multi_line_arithmetic_implies_exact_total_from_terms
+    (lines : List PricedLine)
+    (subtotalMinor taxMinor totalMinor : Nat)
+    (hArithmetic :
+      MultiLineArithmeticRecomputed
+        lines subtotalMinor taxMinor totalMinor) :
+    totalMinor = recomputedExtensionSubtotal lines + taxMinor := by
+  rcases hArithmetic with
+    ⟨_hNonempty, hExtensions, hSubtotal, hTotal⟩
+  calc
+    totalMinor = subtotalMinor + taxMinor := hTotal
+    _ = statedExtensionSubtotal lines + taxMinor := by rw [hSubtotal]
+    _ = recomputedExtensionSubtotal lines + taxMinor := by
+      rw [exact_line_extensions_have_exact_recomputed_sum lines hExtensions]
+
 structure Invoice where
   ref : RecordRef
   buyerId : String
@@ -326,6 +398,20 @@ canonical JSON encoder or digest algorithm.
 -/
 abbrev ParameterDescribes :=
   String → PolicyRef → List RecordRef → Option InvoiceIdentity → Prop
+
+/-!
+The runtime parameter-description relation must be single-valued: one opaque
+parameter text cannot describe two different policies, ordered record lists,
+or target identities.  Lean does not prove this property of canonical JSON or
+its decoder.  It is an explicit conformance premise used below to state what
+an immutable invoice replacement invalidates.
+-/
+def ParameterDescriptionIsSingleValued
+    (describes : ParameterDescribes) : Prop :=
+  ∀ text policy records target policy' records' target',
+    describes text policy records target →
+    describes text policy' records' target' →
+    policy = policy' ∧ records = records' ∧ target = target'
 
 /-!
 This is the explicit cross-language correspondence assumption.  It binds every
@@ -804,6 +890,44 @@ def reconciliationMeaning
       False
 
 /-!
+The three-way branch retains exactly its six declared premises.  In
+particular, the invoice-to-order and invoice-to-receipt conclusions share one
+invoice-arithmetic premise but do not erase either cross-record relationship.
+-/
+theorem three_source_meaning_iff_exact_declared_premises
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet) :
+    threeSourceMeaning expectedPolicy facts ↔
+      policyPinned expectedPolicy facts ∧
+      InvoiceArithmeticRecomputed facts.invoice ∧
+      PurchaseOrderArithmeticRecomputed facts.purchaseOrder ∧
+      ReceiptCapturedNormalized facts.receiving ∧
+      InvoicePurchaseOrderFieldsAgree facts.invoice facts.purchaseOrder ∧
+      InvoiceReceiptQuantitiesAgree facts.invoice facts.receiving := by
+  constructor
+  · rintro ⟨hOrderBranch, hReceiptBranch⟩
+    have hArithmetic := hOrderBranch.1.1
+    have hPurchaseOrder := hOrderBranch.1.2
+    have hReceipt := hReceiptBranch.1.2
+    exact
+      ⟨hArithmetic.1, hArithmetic.2, hPurchaseOrder.2, hReceipt.2,
+        hOrderBranch.2, hReceiptBranch.2⟩
+  · rintro
+      ⟨hPolicy, hArithmetic, hPurchaseOrder, hReceipt,
+        hOrderRelation, hReceiptRelation⟩
+    have hArithmeticMeaning :
+        invoiceArithmeticMeaning expectedPolicy facts :=
+      ⟨hPolicy, hArithmetic⟩
+    have hPurchaseOrderMeaning :
+        purchaseOrderMeaning expectedPolicy facts :=
+      ⟨hPolicy, hPurchaseOrder⟩
+    have hReceiptMeaning : receiptMeaning expectedPolicy facts :=
+      ⟨hPolicy, hReceipt⟩
+    exact
+      ⟨⟨⟨hArithmeticMeaning, hPurchaseOrderMeaning⟩, hOrderRelation⟩,
+        ⟨⟨hArithmeticMeaning, hReceiptMeaning⟩, hReceiptRelation⟩⟩
+
+/-!
 The root retains exactly the five runtime leaf meanings, the independently
 expected policy, the three runtime cross-record relationships, the register
 target-to-invoice relationship, and its own canonical parameter binding.  The
@@ -1191,6 +1315,188 @@ theorem invoice_identity_meaning_is_payment_independent
   rfl
 
 /-!
+Replacing an invoice changes only the invoice field of the typed record set.
+The independently captured purchase-order and receipt meanings are therefore
+definitionally reusable.  This says nothing about the replacement invoice's
+own arithmetic or its agreement with those unchanged records.
+-/
+def replaceInvoice
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice) : CapturedRecordSet :=
+  { facts with invoice := replacementInvoice }
+
+theorem invoice_replacement_preserves_purchase_order_meaning
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice) :
+    purchaseOrderMeaning expectedPolicy
+        (replaceInvoice facts replacementInvoice) ↔
+      purchaseOrderMeaning expectedPolicy facts := by
+  rfl
+
+theorem invoice_replacement_preserves_receipt_meaning
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice) :
+    receiptMeaning expectedPolicy
+        (replaceInvoice facts replacementInvoice) ↔
+      receiptMeaning expectedPolicy facts := by
+  rfl
+
+/-!
+An immutable invoice replacement has a different exact `RecordRef`.  Under a
+single-valued parameter-description boundary, both the three-way conclusion
+and the full reconciliation root must therefore receive new canonical
+parameters and new claim keys.  Old conclusions are not silently reusable.
+-/
+theorem changed_invoice_ref_forces_changed_three_source_parameters
+    (describes : ParameterDescribes)
+    (hSingleValued : ParameterDescriptionIsSingleValued describes)
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice)
+    (oldParameters revisedParameters : CanonicalParameters)
+    (hOld :
+      CanonicalCorrespondence describes expectedPolicy facts oldParameters)
+    (hRevised :
+      CanonicalCorrespondence describes expectedPolicy
+        (replaceInvoice facts replacementInvoice) revisedParameters)
+    (hChanged : replacementInvoice.ref ≠ facts.invoice.ref) :
+    oldParameters.threeSource ≠ revisedParameters.threeSource := by
+  intro hParameters
+  have hRevisedBinding :
+      describes oldParameters.threeSource expectedPolicy
+        [replacementInvoice.ref, facts.purchaseOrder.ref, facts.receiving.ref]
+        none := by
+    simpa [replaceInvoice, hParameters] using hRevised.threeSource
+  have hRecords :=
+    (hSingleValued oldParameters.threeSource expectedPolicy
+      [facts.invoice.ref, facts.purchaseOrder.ref, facts.receiving.ref] none
+      expectedPolicy
+      [replacementInvoice.ref, facts.purchaseOrder.ref, facts.receiving.ref]
+      none hOld.threeSource hRevisedBinding).2.1
+  have hInvoiceRef : facts.invoice.ref = replacementInvoice.ref := by
+    simpa using congrArg List.head? hRecords
+  exact hChanged hInvoiceRef.symm
+
+theorem changed_invoice_ref_forces_changed_root_parameters
+    (describes : ParameterDescribes)
+    (hSingleValued : ParameterDescriptionIsSingleValued describes)
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice)
+    (oldParameters revisedParameters : CanonicalParameters)
+    (hOld :
+      CanonicalCorrespondence describes expectedPolicy facts oldParameters)
+    (hRevised :
+      CanonicalCorrespondence describes expectedPolicy
+        (replaceInvoice facts replacementInvoice) revisedParameters)
+    (hChanged : replacementInvoice.ref ≠ facts.invoice.ref) :
+    oldParameters.root ≠ revisedParameters.root := by
+  intro hParameters
+  have hRevisedBinding :
+      describes oldParameters.root expectedPolicy
+        [replacementInvoice.ref, facts.purchaseOrder.ref, facts.receiving.ref,
+          facts.payment.ref, facts.invoiceRegister.ref]
+        (some facts.invoiceRegister.targetIdentity) := by
+    simpa [replaceInvoice, hParameters] using hRevised.root
+  have hRecords :=
+    (hSingleValued oldParameters.root expectedPolicy
+      [facts.invoice.ref, facts.purchaseOrder.ref, facts.receiving.ref,
+        facts.payment.ref, facts.invoiceRegister.ref]
+      (some facts.invoiceRegister.targetIdentity) expectedPolicy
+      [replacementInvoice.ref, facts.purchaseOrder.ref, facts.receiving.ref,
+        facts.payment.ref, facts.invoiceRegister.ref]
+      (some facts.invoiceRegister.targetIdentity)
+      hOld.root hRevisedBinding).2.1
+  have hInvoiceRef : facts.invoice.ref = replacementInvoice.ref := by
+    simpa using congrArg List.head? hRecords
+  exact hChanged hInvoiceRef.symm
+
+theorem invoice_replacement_changes_three_source_conclusion
+    (describes : ParameterDescribes)
+    (hSingleValued : ParameterDescriptionIsSingleValued describes)
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice)
+    (oldParameters revisedParameters : CanonicalParameters)
+    (hOld :
+      CanonicalCorrespondence describes expectedPolicy facts oldParameters)
+    (hRevised :
+      CanonicalCorrespondence describes expectedPolicy
+        (replaceInvoice facts replacementInvoice) revisedParameters)
+    (hChanged : replacementInvoice.ref ≠ facts.invoice.ref) :
+    threeSourceClaim oldParameters.threeSource ≠
+      threeSourceClaim revisedParameters.threeSource := by
+  intro hClaims
+  exact
+    changed_invoice_ref_forces_changed_three_source_parameters
+      describes hSingleValued expectedPolicy facts replacementInvoice
+      oldParameters revisedParameters hOld hRevised hChanged
+      (congrArg ClaimKey.canonicalParameters hClaims)
+
+theorem invoice_replacement_changes_root_conclusion
+    (describes : ParameterDescribes)
+    (hSingleValued : ParameterDescriptionIsSingleValued describes)
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice)
+    (oldParameters revisedParameters : CanonicalParameters)
+    (hOld :
+      CanonicalCorrespondence describes expectedPolicy facts oldParameters)
+    (hRevised :
+      CanonicalCorrespondence describes expectedPolicy
+        (replaceInvoice facts replacementInvoice) revisedParameters)
+    (hChanged : replacementInvoice.ref ≠ facts.invoice.ref) :
+    capturedFieldsAgreeClaim oldParameters.root ≠
+      capturedFieldsAgreeClaim revisedParameters.root := by
+  intro hClaims
+  exact
+    changed_invoice_ref_forces_changed_root_parameters
+      describes hSingleValued expectedPolicy facts replacementInvoice
+      oldParameters revisedParameters hOld hRevised hChanged
+      (congrArg ClaimKey.canonicalParameters hClaims)
+
+/-!
+Here "fresh" means replacement-bound, not clock freshness.  Any semantic root
+for the revised specimen must supply the replacement invoice's arithmetic and
+all four relationships that mention it, and its root parameter binding must
+name the replacement `RecordRef`.  Runtime code still owns capture time,
+parsing, hashing, signatures, and currentness.
+-/
+theorem revised_root_requires_replacement_bound_invoice_premises
+    (scope : Scope)
+    (describes : ParameterDescribes)
+    (expectedPolicy : PolicyRef)
+    (facts : CapturedRecordSet)
+    (replacementInvoice : Invoice)
+    (revisedParameters : CanonicalParameters)
+    (hRoot :
+      reconciliationMeaning describes expectedPolicy
+          (replaceInvoice facts replacementInvoice) revisedParameters scope
+        (capturedFieldsAgreeClaim revisedParameters.root)) :
+    InvoiceArithmeticRecomputed replacementInvoice ∧
+      InvoicePurchaseOrderFieldsAgree replacementInvoice facts.purchaseOrder ∧
+      InvoiceReceiptQuantitiesAgree replacementInvoice facts.receiving ∧
+      PaymentFieldsMatchInvoice replacementInvoice facts.payment ∧
+      InvoiceRegisterTargetsInvoice replacementInvoice facts.invoiceRegister ∧
+      describes revisedParameters.root expectedPolicy
+        [replacementInvoice.ref, facts.purchaseOrder.ref, facts.receiving.ref,
+          facts.payment.ref, facts.invoiceRegister.ref]
+        (some facts.invoiceRegister.targetIdentity) := by
+  have hExact :=
+    (captured_fields_root_meaning_iff_exact_relationships
+      scope describes expectedPolicy
+      (replaceInvoice facts replacementInvoice) revisedParameters).mp hRoot
+  rcases hExact with
+    ⟨_hPolicy, hArithmetic, _hPurchaseOrder, _hReceipt, _hPayment,
+      _hRegister, hOrderRelation, hReceiptRelation, hPaymentRelation,
+      hRegisterTarget, hRootBinding⟩
+  simpa [replaceInvoice] using
+    ⟨hArithmetic, hOrderRelation, hReceiptRelation, hPaymentRelation,
+      hRegisterTarget, hRootBinding⟩
+
+/-!
 If an old root was established and a replacement payment independently
 satisfies both the posted-capture leaf meaning and the exact relationship for
 the unchanged invoice, the unchanged three-source and invoice-identity
@@ -1224,6 +1530,74 @@ theorem changed_payment_recomposes_from_unchanged_three_source_branch
   exact ⟨⟨hIdentity, hReplacementPaymentBranch⟩, hThreeSource⟩
 
 namespace Fixture
+
+/-!
+These two-line values match the public synthetic workbench fixture.  The first
+invoice is internally arithmetic-consistent even though its second-line
+quantity does not agree with the separately captured purchase order and
+receipt.  The second list is the typed invoice-only correction.  These
+theorems cover arithmetic only; fixture-file decoding and correspondence to
+these typed values remain runtime/source-level test obligations.
+-/
+def workbenchOverInvoicedLines : List PricedLine := [
+  {
+    lineId := "line-1"
+    itemId := "WIDGET-A"
+    quantity := 10
+    unitPriceMinor := 1250
+    extendedMinor := 12500
+  },
+  {
+    lineId := "line-2"
+    itemId := "SERVICE-B"
+    quantity := 12
+    unitPriceMinor := 500
+    extendedMinor := 6000
+  }
+]
+
+def workbenchCorrectedLines : List PricedLine := [
+  {
+    lineId := "line-1"
+    itemId := "WIDGET-A"
+    quantity := 10
+    unitPriceMinor := 1250
+    extendedMinor := 12500
+  },
+  {
+    lineId := "line-2"
+    itemId := "SERVICE-B"
+    quantity := 10
+    unitPriceMinor := 500
+    extendedMinor := 5000
+  }
+]
+
+theorem workbench_over_invoiced_two_line_arithmetic_holds :
+    MultiLineArithmeticRecomputed
+      workbenchOverInvoicedLines 18500 1480 19980 := by
+  simp [MultiLineArithmeticRecomputed, EveryLineExtensionExact,
+    workbenchOverInvoicedLines, statedExtensionSubtotal]
+
+theorem workbench_over_invoiced_total_is_exactly_recomputed :
+    19980 =
+      recomputedExtensionSubtotal workbenchOverInvoicedLines + 1480 :=
+  multi_line_arithmetic_implies_exact_total_from_terms
+    workbenchOverInvoicedLines 18500 1480 19980
+    workbench_over_invoiced_two_line_arithmetic_holds
+
+theorem workbench_corrected_two_line_arithmetic_holds :
+    MultiLineArithmeticRecomputed
+      workbenchCorrectedLines 17500 1400 18900 := by
+  simp [MultiLineArithmeticRecomputed, EveryLineExtensionExact,
+    workbenchCorrectedLines, statedExtensionSubtotal]
+
+theorem workbench_corrected_total_is_exactly_recomputed :
+    18900 =
+      recomputedExtensionSubtotal workbenchCorrectedLines + 1400 :=
+  multi_line_arithmetic_implies_exact_total_from_terms
+    workbenchCorrectedLines 17500 1400 18900
+    workbench_corrected_two_line_arithmetic_holds
 
 def policy : PolicyRef where
   policyId := "synthetic-ap-field-policy"
