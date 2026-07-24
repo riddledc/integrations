@@ -20,13 +20,17 @@ runtime must do those things.  This file starts with:
   independently configured resolver;
 * a subject identity derived by the controller from that exact scope and the
   pinned contract; and
+* for agent-mediated changes, a structurally limited proposal checked against
+  a separately pinned mutation policy and independently resolved new revision;
+  and
 * one runtime-supplied outcome for each of the four required checkpoints.
 
 The theorems prove only that the controller cannot silently swap the pinned
 contract while preparing a repair, that an attempt is bound to the resolver's
-exact scope and the contract-derived subject, that a result for one subject
-cannot be reused for another, and that the client-facing disposition follows
-the intended complete-vector algebra.
+exact scope and the contract-derived subject, that a bounded proposal cannot
+replace the configured mutation policy or application authority, that a
+previous result cannot be reused after the revision changes, and that the
+client-facing disposition follows the intended complete-vector algebra.
 -/
 
 structure PinnedChangeContract where
@@ -438,6 +442,258 @@ theorem fresh_attempt_cannot_reuse_previous_result
     hOldPrepared hNextPrepared (Ne.symm hFacts.2.2.1) hOldResult
 
 end Controller
+
+/-!
+An agent-mediated change adds one more trust boundary before browser proof:
+the agent may return a bounded proposal, but it may not choose the proof
+contract, proof authority, or mutation policy.
+
+`ChangeProposal` is intentionally small.  Its revision and digest strings are
+runtime-supplied identities; Lean does not hash source bytes, inspect a diff,
+authenticate the agent, or establish that the proposed mutation is the one
+described by those strings.  The runtime must validate those facts before
+calling `prepareProposal`.
+-/
+structure PinnedMutationPolicy where
+  policyId : String
+  protocolVersion : String
+  allowedMutationKind : String
+  policyDigest : String
+  deriving DecidableEq, Repr, BEq
+
+structure ChangeProposal where
+  proposalRef : String
+  candidateRef : CandidateRef
+  baseRevision : String
+  proposedRevision : String
+  mutationKind : String
+  mutationPolicyDigest : String
+  deriving DecidableEq, Repr, BEq
+
+/-!
+The proof controller and mutation policy are configuration.  Ordinary proposal
+input contains neither one.
+-/
+structure ChangeController where
+  proofController : Controller
+  pinnedMutationPolicy : PinnedMutationPolicy
+
+structure PreparedChangeProposal where
+  proposal : ChangeProposal
+  mutationPolicy : PinnedMutationPolicy
+  previousAttempt : PreparedAttempt
+  newAttempt : PreparedAttempt
+  deriving DecidableEq, Repr, BEq
+
+def ProposalMatchesPinnedBaseAndPolicy
+    (controller : ChangeController)
+    (previous : PreparedAttempt)
+    (proposal : ChangeProposal) : Prop :=
+  previous.contract = controller.proofController.pinnedContract ∧
+  proposal.baseRevision = previous.resolvedScope.candidateRevision ∧
+  proposal.proposedRevision ≠ proposal.baseRevision ∧
+  proposal.mutationKind =
+    controller.pinnedMutationPolicy.allowedMutationKind ∧
+  proposal.mutationPolicyDigest =
+    controller.pinnedMutationPolicy.policyDigest
+
+instance proposalMatchesPinnedBaseAndPolicyDecidable
+    (controller : ChangeController)
+    (previous : PreparedAttempt)
+    (proposal : ChangeProposal) :
+    Decidable (ProposalMatchesPinnedBaseAndPolicy
+      controller previous proposal) := by
+  unfold ProposalMatchesPinnedBaseAndPolicy
+  infer_instance
+
+namespace ChangeController
+
+/-!
+Preparation accepts the proposal only when it names the exact previous
+revision, a distinct proposed revision, and the configured mutation policy.
+The proposed candidate is then resolved through the already configured proof
+controller; its independently resolved revision must equal the proposal's new
+revision.
+-/
+def prepareProposal
+    (controller : ChangeController)
+    (previous : PreparedAttempt)
+    (proposal : ChangeProposal) : Option PreparedChangeProposal :=
+  if ProposalMatchesPinnedBaseAndPolicy controller previous proposal then
+    match controller.proofController.prepareAttempt proposal.candidateRef with
+    | none => none
+    | some next =>
+        if next.resolvedScope.candidateRevision = proposal.proposedRevision then
+          some {
+            proposal := proposal
+            mutationPolicy := controller.pinnedMutationPolicy
+            previousAttempt := previous
+            newAttempt := next
+          }
+        else
+          none
+  else
+    none
+
+theorem prepared_proposal_is_bound_to_exact_input_and_resolved_revision
+    {controller : ChangeController}
+    {previous : PreparedAttempt}
+    {proposal : ChangeProposal}
+    {prepared : PreparedChangeProposal}
+    (hPrepared :
+      controller.prepareProposal previous proposal = some prepared) :
+    prepared.proposal = proposal ∧
+      prepared.previousAttempt = previous ∧
+      prepared.mutationPolicy = controller.pinnedMutationPolicy ∧
+      controller.proofController.prepareAttempt proposal.candidateRef =
+        some prepared.newAttempt ∧
+      prepared.newAttempt.resolvedScope.candidateRevision =
+        proposal.proposedRevision ∧
+      ProposalMatchesPinnedBaseAndPolicy controller previous proposal := by
+  unfold prepareProposal at hPrepared
+  split at hPrepared
+  · next hMatches =>
+      split at hPrepared
+      · contradiction
+      · next next hNext =>
+          split at hPrepared
+          · next hRevision =>
+              simp only [Option.some.injEq] at hPrepared
+              subst prepared
+              exact ⟨rfl, rfl, rfl, hNext, hRevision, hMatches⟩
+          · contradiction
+  · contradiction
+
+theorem prepared_proposal_preserves_pinned_contract_and_policy
+    {controller : ChangeController}
+    {previous : PreparedAttempt}
+    {proposal : ChangeProposal}
+    {prepared : PreparedChangeProposal}
+    (hPrepared :
+      controller.prepareProposal previous proposal = some prepared) :
+    prepared.previousAttempt.contract =
+        controller.proofController.pinnedContract ∧
+      prepared.newAttempt.contract =
+        controller.proofController.pinnedContract ∧
+      prepared.mutationPolicy = controller.pinnedMutationPolicy := by
+  rcases
+    prepared_proposal_is_bound_to_exact_input_and_resolved_revision hPrepared
+      with ⟨_, hPrevious, hPolicy, hNewPrepared, _, hMatches⟩
+  have hNewContract :=
+    Controller.prepared_attempt_uses_pinned_contract hNewPrepared
+  rw [hPrevious]
+  exact ⟨hMatches.1, hNewContract, hPolicy⟩
+
+/-!
+A revision change changes the structurally retained resolver scope and
+therefore the resolved subject and attempt authority.  Reuse of the previous
+result is impossible in this model.  The runtime still has to establish that
+the revision strings identify the actual source bytes.
+-/
+theorem changed_revision_invalidates_previous_result
+    {controller : ChangeController}
+    {previousCandidateRef : CandidateRef}
+    {previous : PreparedAttempt}
+    {proposal : ChangeProposal}
+    {prepared : PreparedChangeProposal}
+    {result : Controller.AttemptResult}
+    (hPreviousPrepared :
+      controller.proofController.prepareAttempt previousCandidateRef =
+        some previous)
+    (hProposalPrepared :
+      controller.prepareProposal previous proposal = some prepared)
+    (hPreviousResult : Controller.ResultBelongsTo result previous) :
+    ¬ Controller.ResultBelongsTo result prepared.newAttempt := by
+  rcases
+    prepared_proposal_is_bound_to_exact_input_and_resolved_revision
+      hProposalPrepared
+      with ⟨_, _, _, hNewPrepared, hNewRevision, hMatches⟩
+  have hPreviousParts :=
+    Controller.prepared_attempt_uses_exact_resolver_scope_and_contract_derived_subject_and_authority
+      hPreviousPrepared
+  have hNewParts :=
+    Controller.prepared_attempt_uses_exact_resolver_scope_and_contract_derived_subject_and_authority
+      hNewPrepared
+  have hRevisionChanged :
+      previous.resolvedScope.candidateRevision ≠
+        prepared.newAttempt.resolvedScope.candidateRevision := by
+    intro hEqual
+    apply hMatches.2.2.1
+    calc
+      proposal.proposedRevision =
+          prepared.newAttempt.resolvedScope.candidateRevision :=
+        hNewRevision.symm
+      _ = previous.resolvedScope.candidateRevision := hEqual.symm
+      _ = proposal.baseRevision := hMatches.2.1.symm
+  have hSubjectChanged :
+      previous.resolvedSubject ≠ prepared.newAttempt.resolvedSubject := by
+    intro hSubjectsEqual
+    apply hRevisionChanged
+    have hScopesEqual :
+        previous.resolvedScope = prepared.newAttempt.resolvedScope := by
+      calc
+        previous.resolvedScope =
+            previous.resolvedSubject.scope := by
+              rw [hPreviousParts.2.2.1]
+              rfl
+        _ = prepared.newAttempt.resolvedSubject.scope :=
+          congrArg ResolvedSubject.scope hSubjectsEqual
+        _ = prepared.newAttempt.resolvedScope := by
+          rw [hNewParts.2.2.1]
+          rfl
+    exact congrArg ResolvedScope.candidateRevision hScopesEqual
+  exact Controller.changed_subject_cannot_reuse_attempt_result
+    hPreviousPrepared hNewPrepared hSubjectChanged hPreviousResult
+
+end ChangeController
+
+namespace PreparedChangeProposal
+
+/-!
+The new proof request is derived from the prepared new subject.  Replacing the
+request this way preserves the independently configured application authority
+and the runtime report exactly; neither may come from the agent proposal.
+-/
+def projectionInput
+    (prepared : PreparedChangeProposal)
+    (configured : ProjectionInput) : ProjectionInput :=
+  configured.withRequest {
+    expectedSpecification := configured.authority.specification
+    subject := prepared.newAttempt.resolvedSubject.subject
+  }
+
+@[simp] theorem projection_input_preserves_pinned_authority
+    (prepared : PreparedChangeProposal)
+    (configured : ProjectionInput) :
+    (prepared.projectionInput configured).authority =
+      configured.authority := by
+  rfl
+
+@[simp] theorem projection_input_preserves_runtime_report
+    (prepared : PreparedChangeProposal)
+    (configured : ProjectionInput) :
+    (prepared.projectionInput configured).report =
+      configured.report := by
+  rfl
+
+theorem conforming_prepared_change_requires_current_verified_new_subject
+    {prepared : PreparedChangeProposal}
+    {configured : ProjectionInput}
+    (hConforms :
+      projectDisposition (prepared.projectionInput configured) =
+        .conforms) :
+    configured.report.subject =
+        prepared.newAttempt.resolvedSubject.subject ∧
+      configured.report.evidenceVerified = true ∧
+      configured.report.semanticDerivationVerified = true ∧
+      configured.report.kernelDisposition = .checked ∧
+      configured.report.currentness = .current := by
+  have hFacts :=
+    conforms_implies_pinned_spec_expected_root_verified_and_current hConforms
+  exact ⟨hFacts.reportUsesRequestedSubject, hFacts.evidenceVerified,
+    hFacts.semanticDerivationVerified, hFacts.kernelChecked, hFacts.current⟩
+
+end PreparedChangeProposal
 
 /-!
 The browser-transition report is complete by construction: it contains one

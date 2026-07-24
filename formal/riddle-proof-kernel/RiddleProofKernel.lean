@@ -9,6 +9,7 @@ import RiddleProofKernel.BrowserTransition
 import RiddleProofKernel.SyntheticRecordReconciliation
 import RiddleProofKernel.ApplicationProjection
 import RiddleProofKernel.ProofGuidedWebChange
+import RiddleProofKernel.CtaWebChange
 
 namespace RiddleProofKernel
 

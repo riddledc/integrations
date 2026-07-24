@@ -2,7 +2,7 @@
   "name": "riddle-proof-guided-web-change-app",
   "version": "0.0.0",
   "private": true,
-  "description": "Private proof-guided durable-setting repair application.",
+  "description": "Private proof-guided web-change applications.",
   "type": "module",
   "main": "./dist/application.js",
   "types": "./dist/application.d.ts",
@@ -18,6 +18,30 @@
     "./cli": {
       "types": "./dist/cli.d.ts",
       "import": "./dist/cli.js"
+    },
+    "./cta-agent": {
+      "types": "./dist/cta-agent.d.ts",
+      "import": "./dist/cta-agent.js"
+    },
+    "./cta-application": {
+      "types": "./dist/cta-application.d.ts",
+      "import": "./dist/cta-application.js"
+    },
+    "./cta-local-runtime": {
+      "types": "./dist/cta-local-runtime.d.ts",
+      "import": "./dist/cta-local-runtime.js"
+    },
+    "./cta-main": {
+      "types": "./dist/cta-main.d.ts",
+      "import": "./dist/cta-main.js"
+    },
+    "./cta-project-candidate-resolver": {
+      "types": "./dist/cta-project-candidate-resolver.d.ts",
+      "import": "./dist/cta-project-candidate-resolver.js"
+    },
+    "./cta-specimen": {
+      "types": "./dist/cta-specimen.d.ts",
+      "import": "./dist/cta-specimen.js"
     },
     "./local-runtime": {
       "types": "./dist/local-runtime.d.ts",
@@ -42,18 +66,25 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
+    },
+    "./workflow-controller": {
+      "types": "./dist/workflow-controller.d.ts",
+      "import": "./dist/workflow-controller.js"
     }
   },
   "bin": {
+    "proof-guided-cta-change": "./bin/proof-guided-cta-change",
     "proof-guided-web-change": "./bin/proof-guided-web-change"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "demo": "pnpm run build && node bin/proof-guided-web-change",
+    "demo:cta": "pnpm run build && node bin/proof-guided-cta-change",
     "test": "pnpm run build && node --test test/*.test.mjs"
   },
   "dependencies": {
+    "riddle-proof-guided-cta-change-experiment": "link:../../experiments/proof-guided-cta-change",
     "riddle-proof-guided-web-change-experiment": "link:../../experiments/proof-guided-web-change"
   },
   "engines": {

@@ -16,15 +16,23 @@
     "proof_transport",
     "signing_key_provider",
     "proof_store",
-    "clock"
+    "clock",
+    "cta_change_agent"
   ],
   "notes": [
-    "The owned specimen server binds only to an ephemeral 127.0.0.1 port.",
-    "The shell and each specimen require an ephemeral 256-bit run capability; proof-target authorization is injected into the Playwright context and excluded from semantic targets and retained artifacts.",
-    "The application resolver accepts only app-issued opaque candidate references.",
-    "Only two exact app-owned specimen source variants may execute, and display runtimes are separate from fresh proof-target runtimes.",
-    "The local runtime directly owns loopback networking, artifact filesystem access, ephemeral signing, specimen execution, and the Playwright subprocess; the proof client/provider remains the verification seam.",
-    "The deterministic repair executor receives source bytes and meaning-level findings, never proof audit material.",
-    "The application has no hosted Riddle client or configuration."
+    "The app contains two private workflows: a deterministic durable-setting repair and a bounded primary-CTA agent change.",
+    "Both workflows use one generic controller for serialized one-shot attempts, immutable candidate history, new revisions after changes, and fresh attempts after unusable checks; contracts, candidate resolution, and change policies remain workflow-owned.",
+    "Each workflow pins its expected contract inside the application and accepts only app-issued opaque candidate references from ordinary callers.",
+    "The owned specimen servers bind only to ephemeral 127.0.0.1 ports.",
+    "The shell and each specimen require ephemeral 256-bit run capabilities; proof-target authorization is injected into the Playwright context and excluded from semantic targets, signed evidence, audit identities, and retained artifacts.",
+    "Each workflow owns exactly two executable specimen source variants, and visible display runtimes are separate from fresh proof-target runtimes.",
+    "The durable-setting executor receives immutable source bytes, the displayed task, and meaning-level findings, never proof audit material.",
+    "The CTA agent protocol exposes only a proposal reference, base-source digest, displayed task, meaning-level findings, current and requested CTA values, and one permitted mutation kind; it exposes no contract, profile, proof authority, signing key, run capability, proof transport, disposition, or audit record.",
+    "The CTA application accepts only an exact, base-bound proposal for the pinned CTA values, reconstructs the exact reviewed source itself, and records a separate proposal audit only after the resulting repair is committed.",
+    "The subprocess CTA adapter requires an absolute executable, an explicit real non-symlink working directory, shell:false, an empty environment by default or explicit string-only environment, bounded output, and a timeout.",
+    "The subprocess controls are not an operating-system sandbox; the child retains every filesystem, network, and subprocess capability granted to its user and executable by the operating system.",
+    "The local runtime owns loopback networking, private artifact filesystem access, ephemeral signing, specimen execution, and the Playwright subprocess; browser artifacts may contain sensitive rendered content and must remain in an approved private directory.",
+    "Retained artifact directories and files are permission-restricted, private signing keys remain process-local, and portable receipts use relative rather than workstation paths.",
+    "The application has no hosted Riddle client, configuration, or request path."
   ]
 }

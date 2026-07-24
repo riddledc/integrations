@@ -1,0 +1,26 @@
+{
+  "version": "riddle-proof.experimental-capabilities.v1",
+  "name": "proof-guided-cta-change-client",
+  "capabilities": {
+    "network": true,
+    "filesystem": true,
+    "browser": true,
+    "subprocess": true,
+    "hosted_riddle": false,
+    "cryptography": true,
+    "ambient_clock": true
+  },
+  "delegated_capabilities": [
+    "candidate_resolver",
+    "browser_capture",
+    "signing_key_provider",
+    "clock"
+  ],
+  "notes": [
+    "The ordinary client request contains only an opaque candidate reference.",
+    "The local provider owns Playwright, local artifacts, signatures, and explicit consumer time.",
+    "The installed profile, requirement mapping, expected root, and finding prose are construction-time authority.",
+    "The experiment has no hosted-Riddle client or hosted configuration.",
+    "Browser egress is not allowlisted; a checked page may request redirects or subresources from other origins."
+  ]
+}
