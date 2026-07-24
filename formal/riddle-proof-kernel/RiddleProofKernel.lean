@@ -7,6 +7,7 @@ import RiddleProofKernel.GenericProtocol
 import RiddleProofKernel.BrowserPyramid
 import RiddleProofKernel.BrowserTransition
 import RiddleProofKernel.SyntheticRecordReconciliation
+import RiddleProofKernel.WorkbookInvoiceExtraction
 import RiddleProofKernel.ApplicationProjection
 import RiddleProofKernel.ProofGuidedWebChange
 import RiddleProofKernel.CtaWebChange

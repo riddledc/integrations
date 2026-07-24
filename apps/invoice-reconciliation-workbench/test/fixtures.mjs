@@ -1,4 +1,5 @@
 const requirements = [
+  "One exact pinned XLSX invoice worksheet is captured and extracted into canonical invoice facts.",
   "Every invoice line amount equals quantity multiplied by unit price.",
   "Invoice subtotal, tax, and total are internally consistent.",
   "Invoice and purchase order use the same currency, terms, items, quantities, prices, and total.",
@@ -15,7 +16,7 @@ const boundaries = [
 const task = {
   title: "Reconcile invoice INV-1001",
   description:
-    "Check the synthetic invoice’s arithmetic and exact agreement with purchase order PO-7001 and receipt RCPT-9001.",
+    "Extract the pinned synthetic XLSX invoice and check its exact normalized facts against purchase order PO-7001 and receipt RCPT-9001.",
   requirements,
 };
 
@@ -93,6 +94,7 @@ function invoice(revised) {
     revision: revised ? "Invoice revision 2" : "Invoice revision 1",
     status: revised ? "Corrected" : "Mismatch found",
     metadata: [
+      { label: "Source", value: "Pinned synthetic XLSX workbook" },
       { label: "Buyer", value: "Acme" },
       { label: "Supplier", value: "Lumen" },
       { label: "PO", value: "PO-7001" },
@@ -285,7 +287,7 @@ const conformingCheck = {
   non_conclusions: boundaries,
 };
 
-function historyEntry(check, current, reused, recomputed) {
+function historyEntry(check, current, reused, recomputed, refreshed = 0) {
   return {
     check_ref: check.check_ref,
     record_set_ref: check === failingCheck
@@ -300,6 +302,7 @@ function historyEntry(check, current, reused, recomputed) {
       ? "2026-07-24T14:00:00.000Z"
       : "2026-07-24T14:02:00.000Z",
     reused_branch_count: reused,
+    refreshed_branch_count: refreshed,
     recomputed_branch_count: recomputed,
   };
 }
@@ -309,7 +312,7 @@ export function readyState() {
     task,
     record_set: {
       record_set_ref: "record-set:case-001:r1",
-      label: "Case 001 · three selected records",
+      label: "One pinned XLSX invoice and two structured records",
       revision: "Revision 1",
       attempt: "Attempt 1",
       records: [invoice(false), purchaseOrder, receipt],
@@ -341,7 +344,7 @@ export function correctedReadyState() {
     task,
     record_set: {
       record_set_ref: "record-set:case-001:r2",
-      label: "Case 001 · three selected records",
+      label: "One pinned XLSX invoice and two structured records",
       revision: "Revision 2",
       attempt: "Attempt 1",
       records: [invoice(true), purchaseOrder, receipt],
@@ -350,7 +353,7 @@ export function correctedReadyState() {
     correction: { available: false, changes: [] },
     reuse: {
       summary:
-        "The invoice changed. The purchase order and receipt bytes remain unchanged; proof reuse will be established by the fresh check.",
+        "The XLSX invoice and its normalized facts changed. The purchase order and receipt bytes remain unchanged; fresh proof will determine reuse.",
       branches: [
         {
           branch_id: "purchase-order-capture",
@@ -365,17 +368,25 @@ export function correctedReadyState() {
           reason: "RCPT-9001 was not edited.",
         },
         {
-          branch_id: "invoice-capture",
-          label: "Invoice capture and arithmetic",
+          branch_id: "invoice-workbook-extraction",
+          label: "Workbook capture and extraction",
           action: "new",
-          reason: "Invoice revision 2 must be captured and checked independently.",
+          reason:
+            "A new immutable XLSX workbook must be captured and extracted independently.",
+        },
+        {
+          branch_id: "invoice-capture",
+          label: "Normalized invoice arithmetic",
+          action: "new",
+          reason:
+            "The new workbook must be normalized and checked independently.",
         },
       ],
     },
     last_activity: {
       kind: "invoice_correction",
       summary:
-        "Created invoice revision 2; purchase order and receipt stayed unchanged.",
+        "Created XLSX invoice revision 2; purchase order and receipt stayed unchanged.",
       revision: "Revision 2",
       attempt: "Attempt 1",
     },
@@ -391,7 +402,7 @@ export function checkedConformingState() {
     current_check: conformingCheck,
     reuse: {
       summary:
-        "Two independent grounded branches were reused exactly. Only the changed invoice and its dependent comparisons were checked again.",
+        "The purchase-order and receipt branches were reused exactly. Workbook extraction, normalized invoice arithmetic, dependent comparisons, and the source-bound conclusion were checked again.",
       branches: [
         {
           branch_id: "purchase-order-capture",
@@ -406,10 +417,17 @@ export function checkedConformingState() {
           reason: "Same immutable receipt bytes and certificate identity.",
         },
         {
-          branch_id: "invoice-capture",
-          label: "Invoice capture and arithmetic",
+          branch_id: "invoice-workbook-extraction",
+          label: "Workbook capture and extraction",
           action: "recomputed",
-          reason: "Revision 2 has a new immutable invoice identity.",
+          reason:
+            "Revision 2 is a new immutable XLSX specimen with a new extraction binding.",
+        },
+        {
+          branch_id: "invoice-capture",
+          label: "Normalized invoice arithmetic",
+          action: "recomputed",
+          reason: "Revision 2 has new normalized invoice facts.",
         },
         {
           branch_id: "invoice-to-purchase-order",
@@ -425,16 +443,17 @@ export function checkedConformingState() {
         },
         {
           branch_id: "three-record-root",
-          label: "Three-record agreement",
+          label: "Source-bound reconciliation conclusion",
           action: "recomputed",
-          reason: "The composed conclusion binds the revised invoice.",
+          reason:
+            "The conclusion binds the revised workbook, extraction, and normalized records.",
         },
       ],
     },
     can_check: false,
     history: [
       historyEntry(failingCheck, false, 0, 5),
-      historyEntry(conformingCheck, true, 2, 4),
+      historyEntry(conformingCheck, true, 2, 5),
     ],
   };
 }
@@ -461,15 +480,13 @@ export function auditFor(checkRef) {
       root_certificate_id: revised
         ? "certificate:three-record:r2"
         : "certificate:negative-report:r1",
-      nonce: revised ? "synthetic-nonce-r2" : "synthetic-nonce-r1",
-      signature: `ed25519:${"b".repeat(86)}`,
       replayed_at: revised
         ? "2026-07-24T14:02:00.000Z"
         : "2026-07-24T14:00:00.000Z",
     },
     selective_reuse: revised
       ? {
-          reused_certificate_ids: [
+          cacheable_branch_certificate_ids: [
             "certificate:purchase-order:1",
             "certificate:receipt:1",
           ],

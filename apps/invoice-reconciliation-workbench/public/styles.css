@@ -641,6 +641,11 @@ h3 {
   color: var(--blue);
 }
 
+.branch-refreshed {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
 .supporting-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);

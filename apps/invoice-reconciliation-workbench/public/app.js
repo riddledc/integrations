@@ -295,10 +295,15 @@ function renderHistory(history) {
     const metaParts = [entry.revision, entry.attempt];
     if (entry.checked_at) metaParts.push(entry.checked_at);
     body.append(node("p", metaParts.join(" · ")));
-    if (entry.reused_branch_count || entry.recomputed_branch_count) {
+    if (
+      entry.reused_branch_count
+      || entry.refreshed_branch_count
+      || entry.recomputed_branch_count
+    ) {
       body.append(node(
         "p",
         `${entry.reused_branch_count} reused · `
+          + `${entry.refreshed_branch_count} refreshed · `
           + `${entry.recomputed_branch_count} checked again`,
         "history-reuse",
       ));

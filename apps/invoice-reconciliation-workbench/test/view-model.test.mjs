@@ -53,6 +53,15 @@ test("ordinary state drops crypto, proof bodies, raw records, and unknown fields
     certificate: { body: "must-not-leak" },
     proof_envelope: { raw: "must-not-leak" },
     private_rule_bundle: { content: "must-not-leak" },
+    source_binding: {
+      workbook_digest: "must-not-leak",
+      normalized_invoice_digest: "must-not-leak",
+      extraction_binding_digest: "must-not-leak",
+      private_trace_digest: "must-not-leak",
+      cell_values: "must-not-leak",
+      formulas: "must-not-leak",
+      cached_values: "must-not-leak",
+    },
     record_set: {
       ...checkedFailingState().record_set,
       raw_document_bytes: "must-not-leak",
@@ -69,6 +78,10 @@ test("ordinary state drops crypto, proof bodies, raw records, and unknown fields
       ...checkedFailingState().current_check,
       root_certificate_id: "must-not-leak",
       evidence_bytes: "must-not-leak",
+      xlsx_source_binding: {
+        workbook_digest: "must-not-leak",
+        extraction_binding_digest: "must-not-leak",
+      },
     },
   };
 
@@ -81,6 +94,15 @@ test("ordinary state drops crypto, proof bodies, raw records, and unknown fields
     "certificate",
     "proof_envelope",
     "private_rule_bundle",
+    "source_binding",
+    "workbook_digest",
+    "normalized_invoice_digest",
+    "extraction_binding_digest",
+    "private_trace_digest",
+    "cell_values",
+    "formulas",
+    "cached_values",
+    "xlsx_source_binding",
     "raw_document_bytes",
     "root_certificate_id",
     "evidence_bytes",
@@ -179,6 +201,7 @@ test("revised record set exposes reuse without inheriting the old result", () =>
     [
       { branch_id: "purchase-order-capture", action: "unchanged" },
       { branch_id: "receipt-capture", action: "unchanged" },
+      { branch_id: "invoice-workbook-extraction", action: "new" },
       { branch_id: "invoice-capture", action: "new" },
     ],
   );
@@ -199,11 +222,25 @@ test("revised record set exposes reuse without inheriting the old result", () =>
       .filter((branch) => branch.action === "recomputed")
       .map((branch) => branch.branch_id),
     [
+      "invoice-workbook-extraction",
       "invoice-capture",
       "invoice-to-purchase-order",
       "invoice-to-receipt",
       "three-record-root",
     ],
+  );
+  assert.deepEqual(
+    checked.reuse.branches.find(
+      (branch) => branch.branch_id === "invoice-workbook-extraction",
+    ),
+    {
+      branch_id: "invoice-workbook-extraction",
+      label: "Workbook capture and extraction",
+      action: "recomputed",
+      reason:
+        "Revision 2 is a new immutable XLSX specimen with a new extraction binding.",
+    },
+    "the ordinary interface explains the newly recomputed workbook branch without exposing its digest",
   );
 });
 
@@ -213,6 +250,7 @@ test("labels stay ordinary and domain-specific", () => {
   assert.equal(dispositionLabel("stale"), "Check is out of date");
   assert.equal(dispositionLabel("could_not_check"), "Could not check");
   assert.equal(branchActionLabel("reused"), "Reused");
+  assert.equal(branchActionLabel("refreshed"), "Refreshed");
   assert.equal(branchActionLabel("recomputed"), "Checked again");
   assert.equal(branchActionLabel("unknown"), "Unknown");
 });

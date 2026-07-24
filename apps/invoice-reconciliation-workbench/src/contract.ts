@@ -19,6 +19,12 @@ export const INVOICE_RECONCILIATION_SUCCESS_CLAIM = {
   claim_version: "1",
 } as const;
 
+export const INVOICE_NORMALIZED_RECONCILIATION_STATUS_CLAIM = {
+  claim_id:
+    "riddle-proof.private.commercial-record.normalized-invoice-reconciliation-status-report",
+  claim_version: "1",
+} as const;
+
 export const INVOICE_REQUIREMENT_STATUS_CLAIM = {
   claim_id: "riddle-proof.commercial-record.invoice-requirement-status",
   claim_version: "1",
@@ -26,6 +32,12 @@ export const INVOICE_REQUIREMENT_STATUS_CLAIM = {
 
 export const INVOICE_RECORD_SET_BINDING_CLAIM = {
   claim_id: "riddle-proof.commercial-record.invoice-record-set-bound",
+  claim_version: "1",
+} as const;
+
+export const INVOICE_WORKBOOK_EXTRACTION_BINDING_CLAIM = {
+  claim_id:
+    "riddle-proof.private.commercial-record.invoice-workbook-extraction-bound",
   claim_version: "1",
 } as const;
 
@@ -121,7 +133,7 @@ export const INVOICE_POLICY_DEFINITION = deepFreeze({
     "completeness outside the three supplied records",
     "approval to pay",
     "actual movement of money",
-    "faithful extraction from PDF, DOCX, XLSX, email, image, or OCR",
+    "faithful extraction from PDF, DOCX, email, image, OCR, or any XLSX layout other than the separately pinned synthetic invoice-workbook profile",
   ],
 });
 

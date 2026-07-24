@@ -77,6 +77,11 @@ test("the only proposed correction is exact, invoice-only, and sufficient", () =
     revised.analysis.records.receipt,
     analysis.records.receipt,
   );
+  assert.equal(
+    revised.analysis.records.invoice.memo,
+    analysis.records.invoice.memo,
+    "the typed quantity/amount correction does not make an undisclosed memo edit",
+  );
   assert.notDeepEqual(
     revised.analysis.records.invoice,
     analysis.records.invoice,

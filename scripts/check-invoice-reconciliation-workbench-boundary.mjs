@@ -299,7 +299,7 @@ const forbiddenText = [
   ],
   [
     "absolute or protocol-relative request target",
-    /(?:https?:)?\/\/(?!(?:invoice-workbench\.local|www\.w3\.org\/2000\/svg)\b)[A-Za-z0-9]/u,
+    /(?:https?:)?\/\/(?!(?:invoice-workbench\.local|www\.w3\.org\/2000\/svg|schemas\.openxmlformats\.org)\b)[A-Za-z0-9]/u,
   ],
 ];
 const findings = [];
@@ -316,6 +316,50 @@ assert.deepEqual(
   findings,
   [],
   `The invoice workbench contains forbidden capability material:\n${findings
+    .map((finding) => `- ${finding}`)
+    .join("\n")}`,
+);
+
+const xlsxSourceFiles = filesBelow(join(appDirectory, "src"))
+  .filter((filename) => /(?:^|\/)xlsx(?:-[^/]+)?\.ts$/u.test(filename));
+assert.ok(
+  xlsxSourceFiles.some((filename) => filename.endsWith("/xlsx.ts")),
+  "The pinned XLSX adapter source is absent.",
+);
+const xlsxCapabilityFindings = [];
+for (const filename of xlsxSourceFiles) {
+  const contents = readFileSync(filename, "utf8");
+  for (const match of contents.matchAll(/from\s+["']([^"']+)["']/gu)) {
+    const specifier = match[1];
+    if (specifier !== "node:zlib" && !specifier.startsWith("./")) {
+      xlsxCapabilityFindings.push(
+        `${relative(repositoryRoot, filename)}: unapproved import ${specifier}`,
+      );
+    }
+  }
+  for (const [label, pattern] of [
+    [
+      "network module",
+      /["'](?:node:)?(?:http|https|http2|net|tls|dns|dgram|undici|axios|got)(?:\/promises)?["']/u,
+    ],
+    ["outbound request API", /\b(?:fetch|WebSocket|EventSource)\s*\(/u],
+    [
+      "browser automation",
+      /["'](?:playwright|puppeteer|selenium-webdriver)["']/u,
+    ],
+    ["subprocess execution", /["']node:child_process["']/u],
+  ]) {
+    if (pattern.test(contents)) {
+      xlsxCapabilityFindings.push(
+        `${relative(repositoryRoot, filename)}: ${label}`,
+      );
+    }
+  }
+}
+assert.deepEqual(
+  xlsxCapabilityFindings,
+  [],
+  `The XLSX adapter contains unapproved capability material:\n${xlsxCapabilityFindings
     .map((finding) => `- ${finding}`)
     .join("\n")}`,
 );
@@ -365,6 +409,7 @@ const captureSource = readFileSync(
 for (const requiredBoundary of [
   /artifactPolicy:\s*["']full["']/u,
   /artifactPolicy:\s*["']digest_only["']/u,
+  /role:\s*["']invoice_workbook["']/u,
   /privateFull\.snapshot\.snapshot_id\s*!==\s*digestOnly\.snapshot\.snapshot_id/u,
   /receipt:\s*digestOnly/u,
 ]) {
@@ -384,7 +429,7 @@ for (const requiredBoundary of [
   /mode:\s*0o600/u,
   /compareDocumentSnapshotReceipts/u,
   /selected_record_set_changed_outside_workbench/u,
-  /prior proof is historical and cannot apply to this record set/u,
+  /prior proof is historical and cannot apply to this specimen record set/u,
 ]) {
   assert.match(
     applicationSource,
@@ -393,13 +438,18 @@ for (const requiredBoundary of [
   );
 }
 
+const fixtureDirectory = join(
+  appDirectory,
+  "fixtures",
+  "over-invoiced",
+);
 const fixtureText = [
   "invoice.v1.json",
   "purchase-order.json",
   "receipt.json",
 ].map((filename) =>
   readFileSync(
-    join(appDirectory, "fixtures", "over-invoiced", filename),
+    join(fixtureDirectory, filename),
     "utf8",
   )).join("\n");
 assert.match(
@@ -411,6 +461,32 @@ assert.doesNotMatch(
   fixtureText,
   /\b(?:confidential|privileged|real customer|actual vendor)\b/iu,
   "The public fixture set appears to contain non-synthetic material.",
+);
+const workbookFixture = join(fixtureDirectory, "invoice.v1.xlsx");
+assert.equal(
+  existsSync(workbookFixture),
+  true,
+  "The pinned synthetic XLSX fixture is absent.",
+);
+const workbookStats = lstatSync(workbookFixture);
+assert.equal(
+  workbookStats.isSymbolicLink(),
+  false,
+  "The pinned synthetic XLSX fixture must not be a symbolic link.",
+);
+assert.equal(
+  workbookStats.isFile(),
+  true,
+  "The pinned synthetic XLSX fixture must be a regular file.",
+);
+assert.ok(
+  workbookStats.size > 4 && workbookStats.size <= 4 * 1024 * 1024,
+  "The pinned synthetic XLSX fixture must stay within its reviewed size bound.",
+);
+assert.deepEqual(
+  readFileSync(workbookFixture).subarray(0, 4),
+  Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+  "The pinned synthetic XLSX fixture must begin with a ZIP local-file header.",
 );
 
 process.stdout.write(`${JSON.stringify({
@@ -424,4 +500,5 @@ process.stdout.write(`${JSON.stringify({
   loopback_only: true,
   subprocess: false,
   browser_automation: false,
+  pinned_xlsx_profile: true,
 })}\n`);

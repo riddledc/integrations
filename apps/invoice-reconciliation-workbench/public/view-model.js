@@ -170,6 +170,7 @@ function historyEntry(value) {
     headline: text(source.headline, "Check complete"),
     checked_at: text(source.checked_at),
     reused_branch_count: integer(source.reused_branch_count),
+    refreshed_branch_count: integer(source.refreshed_branch_count),
     recomputed_branch_count: integer(source.recomputed_branch_count),
   };
 }
@@ -279,6 +280,8 @@ export function branchActionLabel(value) {
   switch (value) {
     case "reused":
       return "Reused";
+    case "refreshed":
+      return "Refreshed";
     case "recomputed":
       return "Checked again";
     case "new":

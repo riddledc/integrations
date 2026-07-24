@@ -91,6 +91,33 @@ export interface RecordDigests {
   record_set: string;
 }
 
+/**
+ * The narrow XLSX adapter's deterministic output. The workbook and private
+ * extraction trace stay in the local process; only their content-addressed
+ * identities may cross into an audit projection.
+ */
+export interface InvoiceWorkbookExtraction {
+  policy: {
+    id: string;
+    version: string;
+    digest: string;
+  };
+  workbook_digest: string;
+  normalized_invoice: InvoiceRecord;
+  normalized_invoice_bytes: Uint8Array;
+  normalized_invoice_digest: string;
+  private_trace_digest: string;
+  binding_digest: string;
+}
+
+export interface SpecimenRecordSetDigests {
+  invoice_workbook: string;
+  normalized_invoice: string;
+  normalized_record_set: string;
+  extraction_binding: string;
+  record_set: string;
+}
+
 export interface ReconciliationDifference {
   field: string;
   observed: string | number;
@@ -142,7 +169,7 @@ export interface TypedInvoiceCorrection {
 }
 
 export interface RecordSetSelection {
-  invoice_path: string;
+  invoice_workbook_path: string;
   purchase_order_path: string;
   receipt_path: string;
   revision: string;
@@ -151,8 +178,19 @@ export interface RecordSetSelection {
 export interface CapturedRecordSet {
   selection: RecordSetSelection;
   receipt: DocumentSnapshotReceipt;
+  invoice_workbook_bytes: Uint8Array;
+  invoice_workbook_extraction: InvoiceWorkbookExtraction;
   bytes: RecordBytes;
+  /**
+   * Normalized JSON identities consumed by the existing reconciliation proof.
+   * `record_set` deliberately retains its original meaning.
+   */
   digests: RecordDigests;
+  /**
+   * Outer immutable-specimen identity. This also changes for a byte-distinct
+   * workbook that normalizes to identical invoice facts.
+   */
+  specimen_digests: SpecimenRecordSetDigests;
 }
 
 export interface ReconciliationProofResult {
@@ -168,6 +206,15 @@ export interface ReconciliationProofResult {
   reusable_certificate_ids: {
     purchase_order: readonly string[];
     receipt: readonly string[];
+  };
+  /**
+   * How each digest-stable branch was obtained for this proof. A cached branch
+   * is refreshed once its grounded capture is older than the proof freshness
+   * window, even when its source bytes are unchanged.
+   */
+  reusable_branch_actions: {
+    purchase_order: "new" | "reused" | "refreshed" | "recomputed";
+    receipt: "new" | "reused" | "refreshed" | "recomputed";
   };
   audit: {
     snapshot_receipt: DocumentSnapshotReceipt;
